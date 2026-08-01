@@ -1,0 +1,127 @@
+/**
+ * C2 cut-in composed from primitives: `changeLane` on a `when(distance ≤ X)`
+ * trigger. This is the archetype the R157 grids parameterise by lateral
+ * velocity, so the assertions are on the lateral profile, not just the outcome.
+ */
+
+import { describe, expect, it } from 'vitest';
+import { runSimulation } from '../sim/engine.js';
+import { LANE_LEFT, LANE_RIGHT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
+
+const graph = syntheticGraph();
+
+function cutInScenario(lateralRateMps: number, triggerDistanceM = 25) {
+  return scenario(graph, {
+    metricSubject: 'ego',
+    // The challenger overtakes in the adjacent lane, then cuts in when it is
+    // within `triggerDistanceM` of the ego.
+    actors: [
+      vehicle(graph, { id: 'ego', rsl: LANE_LEFT, s: 90, speedMps: 14, cruiseSpeedMps: 14 }),
+      vehicle(graph, { id: 'challenger', rsl: LANE_RIGHT, s: 20, speedMps: 18, cruiseSpeedMps: 18 }),
+    ],
+    interactions: [
+      {
+        id: 'cut-in',
+        actorId: 'challenger',
+        trigger: {
+          kind: 'when',
+          condition: {
+            kind: 'distance',
+            a: 'challenger',
+            b: 'ego',
+            mode: 'euclidean',
+            cmp: 'lte',
+            value: triggerDistanceM,
+          },
+          byLatest: 15,
+          ifNever: 'skip',
+        },
+        verb: 'changeLane',
+        target: { mode: 'left', count: 1 },
+        dynamics: { shape: 'sinusoidal', constraint: 'rate', value: lateralRateMps },
+      },
+    ],
+  });
+}
+
+describe('cut-in composition', () => {
+  it('changes lane on a distance trigger and lands on the target lane', () => {
+    const { trace } = runSimulation(cutInScenario(1.0), { graph });
+    const track = trace.ticks.actors['challenger']!;
+
+    const fired = trace.events.find((e) => e.kind === 'trigger_fired' && e.interactionId === 'cut-in');
+    expect(fired).toBeDefined();
+
+    const laneChange = trace.events.find((e) => e.kind === 'lane_change');
+    expect(laneChange).toMatchObject({ actorId: 'challenger', toRsl: LANE_LEFT, legal: true });
+
+    // Starts in the right lane (y = -3.5) and finishes in the left (y = 0).
+    expect(track.y[0]!).toBeCloseTo(-3.5, 3);
+    expect(track.y[track.y.length - 1]!).toBeCloseTo(0, 2);
+    expect(track.laneRsl[track.laneRsl.length - 1]).toBe(LANE_LEFT);
+  });
+
+  it('respects the commanded lateral velocity', () => {
+    for (const rate of [0.4, 1.0]) {
+      const { trace } = runSimulation(cutInScenario(rate), { graph });
+      const track = trace.ticks.actors['challenger']!;
+      let peak = 0;
+      for (let i = 1; i < track.y.length; i++) {
+        peak = Math.max(peak, Math.abs(track.y[i]! - track.y[i - 1]!) / 0.02);
+      }
+      // `rate` under a `sinusoidal` shape means *peak* lateral velocity.
+      expect(peak).toBeLessThanOrEqual(rate * 1.05);
+      expect(peak).toBeGreaterThan(rate * 0.8);
+    }
+  });
+
+  it('a slower lateral velocity takes proportionally longer', () => {
+    const duration = (rate: number) => {
+      const { trace } = runSimulation(cutInScenario(rate), { graph });
+      const track = trace.ticks.actors['challenger']!;
+      const start = track.y.findIndex((y) => y > -3.45);
+      const end = track.y.findIndex((y) => y > -0.05);
+      return (end - start) * 0.02;
+    };
+    const slow = duration(0.4);
+    const fast = duration(1.0);
+    expect(slow / fast).toBeGreaterThan(2.0);
+    expect(slow / fast).toBeLessThan(3.0);
+  });
+
+  it('records a preemption when a second interaction takes the lateral axis', () => {
+    const input = scenario(graph, {
+      actors: [
+        vehicle(graph, { id: 'challenger', rsl: LANE_RIGHT, s: 40, speedMps: 14, cruiseSpeedMps: 14 }),
+      ],
+      interactions: [
+        {
+          id: 'drift',
+          actorId: 'challenger',
+          trigger: { kind: 'at', t: 1 },
+          verb: 'laneOffset',
+          target: { mode: 'meters', value: 1.2 },
+          dynamics: { shape: 'linear', constraint: 'rate', value: 0.3 },
+        },
+        {
+          id: 'swerve-back',
+          actorId: 'challenger',
+          trigger: { kind: 'at', t: 3 },
+          verb: 'laneOffset',
+          target: { mode: 'fraction', value: -0.25 },
+          dynamics: { shape: 'cubic', constraint: 'time', value: 2 },
+        },
+      ],
+    });
+    const { trace } = runSimulation(input, { graph });
+    const preemption = trace.events.find((e) => e.kind === 'preemption');
+    expect(preemption).toMatchObject({
+      axis: 'lateral',
+      byInteractionId: 'swerve-back',
+      preemptedInteractionId: 'drift',
+    });
+    const track = trace.ticks.actors['challenger']!;
+    // -0.25 of a 3.5 m lane = -0.875 m, relative to the lane centreline at -3.5.
+    expect(track.y[track.y.length - 1]!).toBeCloseTo(-3.5 - 0.875, 2);
+  });
+});
