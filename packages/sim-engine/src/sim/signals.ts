@@ -22,6 +22,8 @@ export interface StopLineBinding {
   readonly rsl: LaneRsl;
   /** Arc length in the lane's **storage** direction. */
   readonly s: number;
+  /** Empty means every movement; otherwise the route must contain one. */
+  readonly connectingLaneRsls: readonly LaneRsl[];
 }
 
 export class SignalBook {
@@ -30,6 +32,7 @@ export class SignalBook {
   private readonly cycleLength = new Map<string, number>();
   readonly stopLines: StopLineBinding[] = [];
   private readonly stopLinesByLane = new Map<LaneRsl, StopLineBinding[]>();
+  private readonly overrides = new Map<string, SignalPhase>();
 
   constructor(programs: readonly SignalProgram[], private readonly warmupSeconds: number) {
     this.programs = [...programs].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -40,7 +43,12 @@ export class SignalBook {
         p.phases.reduce((sum, ph) => sum + ph.durationS, 0),
       );
       for (const sl of [...p.stopLines].sort((a, b) => (a.rsl < b.rsl ? -1 : a.rsl > b.rsl ? 1 : a.s - b.s))) {
-        const binding: StopLineBinding = { signalId: p.id, rsl: sl.rsl, s: sl.s };
+        const binding: StopLineBinding = {
+          signalId: p.id,
+          rsl: sl.rsl,
+          s: sl.s,
+          connectingLaneRsls: [...sl.connectingLaneRsls].sort(),
+        };
         this.stopLines.push(binding);
         const arr = this.stopLinesByLane.get(sl.rsl);
         if (arr) arr.push(binding);
@@ -59,6 +67,8 @@ export class SignalBook {
 
   /** Phase of `signalId` at simulation time `t` (which may be negative). */
   phaseAt(signalId: string, t: number): SignalPhase | null {
+    const forced = this.overrides.get(signalId);
+    if (forced) return forced;
     const p = this.byId.get(signalId);
     if (!p) return null;
     const cycle = this.cycleLength.get(signalId)!;
@@ -76,6 +86,14 @@ export class SignalBook {
       if (elapsed < acc) return ph.phase;
     }
     return p.phases[p.phases.length - 1]!.phase;
+  }
+
+  /** Force a world signal phase through `set(signal:<id>.phase, ...)`. */
+  setOverride(signalId: string, phase: SignalPhase | null): boolean {
+    if (!this.byId.has(signalId)) return false;
+    if (phase === null) this.overrides.delete(signalId);
+    else this.overrides.set(signalId, phase);
+    return true;
   }
 
   /** Stop lines on a lane, in storage-`s` order. */

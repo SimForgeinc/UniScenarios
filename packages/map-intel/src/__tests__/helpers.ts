@@ -18,7 +18,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
-import { CoordinateFrame } from '@scenario-studio/xodr-tools';
+import { CoordinateFrame } from '@uniscenarios/xodr-tools';
 
 import { asMapId } from '../types/ids.js';
 import type { MapSources } from '../build/sources.js';

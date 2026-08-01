@@ -164,6 +164,13 @@ export const actorSchema = z.object({
   }),
   /** `false` = starts absent, waiting for an `exist(present)` interaction. */
   presentAtStart: z.boolean().default(true),
+  /**
+   * Static roadside actors (parked cars, stopped queues, barriers modelled as
+   * actors) still occupy space and occlude sight lines, but they are excluded
+   * from episode pair metrics so they cannot steal `minTTC` from the incident
+   * pair they are only meant to reveal or hide.
+   */
+  static: z.boolean().default(false),
   /** Free-form tags carried through to the trace header (role, class, …). */
   tags: z.array(z.string()).default([]),
 });
@@ -295,7 +302,22 @@ export const conditionSchema: z.ZodType<Condition> = z.union([
 
 /** Where the arrival solver aims the actor. */
 export const arrivalPointSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('point'), at: scenePointSchema }),
+  z.object({
+    kind: z.literal('point'),
+    at: scenePointSchema,
+    /**
+     * Optional proof that this point was authored from a reference-frame
+     * cross-section. Each station is the same longitudinal cross-section on a
+     * concrete lane. An actor route containing one of those lanes therefore
+     * resolves the arrival semantically, even when the authored point is one or
+     * more lane widths away from its centreline.
+     */
+    referenceFrame: z
+      .object({
+        stations: z.array(z.object({ rsl: z.string().min(1), s: nonNeg })).min(1),
+      })
+      .optional(),
+  }),
   z.object({ kind: z.literal('laneS'), rsl: z.string().min(1), s: nonNeg }),
 ]);
 export type ArrivalPoint = z.infer<typeof arrivalPointSchema>;
@@ -371,14 +393,35 @@ export const signalProgramSchema = z.object({
    * lanes brakes for the line when the phase forbids entry.
    */
   stopLines: z
-    .array(z.object({ rsl: z.string().min(1), s: nonNeg }))
+    .array(z.object({
+      rsl: z.string().min(1),
+      s: nonNeg,
+      /**
+       * Optional movement filter. A stop line only applies when the actor's
+       * route continues through one of these junction lanes. This keeps a
+       * protected left-turn head from stopping adjacent through traffic that
+       * happens to share the same approach lane.
+       */
+      connectingLaneRsls: z.array(z.string().min(1)).default([]),
+    }))
     .default([]),
+  /** Stable binding back to the map's physical signal furniture/export ids. */
+  mapBinding: z.object({
+    junctionId: z.string().min(1),
+    controllerIds: z.array(z.string().min(1)).default([]),
+    headIds: z.array(z.string().min(1)).min(1),
+    /** Honest provenance for programs derived without authoritative timing. */
+    timingSource: z.enum(['map', 'synthetic-default', 'authored']),
+  }).optional(),
 });
 export type SignalProgram = z.infer<typeof signalProgramSchema>;
 
 /** Static line-of-sight blockers, in the scene frame. */
 export const occluderSchema = z.object({
+  /** Concrete shape id; repeated author-level props materialize as one shape per member. */
   id: idSchema,
+  /** Optional author-level aggregate id shared by repeated concrete shapes. */
+  groupId: idSchema.optional(),
   obb: z.object({
     center: scenePointSchema,
     lengthM: positive,
@@ -388,6 +431,15 @@ export const occluderSchema = z.object({
   }),
 });
 export type Occluder = z.infer<typeof occluderSchema>;
+
+/** An authored line-of-sight relation the occluder layer is supposed to affect. */
+export const occlusionPairSchema = z.object({
+  observer: idSchema,
+  target: idSchema,
+  /** Concrete occluder id, occluder groupId, or static actor ref (`actor:<id>`). */
+  occluderId: idSchema.optional(),
+});
+export type OcclusionPair = z.infer<typeof occlusionPairSchema>;
 
 /* ------------------------------------------------------------- the document */
 
@@ -409,6 +461,7 @@ export const simScenarioInputSchema = z
     interactions: z.array(interactionSchema).default([]),
     signalPrograms: z.array(signalProgramSchema).default([]),
     occluders: z.array(occluderSchema).default([]),
+    occlusionPairs: z.array(occlusionPairSchema).default([]),
   })
   .superRefine((doc, ctx) => {
     const actorIds = new Set<string>();
@@ -449,6 +502,56 @@ export const simScenarioInputSchema = z
     }
     if (doc.metricSubject !== undefined && !actorIds.has(doc.metricSubject)) {
       ctx.addIssue({ code: 'custom', path: ['metricSubject'], message: 'unknown actor' });
+    }
+    const occluderIds = new Set<string>();
+    const occluderGroupIds = new Set<string>();
+    for (let i = 0; i < doc.occluders.length; i++) {
+      const o = doc.occluders[i]!;
+      if (occluderIds.has(o.id)) {
+        ctx.addIssue({ code: 'custom', path: ['occluders', i, 'id'], message: `duplicate occluder id ${o.id}` });
+      }
+      occluderIds.add(o.id);
+      if (o.groupId) occluderGroupIds.add(o.groupId);
+    }
+    for (let i = 0; i < doc.occluders.length; i++) {
+      const groupId = doc.occluders[i]!.groupId;
+      if (groupId && occluderIds.has(groupId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['occluders', i, 'groupId'],
+          message: `occluder group ${groupId} collides with a concrete occluder id`,
+        });
+      }
+    }
+    const staticActorOccluderIds = new Set(doc.actors.filter((a) => a.static).map((a) => `actor:${a.id}`));
+    for (let i = 0; i < doc.occlusionPairs.length; i++) {
+      const pair = doc.occlusionPairs[i]!;
+      if (!actorIds.has(pair.observer)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['occlusionPairs', i, 'observer'],
+          message: `unknown actor ${pair.observer}`,
+        });
+      }
+      if (!actorIds.has(pair.target)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['occlusionPairs', i, 'target'],
+          message: `unknown actor ${pair.target}`,
+        });
+      }
+      if (
+        pair.occluderId !== undefined &&
+        !occluderIds.has(pair.occluderId) &&
+        !occluderGroupIds.has(pair.occluderId) &&
+        !staticActorOccluderIds.has(pair.occluderId)
+      ) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['occlusionPairs', i, 'occluderId'],
+          message: `unknown occluder or occluder group ${pair.occluderId}`,
+        });
+      }
     }
     const signalIds = new Set(doc.signalPrograms.map((p) => p.id));
     for (let i = 0; i < doc.signalPrograms.length; i++) {
@@ -495,6 +598,12 @@ export function normalizeSimScenarioInput(input: SimScenarioInput): SimScenarioI
     interactions: byId(input.interactions),
     signalPrograms: byId(input.signalPrograms),
     occluders: byId(input.occluders),
+    occlusionPairs: [...input.occlusionPairs].sort(
+      (a, b) =>
+        a.observer.localeCompare(b.observer) ||
+        a.target.localeCompare(b.target) ||
+        (a.occluderId ?? '').localeCompare(b.occluderId ?? ''),
+    ),
   };
 }
 

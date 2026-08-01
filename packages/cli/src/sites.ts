@@ -7,8 +7,8 @@
  * would otherwise redo a few thousand frame evaluations per cell.
  */
 
-import { matchAnchorReport, type MatchReport, type MatchedSite } from '@scenario-studio/anchor-matcher';
-import type { ScenarioTemplateV2 } from '@scenario-studio/scenario-model';
+import { matchAnchorReport, type MatchReport, type MatchedSite } from '@uniscenarios/anchor-matcher';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
 import { adaptTemplate, type AdaptNote } from './adapt.js';
 import { CliError } from './errors.js';

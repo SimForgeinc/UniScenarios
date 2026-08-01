@@ -1,6 +1,7 @@
 {
-  "name": "@scenario-studio/map-intel",
+  "name": "@uniscenarios/map-intel",
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
@@ -17,7 +18,7 @@
     "build:map": "tsx src/cli/build-map.ts"
   },
   "dependencies": {
-    "@scenario-studio/xodr-tools": "workspace:*"
+    "@uniscenarios/xodr-tools": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",

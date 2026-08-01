@@ -19,7 +19,7 @@ import { buildMapIntel } from '../build/build.js';
 import { findLocations, findLocationsLinear, knownFactKeys } from '../query/find.js';
 import { describeLocation, getLocation, relationsFrom, requireLocation } from '../query/describe.js';
 import { diceCoefficient, resolveReference } from '../query/resolve.js';
-import { MapIntelQueryError, MAX_RESULT_LIMIT } from '../query/types.js';
+import { MapIntelQueryError, DEFAULT_RESULT_LIMIT, MAX_RESULT_LIMIT } from '../query/types.js';
 import type { FindLocationsQuery } from '../query/types.js';
 import { miniYaleSources } from './helpers.js';
 
@@ -132,15 +132,10 @@ describe('findLocations', () => {
     for (const hit of placeable) expect(hit.location.anchor.road).not.toBeNull();
   });
 
-  it('caps results and explains how to narrow', () => {
-    expect(() => findLocations(catalog, { limit: MAX_RESULT_LIMIT + 1 })).toThrow(MapIntelQueryError);
-    try {
-      findLocations(catalog, { limit: 5000 });
-    } catch (err) {
-      expect((err as MapIntelQueryError).code).toBe('limit_exceeded');
-      expect((err as MapIntelQueryError).reason).toMatch(/narrow the query/);
-    }
-    expect(findLocations(catalog, {}).length).toBeLessThanOrEqual(25);
+  it('clamps excessive result limits instead of hard-failing', () => {
+    expect(findLocations(catalog, { limit: MAX_RESULT_LIMIT + 1 }).length).toBeLessThanOrEqual(MAX_RESULT_LIMIT);
+    expect(findLocations(catalog, { limit: 5000 }).length).toBeLessThanOrEqual(MAX_RESULT_LIMIT);
+    expect(findLocations(catalog, {}).length).toBeLessThanOrEqual(DEFAULT_RESULT_LIMIT);
   });
 
   it('rejects an unknown fact key with the available vocabulary', () => {

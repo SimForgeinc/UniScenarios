@@ -78,6 +78,8 @@ export interface ActorRuntime {
   readonly kind: ActorKind;
   readonly dims: Dims;
   readonly tags: readonly string[];
+  /** Excluded from pair metrics; still collides and occludes. */
+  readonly static: boolean;
   rules: ActorRules;
   /** Free-flow cruise speed, m/s (recomputed when `speedFactor` changes). */
   cruiseSpeedMps: number;

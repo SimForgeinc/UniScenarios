@@ -1,6 +1,6 @@
-# `@scenario-studio/map-intel`
+# `@uniscenarios/map-intel`
 
-Layer 1 of the Scenario Studio stack: **per-map location intelligence**.
+Layer 1 of the UniScenarios stack: **per-map location intelligence**.
 
 Turns the raw artifacts a map ships with into two derived files that everything
 above — the anchor matcher, the sim engine, the `scen` CLI, the editor's
@@ -16,8 +16,8 @@ Nothing here imports three.js and nothing reads the network.
 ## Build
 
 ```bash
-pnpm --filter @scenario-studio/map-intel build:map -- --map yale-street
-pnpm --filter @scenario-studio/map-intel build:map -- --all [--json]
+pnpm --filter @uniscenarios/map-intel build:map -- --map yale-street
+pnpm --filter @uniscenarios/map-intel build:map -- --all [--json]
 ```
 
 Both artifacts carry the same `catalogRevision`, a hash over the *source
@@ -67,7 +67,7 @@ road-snaps.
 ## Query API
 
 ```ts
-import { buildMapIntelFromDir, findLocations, describeLocation } from '@scenario-studio/map-intel';
+import { buildMapIntelFromDir, findLocations, describeLocation } from '@uniscenarios/map-intel';
 
 const { catalog, derived } = await buildMapIntelFromDir('dev-assets/yale-street');
 

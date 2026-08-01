@@ -25,7 +25,13 @@
  *     against the same pose with the actor layer hidden, plus a full
  *     `runBenchmark` fly-through both ways.
  *
+ * Between 1 and 2 it also drives the whole keyboard model — `G`, `R` (with and
+ * without the ⇧ 15° snap), `Tab`, `⌥`, `Esc`, `⌘D`, `⌘Z`/`⇧⌘Z`, `⌫` — through
+ * real key events, with before/after screenshots for the four gestures that
+ * change geometry.
+ *
  *   node scripts/verify-editor.mjs [--url http://localhost:5199] [--out /tmp/ss-editor]
+ *                                  [--map yale-street]
  */
 import { chromium } from 'playwright-core';
 import { mkdir, writeFile } from 'node:fs/promises';
@@ -40,6 +46,19 @@ for (let i = 2; i < process.argv.length; i += 2) {
 const url = args.get('url') ?? 'http://localhost:5199/';
 const outDir = args.get('out') ?? '/tmp/ss-editor';
 const benchMs = Number(args.get('bench') ?? 12000);
+/**
+ * Which map gates 1-3 and 5 run on.
+ *
+ * Pinned through `?map=`, not left to chance: `initialMapId` remembers the last
+ * map in `localStorage`, so an un-pinned run would open wherever the *previous*
+ * run happened to finish and the numbers would not be comparable.
+ */
+const mapId = args.get('map') ?? 'yale-street';
+const pageUrl = (() => {
+  const u = new URL(url);
+  u.searchParams.set('map', mapId);
+  return u.toString();
+})();
 
 await mkdir(outDir, { recursive: true });
 
@@ -112,6 +131,99 @@ const project = (p) =>
     };
   }, [p.x, p.y, p.z]);
 
+/** The panels the harness reads, in one object. */
+const editorState = () =>
+  page.evaluate(() => {
+    const s = window.__editor.state;
+    return {
+      mode: s.mode,
+      placing: s.placing,
+      snapped: s.snapped,
+      flipped: s.flipped,
+      valid: s.valid,
+      laneLabel: s.laneLabel,
+      rotationDeg: s.rotationDeg === null ? null : +s.rotationDeg.toFixed(3),
+      selection: [...s.selection],
+      actors: s.actors.length,
+      hint: s.hint,
+    };
+  });
+
+const actorOf = (id) =>
+  page.evaluate(
+    (wanted) => {
+      const a = window.__editor.state.actors.find((x) => x.id === wanted);
+      return a ? JSON.parse(JSON.stringify(a)) : null;
+    },
+    id,
+  );
+
+/** Keyboard shortcuts are ignored while an inspector field has focus — by design. */
+const blurUi = () => page.evaluate(() => document.activeElement?.blur?.());
+
+/**
+ * Put the real cursor over a world point.
+ *
+ * Returns `null` when the point is off screen *or* behind a panel: the left and
+ * right rails float over the canvas, and a press there is a UI click, not a map
+ * click, so a gesture driven at such a point would silently do nothing.
+ */
+const hover = async (point, steps = 6) => {
+  const screen = await project(point);
+  if (!screen.onScreen) return null;
+  const onCanvas = await page.evaluate(
+    ([x, y]) => document.elementFromPoint(x, y) === window.__viewer.renderer.domElement,
+    [screen.x, screen.y],
+  );
+  if (!onCanvas) return null;
+  await page.mouse.move(screen.x, screen.y, { steps });
+  await page.waitForTimeout(80);
+  return screen;
+};
+
+/**
+ * Arm a catalog entry.
+ *
+ * The palette is a toggle — clicking the entry that is already armed disarms it
+ * — so a harness that just clicks can end up in `idle` and place nothing.
+ */
+const armPalette = async (catalogId) => {
+  await page.click(`[data-testid="palette-${catalogId}"]`);
+  // Wait for the snapshot rather than re-clicking on the first miss. The
+  // controller coalesces notifications to one animation frame, and right after a
+  // map switch a frame can take >100 ms, so `state` still reads `idle` when
+  // `click` resolves — and a second click on a *toggle* disarms what the first
+  // one armed. That race silently placed nothing on one map per run.
+  const armed = await page
+    .waitForFunction(
+      (id) => window.__editor?.state.mode === 'placing' && window.__editor.state.placing === id,
+      catalogId,
+      { timeout: 5000 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (!armed) {
+    await page.click(`[data-testid="palette-${catalogId}"]`);
+    await page.waitForTimeout(400);
+  }
+  return editorState();
+};
+
+/** Confirm a modal gesture / drop a ghost where the cursor already is. */
+const clickHere = async () => {
+  await page.mouse.down();
+  await page.mouse.up();
+  await page.waitForTimeout(180);
+};
+
+const deg = (rad) => (rad * 180) / Math.PI;
+const wrapDeg = (d) => {
+  let out = d % 360;
+  if (out > 180) out -= 360;
+  if (out <= -180) out += 360;
+  return out;
+};
+
 const rendererInfo = async () => {
   // Three collections: the first frees the disposed viewer, the second its
   // now-unreachable typed arrays, the third settles the tail.
@@ -139,7 +251,7 @@ const rendererInfo = async () => {
 const clearScenarios = () =>
   page.evaluate(() => {
     for (const key of Object.keys(localStorage)) {
-      if (key.startsWith('scenario-studio:scenario:')) localStorage.removeItem(key);
+      if (key.startsWith('uniscenarios:scenario:')) localStorage.removeItem(key);
     }
   });
 
@@ -220,9 +332,11 @@ const placementPoints = (stage, count, spacing, lateral = 0, radius = 55, cleara
  *   the cursor in steps and pauses between placements.
  */
 async function placeAll(catalogId, points, pace) {
-  await page.click(`[data-testid="palette-${catalogId}"]`);
+  await blurUi();
+  const armed = await armPalette(catalogId);
+  const before = armed.actors;
   const started = Date.now();
-  let placed = 0;
+  let clicked = 0;
   let offScreen = 0;
   for (const point of points) {
     const screen = await project(point);
@@ -239,11 +353,52 @@ async function placeAll(catalogId, points, pace) {
     }
     await page.mouse.down();
     await page.mouse.up();
-    placed++;
+    clicked++;
     if (pace === 'human') await page.waitForTimeout(420);
   }
+  const ms = Date.now() - started;
   await page.keyboard.press('Escape');
-  return { ms: Date.now() - started, placed, offScreen };
+  await page.waitForTimeout(150);
+  const added = (await editorState()).actors - before;
+  const result = { ms, placed: clicked, added, offScreen };
+  // A click that placed nothing is the interesting case; replay those points
+  // slowly and record what the ghost said, outside the timed section.
+  if (added < clicked) result.refusals = await diagnosePlacement(catalogId, points);
+  return result;
+}
+
+/** Why did a click not place? One slow pass, reporting the ghost's own verdict. */
+async function diagnosePlacement(catalogId, points) {
+  const rows = [];
+  await blurUi();
+  await armPalette(catalogId);
+  for (const point of points.slice(0, 6)) {
+    const screen = await project(point);
+    if (!screen.onScreen) {
+      rows.push({ point: [+point.x.toFixed(1), +point.z.toFixed(1)], why: 'off screen', ndcZ: null });
+      continue;
+    }
+    const over = await page.evaluate(
+      ([x, y]) => document.elementFromPoint(x, y)?.tagName ?? null,
+      [screen.x, screen.y],
+    );
+    await page.mouse.move(screen.x, screen.y, { steps: 6 });
+    await page.waitForTimeout(200);
+    const ghost = await editorState();
+    rows.push({
+      point: [+point.x.toFixed(1), +point.z.toFixed(1)],
+      screen: [Math.round(screen.x), Math.round(screen.y)],
+      over,
+      mode: ghost.mode,
+      placing: ghost.placing,
+      snapped: ghost.snapped,
+      valid: ghost.valid,
+      lane: ghost.laneLabel,
+    });
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(120);
+  return rows;
 }
 
 /** Measure fps by sampling the viewer's own rolling average at a fixed pose. */
@@ -271,8 +426,8 @@ const sampleFps = async (seconds = 5) => {
 const report = { url, machine: { cores: os.cpus().length, load: os.loadavg()[0] } };
 
 // ------------------------------------------------------------------ 0. load
-console.log(`> opening ${url}`);
-await page.goto(url, { waitUntil: 'load' });
+console.log(`> opening ${pageUrl}`);
+await page.goto(pageUrl, { waitUntil: 'load' });
 await page.waitForFunction(() => Boolean(window.__viewer), null, { timeout: 30000 });
 await clearScenarios();
 await page.reload({ waitUntil: 'load' });
@@ -334,12 +489,12 @@ const gestures = {};
 // `extensions.propsV0`. They must behave like everything else on screen and
 // survive a save.
 const conePoints = await placementPoints(stage, 3, 6, 3.2, 40, 3);
-await placeAll('construction.traffic_cone', conePoints, 'fast');
+gestures.conePlacement = { points: conePoints.length, ...(await placeAll('construction.traffic_cone', conePoints, 'fast')) };
 await page.evaluate(() => window.__editor.doc.flush());
 gestures.props = await page.evaluate(() => {
   const doc = window.__editor.doc.data;
   const stored = JSON.parse(
-    localStorage.getItem(`scenario-studio:scenario:autosave-${window.__mapId}`) ?? '{}',
+    localStorage.getItem(`uniscenarios:scenario:autosave-${window.__mapId}`) ?? '{}',
   );
   return {
     inDocument: (doc.extensions?.propsV0 ?? []).length,
@@ -349,6 +504,7 @@ gestures.props = await page.evaluate(() => {
     actors: window.__editor.state.actors.filter((a) => a.kind === 'prop').length,
   };
 });
+console.log(`  cones ${JSON.stringify(gestures.conePlacement)}`);
 console.log(`  props ${JSON.stringify(gestures.props)}`);
 
 // Duplicate / undo / redo / delete, through the real key bindings.
@@ -423,6 +579,356 @@ gestures.inspector = {
 console.log(`  inspector ${JSON.stringify(gestures.inspector)}`);
 report.gestures = gestures;
 await shot('01b-props-and-gestures');
+
+// ------------------------------------------------------ 1c. keyboard model
+console.log('> gate 1c: keyboard model — G, R, ⇧R, ⌘D, ⌫, Esc, ⌘Z, Tab, ⌥');
+const keys = {};
+await blurUi();
+
+// --- G: move, sliding along the lane -------------------------------------
+// Pick the anchored vehicle with the most lane left in front of it, so the
+// slide has somewhere to go without falling off the end of a junction lane.
+const slideActor = await page.evaluate(() => {
+  const editor = window.__editor;
+  let best = null;
+  for (const a of editor.state.actors) {
+    if (a.kind !== 'vehicle' || !a.laneRef) continue;
+    const lane = editor.laneIndex.laneFor(a.laneRef.roadId, a.laneRef.section, a.laneRef.laneId);
+    if (!lane) continue;
+    const room = lane.forward ? lane.length - a.laneRef.s : a.laneRef.s;
+    if (!best || room > best.room) best = { id: a.id, room: +room.toFixed(2), forward: lane.forward };
+  }
+  if (best) editor.setSelection([best.id]);
+  return best;
+});
+const slideM = Math.max(3, Math.min(12, slideActor.room - 1));
+const slideTo = await page.evaluate(
+  ([id, d]) => {
+    const editor = window.__editor;
+    const a = editor.state.actors.find((x) => x.id === id);
+    const lane = editor.laneIndex.laneFor(a.laneRef.roadId, a.laneRef.section, a.laneRef.laneId);
+    const s = lane.forward ? a.laneRef.s + d : a.laneRef.s - d;
+    const p = editor.laneIndex.poseAt(lane, s, a.laneRef.t);
+    return { x: p.x, y: window.__overlays.sampleHeight(p.x, p.z), z: p.z, s: +s.toFixed(3) };
+  },
+  [slideActor.id, slideM],
+);
+const grabBefore = await actorOf(slideActor.id);
+await shot('kb-01-grab-before');
+await hover({ x: grabBefore.x, y: grabBefore.y, z: grabBefore.z });
+await page.keyboard.press('g');
+await page.waitForTimeout(140);
+const grabArmed = await editorState();
+const grabReached = await hover(slideTo);
+await page.waitForTimeout(200);
+await shot('kb-02-grab-dragging');
+await clickHere();
+const grabAfter = await actorOf(slideActor.id);
+await shot('kb-03-grab-after');
+keys.grab = {
+  mode: grabArmed.mode,
+  hint: grabArmed.hint,
+  cursorReachedTarget: grabReached !== null,
+  requestedM: +slideM.toFixed(2),
+  movedM: +Math.hypot(grabAfter.x - grabBefore.x, grabAfter.z - grabBefore.z).toFixed(3),
+  sBefore: +grabBefore.laneRef.s.toFixed(3),
+  sAfter: grabAfter.laneRef ? +grabAfter.laneRef.s.toFixed(3) : null,
+  stillAnchored: Boolean(grabAfter.laneRef),
+  sameLane: grabAfter.laneRef?.laneId === grabBefore.laneRef.laneId,
+  tHeldM: grabAfter.laneRef ? +(grabAfter.laneRef.t - grabBefore.laneRef.t).toFixed(4) : null,
+  // The whole point of "slide along the lane": the actor must stay on the
+  // centreline it was anchored to, however the cursor wandered.
+  offCentreM: await page.evaluate((id) => {
+    const editor = window.__editor;
+    const a = editor.state.actors.find((x) => x.id === id);
+    if (!a?.laneRef) return null;
+    const lane = editor.laneIndex.laneFor(a.laneRef.roadId, a.laneRef.section, a.laneRef.laneId);
+    const p = editor.laneIndex.poseAt(lane, a.laneRef.s, a.laneRef.t);
+    return +Math.hypot(a.x - p.x, a.z - p.z).toFixed(5);
+  }, slideActor.id),
+};
+console.log(`  G  ${JSON.stringify(keys.grab)}`);
+
+// --- Esc cancels a move without writing to the document -------------------
+await blurUi();
+await page.evaluate((id) => window.__editor.setSelection([id]), slideActor.id);
+const escPoseBefore = await actorOf(slideActor.id);
+await hover({ x: escPoseBefore.x, y: escPoseBefore.y, z: escPoseBefore.z });
+await page.keyboard.press('g');
+await page.waitForTimeout(120);
+await hover({ x: escPoseBefore.x + 6, y: escPoseBefore.y, z: escPoseBefore.z + 6 });
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+const escPoseAfter = await actorOf(slideActor.id);
+const escState = await editorState();
+keys.escapeCancelsGrab = {
+  mode: escState.mode,
+  poseUnchanged:
+    escPoseAfter.x === escPoseBefore.x &&
+    escPoseAfter.z === escPoseBefore.z &&
+    escPoseAfter.headingRad === escPoseBefore.headingRad,
+};
+console.log(`  Esc(grab) ${JSON.stringify(keys.escapeCancelsGrab)}`);
+
+// --- R, and ⇧R's 15° snap -------------------------------------------------
+await blurUi();
+await page.evaluate((id) => window.__editor.setSelection([id]), slideActor.id);
+const rotBefore = await actorOf(slideActor.id);
+await shot('kb-04-rotate-before');
+// Cursor on a 10 m arm, due east of the actor, then swung to +47°. With ⇧ held
+// the readout must land exactly on 45°, not on 47°.
+const ARM_M = 10;
+const armPoint = (angleDeg) => ({
+  x: rotBefore.x + ARM_M * Math.cos((angleDeg * Math.PI) / 180),
+  y: rotBefore.y,
+  z: rotBefore.z - ARM_M * Math.sin((angleDeg * Math.PI) / 180),
+});
+await hover(armPoint(0));
+await page.keyboard.press('r');
+await page.waitForTimeout(140);
+const rotArmed = await editorState();
+await page.keyboard.down('Shift');
+await hover(armPoint(47));
+await page.waitForTimeout(200);
+const snappedDeg = (await editorState()).rotationDeg;
+await shot('kb-05-rotate-shift-snap');
+await page.keyboard.up('Shift');
+await page.waitForTimeout(200);
+const freeDeg = (await editorState()).rotationDeg;
+await page.keyboard.down('Shift');
+await page.waitForTimeout(200);
+const snappedAgainDeg = (await editorState()).rotationDeg;
+await clickHere();
+await page.keyboard.up('Shift');
+const rotAfter = await actorOf(slideActor.id);
+await shot('kb-06-rotate-after');
+keys.rotate = {
+  mode: rotArmed.mode,
+  hint: rotArmed.hint,
+  freeDeg,
+  snappedDeg,
+  snappedAgainDeg,
+  isMultipleOf15: snappedDeg === null ? null : Math.abs(snappedDeg / 15 - Math.round(snappedDeg / 15)) < 1e-6,
+  appliedDeg: +wrapDeg(deg(rotAfter.headingRad - rotBefore.headingRad)).toFixed(3),
+  // A deliberate skew is recorded on the anchor, not lost.
+  offsetRecordedDeg: rotAfter.laneRef ? +deg(rotAfter.laneRef.headingOffsetRad).toFixed(3) : null,
+  positionHeldM: +Math.hypot(rotAfter.x - rotBefore.x, rotAfter.z - rotBefore.z).toFixed(5),
+};
+console.log(`  R  ${JSON.stringify(keys.rotate)}`);
+
+// Put it back so the accuracy gate is not measuring a deliberately skewed car
+// twice; the skew itself is already recorded above.
+await page.keyboard.press('Meta+z');
+await page.waitForTimeout(200);
+keys.rotate.undoRestoredHeading =
+  +wrapDeg(deg((await actorOf(slideActor.id)).headingRad - rotBefore.headingRad)).toFixed(4);
+
+// --- ⌘D: duplicate one body-length *behind*, along the lane ---------------
+await blurUi();
+const dupSource = await page.evaluate(() => {
+  const editor = window.__editor;
+  let best = null;
+  for (const a of editor.state.actors) {
+    if (a.kind !== 'vehicle' || !a.laneRef) continue;
+    const lane = editor.laneIndex.laneFor(a.laneRef.roadId, a.laneRef.section, a.laneRef.laneId);
+    if (!lane) continue;
+    // Room *behind* it, which is where the copy goes.
+    const room = lane.forward ? a.laneRef.s : lane.length - a.laneRef.s;
+    if (!best || room > best.room) best = { id: a.id, room: +room.toFixed(2) };
+  }
+  editor.setSelection([best.id]);
+  return best;
+});
+const dupBefore = await actorOf(dupSource.id);
+const countBeforeDup = (await editorState()).actors;
+await shot('kb-07-duplicate-before');
+await page.keyboard.press('Meta+d');
+await page.waitForTimeout(250);
+const dupCopy = await page.evaluate(() => {
+  const id = window.__editor.state.selection[0];
+  const a = window.__editor.state.actors.find((x) => x.id === id);
+  return a ? JSON.parse(JSON.stringify(a)) : null;
+});
+await shot('kb-08-duplicate-after');
+// Signed distance along the original's own heading: negative means behind.
+const along =
+  (dupCopy.x - dupBefore.x) * Math.cos(dupBefore.headingRad) +
+  (dupCopy.z - dupBefore.z) * -Math.sin(dupBefore.headingRad);
+const lateral =
+  (dupCopy.x - dupBefore.x) * Math.sin(dupBefore.headingRad) +
+  (dupCopy.z - dupBefore.z) * Math.cos(dupBefore.headingRad);
+keys.duplicate = {
+  added: (await editorState()).actors - countBeforeDup,
+  alongHeadingM: +along.toFixed(3),
+  lateralM: +lateral.toFixed(3),
+  expectedGapM: +(dupBefore.dims.l + 1).toFixed(3),
+  sameLane: dupCopy.laneRef?.laneId === dupBefore.laneRef.laneId &&
+    dupCopy.laneRef?.roadId === dupBefore.laneRef.roadId,
+  selectionMovedToCopy: dupCopy.id !== dupBefore.id,
+  headingMatchesDeg: +wrapDeg(deg(dupCopy.headingRad - dupBefore.headingRad)).toFixed(3),
+};
+console.log(`  ⌘D ${JSON.stringify(keys.duplicate)}`);
+
+// --- ⌘Z / ⇧⌘Z around that duplicate --------------------------------------
+await page.keyboard.press('Meta+z');
+await page.waitForTimeout(250);
+const afterUndoKb = (await editorState()).actors;
+await shot('kb-09-undo-after');
+await page.keyboard.press('Meta+Shift+z');
+await page.waitForTimeout(250);
+const afterRedoKb = (await editorState()).actors;
+keys.undoRedo = {
+  before: countBeforeDup,
+  afterDuplicate: countBeforeDup + 1,
+  afterUndo: afterUndoKb,
+  afterRedo: afterRedoKb,
+  undoRemovedTheCopy: afterUndoKb === countBeforeDup,
+  redoBroughtItBack: afterRedoKb === countBeforeDup + 1,
+};
+console.log(`  ⌘Z ${JSON.stringify(keys.undoRedo)}`);
+
+// --- ⌫ delete -------------------------------------------------------------
+await blurUi();
+await page.evaluate(() => {
+  const id = window.__editor.state.actors[window.__editor.state.actors.length - 1].id;
+  window.__editor.setSelection([id]);
+});
+const beforeDel = (await editorState()).actors;
+await page.keyboard.press('Delete');
+await page.waitForTimeout(250);
+keys.delete = { before: beforeDel, after: (await editorState()).actors };
+console.log(`  ⌫  ${JSON.stringify(keys.delete)}`);
+
+// --- Tab: flip the ghost to the opposing lane -----------------------------
+// A point on a road that actually has an opposing lane, as close to the stage
+// (i.e. to the middle of the frame) as possible.
+const flipPoint = await page.evaluate(
+  ([sx, sz, radius]) => {
+    const idx = window.__editor.laneIndex;
+    let best = null;
+    for (const lane of idx.all) {
+      for (let s = 0; s <= lane.length; s += 4) {
+        const p = idx.poseAt(lane, s, 0);
+        const d = Math.hypot(p.x - sx, p.z - sz);
+        if (d > radius || (best && best.d <= d)) continue;
+        const hit = idx.nearest(p.x, p.z, 30);
+        if (!hit) continue;
+        const opp = idx.nearestOpposing(p.x, p.z, hit.headingRad, 30);
+        if (!opp || opp.lane.rsl === hit.lane.rsl) continue;
+        best = {
+          x: p.x,
+          z: p.z,
+          y: window.__overlays.sampleHeight(p.x, p.z),
+          d,
+          laneId: hit.lane.laneId,
+          roadId: hit.lane.roadId,
+          headingDeg: (hit.headingRad * 180) / Math.PI,
+          oppLaneId: opp.lane.laneId,
+          oppRoadId: opp.lane.roadId,
+          oppHeadingDeg: (opp.headingRad * 180) / Math.PI,
+        };
+      }
+    }
+    return best;
+  },
+  [stage.x, stage.z, 50],
+);
+if (!flipPoint) {
+  keys.tab = { skipped: 'no two-way road within 50 m of the stage' };
+} else {
+  await blurUi();
+  await armPalette('vehicle.sedan');
+  const reached = await hover(flipPoint);
+  const beforeTab = await editorState();
+  await page.keyboard.press('Tab');
+  await page.waitForTimeout(220);
+  const afterTab = await editorState();
+  keys.tab = {
+    cursorOnMap: reached !== null,
+    snappedBefore: beforeTab.snapped,
+    flippedBefore: beforeTab.flipped,
+    flippedAfter: afterTab.flipped,
+    laneBefore: beforeTab.laneLabel,
+    laneAfter: afterTab.laneLabel,
+    laneChanged: beforeTab.laneLabel !== afterTab.laneLabel,
+    indexOpposingDeltaDeg: +Math.abs(wrapDeg(flipPoint.oppHeadingDeg - flipPoint.headingDeg)).toFixed(2),
+  };
+  if (afterTab.valid) {
+    await clickHere();
+    const placed = await page.evaluate(() => {
+      const id = window.__editor.state.selection[0];
+      const a = window.__editor.state.actors.find((x) => x.id === id);
+      return a ? JSON.parse(JSON.stringify(a)) : null;
+    });
+    keys.tab.placedLaneId = placed?.laneRef?.laneId ?? null;
+    keys.tab.placedOnOpposingLane = placed?.laneRef?.laneId === flipPoint.oppLaneId;
+    keys.tab.placedVsUnflippedDeg = placed
+      ? +Math.abs(wrapDeg(deg(placed.headingRad) - flipPoint.headingDeg)).toFixed(2)
+      : null;
+  } else {
+    keys.tab.placedLaneId = 'not placed (ghost invalid — occupied)';
+  }
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  await shot('kb-10-tab-opposing-lane');
+}
+console.log(`  Tab ${JSON.stringify(keys.tab)}`);
+
+// --- ⌥: free placement, no lane snap --------------------------------------
+const freeSpot = (await placementPoints(stage, 1, 8, 0, 50, 6))[0];
+if (!freeSpot) {
+  keys.alt = { skipped: 'no free ground near the stage' };
+} else {
+  await blurUi();
+  await armPalette('vehicle.sedan');
+  await hover(freeSpot);
+  const snappedState = await editorState();
+  await page.keyboard.down('Alt');
+  await hover({ ...freeSpot, x: freeSpot.x + 0.05 });
+  const altState = await editorState();
+  await clickHere();
+  await page.keyboard.up('Alt');
+  const freePlaced = await page.evaluate(() => {
+    const id = window.__editor.state.selection[0];
+    const a = window.__editor.state.actors.find((x) => x.id === id);
+    return a ? JSON.parse(JSON.stringify(a)) : null;
+  });
+  keys.alt = {
+    snappedWithoutAlt: snappedState.snapped,
+    snappedWithAlt: altState.snapped,
+    hint: altState.hint,
+    placedAnchored: Boolean(freePlaced?.laneRef),
+    // Free placement still lands on the ground.
+    groundDeltaM: freePlaced
+      ? +Math.abs(
+          freePlaced.y -
+            (await page.evaluate(
+              ([x, z]) => window.__overlays.sampleHeight(x, z),
+              [freePlaced.x, freePlaced.z],
+            )),
+        ).toFixed(4)
+      : null,
+  };
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  await shot('kb-11-alt-free-placement');
+}
+console.log(`  ⌥  ${JSON.stringify(keys.alt)}`);
+
+// --- Esc leaves placement mode -------------------------------------------
+await blurUi();
+const armedState = await armPalette('pedestrian.adult_walking');
+await page.keyboard.press('Escape');
+await page.waitForTimeout(200);
+const idleState = await editorState();
+keys.escape = {
+  armedMode: armedState.mode,
+  armedPlacing: armedState.placing,
+  afterMode: idleState.mode,
+  afterPlacing: idleState.placing,
+};
+console.log(`  Esc ${JSON.stringify(keys.escape)}`);
+report.keys = keys;
 
 // ------------------------------------------- 2. ground + heading accuracy
 console.log('> gate 2: ground contact and lane heading');
@@ -586,7 +1092,7 @@ const before = await page.evaluate(() =>
   ),
 );
 const storedBefore = await page.evaluate(() =>
-  localStorage.getItem(`scenario-studio:scenario:autosave-${window.__mapId}`),
+  localStorage.getItem(`uniscenarios:scenario:autosave-${window.__mapId}`),
 );
 await page.reload({ waitUntil: 'load' });
 await editorReady();
@@ -597,7 +1103,7 @@ const after = await page.evaluate(() =>
 );
 await page.evaluate(() => window.__editor.doc.flush());
 const storedAfter = await page.evaluate(() =>
-  localStorage.getItem(`scenario-studio:scenario:autosave-${window.__mapId}`),
+  localStorage.getItem(`uniscenarios:scenario:autosave-${window.__mapId}`),
 );
 report.persistence = {
   actorsBefore: JSON.parse(before).length,
@@ -653,6 +1159,7 @@ for (const id of maps) {
   entry.lanes = await page.evaluate(() => window.__editor.laneIndex.stats.lanes);
   entry.signalDraws = await page.evaluate(() => window.__overlays.stats.signalDrawCalls);
   entry.placed = await page.evaluate(() => window.__editor.state.actors.length);
+  entry.placement = { points: points.length, ...placed };
   entry.placeMs = placed.ms;
   entry.accuracy = await page.evaluate(() => {
     const editor = window.__editor;
@@ -672,7 +1179,9 @@ for (const id of maps) {
     }
     return { worstGroundDeltaM: +worstY.toFixed(4), worstHeadingDeg: +worstHeading.toFixed(4) };
   });
-  console.log(`    ${id}: ${entry.placed} actors, ${JSON.stringify(entry.accuracy)}`);
+  console.log(
+    `    ${id}: ${entry.placed} actors, ${JSON.stringify(entry.accuracy)} place=${JSON.stringify(entry.placement)}`,
+  );
   await shot(`03-map-${id}`);
 }
 
@@ -755,6 +1264,22 @@ await streamIdle(60000);
 await page.waitForTimeout(2000);
 await shot('04-street-30-actors');
 
+// The same pose with the nearest actor selected, so the inspector is on screen
+// showing a real lane anchor — the shot the brief asks for.
+await page.evaluate(
+  ([x, z]) => {
+    const actors = window.__editor.state.actors;
+    let best = actors[0];
+    for (const a of actors) {
+      if (Math.hypot(a.x - x, a.z - z) < Math.hypot(best.x - x, best.z - z)) best = a;
+    }
+    window.__editor.setSelection([best.id]);
+  },
+  [streetPose.target[0], streetPose.target[2]],
+);
+await page.waitForTimeout(600);
+await shot('06-street-inspector');
+
 const setActorsVisible = (visible) =>
   page.evaluate((v) => {
     window.__editor.renderer.group.visible = v;
@@ -783,6 +1308,93 @@ await setView(streetPose.eye, streetPose.target);
 await page.waitForTimeout(1500);
 await shot('05-final');
 
+// ------------------------------------------------- 6. ⌘D builds a queue
+// The gesture the duplicate rule exists for: select one car, hold ⌘D, get a
+// stopped queue in its own lane. Shot from above, where a queue reads.
+console.log('> gate 6: ⌘D queue, top-down');
+await page.evaluate(() => {
+  const ids = window.__editor.state.actors.map((a) => a.id);
+  window.__editor.setSelection(ids);
+  window.__editor.deleteSelection();
+});
+await page.waitForTimeout(300);
+const queueSeed = await page.evaluate(
+  ([x, z]) => {
+    const index = window.__editor.laneIndex;
+    // The longest lane near the stage, so five cars fit nose to tail.
+    let best = null;
+    for (const lane of index.all) {
+      const mid = index.poseAt(lane, lane.length / 2, 0);
+      if (Math.hypot(mid.x - x, mid.z - z) > 90) continue;
+      if (!best || lane.length > best.length) best = { lane, length: lane.length, mid };
+    }
+    if (!best) return null;
+    // Start near the downstream end so the copies march back up the lane.
+    const s = best.lane.forward ? best.length - 6 : 6;
+    const pose = index.poseAt(best.lane, s, 0);
+    return {
+      x: pose.x,
+      y: window.__overlays.sampleHeight(pose.x, pose.z),
+      z: pose.z,
+      headingDeg: (pose.headingRad * 180) / Math.PI,
+      laneLength: +best.length.toFixed(1),
+    };
+  },
+  [benchStage.x, benchStage.z],
+);
+report.queue = { seed: queueSeed };
+if (queueSeed) {
+  await setView(
+    [queueSeed.x + 6, queueSeed.y + 70, queueSeed.z + 6],
+    [queueSeed.x, queueSeed.y, queueSeed.z],
+  );
+  await streamIdle(60000);
+  await page.waitForTimeout(1500);
+  await blurUi();
+  await armPalette('vehicle.sedan');
+  await hover(queueSeed);
+  await clickHere();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(200);
+  for (let i = 0; i < 5; i++) {
+    await blurUi();
+    await page.keyboard.press('Meta+d');
+    await page.waitForTimeout(220);
+  }
+  report.queue.actors = await page.evaluate(() => {
+    const index = window.__editor.laneIndex;
+    const rows = window.__editor.state.actors
+      .filter((a) => a.laneRef)
+      .map((a) => ({ id: a.id, s: a.laneRef.s, lane: `${a.laneRef.roadId}:${a.laneRef.laneId}`, x: a.x, z: a.z }))
+      .sort((a, b) => a.s - b.s);
+    const gaps = [];
+    for (let i = 1; i < rows.length; i++) {
+      gaps.push(+Math.hypot(rows[i].x - rows[i - 1].x, rows[i].z - rows[i - 1].z).toFixed(3));
+    }
+    return {
+      n: window.__editor.state.actors.length,
+      anchored: rows.length,
+      lanes: [...new Set(rows.map((r) => r.lane))],
+      gapsM: gaps,
+      worstHeadingDeg: +window.__editor.state.actors
+        .reduce((worst, a) => {
+          if (!a.laneRef) return worst;
+          const lane = index.laneFor(a.laneRef.roadId, a.laneRef.section, a.laneRef.laneId);
+          if (!lane) return worst;
+          const pose = index.poseAt(lane, a.laneRef.s, a.laneRef.t);
+          let d = a.headingRad - pose.headingRad - a.laneRef.headingOffsetRad;
+          while (d > Math.PI) d -= Math.PI * 2;
+          while (d <= -Math.PI) d += Math.PI * 2;
+          return Math.max(worst, Math.abs((d * 180) / Math.PI));
+        }, 0)
+        .toFixed(4),
+    };
+  });
+  await page.waitForTimeout(600);
+  await shot('07-topdown-queue');
+  console.log(`  queue ${JSON.stringify(report.queue.actors)}`);
+}
+
 report.consoleErrors = consoleErrors;
 report.consoleWarnings = consoleWarnings.slice(0, 20);
 await writeFile(path.join(outDir, 'report.json'), JSON.stringify(report, null, 2));
@@ -801,11 +1413,21 @@ console.log(`independent recompute     : ${JSON.stringify(report.accuracy.indepe
 console.log(`props sidecar             : ${JSON.stringify(report.gestures.props)}`);
 console.log(`gestures                  : ${JSON.stringify(report.gestures.history)}`);
 console.log(`inspector sync            : ${JSON.stringify(report.gestures.inspector)}`);
+console.log(`G move (slide on lane)    : ${JSON.stringify(report.keys.grab)}`);
+console.log(`Esc cancels move          : ${JSON.stringify(report.keys.escapeCancelsGrab)}`);
+console.log(`R / ⇧R 15° snap           : ${JSON.stringify(report.keys.rotate)}`);
+console.log(`⌘D duplicate behind       : ${JSON.stringify(report.keys.duplicate)}`);
+console.log(`⌘Z / ⇧⌘Z                  : ${JSON.stringify(report.keys.undoRedo)}`);
+console.log(`⌫ delete                  : ${JSON.stringify(report.keys.delete)}`);
+console.log(`Tab opposing lane         : ${JSON.stringify(report.keys.tab)}`);
+console.log(`⌥ free placement          : ${JSON.stringify(report.keys.alt)}`);
+console.log(`Esc leaves placement      : ${JSON.stringify(report.keys.escape)}`);
 console.log(`reload identical          : ${report.persistence.poseIdentical} (bytes ${report.persistence.bytesIdentical})`);
 console.log(`maps                      : ${report.maps.map((m) => `${m.id}=${m.placed}`).join(' ')}`);
 console.log(`leak drift geometry/tex   : ${JSON.stringify(report.leaks.geometryDrift)} / ${JSON.stringify(report.leaks.textureDrift)}`);
 console.log(`street fps (30 actors)    : ${JSON.stringify(report.frameBudget.street.withActors)}`);
 console.log(`street fps (hidden)       : ${JSON.stringify(report.frameBudget.street.withoutActors)}`);
+console.log(`⌘D queue                  : ${JSON.stringify(report.queue?.actors ?? report.queue)}`);
 console.log(`console errors            : ${consoleErrors.length}`);
 for (const err of consoleErrors.slice(0, 20)) console.log(`  ${err}`);
 

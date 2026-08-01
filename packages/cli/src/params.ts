@@ -23,7 +23,7 @@ import {
   Rng,
   contentHash,
   sha256,
-} from '@scenario-studio/sim-engine';
+} from '@uniscenarios/sim-engine';
 import {
   compareWith,
   evaluateExpr,
@@ -31,7 +31,7 @@ import {
   type ExprScope,
   type ParamDecl,
   type ScenarioTemplateV2,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 
 import { CliError } from './errors.js';
 

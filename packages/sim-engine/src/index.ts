@@ -1,5 +1,5 @@
 /**
- * `@scenario-studio/sim-engine` — the deterministic scenario simulation engine
+ * `@uniscenarios/sim-engine` — the deterministic scenario simulation engine
  * (layer 3 of `docs/agent-authoring-architecture.md`).
  *
  * Pure TypeScript, zod for the input contract, no rendering dependency: the
@@ -29,6 +29,7 @@ export {
   interactionSchema,
   laneRefSchema,
   occluderSchema,
+  occlusionPairSchema,
   poseSchema,
   regionSchema,
   routeSpecSchema,
@@ -48,6 +49,7 @@ export type {
   LaneChangeTarget,
   LaneRef,
   Occluder,
+  OcclusionPair,
   Pose,
   Region,
   RouteSpec,
@@ -128,6 +130,7 @@ export type {
   ActorTrack,
   EpisodeMetrics,
   InvariantResidual,
+  OccluderIneffective,
   MinTtcRecord,
   PairMinDistance,
   RevealToConflict,

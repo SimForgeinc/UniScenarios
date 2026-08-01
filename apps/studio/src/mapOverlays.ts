@@ -44,7 +44,7 @@
  */
 
 import { Group } from 'three';
-import type { CityViewer, GroundIndex } from '@scenario-studio/city-renderer';
+import type { CityViewer, GroundIndex } from '@uniscenarios/city-renderer';
 import {
   CoordinateFrame,
   buildLaneOverlay,
@@ -56,7 +56,7 @@ import {
   type LaneOverlayUserData,
   type SceneManifestLike,
   type SignalOverlayUserData,
-} from '@scenario-studio/xodr-tools';
+} from '@uniscenarios/xodr-tools';
 
 /** Where a map's overlay sidecars live. */
 export interface MapOverlayUrls {

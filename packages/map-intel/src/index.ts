@@ -1,5 +1,5 @@
 /**
- * `@scenario-studio/map-intel` — layer 1 of the Scenario Studio stack.
+ * `@uniscenarios/map-intel` — layer 1 of the UniScenarios stack.
  *
  * Per map, offline, one build step, cached by source hashes:
  *
@@ -15,7 +15,7 @@
  *    `resolveReference`, pure functions over the built artifacts.
  *
  * ```ts
- * import { buildMapIntelFromDir, findLocations, describeLocation } from '@scenario-studio/map-intel';
+ * import { buildMapIntelFromDir, findLocations, describeLocation } from '@uniscenarios/map-intel';
  *
  * const { catalog, derived } = await buildMapIntelFromDir('dev-assets/yale-street');
  *

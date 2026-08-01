@@ -1,4 +1,4 @@
-# @scenario-studio/scenario-model
+# @uniscenarios/scenario-model
 
 The scenario document: schemas, edit history, (de)serialization, migrations,
 validation and persistence. Framework-free TypeScript — no React, no three.js,
@@ -18,7 +18,7 @@ for retargetable scenarios and the emission target for LLM agents — jump to
 [Schema v2](#schema-v2--the-portable-scenariotemplate).
 
 ```ts
-import { ScenarioDocument, WebScenarioFileStore } from '@scenario-studio/scenario-model';
+import { ScenarioDocument, WebScenarioFileStore } from '@uniscenarios/scenario-model';
 
 const doc = ScenarioDocument.create({
   name: 'Yale & Grant unprotected left',
@@ -56,7 +56,7 @@ doc.markClean();
 ## Frame conventions
 
 `pose.position` is the **scene frame**: metres, **y-up**, the same frame
-`CoordinateFrame.localToScene` in `@scenario-studio/xodr-tools` produces and the
+`CoordinateFrame.localToScene` in `@uniscenarios/xodr-tools` produces and the
 same one `manifest.scene.bounds` is expressed in. No translation is applied —
 scene coordinates are absolute OpenDRIVE-local coordinates, re-axed as
 `scene = (x, z, -y)`.
@@ -178,7 +178,7 @@ being partially parsed.
 ## Schema v2 — the portable `ScenarioTemplate`
 
 ```ts
-import { parseTemplate, validateTemplate } from '@scenario-studio/scenario-model';
+import { parseTemplate, validateTemplate } from '@uniscenarios/scenario-model';
 
 const template = parseTemplate({
   scenarioVersion: 2,
@@ -322,7 +322,7 @@ quietly does it wrong.
 ## Scripts
 
 ```sh
-pnpm --filter @scenario-studio/scenario-model test        # vitest
-pnpm --filter @scenario-studio/scenario-model typecheck   # tsc --noEmit
-pnpm --filter @scenario-studio/scenario-model schema      # regenerate JSON Schemas
+pnpm --filter @uniscenarios/scenario-model test        # vitest
+pnpm --filter @uniscenarios/scenario-model typecheck   # tsc --noEmit
+pnpm --filter @uniscenarios/scenario-model schema      # regenerate JSON Schemas
 ```

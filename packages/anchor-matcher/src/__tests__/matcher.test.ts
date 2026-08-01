@@ -83,6 +83,37 @@ describe('matchAnchor — the worked example', () => {
     expect(site.matchedReasons.length).toBeGreaterThan(0);
   });
 
+  it('binds point features on laterally adjacent lanes, such as roadside bus stops', () => {
+    const withRoadsideStop = {
+      ...signalizedIndex,
+      pointFeatures: [
+        ...signalizedIndex.pointFeatures,
+        { id: 'bus-stop:adjacent', kind: 'bus_stop' as const, laneRsl: '1:0:-2', s: 50, point: { x: -100, y: -5.25 } },
+      ],
+      factIndex: {
+        ...signalizedIndex.factIndex,
+        pointFeaturesByKind: {
+          ...signalizedIndex.factIndex.pointFeaturesByKind,
+          bus_stop: ['bus-stop:adjacent'],
+        },
+      },
+    };
+    const base = workedExampleAnchor();
+    const anchor = parseLogicalAnchor({
+      ...base,
+      id: 'worked-example-with-roadside-stop',
+      features: [
+        ...base.features,
+        { id: 'stop', kind: 'bus_stop', atM: { value: [-95, -85], essentiality: 'required' } },
+      ],
+    });
+
+    const [site] = matchAnchor(anchor, withRoadsideStop);
+    expect(site).toBeDefined();
+    expect(site!.featureMatches.stop?.mapFeatureId).toBe('bus-stop:adjacent');
+    expect(site!.clauses.find((c) => c.path === 'features.stop.atM')?.reason).toContain('same-road station');
+  });
+
   it('stamps map, digest and semantics version onto the site', () => {
     const site = sites[0]!;
     expect(site.mapId).toBe('synthetic');

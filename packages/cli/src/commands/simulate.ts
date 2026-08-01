@@ -8,7 +8,7 @@
 
 import path from 'node:path';
 
-import { runSimulation, traceDigest, type SimTrace } from '@scenario-studio/sim-engine';
+import { runSimulation, traceDigest, type SimTrace } from '@uniscenarios/sim-engine';
 
 import { EXIT } from '../errors.js';
 import { loadMap } from '../maps.js';
@@ -39,11 +39,22 @@ export function metricsSummary(trace: SimTrace): Record<string, unknown> {
     revealToConflict: m.revealToConflict
       ? {
           value: round(m.revealToConflict.value),
+          firstBlockedT: round(m.revealToConflict.firstBlockedT),
           losOpenT: round(m.revealToConflict.losOpenT),
           conflictT: round(m.revealToConflict.conflictT),
           pair: m.revealToConflict.pair,
+          occluderId: m.revealToConflict.occluderId ?? null,
+          relevantOccluderIds: m.revealToConflict.relevantOccluderIds,
         }
       : null,
+    occluderIneffective: (m.occluderIneffective ?? []).map((entry) => ({
+      pair: entry.pair,
+      conflictT: round(entry.conflictT),
+      firstBlockedT: entry.firstBlockedT === undefined ? null : round(entry.firstBlockedT),
+      occluderId: entry.occluderId ?? null,
+      relevantOccluderIds: entry.relevantOccluderIds,
+      reason: entry.reason,
+    })),
     collisions: m.collisions,
     triggerNeverFired: m.triggerNeverFired,
     clippedCriticality: m.clippedCriticality,
@@ -91,7 +102,8 @@ export async function simulate(options: SimulateOptions): Promise<number> {
       `requiredDecelMax    ${Object.entries(m.requiredDecelMax)
         .map(([k, v]) => `${k}: ${fixed(v)}`)
         .join(', ')}`,
-      `revealToConflict    ${m.revealToConflict ? `${fixed(m.revealToConflict.value)} s (LOS opened ${fixed(m.revealToConflict.losOpenT)} s, conflict ${fixed(m.revealToConflict.conflictT)} s)` : '—'}`,
+      `revealToConflict    ${m.revealToConflict ? `${fixed(m.revealToConflict.value)} s (${m.revealToConflict.occluderId ?? 'any'}: blocked ${fixed(m.revealToConflict.firstBlockedT)} s, LOS opened ${fixed(m.revealToConflict.losOpenT)} s, conflict ${fixed(m.revealToConflict.conflictT)} s; members ${m.revealToConflict.relevantOccluderIds.join(',') || '—'})` : '—'}`,
+      `occluderIneffective ${(m.occluderIneffective ?? []).map((e) => `${e.pair.join(' / ')} via ${e.occluderId ?? 'any'} (${e.reason}; members ${e.relevantOccluderIds.join(',') || '—'})`).join(', ') || '—'}`,
       `collisions          ${m.collisions.length}`,
       `triggerNeverFired   ${m.triggerNeverFired.join(', ') || '—'}`,
       `clippedCriticality  ${m.clippedCriticality}`,

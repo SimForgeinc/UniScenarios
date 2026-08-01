@@ -13,7 +13,7 @@
 
 import { memo, useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
-import { queryCatalog, type CatalogEntry, type CatalogId, type PropClass } from '@scenario-studio/prop-catalog';
+import { queryCatalog, type CatalogEntry, type CatalogId, type PropClass } from '@uniscenarios/prop-catalog';
 import type { EditorController, EditorState } from './controller';
 import type { ActorRecord } from './document';
 import { MAPS, type MapEntry } from '../maps';

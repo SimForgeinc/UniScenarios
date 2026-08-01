@@ -1,4 +1,7 @@
-# `@scenario-studio/cli` — `scen`
+# `@uniscenarios/cli` — `uniscenarios`
+
+`uniscenarios` is the canonical command. The shorter `scen` executable remains
+available as a compatibility alias for existing automation.
 
 Layer 4 of `docs/agent-authoring-architecture.md`: the surface an LLM agent
 drives the whole stack through. Query a map's semantics, author a template
@@ -6,8 +9,8 @@ against the published JSON Schemas, match it onto concrete sites, sample it into
 thousands of instances, simulate, filter, triage.
 
 ```bash
-node packages/cli/bin/scen.js sites match examples/ltap-opposing.template.json --all-maps --pretty
-node packages/cli/bin/scen.js batch examples/ltap-opposing.template.json --all-maps --draws 5 --out out/
+node packages/cli/bin/uniscenarios.js sites match examples/ltap-opposing.template.json --all-maps --pretty
+node packages/cli/bin/uniscenarios.js batch examples/ltap-opposing.template.json --all-maps --draws 5 --out out/
 ```
 
 ## The contract
@@ -26,24 +29,27 @@ That 1-vs-2 split is the whole reason an unattended repair loop works: `1` means
 ## Commands
 
 ```
-scen maps list
-scen locations find    --map <id> [--type --subtype --tags --affordances
+uniscenarios maps list
+uniscenarios locations find    --map <id> [--type --subtype --tags --affordances
                                    --facts k=v,k2>=v2 --near <handle>
                                    --within-m N --limit N --diversity-m N]
-scen locations get     <handleOrId> --map <id> [--describe]
-scen locations resolve --map <id> "<free text>"
-scen template validate <file> [--map <id> [--site <siteId>]]
-scen sites match       <template.json> --map <id> | --maps a,b | --all-maps
+uniscenarios locations get     <handleOrId> --map <id> [--describe]
+uniscenarios locations resolve --map <id> "<free text>"
+uniscenarios template validate <file> [--map <id> [--site <siteId>]]
+uniscenarios sites match       <template.json> --map <id> | --maps a,b | --all-maps
                        [--min-score --max-sites --rejected]
-scen instantiate       <template.json> --map <id> --site <siteId>
+uniscenarios instantiate       <template.json> --map <id> --site <siteId>
                        [--seed <hex> | --draw K] [--out file]
-scen simulate          <instance.json> [--trace out.trace.json.gz]
-scen validate          <instance|template> [--tier 1|2 --map --site --draw]
-scen evaluate          <trace> [--filter critical|negative-control|all]
+uniscenarios simulate          <instance.json> [--trace out.trace.json.gz]
+uniscenarios validate          <instance|template> [--tier 1|2 --map --site --draw]
+uniscenarios evaluate          <trace> [--filter critical|negative-control|all]
                        [--trivial-ttc S --reject-collisions]
-scen batch             <template.json> --maps a,b,c --draws N --out dir/
+uniscenarios evidence verify   <instance.json> <trace.json.gz>
+uniscenarios catalog create    --out <catalog.json> [--namespace ID --evidence-root DIR]
+uniscenarios catalog verify    <catalog.json> [--evidence-root DIR --require-evidence]
+uniscenarios batch             <template.json> --maps a,b,c --draws N --out dir/
                        [--concurrency N --min-score --max-sites --force --no-trace]
-scen schemas           [--name template|anchor|interactions] [--content]
+uniscenarios schemas           [--name template|anchor|interactions] [--content]
 ```
 
 `locations` is the model's spatial awareness: it never sees a road id, it
@@ -53,7 +59,7 @@ that need it.
 
 ## The materializer
 
-`scen instantiate` is the only genuinely new code in this package — everything
+`uniscenarios instantiate` is the only genuinely new code in this package — everything
 else composes the four packages below it. The four layers are each deliberately
 incomplete: the matcher does the *structural* pass and stops, the engine takes a
 *fully resolved* document and refuses anything less. `src/materialize.ts` is the
@@ -111,9 +117,26 @@ Every instance carries the key that reproduces it:
   "matcherVersion": "…", "solverVersion": "…", "paramSeed": "…", "drawIndex": 0 }
 ```
 
-`scen batch` resumes on all of it, not just the seed: a cached verdict from an
+`uniscenarios batch` resumes on all of it, not just the seed: a cached verdict from an
 older matcher or an older engine is exactly the stale answer a resumable batch
 exists to prevent.
+
+## Deterministic five-map catalog
+
+`uniscenarios catalog create` reserves exactly **100 identities on each of the five
+supported maps** (500 total) before expensive generation begins. Every slot
+carries the map catalog revision and topology digest, template source/digest and
+archetype category, a coordinate-derived SHA-256 seed, status, and reserved
+instance/trace/result/frame/video/inspection paths. The output has no clock
+field: identical templates and map provenance produce byte-identical JSON.
+
+`uniscenarios catalog verify` rejects changed seeds or identities, duplicate identities
+or seeds, missing/duplicate ordinals, anything other than the canonical 5 × 100
+shape, provenance drift, unsafe evidence paths, and a stale catalog digest.
+`reserved` slots do not pretend evidence exists. Advancing status makes evidence
+mandatory (`generated` requires an instance, `simulated` also trace/result,
+`rendered` also frame/video/render manifest, and `visually-proven` also a written
+inspection). `--require-evidence` checks every reserved evidence path.
 
 ## Batch
 
@@ -131,7 +154,7 @@ out/
 
 ## What this package deliberately does not do yet
 
-Stated plainly, because they bound what a number from `scen` means:
+Stated plainly, because they bound what a number from `uniscenarios` means:
 
 - **No signal programs.** The derived index carries junction *control*, not
   per-approach heads with phase timing, so `signalPrograms` is empty and a
@@ -151,7 +174,7 @@ Stated plainly, because they bound what a number from `scen` means:
 ## Tests
 
 ```bash
-pnpm --filter @scenario-studio/cli test
+pnpm --filter @uniscenarios/cli test
 ```
 
 The pure tests (adapter, seeding, prop-dims) always run. The materializer and

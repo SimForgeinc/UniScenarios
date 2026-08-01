@@ -8,7 +8,7 @@
  * author said must stay true actually stay true on this site".
  */
 
-import { runSimulation } from '@scenario-studio/sim-engine';
+import { runSimulation } from '@uniscenarios/sim-engine';
 
 import { CliError, EXIT } from '../errors.js';
 import { checkInvariants, type InvariantResidualReport } from '../invariants.js';
@@ -45,7 +45,7 @@ export async function validate(options: ValidateOptions): Promise<number> {
     // A tier-1 pass on an instance is the engine contract plus the guards.
     const instance = await readInstance(options.file);
     const bundle = await loadMap(instance.input.mapId);
-    const { checkFeasibility } = await import('@scenario-studio/sim-engine');
+    const { checkFeasibility } = await import('@uniscenarios/sim-engine');
     const issues = checkFeasibility(instance.input, bundle.graph);
     const errors = issues.filter((i) => i.severity === 'error').length;
     emit(

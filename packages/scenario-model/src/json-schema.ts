@@ -14,7 +14,7 @@ import { ScenarioV1ObjectSchema, SCENARIO_VERSION } from './schema/v1.js';
 
 /** Canonical `$id` for the emitted schema. */
 export const JSON_SCHEMA_ID =
-  'https://scenario-studio.simforge.ai/schema/scenario.v1.schema.json';
+  'https://schemas.uniscenarios.dev/scenario.v1.schema.json';
 
 /** Where the generated file lives, relative to the package root. */
 export const JSON_SCHEMA_PATH = 'schema/scenario.v1.schema.json';
@@ -25,9 +25,9 @@ export function buildJsonSchema(): Record<string, unknown> {
   return {
     $schema: 'https://json-schema.org/draft/2020-12/schema',
     $id: JSON_SCHEMA_ID,
-    title: `Scenario Studio scenario, schema v${SCENARIO_VERSION}`,
+    title: `UniScenarios scenario, schema v${SCENARIO_VERSION}`,
     description:
-      'Authoring format for Scenario Studio (.scenario.json). Positions are metres in the y-up scene frame; headings are radians CCW about +Y from +X. Two constraints are not expressible here and are enforced by the reference implementation: entity ids must be unique within a document, and meta.modifiedAt must not precede meta.createdAt.',
+      'Authoring format for UniScenarios (.scenario.json). Positions are metres in the y-up scene frame; headings are radians CCW about +Y from +X. Two constraints are not expressible here and are enforced by the reference implementation: entity ids must be unique within a document, and meta.modifiedAt must not precede meta.createdAt.',
     ...base,
   };
 }

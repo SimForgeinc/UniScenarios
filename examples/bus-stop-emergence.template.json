@@ -2,9 +2,9 @@
   "scenarioVersion": 2,
   "meta": {
     "name": "Bus-stop emergence — pedestrian from in front of a dwelling bus",
-    "description": "A bus dwells at a kerbside stop with its doors open; a passenger who has just got off walks round the front of it and into the carriageway. The anchor requires a real `bus_stop` on the reference path, so the scenario lands where buses actually stop rather than at an arbitrary kerb. The bus itself is an L3 prop: it is stationary for the whole clip, and the engine's pairwise TTC circumscribes both footprints without regard to lanes, so a 12 m *actor* parked 3 m to the ego's side pins the episode min-TTC at zero and takes the metric away from the pedestrian (measured — see the campaign report). The cost of that choice is that `doors.left` is not settable on a prop; the open-doors cue is carried as a prop extension until the engine treats parked actors as scenery. The `bus_stop` anchor feature is declared but cosmetic: on all five maps the catalog anchors bus stops onto the sidewalk or shoulder lane beside the carriageway, and the matcher only searches point features lying on the driving reference path, so the clause can never bind. Required, it returns zero sites on every map; cosmetic, it records the intent and the corridor clauses carry the match.",
+    "description": "A required real bus_stop feature anchors the scenario. A static dwelling bus actor sits at the stop with doors open, remains immobile, and is the declared line-of-sight occluder between ego and the alighting pedestrian. The pedestrian route is folded into the initial route so the lane-semantic arrival solver can place the actor at a real trace-critical conflict with the ego vehicle.",
     "createdAt": "2026-08-01T00:00:00.000Z",
-    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T16:02:00.000Z",
     "appVersion": "scen/0.0.1",
     "archetype": "C5.bus-stop-emergence",
     "tags": [
@@ -12,8 +12,10 @@
       "occlusion",
       "bus-stop",
       "transit",
-      "prop-occluder",
-      "campaign-occluded-pedestrian"
+      "campaign-occluded-pedestrian",
+      "static-bus",
+      "real-feature-point",
+      "lane-semantic-arrival"
     ],
     "author": "agent/campaign-occluded-pedestrian",
     "negativeControl": false
@@ -40,7 +42,7 @@
         "unit": "kph",
         "tier": 1,
         "range": [
-          4.0,
+          4,
           8.5
         ],
         "default": 5.4,
@@ -53,23 +55,10 @@
         "unit": "m",
         "tier": 1,
         "range": [
-          7.0,
-          14.0
+          7,
+          14
         ],
-        "default": 9.0,
-        "distribution": "uniform"
-      },
-      {
-        "id": "dartLeadM",
-        "type": "continuous",
-        "description": "Metres upstream of the conflict point at which the pedestrian leaves the kerb line. With `pedSpeedKph` this is the reveal-to-conflict lever.",
-        "unit": "m",
-        "tier": 1,
-        "range": [
-          1.5,
-          4.5
-        ],
-        "default": 2.8,
+        "default": 9,
         "distribution": "uniform"
       }
     ],
@@ -123,18 +112,18 @@
       {
         "id": "stop",
         "kind": "bus_stop",
-        "label": "the kerbside bus stop — declared but never bound on these five maps (campaign defect D3); kept cosmetic so the intent is on record",
-        "essentiality": "cosmetic",
+        "label": "real kerbside bus stop, required",
+        "essentiality": "required",
         "atM": {
           "value": [
             70,
             165
           ],
-          "essentiality": "cosmetic"
+          "essentiality": "required"
         },
         "side": {
           "value": "right",
-          "essentiality": "cosmetic"
+          "essentiality": "preferred"
         }
       }
     ],
@@ -148,7 +137,9 @@
   "roles": [
     {
       "id": "ego",
-      "kind": "on_reference",
+      "kind": "lane_offset",
+      "k": -2,
+      "onMissing": "fail",
       "label": "the vehicle under test",
       "actor": {
         "class": "car",
@@ -157,54 +148,63 @@
       "essentiality": "required",
       "pose": {
         "laneOffset": 0,
-        "s": "125 - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
+        "s": "9 - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
         "tFrac": 0,
         "headingOffsetRad": 0
       },
-      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)"
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)",
+      "extensions": {
+        "placementFeature": "stop"
+      }
+    },
+    {
+      "id": "bus",
+      "kind": "lane_offset",
+      "k": -3,
+      "onMissing": "fail",
+      "pose": {
+        "laneOffset": 0,
+        "s": "9 - param.busGapM",
+        "tFrac": -0.4,
+        "headingOffsetRad": 0
+      },
+      "label": "dwelling static bus at the real bus stop",
+      "actor": {
+        "class": "bus",
+        "catalogId": "vehicle.bus",
+        "static": true
+      },
+      "essentiality": "required",
+      "initialSpeedKph": 0,
+      "extensions": {
+        "placementFeature": "stop",
+        "doorsLeft": "open",
+        "occludes": {
+          "observer": "ego",
+          "target": "ped"
+        }
+      }
     },
     {
       "id": "ped",
-      "kind": "on_reference",
+      "kind": "relative_to",
       "label": "the alighting passenger that walks round the front of the bus",
       "actor": {
         "class": "pedestrian"
       },
       "essentiality": "required",
-      "pose": {
-        "laneOffset": 0,
-        "s": 60,
-        "tFrac": -1,
-        "headingOffsetRad": 0
-      },
-      "initialSpeedKph": "param.pedSpeedKph"
-    }
-  ],
-  "props": [
-    {
-      "id": "bus",
-      "catalogId": "vehicle.bus",
-      "label": "the dwelling bus, doors open on the kerb side; its nose sits `busGapM` upstream of the crossing line",
-      "essentiality": "required",
-      "pose": {
-        "laneOffset": 0,
-        "s": "125 - param.busGapM",
-        "tFrac": -0.75,
-        "headingOffsetRad": 0
-      },
+      "initialSpeedKph": "param.pedSpeedKph",
+      "ref": "ego",
+      "dLane": 0,
+      "dsM": 60,
+      "tFrac": -1,
       "headingOffsetRad": 0,
-      "scale": 1,
-      "occludes": {
-        "observer": "ego",
-        "target": "ped"
-      },
-      "targetRevealToConflictS": 0.8,
       "extensions": {
-        "doorsLeft": "open",
-        "doorsNote": "`set doors.left = open` is only expressible on an actor, and an actor bus steals the episode min-TTC; carried declaratively until the engine treats parked actors as scenery."
+        "placementFeature": "stop"
       }
     }
   ],
+  "props": [],
   "choreography": {
     "clipSeconds": 14,
     "warmupSeconds": 1,
@@ -238,7 +238,7 @@
       },
       {
         "id": "ped-rounds-the-bus",
-        "label": "along the kerb past the bus, then out into the carriageway",
+        "label": "from the rear flank, along the kerb side, around the bus nose, then into the carriageway",
         "actor": "ped",
         "verb": "route",
         "trigger": {
@@ -249,21 +249,33 @@
           "mode": "polyline",
           "points": [
             {
-              "laneOffset": 0,
-              "s": 60,
+              "laneOffset": -3,
+              "s": "3 - param.busGapM",
               "tFrac": -1,
               "headingOffsetRad": 0
             },
             {
-              "laneOffset": 0,
-              "s": "125 - param.dartLeadM",
+              "laneOffset": -3,
+              "s": "9 - param.busGapM",
               "tFrac": -1,
               "headingOffsetRad": 0
             },
             {
-              "laneOffset": 0,
-              "s": 126,
-              "tFrac": 0.15,
+              "laneOffset": -3,
+              "s": "15.8 - param.busGapM",
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": -2,
+              "s": 9,
+              "tFrac": 0,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": -2,
+              "s": 9,
+              "tFrac": 0.8,
               "headingOffsetRad": 0
             }
           ]
@@ -279,8 +291,8 @@
           "of": "ped",
           "at": {
             "pose": {
-              "laneOffset": 0,
-              "s": 125,
+              "laneOffset": -2,
+              "s": 9,
               "tFrac": 0,
               "headingOffsetRad": 0
             }
@@ -310,7 +322,7 @@
       "to": "ped",
       "range": [
         null,
-        3.0
+        3
       ],
       "mode": "min"
     },
@@ -322,15 +334,15 @@
       "of": "ped",
       "at": {
         "pose": {
-          "laneOffset": 0,
-          "s": 125,
+          "laneOffset": -2,
+          "s": 9,
           "tFrac": 0,
           "headingOffsetRad": 0
         }
       },
       "syncWith": "ego",
       "deltaTRange": [
-        -3.0,
+        -3,
         -0.6
       ]
     },
@@ -340,7 +352,7 @@
       "label": "beyond a hard stop the conflict was unavoidable, which is a different finding",
       "essentiality": "preferred",
       "of": "ego",
-      "maxMps2": 8.0
+      "maxMps2": 8
     }
   ],
   "variants": [],

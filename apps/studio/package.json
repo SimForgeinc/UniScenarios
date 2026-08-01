@@ -1,7 +1,8 @@
 {
-  "name": "@scenario-studio/studio",
+  "name": "@uniscenarios/studio",
   "private": true,
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,10 +11,11 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@scenario-studio/city-renderer": "workspace:*",
-    "@scenario-studio/prop-catalog": "workspace:*",
-    "@scenario-studio/scenario-model": "workspace:*",
-    "@scenario-studio/xodr-tools": "workspace:*",
+    "@uniscenarios/city-renderer": "workspace:*",
+    "@uniscenarios/prop-catalog": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
+    "@uniscenarios/sim-engine": "workspace:*",
+    "@uniscenarios/xodr-tools": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "three": "^0.182.0"

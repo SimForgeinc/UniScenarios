@@ -152,6 +152,35 @@ describe('LaneIndex', () => {
     expect(index.nearestOpposing(30, 1.6, hit.headingRad, 0.05)).toBeNull();
   });
 
+  it('does not treat a 91 degree cross street as the opposing lane', () => {
+    const cross = LaneIndex.build({
+      mapName: 'crossing',
+      lanes: {
+        ...syntheticTopology().lanes,
+        '9:0:-3': {
+          roadId: 9,
+          section: 0,
+          laneId: -3,
+          laneType: 'driving',
+          representativeWidthM: 3.5,
+          // This centreline crosses the query point and travels at +91° in the
+          // scene frame: just over perpendicular, but not an oncoming carriageway.
+          polyline: [
+            { x: 30, y: -1.75 },
+            { x: 30 + 100 * Math.cos(91 * DEG), y: -1.75 + 100 * Math.sin(91 * DEG) },
+          ],
+        },
+      },
+    });
+    // The cross street is the nearest centreline, but Tab is given the active
+    // eastbound heading from the placement ghost; it must choose the true
+    // westbound carriageway instead of the 91° crossing lane.
+    expect(cross.nearest(30, 1.6, 20)!.lane.laneId).toBe(-3);
+    const opposing = cross.nearestOpposing(30, 1.6, 0, 20)!;
+    expect(opposing.lane.laneId).toBe(1);
+    expect(Math.abs(headingDelta(0, opposing.headingRad)) / DEG).toBeCloseTo(180, 6);
+  });
+
   it('projects onto one specific lane, clamped to its extent', () => {
     const east = index.laneFor('7', 0, -1)!;
     expect(index.project(east, 30, 1.75).s).toBeCloseTo(30, 6);
@@ -174,6 +203,54 @@ describe('LaneIndex', () => {
     expect(index.lateralLimit(east, 0)).toBeCloseTo(1.75, 9);
     expect(index.lateralLimit(east, 1.82)).toBeCloseTo(0.84, 9);
     expect(index.lateralLimit(east, 6)).toBe(0);
+  });
+
+  /**
+   * Regression: a hit's heading must be the heading its own `s` resolves to.
+   *
+   * A point off the outside of a corner projects onto the *vertex* the two
+   * segments share — clamped to `f = 1` on the incoming one and `f = 0` on the
+   * outgoing one, both at the same distance. `s` is the same either way, so if
+   * the hit reported the incoming segment's heading, a placement stored from it
+   * would claim a lane anchor whose `poseAt(s)` points somewhere else, and the
+   * car would jump the moment anything re-derived its pose.
+   */
+  it('reports the heading its own s resolves to, even on a corner vertex', () => {
+    const bend = [];
+    for (let i = 0; i <= 50; i += 5) bend.push({ x: i, y: 0 });
+    for (let i = 5; i <= 50; i += 5) bend.push({ x: 50 + i * Math.cos(30 * DEG), y: -i * Math.sin(30 * DEG) });
+    const bent = LaneIndex.build({
+      mapName: 'bend',
+      lanes: {
+        '1:0:-1': {
+          roadId: 1,
+          section: 0,
+          laneId: -1,
+          laneType: 'driving',
+          representativeWidthM: 3.5,
+          polyline: bend,
+        },
+      },
+    });
+    const lane = bent.laneFor('1', 0, -1)!;
+    // Straight in, 30° out (local +y is scene -z, so the turn reads negative):
+    // the corner is a real 30° turn, so picking the wrong side of the vertex is
+    // a 30° error.
+    expect(bent.poseAt(lane, 49, 0).headingRad / DEG).toBeCloseTo(0, 6);
+    expect(bent.poseAt(lane, 51, 0).headingRad / DEG).toBeCloseTo(-30, 6);
+
+    // A point outside the corner: its nearest centreline point *is* the vertex.
+    const hit = bent.nearest(50, -6, 20)!;
+    expect(hit.s).toBeCloseTo(50, 6);
+    const pose = bent.poseAt(hit.lane, hit.s, 0);
+    expect(headingDelta(pose.headingRad, hit.headingRad) / DEG).toBeCloseTo(0, 9);
+    expect(hit.x).toBeCloseTo(pose.x, 9);
+    expect(hit.z).toBeCloseTo(pose.z, 9);
+    // Same for the single-lane projection used by a drag.
+    const projected = bent.project(lane, 50, -6);
+    expect(
+      headingDelta(bent.poseAt(lane, projected.s, 0).headingRad, projected.headingRad) / DEG,
+    ).toBeCloseTo(0, 9);
   });
 
   it('rejects a topology with no lanes of the requested type', () => {
@@ -230,6 +307,33 @@ describe.skipIf(!existsSync(YALE))('LaneIndex on Yale Street', () => {
       // The nearest centreline to a point *on* a centreline is at distance ~0.
       expect(hit!.distance).toBeLessThan(0.01);
     }
+  });
+
+  /**
+   * The same invariant as the synthetic corner test, swept over the real
+   * network: every hit `nearest` can return must agree with `poseAt(hit.s)`.
+   * Before the fix this reached 3.3° on Yale Street's junction turns — enough to
+   * fail the 2° placement gate on its own.
+   */
+  it('never reports a heading its own s disagrees with', () => {
+    let worstDeg = 0;
+    let worstPosM = 0;
+    for (const lane of index.all) {
+      for (const f of [0.02, 0.25, 0.5, 0.75, 0.98]) {
+        // Probe from both sides, at a metre out: on a bend one of them lands on
+        // the shared vertex.
+        for (const t of [-1.2, 1.2]) {
+          const probe = index.poseAt(lane, lane.length * f, t);
+          const hit = index.nearest(probe.x, probe.z, 8);
+          if (!hit) continue;
+          const pose = index.poseAt(hit.lane, hit.s, 0);
+          worstDeg = Math.max(worstDeg, Math.abs(headingDelta(pose.headingRad, hit.headingRad)) / DEG);
+          worstPosM = Math.max(worstPosM, Math.hypot(hit.x - pose.x, hit.z - pose.z));
+        }
+      }
+    }
+    expect(worstDeg).toBeLessThan(1e-9);
+    expect(worstPosM).toBeLessThan(1e-9);
   });
 
   it('round-trips (s, t) through the scene frame', () => {

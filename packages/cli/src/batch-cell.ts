@@ -8,13 +8,15 @@
 
 import path from 'node:path';
 
-import { runSimulation, traceDigest } from '@scenario-studio/sim-engine';
-import type { ScenarioTemplateV2 } from '@scenario-studio/scenario-model';
+import { runSimulation, traceDigest } from '@uniscenarios/sim-engine';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
 import { criticalityBand, filtersFor, type EvaluateFilterMode } from './commands/evaluate.js';
 import { metricsSummary } from './commands/simulate.js';
-import { evaluateTrace } from '@scenario-studio/sim-engine';
+import { evaluateTrace } from '@uniscenarios/sim-engine';
 import { loadMap } from './maps.js';
+import { verifyEvidenceHashes, type EvidenceHashReport } from './evidence.js';
+import { checkInvariants, type InvariantResidualReport } from './invariants.js';
 import { materialize } from './materialize.js';
 import { findSite } from './sites.js';
 import { writeJsonFile, writeTraceFile } from './template-io.js';
@@ -41,6 +43,8 @@ export interface CellResult extends CellCoords {
   readonly band: string | null;
   readonly tags: string[];
   readonly findings: Array<{ code: string; reason: string }>;
+  readonly invariants: InvariantResidualReport[];
+  readonly evidence: EvidenceHashReport;
   readonly metrics: Record<string, unknown> | null;
   readonly siteScore: number;
   readonly siteVerdict: string;
@@ -102,15 +106,54 @@ export async function runCell(
         { trivialTtcS: options.trivialTtcS },
       ),
     );
+    const speedLimitKph = bundle.index.lanes[site.frame.entryLaneRsl]?.speedLimitKph ?? null;
+    const invariants = checkInvariants({
+      template,
+      trace: run.trace,
+      scope: {
+        params: manifest.params.values,
+        clip: { seconds: run.trace.header.clipSeconds },
+        ...(speedLimitKph === null ? {} : { lane: { speedLimitKph } }),
+      },
+      arrival: manifest.arrival,
+      speedLimitKph,
+    });
+    const invariantViolations = invariants.filter(
+      (r) => r.status === 'violated' && r.essentiality === 'required',
+    );
+    const evidence = verifyEvidenceHashes({ kind: 'scenario-instance', version: 1, manifest, input }, run.trace);
+    const findings: Array<{ code: string; reason: string }> = evaluation.findings.map((f) => ({ code: f.code, reason: f.reason }));
+    if (!evidence.ok) {
+      findings.push(...evidence.issues.map((i) => ({ code: i.code, reason: i.reason })));
+    }
+    if (invariantViolations.length > 0) {
+      findings.push(
+        ...invariantViolations.map((r) => ({
+          code: 'invariant_violated',
+          reason: `${r.id}: ${r.reason}`,
+        })),
+      );
+    }
+    const verdict = invariantViolations.length > 0 || !evidence.ok ? 'reject' : evaluation.verdict;
 
     const result: CellResult = {
       ...base,
       status: 'ok',
       feasible: manifest.feasible,
-      verdict: evaluation.verdict,
-      band: criticalityBand(evaluation.verdict, evaluation.findings),
-      tags: evaluation.tags,
-      findings: evaluation.findings.map((f) => ({ code: f.code, reason: f.reason })),
+      verdict,
+      band: !evidence.ok
+        ? 'evidence-mismatch'
+        : invariantViolations.length > 0
+          ? 'invariant'
+          : criticalityBand(evaluation.verdict, evaluation.findings),
+      tags: [
+        ...evaluation.tags,
+        ...(!evidence.ok ? ['evidence_mismatch'] : []),
+        ...(invariantViolations.length > 0 ? ['invariant_violated'] : []),
+      ],
+      findings,
+      invariants,
+      evidence,
       metrics: metricsSummary(run.trace),
       siteScore: site.score,
       siteVerdict: site.degradation.verdict,
@@ -138,6 +181,18 @@ export async function runCell(
       band: 'infeasible',
       tags: [],
       findings: [],
+      invariants: [],
+      evidence: {
+        ok: false,
+        recomputedInputHash: '',
+        manifestInputHash: null,
+        traceInputHash: null,
+        inputActorIds: [],
+        traceActorIds: [],
+        actorIds: [],
+        actorCount: 0,
+        issues: [],
+      },
       metrics: null,
       siteScore: 0,
       siteVerdict: 'infeasible',

@@ -26,8 +26,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
-import { MATCH_SEMANTICS_VERSION } from '@scenario-studio/anchor-matcher';
-import { ENGINE_VERSION, contentHash } from '@scenario-studio/sim-engine';
+import { MATCH_SEMANTICS_VERSION } from '@uniscenarios/anchor-matcher';
+import { ENGINE_VERSION, contentHash } from '@uniscenarios/sim-engine';
 
 import { cellPaths, runCell, type CellOptions, type CellResult } from '../batch-cell.js';
 import { EXIT } from '../errors.js';
@@ -69,12 +69,13 @@ export async function batch(options: BatchOptions): Promise<number> {
   const templateDigest = contentHash(template).slice(0, 16);
 
   const cells: PlannedCell[] = [];
-  const perMapSites: Array<{ mapId: string; sites: number; topologyDigest: string }> = [];
+  const perMapSites: Array<{ mapId: string; sites: number; matcherIndexDigest: string; engineGraphDigest: string }> = [];
   for (const match of matches) {
     perMapSites.push({
       mapId: match.mapId,
       sites: match.report.sites.length,
-      topologyDigest: match.bundle.index.topologyDigest,
+      matcherIndexDigest: match.bundle.index.topologyDigest,
+      engineGraphDigest: match.bundle.graph.topologyDigest,
     });
     for (const site of match.report.sites) {
       for (let draw = 0; draw < options.draws; draw += 1) {
@@ -110,6 +111,8 @@ export async function batch(options: BatchOptions): Promise<number> {
         templateDigest,
         matcherVersion: MATCH_SEMANTICS_VERSION,
         solverVersion: ENGINE_VERSION,
+        matcherIndexDigest: matches.find((m) => m.mapId === cell.mapId)?.bundle.index.topologyDigest ?? '',
+        engineGraphDigest: matches.find((m) => m.mapId === cell.mapId)?.bundle.graph.topologyDigest ?? '',
       });
       if (reused) {
         results.set(key, reused);
@@ -235,7 +238,7 @@ function median(values: readonly number[]): number {
  */
 async function tryResume(
   cell: PlannedCell,
-  expect: { templateDigest: string; matcherVersion: string; solverVersion: string },
+  expect: { templateDigest: string; matcherVersion: string; solverVersion: string; matcherIndexDigest: string; engineGraphDigest: string },
 ): Promise<CellResult | null> {
   const paths = cellPaths(cell.outDir, cell);
   if (!existsSync(paths.result) || !existsSync(paths.instance)) return null;
@@ -250,6 +253,8 @@ async function tryResume(
     if (key['templateDigest'] !== expect.templateDigest) return null;
     if (key['matcherVersion'] !== expect.matcherVersion) return null;
     if (key['solverVersion'] !== expect.solverVersion) return null;
+    if (key['matcherIndexDigest'] !== expect.matcherIndexDigest) return null;
+    if (key['engineGraphDigest'] !== expect.engineGraphDigest) return null;
     if (key['paramSeed'] !== cell.expectedSeed) return null;
     if (cell.writeTrace && !existsSync(paths.trace)) return null;
     return result;

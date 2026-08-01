@@ -39,7 +39,7 @@ export interface StorageLike {
 }
 
 /** Default key prefix in `localStorage`. */
-export const DEFAULT_STORAGE_PREFIX = 'scenario-studio:scenario:';
+export const DEFAULT_STORAGE_PREFIX = 'uniscenarios:scenario:';
 
 /** Options for {@link WebScenarioFileStore}. */
 export interface WebScenarioFileStoreOptions {

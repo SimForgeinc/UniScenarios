@@ -1,4 +1,4 @@
-# Scenario Studio
+# UniScenarios
 
 Open-source desktop app for authoring driving scenarios inside high-fidelity 3D
 city models. All TypeScript: Electron + React + three.js.

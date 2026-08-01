@@ -52,14 +52,15 @@ import {
   type Condition as V2Condition,
   type PointRef,
   type PropPlacement,
+  type FramePose,
   type RoleBinding as V2Role,
   type Trigger as V2Trigger,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 import {
   MATCH_SEMANTICS_VERSION,
   type FeatureBinding,
   type MatchedSite,
-} from '@scenario-studio/anchor-matcher';
+} from '@uniscenarios/anchor-matcher';
 import {
   ENGINE_VERSION,
   Route,
@@ -67,6 +68,7 @@ import {
   contentHash,
   checkFeasibility,
   parseSimScenarioInput,
+  normalizeSimScenarioInput,
   safeParseSimScenarioInput,
   solveArrival,
   applyArrivalSolution,
@@ -77,11 +79,12 @@ import {
   type Interaction as SimInteraction,
   type LaneGraph,
   type Occluder,
+  type OcclusionPair,
   type SimActor,
   type SimIssue,
   type SimScenarioInput,
   type Trigger as SimTrigger,
-} from '@scenario-studio/sim-engine';
+} from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
 import type { MapBundle } from './maps.js';
@@ -97,7 +100,10 @@ export interface ReplayKey {
   /** Content hash of the whole authored template — the version field alone lies. */
   readonly templateDigest: string;
   readonly mapId: string;
-  readonly topologyDigest: string;
+  /** Matcher/map-intel digest used to derive the site id. */
+  readonly matcherIndexDigest: string;
+  /** Engine lane-graph digest written into traces. */
+  readonly engineGraphDigest: string;
   readonly siteId: string;
   readonly matcherVersion: string;
   readonly solverVersion: string;
@@ -357,6 +363,17 @@ function evalNum(
   }
 }
 
+function evalTFrac(
+  value: NumberOrExpr | undefined,
+  scope: ExprScope,
+  path: string,
+  fallback = 0,
+): number {
+  const t = evalNum(value, scope, path, fallback);
+  if (!Number.isFinite(t)) return fallback;
+  return Math.max(-1, Math.min(1, t));
+}
+
 const CMP: Record<string, 'lte' | 'gte'> = { '<': 'lte', '<=': 'lte', '>': 'gte', '>=': 'gte' };
 
 /* ------------------------------------------------------------- the builder */
@@ -366,6 +383,7 @@ class Materializer {
   private readonly actors: SimActor[] = [];
   private readonly interactions: SimInteraction[] = [];
   private readonly occluders: Occluder[] = [];
+  private readonly occlusionPairs: OcclusionPair[] = [];
   private readonly bindingByRole = new Map<string, FeatureBinding>();
   private readonly roleById = new Map<string, V2Role>();
   private readonly routeByRole = new Map<string, Route>();
@@ -374,6 +392,7 @@ class Materializer {
   private readonly scopeByRole = new Map<string, ExprScope>();
   private readonly initialRules = new Map<string, Record<string, boolean | number>>();
   private readonly foldedInteractions = new Set<string>();
+  private readonly foldedTriggerStart = new Map<string, number>();
   private refRoute: Route | null = null;
 
   constructor(
@@ -395,6 +414,22 @@ class Materializer {
     };
   }
 
+  /** Optional role-local frame origin supplied through the v2 extension seam. */
+  private placementFeatureOffset(roleId: string, path: string): number {
+    const raw = this.roleById.get(roleId)?.extensions?.['placementFeature'];
+    if (raw === undefined) return 0;
+    if (typeof raw !== 'string') {
+      this.notes.push({ path, reason: 'placementFeature must be a feature id string; using frame origin' });
+      return 0;
+    }
+    const match = this.site.featureMatches[raw];
+    if (!match) {
+      this.notes.push({ path, reason: `placementFeature "${raw}" is not bound at this site; using frame origin` });
+      return 0;
+    }
+    return match.s;
+  }
+
   /** Frame arc length → world point on the reference path. */
   private framePoint(s: number): { x: number; y: number; headingRad: number } {
     const route = this.refRoute;
@@ -403,6 +438,51 @@ class Materializer {
     });
     const pose = route.poseAt(s - this.site.frame.sRange[0]);
     return { ...pose.point, headingRad: pose.headingRad };
+  }
+
+  /** Resolve a full frame pose, including laneOffset and tFrac, into xodr-local metres. */
+  private framePosePoint(
+    pose: FramePose,
+    scope: ExprScope,
+    path: string,
+    frameSOffset = 0,
+  ): { x: number; y: number; headingRad: number } {
+    const frameS = frameSOffset + evalNum(pose.s, scope, `${path}.s`, 0);
+    const center = this.framePoint(frameS);
+    let route = this.refRoute;
+    if (!route) throw new CliError('reference_route_unbuildable', 'the site has no drivable reference path', { path });
+    let routeS = frameS - this.site.frame.sRange[0];
+    if (pose.laneOffset !== 0) {
+      const semanticRoute = [...this.routeByRole.entries()]
+        .filter(([roleId, candidate]) => {
+          const role = this.roleById.get(roleId);
+          return !candidate.isFreeform && role !== undefined && rolePose(role)?.laneOffset === pose.laneOffset;
+        })
+        .map(([, candidate]) => candidate)
+        .sort((a, b) => a.projectPoint(center).d - b.projectPoint(center).d)[0];
+      const rsl = this.site.frame.lateralLanes[pose.laneOffset];
+      if (semanticRoute) {
+        route = semanticRoute;
+        routeS = route.projectPoint({ x: center.x, y: center.y }).s;
+      } else if (!rsl) {
+        this.notes.push({ path: `${path}.laneOffset`, reason: `no lane at k = ${pose.laneOffset}; using the reference lane` });
+      } else {
+        const built = routeFromChain(this.bundle.graph, [rsl], rsl, this.notes, `${path}.laneOffset`);
+        if (built) {
+          route = built;
+          routeS = built.projectPoint({ x: center.x, y: center.y }).s;
+        }
+      }
+    }
+    const laneWidth = route.widthAt(routeS) ?? this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
+    const at = route.poseAt(routeS);
+    const tFrac = evalTFrac(pose.tFrac, scope, `${path}.tFrac`, 0);
+    const lateral = tFrac * laneWidth;
+    return {
+      x: at.point.x - Math.sin(at.headingRad) * lateral,
+      y: at.point.y + Math.cos(at.headingRad) * lateral,
+      headingRad: at.headingRad + pose.headingOffsetRad,
+    };
   }
 
   private buildReferenceRoute(): void {
@@ -530,7 +610,10 @@ class Materializer {
         spawnS = 0;
       } else {
         const pose = rolePose(role);
-        const frameS = pose ? evalNum(pose.s, scope, `${path}.pose.s`, 0) : (binding.pose?.s ?? 0);
+        const frameS = pose
+          ? this.placementFeatureOffset(role.id, `${path}.extensions.placementFeature`) +
+            evalNum(pose.s, scope, `${path}.pose.s`, 0)
+          : (binding.pose?.s ?? 0);
         const frameAt = this.framePoint(frameS);
         const covered = coverTarget(
           this.bundle,
@@ -551,8 +634,8 @@ class Materializer {
             reason: `frame s=${frameS.toFixed(1)} m is upstream of every drivable lane at this site; the spawn was clamped to the start of the route`,
           });
         }
-        tFrac = pose?.tFrac ?? 0;
-        headingOffset = pose?.headingOffsetRad ?? 0;
+        tFrac = pose ? evalTFrac(pose.tFrac, scope, `${path}.pose.tFrac`, 0) : (binding.pose?.tFrac ?? 0);
+        headingOffset = pose?.headingOffsetRad ?? binding.pose?.headingOffsetRad ?? 0;
       }
     }
 
@@ -618,7 +701,13 @@ class Materializer {
         ...(speedMps > 0 ? { cruiseSpeedMps: speedMps } : {}),
       },
       presentAtStart: true,
-      tags: [`role:${role.id}`, `class:${role.actor.class}`, `binding:${role.kind}`],
+      static: role.actor.static || role.actor.class === 'static_object',
+      tags: [
+        `role:${role.id}`,
+        `class:${role.actor.class}`,
+        `binding:${role.kind}`,
+        ...(role.actor.catalogId ? [`catalog:${role.actor.catalogId}`] : []),
+      ],
     });
   }
 
@@ -671,20 +760,17 @@ class Materializer {
       const scope = this.baseScope();
       const t = evalNum(it.trigger.t, scope, `choreography.${it.id}.trigger.t`, 0);
       if (t > 0) continue;
-      const laneWidth =
-        this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
+      const frameSOffset = this.placementFeatureOffset(roleId, `roles.${roleId}.extensions.placementFeature`);
       const points: Array<{ x: number; y: number }> = [];
-      for (const p of it.target.points) {
-        const at = this.framePoint(evalNum(p.s, scope, `choreography.${it.id}.target.points.s`, 0));
-        const lateral = p.tFrac * laneWidth;
-        points.push({
-          x: at.x - Math.sin(at.headingRad) * lateral,
-          y: at.y + Math.cos(at.headingRad) * lateral,
-        });
+      for (let idx = 0; idx < it.target.points.length; idx += 1) {
+        const p = it.target.points[idx]!;
+        const at = this.framePosePoint(p, scope, `choreography.${it.id}.target.points.${idx}`, frameSOffset);
+        points.push({ x: at.x, y: at.y });
       }
       const route = buildRouteFromPoints(points);
       if (!route) continue;
       this.foldedInteractions.add(it.id);
+      this.foldedTriggerStart.set(it.id, t);
       this.notes.push({
         path: `choreography.interactions.${it.id}`,
         reason: `route(polyline) at t=${t} folded into ${roleId}'s spawn route (${route.lengthM.toFixed(1)} m), so the arrival solver can place the actor along it`,
@@ -715,6 +801,7 @@ class Materializer {
         bucket[key] = value;
         this.initialRules.set(interaction.actor, bucket);
         this.foldedInteractions.add(interaction.id);
+        this.foldedTriggerStart.set(interaction.id, t);
       }
     }
   }
@@ -736,7 +823,12 @@ class Materializer {
       return null;
     }
     const scope = this.scopeByRole.get(it.actor) ?? this.baseScope();
-    const trigger = this.buildTrigger(it.trigger, scope, `${path}.trigger`);
+    const trigger = this.buildTrigger(
+      it.trigger,
+      scope,
+      `${path}.trigger`,
+      this.placementFeatureOffset(it.actor, `roles.${it.actor}.extensions.placementFeature`),
+    );
     if (!trigger) return null;
 
     const until = it.until
@@ -845,18 +937,9 @@ class Materializer {
       case 'route': {
         const t = it.target;
         if (t.mode === 'polyline') {
-          const laneWidth =
-            this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
-          const points = t.points.map((p) => {
-            const at = this.framePoint(evalNum(p.s, scope, `${path}.target.points.s`, 0));
-            // `tFrac` is a fraction of lane width across the carriageway; a
-            // polyline that ignored it would run *along* the road, which is the
-            // opposite of what every crossing path means.
-            const lateral = p.tFrac * laneWidth;
-            const scene = toSceneXZ({
-              x: at.x - Math.sin(at.headingRad) * lateral,
-              y: at.y + Math.cos(at.headingRad) * lateral,
-            });
+          const points = t.points.map((p, idx) => {
+            const at = this.framePosePoint(p, scope, `${path}.target.points.${idx}`);
+            const scene = toSceneXZ({ x: at.x, y: at.y });
             return { x: scene.x, z: scene.z };
           });
           return parseInteraction({ ...base, verb: 'route', target: { kind: 'polyline', points } });
@@ -887,6 +970,7 @@ class Materializer {
     trigger: V2Trigger,
     scope: ExprScope,
     path: string,
+    frameSOffset = 0,
   ): SimTrigger | null {
     switch (trigger.kind) {
       case 'at':
@@ -898,10 +982,19 @@ class Materializer {
             reason: 'after(..., event: end) measures from the start in the engine',
           });
         }
+        const delayS = Math.max(0, evalNum(trigger.delayS, scope, `${path}.delayS`, 0));
+        const foldedAt = this.foldedTriggerStart.get(trigger.of);
+        if (foldedAt !== undefined) {
+          this.notes.push({
+            path,
+            reason: `after(${trigger.of}) references an interaction folded into initial state; materialized as at(${(foldedAt + delayS).toFixed(3)})`,
+          });
+          return { kind: 'at', t: foldedAt + delayS };
+        }
         return {
           kind: 'after',
           interactionId: trigger.of,
-          delayS: Math.max(0, evalNum(trigger.delayS, scope, `${path}.delayS`, 0)),
+          delayS,
         };
       }
       case 'when': {
@@ -921,7 +1014,7 @@ class Materializer {
         };
       }
       case 'arrival': {
-        const at = this.arrivalPoint(trigger.at, scope, `${path}.at`);
+        const at = this.arrivalPoint(trigger.at, scope, `${path}.at`, frameSOffset);
         if (!at) return null;
         const ttc = trigger.ttc === undefined ? undefined : evalNum(trigger.ttc, scope, `${path}.ttc`);
         const deltaT =
@@ -944,11 +1037,38 @@ class Materializer {
     ref: PointRef,
     scope: ExprScope,
     path: string,
-  ): { kind: 'point'; at: { x: number; z: number } } | null {
-    const world = this.pointOf(ref, scope, path);
+    frameSOffset = 0,
+  ): { kind: 'point'; at: { x: number; z: number }; referenceFrame?: { stations: Array<{ rsl: string; s: number }> } } | null {
+    const world = this.pointOf(ref, scope, path, frameSOffset);
     if (!world) return null;
     const scene = toSceneXZ(world);
-    return { kind: 'point', at: { x: scene.x, z: scene.z } };
+    const base = { kind: 'point' as const, at: { x: scene.x, z: scene.z } };
+    if ('pose' in ref && this.refRoute) {
+      const frameS = frameSOffset + evalNum(ref.pose.s, scope, `${path}.pose.s`, 0);
+      const frameCenter = this.framePoint(frameS);
+      const stations = new Map<string, number>();
+
+      // These are not nearest-road guesses: every route here already belongs
+      // to a role bound into this anchor frame. Projecting the frame centre onto
+      // those known routes records the equivalent longitudinal cross-section
+      // for each lane. The engine can then solve by exact lane identity while a
+      // freeform crossing route still has to pass geometrically through `at`.
+      for (const route of [this.refRoute, ...this.routeByRole.values()]) {
+        if (route.isFreeform) continue;
+        const projected = route.projectPoint({ x: frameCenter.x, y: frameCenter.y });
+        const pose = route.poseAt(projected.s);
+        if (pose.rsl && !stations.has(pose.rsl)) stations.set(pose.rsl, pose.storageS);
+      }
+      if (stations.size > 0) {
+        return {
+          ...base,
+          referenceFrame: {
+            stations: [...stations].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([rsl, s]) => ({ rsl, s })),
+          },
+        };
+      }
+    }
+    return base;
   }
 
   /** Resolve a `PointRef` into an xodr-local point, where that is possible. */
@@ -956,9 +1076,10 @@ class Materializer {
     ref: PointRef,
     scope: ExprScope,
     path: string,
+    frameSOffset = 0,
   ): { x: number; y: number } | null {
     if ('pose' in ref) {
-      const at = this.framePoint(evalNum(ref.pose.s, scope, `${path}.pose.s`, 0));
+      const at = this.framePosePoint(ref.pose, scope, `${path}.pose`, frameSOffset);
       return { x: at.x, y: at.y };
     }
     if ('feature' in ref) {
@@ -1093,6 +1214,34 @@ class Materializer {
     }
   }
 
+  private declareOcclusionPair(pair: { observer: string; target: string; occluderId?: string }): void {
+    if (!this.actors.some((a) => a.id === pair.observer) || !this.actors.some((a) => a.id === pair.target)) {
+      this.notes.push({
+        path: 'occlusionPairs',
+        reason: `occlusion pair ${pair.observer}/${pair.target} references a role that was not materialized`,
+      });
+      return;
+    }
+    const key = `${pair.observer}\0${pair.target}\0${pair.occluderId ?? ''}`;
+    const existing = this.occlusionPairs.some(
+      (p) => `${p.observer}\0${p.target}\0${p.occluderId ?? ''}` === key,
+    );
+    if (!existing) this.occlusionPairs.push(pair);
+  }
+
+  private buildRoleOcclusionPairs(): void {
+    for (const role of this.template.roles) {
+      const raw = role.extensions?.['occludes'];
+      if (!raw || typeof raw !== 'object') continue;
+      const pair = raw as { observer?: unknown; target?: unknown };
+      if (typeof pair.observer !== 'string' || typeof pair.target !== 'string') {
+        this.notes.push({ path: `roles.${role.id}.extensions.occludes`, reason: 'occlusion declaration is not {observer,target}' });
+        continue;
+      }
+      this.declareOcclusionPair({ observer: pair.observer, target: pair.target, occluderId: `actor:${role.id}` });
+    }
+  }
+
   /* ------------------------------------------------------------------ props */
 
   private buildOccluders(): void {
@@ -1113,18 +1262,22 @@ class Materializer {
         const s = featureOffset + baseS + i * spacing;
         let at: { x: number; y: number; headingRad: number };
         try {
-          at = this.framePoint(s);
+          const baseTFrac = evalTFrac(prop.pose.tFrac, scope, `props.${prop.id}.pose.tFrac`, 0);
+          const tFracStep = prop.repeat
+            ? evalTFrac(prop.repeat.tFracStep, scope, `props.${prop.id}.repeat.tFracStep`, 0)
+            : 0;
+          at = this.framePosePoint(
+            { ...prop.pose, s, tFrac: baseTFrac + i * tFracStep },
+            scope,
+            `props.${prop.id}.pose`,
+          );
         } catch {
           continue;
         }
-        const tFrac = prop.pose.tFrac + i * (prop.repeat?.tFracStep ?? 0);
-        const laneWidth = this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
-        const nx = -Math.sin(at.headingRad);
-        const ny = Math.cos(at.headingRad);
-        const lateral = tFrac * laneWidth;
-        const scene = toSceneXZ({ x: at.x + nx * lateral, y: at.y + ny * lateral });
+        const scene = toSceneXZ({ x: at.x, y: at.y });
         this.occluders.push({
           id: count > 1 ? `${prop.id}-${i}` : prop.id,
+          ...(count > 1 ? { groupId: prop.id } : {}),
           obb: {
             center: { x: scene.x, z: scene.z },
             lengthM: dims.l * prop.scale,
@@ -1135,6 +1288,7 @@ class Materializer {
         });
       }
       if (prop.occludes && count > 0) {
+        this.declareOcclusionPair({ observer: prop.occludes.observer, target: prop.occludes.target, occluderId: prop.id });
         this.notes.push({
           path: `props.${prop.id}`,
           reason: `occlusion declared between ${prop.occludes.observer} and ${prop.occludes.target}; reveal-to-conflict is reported by the engine, not solved for`,
@@ -1161,6 +1315,7 @@ class Materializer {
       }
     }
     this.buildInteractions();
+    this.buildRoleOcclusionPairs();
     this.buildOccluders();
 
     let input = parseSimScenarioInput({
@@ -1177,6 +1332,7 @@ class Materializer {
       interactions: this.interactions,
       signalPrograms: [],
       occluders: this.occluders,
+      occlusionPairs: this.occlusionPairs,
     });
 
     // --- arrival: the criticality that makes the scenario a scenario --------
@@ -1220,7 +1376,7 @@ class Materializer {
     // *instance file* would not be a fully-resolved document — and "the seam is
     // a fully resolved concrete scenario" is the whole point of the seam.
     const resolved = resolveArrivalTriggers(input, this.bundle.graph);
-    input = resolved.input;
+    input = normalizeSimScenarioInput(resolved.input);
     solutions.push(...resolved.solutions);
     for (const issue of resolved.issues) {
       this.notes.push({
@@ -1237,7 +1393,8 @@ class Materializer {
       templateVersion: this.template.scenarioVersion,
       templateDigest: contentHash(this.template).slice(0, 16),
       mapId: this.bundle.mapId,
-      topologyDigest: this.site.topologyDigest,
+      matcherIndexDigest: this.site.topologyDigest,
+      engineGraphDigest: this.bundle.graph.topologyDigest,
       siteId: this.site.siteId,
       matcherVersion: MATCH_SEMANTICS_VERSION,
       solverVersion: ENGINE_VERSION,

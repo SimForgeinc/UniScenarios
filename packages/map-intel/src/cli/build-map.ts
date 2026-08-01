@@ -2,8 +2,8 @@
  * Offline catalog builder.
  *
  * ```
- * pnpm --filter @scenario-studio/map-intel build:map -- --map yale-street
- * pnpm --filter @scenario-studio/map-intel build:map -- --all
+ * pnpm --filter @uniscenarios/map-intel build:map -- --map yale-street
+ * pnpm --filter @uniscenarios/map-intel build:map -- --all
  * ```
  *
  * Emits, per map, into `dev-assets/<map>/derived/`:

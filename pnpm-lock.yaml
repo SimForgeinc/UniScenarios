@@ -17,16 +17,19 @@ importers:
 
   apps/studio:
     dependencies:
-      '@scenario-studio/city-renderer':
+      '@uniscenarios/city-renderer':
         specifier: workspace:*
         version: link:../../packages/city-renderer
-      '@scenario-studio/prop-catalog':
+      '@uniscenarios/prop-catalog':
         specifier: workspace:*
         version: link:../../packages/prop-catalog
-      '@scenario-studio/scenario-model':
+      '@uniscenarios/scenario-model':
         specifier: workspace:*
         version: link:../../packages/scenario-model
-      '@scenario-studio/xodr-tools':
+      '@uniscenarios/sim-engine':
+        specifier: workspace:*
+        version: link:../../packages/sim-engine
+      '@uniscenarios/xodr-tools':
         specifier: workspace:*
         version: link:../../packages/xodr-tools
       react:
@@ -39,6 +42,9 @@ importers:
         specifier: ^0.182.0
         version: 0.182.0
     devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.1
       '@types/react':
         specifier: ^18.3.0
         version: 18.3.31
@@ -57,10 +63,13 @@ importers:
       vite:
         specifier: ^6.0.0
         version: 6.4.3(@types/node@22.20.1)(tsx@4.23.1)
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(tsx@4.23.1)
 
   packages/anchor-matcher:
     dependencies:
-      '@scenario-studio/xodr-tools':
+      '@uniscenarios/xodr-tools':
         specifier: workspace:*
         version: link:../xodr-tools
       zod:
@@ -101,16 +110,16 @@ importers:
 
   packages/cli:
     dependencies:
-      '@scenario-studio/anchor-matcher':
+      '@uniscenarios/anchor-matcher':
         specifier: workspace:*
         version: link:../anchor-matcher
-      '@scenario-studio/map-intel':
+      '@uniscenarios/map-intel':
         specifier: workspace:*
         version: link:../map-intel
-      '@scenario-studio/scenario-model':
+      '@uniscenarios/scenario-model':
         specifier: workspace:*
         version: link:../scenario-model
-      '@scenario-studio/sim-engine':
+      '@uniscenarios/sim-engine':
         specifier: workspace:*
         version: link:../sim-engine
       tsx:
@@ -132,7 +141,7 @@ importers:
 
   packages/map-intel:
     dependencies:
-      '@scenario-studio/xodr-tools':
+      '@uniscenarios/xodr-tools':
         specifier: workspace:*
         version: link:../xodr-tools
     devDependencies:

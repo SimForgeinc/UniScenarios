@@ -14,7 +14,7 @@
  * report says `mapChecked: false` rather than passing checks it did not run.
  */
 
-import type { DerivedMapIndex, MatchedSite } from '@scenario-studio/anchor-matcher';
+import type { DerivedMapIndex, MatchedSite } from '@uniscenarios/anchor-matcher';
 import type {
   FeatureFacts,
   GateFacts,
@@ -24,7 +24,7 @@ import type {
   LaneType,
   MapContext,
   SignalFacts,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 
 const LANE_TYPES = new Set<LaneType>([
   'driving',

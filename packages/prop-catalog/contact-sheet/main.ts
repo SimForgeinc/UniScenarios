@@ -146,7 +146,7 @@ sheet.style.height = `${SHEET_H}px`;
 // ------------------------------------------------------------------- overlay
 const header = document.createElement('div');
 header.className = 'header';
-header.innerHTML = `<h1>@scenario-studio/prop-catalog</h1><p>${CATALOG.length} procedurally generated props · dimensions in metres · 1 m ground grid · origin at ground centre, +X towards the camera-right</p>`;
+header.innerHTML = `<h1>@uniscenarios/prop-catalog</h1><p>${CATALOG.length} procedurally generated props · dimensions in metres · 1 m ground grid · origin at ground centre, +X towards the camera-right</p>`;
 overlay.appendChild(header);
 
 for (const section of sections) {

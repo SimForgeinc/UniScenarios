@@ -19,7 +19,7 @@ import {
   buildAnchorJsonSchema,
   buildInteractionsJsonSchema,
   buildTemplateJsonSchema,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 
 import { CliError, EXIT } from '../errors.js';
 import { emit, emitLines, pad } from '../output.js';

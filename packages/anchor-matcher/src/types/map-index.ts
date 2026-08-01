@@ -159,6 +159,8 @@ export interface PointFeature {
   kind: 'crossing' | 'parking_zone' | 'bus_stop' | 'driveway';
   laneRsl: LaneRsl;
   s: number;
+  /** Feature world point in xodr-local metres, when the source catalog carries it. */
+  point?: Point2;
   side?: 'left' | 'right' | 'both';
   junctionId?: string;
   facts?: Record<string, string | number | boolean>;

@@ -1,0 +1,699 @@
+#!/usr/bin/env node
+/**
+ * Deterministic UniScenarios visual export.
+ *
+ * Exports a still (`--frames 1`), a deterministic frame sequence
+ * (`--frames N`), and, when `ffmpeg` is available and `--video` is passed, an
+ * H.264 MP4. A machine-readable manifest is always written next to the images.
+ *
+ * The script intentionally drives the real app in Chrome instead of reusing
+ * renderer internals: it proves the same lifecycle a human/agent sees.
+ *
+ *   node scripts/export-render.mjs --url http://localhost:5199 --map yale-street \
+ *     --out artifacts/qa/export-smoke --frames 24 --fps 12 --video
+ *   node scripts/export-render.mjs --url http://localhost:5199 --all-maps \
+ *     --out artifacts/qa/five-map-smoke --frames 1
+ *
+ * Strict Yale instance + trace slice (the Studio server should be bound to the
+ * same explicit IPv4 host when a Starcode preview will open it):
+ *
+ *   pnpm --filter @uniscenarios/studio dev --host 127.0.0.1 --port 5199
+ *   node scripts/export-render.mjs --url http://127.0.0.1:5199 \
+ *     --instance artifacts/qa/golden-yale-bus-stop-20260801-corrected/instance.json \
+ *     --trace artifacts/qa/golden-yale-bus-stop-20260801-corrected/trace.json.gz \
+ *     --out artifacts/qa/golden-yale-bus-stop-20260801-corrected/studio-render \
+ *     --headless --fps 2
+ */
+import { chromium } from 'playwright-core';
+import { createHash } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import os from 'node:os';
+import { gunzipSync } from 'node:zlib';
+import {
+  assertScenarioEvidenceAccepted,
+  buildScenarioManifest,
+  cameraActorClearance,
+  cameraForIncident,
+  selectIncidentFrames,
+  selectIncidentVideoFrames,
+  sha256Bytes,
+  tracePose,
+  validateScenarioPair,
+} from './export-render-lib.mjs';
+
+const MAPS = [
+  { id: 'yale-street', label: 'Yale Street' },
+  { id: 'belmont-research-center', label: 'Belmont Research Center' },
+  { id: 'el-camino-road', label: 'El Camino Road' },
+  { id: 'easterbrook-discovery-school', label: 'Easterbrook Discovery School' },
+  { id: 'richmond-field-station', label: 'Richmond Field Station' },
+];
+
+function argsOf(argv) {
+  const out = new Map();
+  for (let i = 2; i < argv.length; i += 1) {
+    const a = argv[i];
+    if (!a.startsWith('--')) throw new Error(`unexpected positional argument ${a}`);
+    const key = a.slice(2);
+    const next = argv[i + 1];
+    if (!next || next.startsWith('--')) out.set(key, 'true');
+    else {
+      out.set(key, next);
+      i += 1;
+    }
+  }
+  return out;
+}
+
+const args = argsOf(process.argv);
+const url = args.get('url') ?? 'http://localhost:5199/';
+const outDir = args.get('out') ?? `artifacts/qa/export-${new Date().toISOString().replace(/[:.]/g, '-')}`;
+const width = Number(args.get('width') ?? 1600);
+const height = Number(args.get('height') ?? 960);
+const frames = Math.max(1, Math.floor(Number(args.get('frames') ?? 1)));
+const fps = Math.max(1, Math.floor(Number(args.get('fps') ?? 12)));
+const headless = args.get('headless') === 'true';
+const encodeVideo = args.has('video');
+const includeUi = args.has('include-ui');
+const instancePath = args.get('instance');
+const tracePath = args.get('trace');
+if (Boolean(instancePath) !== Boolean(tracePath)) {
+  throw new Error('--instance and --trace must be provided together');
+}
+const scenarioMode = Boolean(instancePath && tracePath);
+const maps = args.has('all-maps')
+  ? MAPS
+  : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
+
+function withMap(base, mapId) {
+  const u = new URL(base);
+  u.searchParams.set('map', mapId);
+  u.searchParams.set('dpr', '1');
+  return u.toString();
+}
+
+async function waitForApp(page) {
+  await page.waitForFunction(
+    () => Boolean(window.__viewer) && Boolean(window.__overlays) && Boolean(window.__editor),
+    null,
+    { timeout: 180000 },
+  );
+}
+
+async function waitForStreamIdle(page, timeout = 120000) {
+  await page.waitForFunction(
+    () => {
+      const s = window.__viewer?.getStats?.();
+      return s ? s.residentTiles > 0 && s.loading === 0 && s.uploading === 0 : false;
+    },
+    null,
+    { timeout },
+  );
+  await settleFrames(page, 12);
+}
+
+async function settleFrames(page, count = 8) {
+  await page.evaluate((n) => new Promise((resolve) => {
+    let i = 0;
+    const step = () => {
+      i += 1;
+      if (i >= n) resolve(null);
+      else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }), count);
+}
+
+async function hideUiForExport(page) {
+  if (includeUi) return;
+  await page.evaluate(() => {
+    const root = document.querySelector('#root > div');
+    if (!root) return;
+    for (const child of root.children) {
+      if (child.tagName !== 'CANVAS') child.style.visibility = 'hidden';
+    }
+  });
+}
+
+async function chooseStage(page) {
+  return page.evaluate(() => {
+    const byId = window.__overlays.signals.userData.byId ?? {};
+    const lights = Object.values(byId).filter((p) => p.category === 'traffic_light');
+    if (lights.length >= 3) {
+      let best = null;
+      for (const a of lights) {
+        const near = lights.filter((b) => (a.position[0] - b.position[0]) ** 2 + (a.position[2] - b.position[2]) ** 2 < 45 ** 2);
+        if (!best || near.length > best.length) best = near;
+      }
+      const x = best.reduce((s, p) => s + p.position[0], 0) / best.length;
+      const z = best.reduce((s, p) => s + p.position[2], 0) / best.length;
+      return { x, z, y: window.__overlays.sampleHeight(x, z), reason: `traffic-light cluster (${best.length})` };
+    }
+    const lane = [...window.__editor.laneIndex.all].sort((a, b) => b.length - a.length)[0];
+    const pose = window.__editor.laneIndex.poseAt(lane, lane.length / 2, 0);
+    return { x: pose.x, z: pose.z, y: window.__overlays.sampleHeight(pose.x, pose.z), reason: `longest lane ${lane.rsl}` };
+  });
+}
+
+async function setView(page, eye, target, fovDeg = null) {
+  await page.evaluate((v) => {
+    const viewer = window.__viewer;
+    const V = viewer.camera.position.constructor;
+    if (v.fovDeg !== null) {
+      viewer.camera.fov = v.fovDeg;
+      viewer.camera.updateProjectionMatrix();
+    }
+    viewer.controls.setView(new V(v.eye[0], v.eye[1], v.eye[2]), new V(v.target[0], v.target[1], v.target[2]));
+  }, { eye, target, fovDeg });
+  await settleFrames(page, 8);
+}
+
+/**
+ * Verify the composition with the live Studio camera and scene graph. Actor
+ * footprint clearance alone cannot catch a camera placed behind foliage or a
+ * shelter, so every present incident actor must project inside the canvas and
+ * have an unobstructed ray through the static city/vegetation layers.
+ */
+async function inspectIncidentComposition(page, poses, requiredActorIds, conflictT, sampleT) {
+  return page.evaluate(({ actorPoses, ids, conflict, t }) => {
+    const viewer = window.__viewer;
+    const editor = window.__editor;
+    if (!viewer || !editor) throw new Error('Studio viewer is unavailable for composition inspection');
+    const canvas = viewer.renderer.domElement;
+    const width = canvas.clientWidth || canvas.width;
+    const height = canvas.clientHeight || canvas.height;
+    viewer.camera.updateMatrixWorld(true);
+    viewer.camera.updateProjectionMatrix();
+    const required = actorPoses.filter((pose) => pose.present && ids.includes(pose.id));
+    const raycaster = editor.raycaster;
+    if (!raycaster) throw new Error('Studio raycaster is unavailable for composition inspection');
+    const savedNear = raycaster.near;
+    const savedFar = raycaster.far;
+    const actors = required.map((pose) => {
+      const actorCenter = viewer.camera.position.clone().set(
+        pose.x,
+        pose.y + Math.max(0.8, (pose.dims?.h ?? 1.8) * 0.52),
+        pose.z,
+      );
+      const ndc = actorCenter.clone().project(viewer.camera);
+      const pixel = [(ndc.x + 1) * width / 2, (1 - ndc.y) * height / 2];
+      const origin = viewer.camera.position.clone();
+      const direction = actorCenter.clone().sub(origin);
+      const distanceM = direction.length();
+      raycaster.near = 0.05;
+      raycaster.far = Math.max(0.05, distanceM - Math.max(0.7, (pose.dims?.l ?? 1.8) * 0.25));
+      raycaster.set(origin, direction.normalize());
+      const cityHit = raycaster.intersectObject(viewer.cityGroup, true)[0];
+      const vegetationHit = raycaster.intersectObject(viewer.vegetationGroup, true)[0];
+      const blocker = !cityHit ? vegetationHit
+        : !vegetationHit ? cityHit
+          : cityHit.distance <= vegetationHit.distance ? cityHit : vegetationHit;
+      return {
+        id: pose.id,
+        ndc: [ndc.x, ndc.y, ndc.z],
+        pixel,
+        inFrame: ndc.z >= -1 && ndc.z <= 1 && Math.abs(ndc.x) <= 0.94 && Math.abs(ndc.y) <= 0.9,
+        sceneryClear: !blocker,
+        blockerLayer: blocker ? (blocker === vegetationHit ? 'vegetation' : 'city') : null,
+        blockerDistanceM: blocker?.distance ?? null,
+      };
+    });
+    raycaster.near = savedNear;
+    raycaster.far = savedFar;
+    let minPairSeparationPx = Infinity;
+    let closestPair = null;
+    for (let i = 0; i < actors.length; i += 1) {
+      for (let j = i + 1; j < actors.length; j += 1) {
+        const separation = Math.hypot(
+          actors[i].pixel[0] - actors[j].pixel[0],
+          actors[i].pixel[1] - actors[j].pixel[1],
+        );
+        if (separation < minPairSeparationPx) {
+          minPairSeparationPx = separation;
+          closestPair = [actors[i].id, actors[j].id];
+        }
+      }
+    }
+    const minimumRequiredSeparationPx = t >= conflict - 0.05 ? 24 : 4;
+    return {
+      viewport: { width, height },
+      boundsNdc: { x: 0.94, y: 0.9 },
+      minimumRequiredSeparationPx,
+      minPairSeparationPx,
+      closestPair,
+      actors,
+      passed: actors.every((actor) => actor.inFrame && actor.sceneryClear)
+        && (actors.length < 2 || minPairSeparationPx >= minimumRequiredSeparationPx),
+    };
+  }, { actorPoses: poses, ids: requiredActorIds, conflict: conflictT, t: sampleT });
+}
+
+async function sha256(file) {
+  return createHash('sha256').update(await readFile(file)).digest('hex');
+}
+
+async function clearGeneratedFrames(directory, pattern) {
+  await mkdir(directory, { recursive: true });
+  const entries = await readdir(directory, { withFileTypes: true });
+  for (const entry of entries) {
+    if (!pattern.test(entry.name)) continue;
+    if (!entry.isFile()) {
+      throw new Error(`refusing to replace non-file frame artifact ${path.join(directory, entry.name)}`);
+    }
+    await unlink(path.join(directory, entry.name));
+  }
+}
+
+async function readJsonMaybeGzip(file) {
+  const bytes = await readFile(file);
+  const plain = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;
+  return { value: JSON.parse(plain.toString('utf8')), bytes, canonicalBytes: plain };
+}
+
+async function topologyEvidence(instanceDoc, trace, mapId) {
+  const mapDir = path.resolve('dev-assets', mapId);
+  const topologyFile = path.join(mapDir, 'topology-index.json.gz');
+  const xodrFile = path.join(mapDir, 'map.xodr');
+  const renderManifestFile = path.join(mapDir, '3d', 'manifest.json');
+  for (const file of [topologyFile, xodrFile, renderManifestFile]) {
+    if (!existsSync(file)) throw new Error(`map evidence file is missing: ${file}`);
+  }
+  const [topologyBytes, xodrBytes, renderManifestBytes] = await Promise.all([
+    readFile(topologyFile),
+    readFile(xodrFile),
+    readFile(renderManifestFile),
+  ]);
+  const matcherDigest = sha256Bytes(topologyBytes);
+  const engineGraphDigest = sha256Bytes(xodrBytes);
+  const claimedMatcher = instanceDoc.manifest.replayKey.matcherIndexDigest;
+  const claimedEngine = instanceDoc.manifest.replayKey.engineGraphDigest;
+  if (claimedMatcher !== matcherDigest) {
+    throw new Error(`topology integrity failed: matcher topology ${claimedMatcher} != map artifact ${matcherDigest}`);
+  }
+  if (claimedEngine !== engineGraphDigest || trace.header.engineGraphDigest !== engineGraphDigest) {
+    throw new Error(
+      `topology integrity failed: simulation graph instance=${claimedEngine} trace=${trace.header.engineGraphDigest} map=${engineGraphDigest}`,
+    );
+  }
+  return {
+    authoringMatcherTopology: {
+      domain: 'anchor matching and lane topology index',
+      digest: matcherDigest,
+      artifact: path.relative(process.cwd(), topologyFile),
+    },
+    simulationRoadGraph: {
+      domain: 'simulation graph derived from source OpenDRIVE',
+      digest: engineGraphDigest,
+      traceLegacyTopologyDigest: trace.header.topologyDigest ?? null,
+      artifact: path.relative(process.cwd(), xodrFile),
+    },
+    studioRenderScene: {
+      domain: 'streamed 3D city and road render manifest',
+      digest: sha256Bytes(renderManifestBytes),
+      artifact: path.relative(process.cwd(), renderManifestFile),
+    },
+  };
+}
+
+async function exportScenario(page) {
+  const instanceFile = path.resolve(instancePath);
+  const traceFile = path.resolve(tracePath);
+  const [{ value: instanceDoc, bytes: instanceBytes }, { value: trace, bytes: traceFileBytes, canonicalBytes }] =
+    await Promise.all([readJsonMaybeGzip(instanceFile), readJsonMaybeGzip(traceFile)]);
+  const evidence = validateScenarioPair(instanceDoc, trace, canonicalBytes);
+  const topologyDomains = await topologyEvidence(instanceDoc, trace, evidence.mapId);
+  const selectedFrames = selectIncidentFrames(trace);
+  const framesDir = path.join(outDir, 'frames');
+  const sourceDir = path.join(outDir, 'source');
+  await Promise.all([
+    mkdir(framesDir, { recursive: true }),
+    mkdir(sourceDir, { recursive: true }),
+  ]);
+  await clearGeneratedFrames(framesDir, /^frame-\d{3}\.png$/);
+  // Snapshot the validated pair into the evidence bundle. A long GPU export
+  // must remain self-contained even if an upstream regeneration replaces the
+  // source paths while Chrome is rendering the sequence.
+  const instanceSnapshot = path.join(sourceDir, 'instance.json');
+  const traceSnapshot = path.join(sourceDir, 'trace.json.gz');
+  await Promise.all([
+    writeFile(instanceSnapshot, instanceBytes),
+    writeFile(traceSnapshot, traceFileBytes),
+  ]);
+
+  const pageUrl = withMap(url, evidence.mapId);
+  await page.goto(pageUrl, { waitUntil: 'load' });
+  await waitForApp(page);
+  await waitForStreamIdle(page);
+  await page.evaluate(() => {
+    // Lane polygons are an authoring/debug layer; the evidence render keeps
+    // the real streamed road/map and real signal furniture without the cyan
+    // coverage wash obscuring the incident.
+    window.__overlays.setVisible('lanes', false);
+  });
+  await hideUiForExport(page);
+  const loadedMapId = await page.evaluate(() => window.__mapId ?? window.__editor?.doc?.map?.id ?? null);
+  if (loadedMapId !== evidence.mapId) {
+    throw new Error(`Studio loaded map ${loadedMapId}, expected ${evidence.mapId}`);
+  }
+
+  const occluderActorIds = (trace.metrics.revealToConflict?.relevantOccluderIds ?? [])
+    .filter((id) => id.startsWith('actor:'))
+    .map((id) => id.slice('actor:'.length));
+  const framingActorIds = [...new Set([...evidence.metricPair, ...occluderActorIds])];
+
+  const renderTraceFrame = async (selected, file, settleCount) => {
+    const poses = evidence.actorModels.map((actor) => ({
+      ...tracePose(trace, actor.id, selected.index),
+      catalogId: actor.catalogId,
+      dims: actor.dims,
+      static: actor.static,
+    }));
+    const groundedPoses = await page.evaluate((actorPoses) => {
+      const overlays = window.__overlays;
+      const editor = window.__editor;
+      if (!overlays || !editor) throw new Error('Studio renderer is unavailable');
+      const visible = actorPoses.filter((actor) => actor.present).map((actor) => ({
+        ...actor,
+        y: overlays.sampleHeight(actor.x, actor.z),
+      }));
+      editor.renderer.sync(visible);
+      editor.renderer.setSelection([]);
+      return actorPoses.map((actor) => ({
+        ...actor,
+        y: overlays.sampleHeight(actor.x, actor.z),
+      }));
+    }, poses);
+    const pairGround = groundedPoses
+      .filter((pose) => evidence.metricPair.includes(pose.id))
+      .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
+    const camera = cameraForIncident(trace, evidence.metricPair, selected.index, pairGround, framingActorIds);
+    const cameraClearance = cameraActorClearance(camera, groundedPoses, evidence.actorModels);
+    if (cameraClearance.clearanceM < 2) {
+      throw new Error(
+        `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
+      );
+    }
+    await setView(page, camera.eye, camera.target, camera.fovDeg);
+    await waitForStreamIdle(page, 60000).catch(() => undefined);
+    await settleFrames(page, settleCount);
+    const composition = await inspectIncidentComposition(
+      page,
+      groundedPoses,
+      framingActorIds,
+      trace.metrics.revealToConflict.conflictT,
+      selected.t,
+    );
+    if (!composition.passed) {
+      const failures = composition.actors
+        .filter((actor) => !actor.inFrame || !actor.sceneryClear)
+        .map((actor) => `${actor.id}(inFrame=${actor.inFrame},sceneryClear=${actor.sceneryClear},blocker=${actor.blockerLayer})`);
+      if (composition.minPairSeparationPx < composition.minimumRequiredSeparationPx) {
+        failures.push(
+          `${composition.closestPair?.join('/')} separation ${composition.minPairSeparationPx.toFixed(1)}px < ${composition.minimumRequiredSeparationPx}px`,
+        );
+      }
+      throw new Error(`incident composition failed at t=${selected.t}: ${failures.join(', ')}`);
+    }
+    if (includeUi) {
+      await page.screenshot({ path: file, fullPage: false });
+    } else {
+      const canvas = await page.$('canvas');
+      if (!canvas) throw new Error('viewer canvas not found');
+      await canvas.screenshot({ path: file });
+    }
+    return {
+      requestedT: selected.targetT,
+      index: selected.index,
+      t: selected.t,
+      poses: groundedPoses.map(({ catalogId, dims, static: isStatic, ...pose }) => pose),
+      camera,
+      cameraActorClearance: cameraClearance,
+      composition,
+      artifact: {
+        file: path.relative(outDir, file),
+        sha256: await sha256(file),
+      },
+    };
+  };
+
+  const frameRecords = [];
+  for (let frameNo = 0; frameNo < selectedFrames.length; frameNo += 1) {
+    const selected = selectedFrames[frameNo];
+    const file = path.join(framesDir, `frame-${String(frameNo).padStart(3, '0')}.png`);
+    frameRecords.push({
+      phase: selected.phase,
+      ...(await renderTraceFrame(selected, file, 16)),
+    });
+  }
+
+  let video = null;
+  let videoSequence = null;
+  if (!args.has('no-video')) {
+    const videoFps = Math.max(8, fps);
+    const selection = selectIncidentVideoFrames(trace, videoFps);
+    const videoFramesDir = path.join(outDir, 'video-frames');
+    await clearGeneratedFrames(videoFramesDir, /^frame-\d{5}\.png$/);
+    const records = [];
+    for (let frameNo = 0; frameNo < selection.frames.length; frameNo += 1) {
+      const selected = selection.frames[frameNo];
+      const file = path.join(videoFramesDir, `frame-${String(frameNo).padStart(5, '0')}.png`);
+      const record = await renderTraceFrame(selected, file, 3);
+      records.push({
+        sequenceIndex: frameNo,
+        index: record.index,
+        requestedT: record.requestedT,
+        t: record.t,
+        poses: record.poses,
+        camera: record.camera,
+        cameraActorClearance: record.cameraActorClearance,
+        composition: record.composition,
+        artifact: record.artifact,
+      });
+    }
+    const output = path.join(outDir, 'incident.mp4');
+    const ffmpeg = spawnSync('ffmpeg', [
+      '-y',
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-framerate', String(videoFps),
+      '-i', path.join(videoFramesDir, 'frame-%05d.png'),
+      '-an',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-threads', '1',
+      '-fflags', '+bitexact',
+      '-flags:v', '+bitexact',
+      '-map_metadata', '-1',
+      '-movflags', '+faststart',
+      output,
+    ], { encoding: 'utf8' });
+    if (ffmpeg.status === 0 && existsSync(output)) {
+      const probe = spawnSync('ffprobe', [
+        '-v', 'error',
+        '-show_entries', 'stream=nb_frames,r_frame_rate,width,height',
+        '-of', 'json',
+        output,
+      ], { encoding: 'utf8' });
+      if (probe.status !== 0) throw new Error(`ffprobe failed: ${probe.stderr}`);
+      const stream = JSON.parse(probe.stdout).streams?.[0];
+      if (Number(stream?.nb_frames) !== records.length || stream?.r_frame_rate !== `${videoFps}/1`) {
+        throw new Error(
+          `encoded video mismatch: frames=${stream?.nb_frames} fps=${stream?.r_frame_rate}, expected ${records.length} @ ${videoFps}/1`,
+        );
+      }
+    }
+    video = ffmpeg.status === 0 && existsSync(output)
+      ? {
+          file: path.relative(outDir, output),
+          fps: videoFps,
+          durationSeconds: records.length / videoFps,
+          frameCount: records.length,
+          sha256: await sha256(output),
+        }
+      : { unavailable: true, reason: ffmpeg.stderr || 'ffmpeg not installed or failed' };
+    videoSequence = {
+      startT: selection.startT,
+      endT: selection.endT,
+      fps: videoFps,
+      frameCount: records.length,
+      frames: records,
+    };
+  }
+
+  // Keep performance counters out of the evidence manifest: fps, heap and
+  // residency timing are intentionally runtime-dependent. These renderer
+  // facts are stable for a fixed actor/model set.
+  const rendererStats = await page.evaluate(() => ({
+    actorRenderer: window.__editor.renderer.stats,
+  }));
+  const manifest = buildScenarioManifest({
+    instanceDoc,
+    trace,
+    evidence,
+    topologyDomains,
+    viewport: { width, height, deviceScaleFactor: 1, includeUi },
+    frameRecords,
+    videoSequence,
+    video,
+    inputArtifacts: {
+      instance: {
+        file: path.relative(outDir, instanceSnapshot),
+        source: path.relative(process.cwd(), instanceFile),
+        sha256: sha256Bytes(instanceBytes),
+      },
+      traceFile: {
+        file: path.relative(outDir, traceSnapshot),
+        source: path.relative(process.cwd(), traceFile),
+        sha256: sha256Bytes(traceFileBytes),
+      },
+    },
+    rendererStats,
+    diagnostics,
+  });
+  const manifestFile = path.join(outDir, 'manifest.json');
+  await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  // Preserve the rejected manifest for diagnosis, but never report a strict
+  // scenario export as successful unless every machine gate passes.
+  assertScenarioEvidenceAccepted(manifest.machineAssessment);
+  return manifest;
+}
+
+async function exportMap(page, map) {
+  const mapDir = path.join(outDir, map.id);
+  const framesDir = path.join(mapDir, 'frames');
+  await mkdir(framesDir, { recursive: true });
+
+  const pageUrl = withMap(url, map.id);
+  await page.goto(pageUrl, { waitUntil: 'load' });
+  await waitForApp(page);
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage)) {
+      if (key.startsWith('uniscenarios:scenario:')) localStorage.removeItem(key);
+    }
+  });
+  await page.reload({ waitUntil: 'load' });
+  await waitForApp(page);
+  await waitForStreamIdle(page);
+  await hideUiForExport(page);
+
+  const stage = await chooseStage(page);
+  const radius = 48;
+  const elevation = 28;
+  const captures = [];
+  for (let i = 0; i < frames; i += 1) {
+    const theta = frames === 1 ? Math.PI * 0.25 : (2 * Math.PI * i) / frames + Math.PI * 0.25;
+    const eye = [stage.x + Math.cos(theta) * radius, stage.y + elevation, stage.z + Math.sin(theta) * radius];
+    const target = [stage.x, stage.y, stage.z];
+    await setView(page, eye, target);
+    await waitForStreamIdle(page, 60000).catch(() => undefined);
+    await settleFrames(page, 24);
+    const file = frames === 1 ? path.join(mapDir, 'still.png') : path.join(framesDir, `frame-${String(i).padStart(6, '0')}.png`);
+    if (includeUi) {
+      await page.screenshot({ path: file, fullPage: false });
+    } else {
+      const canvas = await page.$('canvas');
+      if (!canvas) throw new Error('viewer canvas not found');
+      await canvas.screenshot({ path: file });
+    }
+    captures.push({ index: i, file: path.relative(outDir, file), sha256: await sha256(file), eye, target });
+  }
+
+  let video = null;
+  if (encodeVideo && frames > 1) {
+    const output = path.join(mapDir, 'video.mp4');
+    const ffmpeg = spawnSync('ffmpeg', [
+      '-y',
+      '-hide_banner',
+      '-loglevel', 'error',
+      '-framerate', String(fps),
+      '-i', path.join(framesDir, 'frame-%06d.png'),
+      '-an',
+      '-c:v', 'libx264',
+      '-pix_fmt', 'yuv420p',
+      '-threads', '1',
+      '-fflags', '+bitexact',
+      '-flags:v', '+bitexact',
+      '-map_metadata', '-1',
+      '-movflags', '+faststart',
+      output,
+    ], { encoding: 'utf8' });
+    if (ffmpeg.status === 0 && existsSync(output)) {
+      video = { file: path.relative(outDir, output), sha256: await sha256(output), encoder: 'ffmpeg/libx264' };
+    } else {
+      video = { unavailable: true, reason: ffmpeg.stderr || 'ffmpeg not installed or failed' };
+    }
+  }
+
+  const stats = await page.evaluate(() => ({
+    viewer: window.__viewer.getStats(),
+    overlays: window.__overlays.stats,
+    lanes: window.__editor.laneIndex.stats,
+    actors: window.__editor.state.actors.length,
+  }));
+  const manifest = {
+    schema: 'uniscenarios.render-export.v1',
+    generatedAt: new Date().toISOString(),
+    map,
+    pageUrl,
+    viewport: { width, height, deviceScaleFactor: 1 },
+    includeUi,
+    frames: captures,
+    video,
+    stage,
+    stats,
+  };
+  await writeFile(path.join(mapDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  return manifest;
+}
+
+await mkdir(outDir, { recursive: true });
+const browser = await chromium.launch({
+  channel: 'chrome',
+  headless,
+  args: ['--ignore-gpu-blocklist', `--window-size=${width + 80},${height + 120}`],
+});
+const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+const page = await context.newPage();
+const diagnostics = [];
+page.on('console', (m) => { if (m.type() === 'error') diagnostics.push({ type: 'console', text: m.text() }); });
+page.on('pageerror', (e) => diagnostics.push({ type: 'pageerror', text: String(e) }));
+
+const results = [];
+try {
+  if (scenarioMode) {
+    console.log(`> export strict scenario ${instancePath}`);
+    results.push(await exportScenario(page));
+  } else {
+    for (const map of maps) {
+      console.log(`> export ${map.id}`);
+      results.push(await exportMap(page, map));
+    }
+  }
+} finally {
+  await browser.close();
+}
+
+if (scenarioMode) {
+  console.log(JSON.stringify({
+    outDir,
+    mapId: results[0].mapId,
+    scenarioId: results[0].scenarioId,
+    frames: results[0].frames.length,
+    diagnostics: diagnostics.length,
+  }, null, 2));
+} else {
+  const rootManifest = {
+    schema: 'uniscenarios.visual-validation.v1',
+    generatedAt: new Date().toISOString(),
+    command: process.argv,
+    machine: { platform: os.platform(), release: os.release(), arch: os.arch(), cpus: os.cpus().length },
+    inputs: { url, outDir, frames, fps, width, height, headless, encodeVideo, includeUi, maps: maps.map((m) => m.id) },
+    diagnostics,
+    results: results.map((r) => ({ map: r.map, manifest: path.join(r.map.id, 'manifest.json'), frames: r.frames, video: r.video, stage: r.stage })),
+  };
+  await writeFile(path.join(outDir, 'validation-manifest.json'), JSON.stringify(rootManifest, null, 2));
+  console.log(JSON.stringify({ outDir, maps: maps.map((m) => m.id), diagnostics: diagnostics.length }, null, 2));
+}

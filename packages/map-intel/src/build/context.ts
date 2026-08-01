@@ -16,7 +16,7 @@
  * the per-lane road-name table, which every handle in the catalog depends on.
  */
 
-import { CoordinateFrame } from '@scenario-studio/xodr-tools';
+import { CoordinateFrame } from '@uniscenarios/xodr-tools';
 
 import { ElevationField } from '../geometry/elevation.js';
 import { LaneGraph } from '../geometry/lane-graph.js';

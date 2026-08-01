@@ -20,7 +20,7 @@
  * trigger by a tick.
  */
 
-import { obbOverlap, normalizeAngle, type Obb, type Vec2 } from '../core/math.js';
+import { obbCorners, obbOverlap, normalizeAngle, type Obb, type Vec2 } from '../core/math.js';
 import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
 import { localFromScene } from '../frames.js';
@@ -201,7 +201,7 @@ class Simulation {
       this.triggerById.set(it.id, tr);
     }
 
-    this.metrics = newMetricAccumulator(this.actors.map((a) => a.id));
+    this.metrics = newMetricAccumulator(this.actors.map((a) => a.id), input.occlusionPairs);
     this.world = {
       t: -input.warmupSeconds,
       dt: this.dt,
@@ -258,6 +258,7 @@ class Simulation {
       kind: spec.kind,
       dims: spec.dims,
       tags: spec.tags,
+      static: spec.static,
       rules,
       cruiseSpeedMps: 0,
       cruiseOverrideMps: spec.behavior.cruiseSpeedMps ?? null,
@@ -265,7 +266,7 @@ class Simulation {
       routeS,
       remainingTurns:
         spec.behavior.route.kind === 'follow' ? [...spec.behavior.route.turns] : ([] as TurnRelation[]),
-      speedMps: spec.initial.speedMps,
+      speedMps: spec.static ? 0 : spec.initial.speedMps,
       accelMps2: 0,
       lateralOffsetM: lateral,
       lateralRateMps: 0,
@@ -280,7 +281,7 @@ class Simulation {
       standstillSinceS: null,
       requiredDecelMax: 0,
     };
-    rt.cruiseSpeedMps = cruiseSpeed(rt, this.speedLimitAt(rt));
+    rt.cruiseSpeedMps = spec.static ? 0 : cruiseSpeed(rt, this.speedLimitAt(rt));
     return rt;
   }
 
@@ -324,6 +325,23 @@ class Simulation {
     return { center: a.position, lengthM: a.dims.l, widthM: a.dims.w, headingRad: a.headingRad };
   }
 
+  private occludersForTick(): readonly OccluderShape[] {
+    const staticActors = this.actors.filter((a) => a.static && a.present && !a.retired);
+    if (staticActors.length === 0) return this.occluders;
+    const dynamic = staticActors
+      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
+      .map((a) => {
+        const obb = this.obbOf(a);
+        return {
+          id: `actor:${a.id}`,
+          obb,
+          heightM: a.dims.h,
+          corners: obbCorners(obb),
+        } satisfies OccluderShape;
+      });
+    return [...this.occluders, ...dynamic];
+  }
+
   private detectCollisions(t: number): Set<string> {
     const live = this.actors.filter((a) => a.present && !a.retired);
     const set = new Set<string>();
@@ -355,7 +373,7 @@ class Simulation {
       t,
       world: { ...this.world, t },
       signals: this.signals,
-      occluders: this.occluders,
+      occluders: this.occludersForTick(),
       collisions,
     };
   }
@@ -743,6 +761,16 @@ class Simulation {
       swap: null,
     };
     if (!a.present || a.retired) return plan;
+    if (a.static) {
+      plan.speed = 0;
+      plan.accel = 0;
+      plan.routeS = a.routeS;
+      plan.lateralOffset = a.lateralOffsetM;
+      plan.lateralRate = 0;
+      plan.position = a.position;
+      plan.heading = a.headingRad;
+      return plan;
+    }
 
     const lim = limitsFor(a);
     const limit = this.speedLimitAt(a);
@@ -888,7 +916,7 @@ class Simulation {
       track.s.push(a.routeS);
       track.present.push(a.present && !a.retired ? 1 : 0);
     }
-    observeTick(this.metrics, t, this.actors, collisions, this.occluders);
+    observeTick(this.metrics, t, this.actors, collisions, this.occludersForTick());
   }
 
   private finishNeverFired(): void {
@@ -916,6 +944,7 @@ class Simulation {
         inputHash: contentHash(input),
         seed: input.seed,
         mapId: input.mapId,
+        engineGraphDigest: this.graph.topologyDigest,
         topologyDigest: this.graph.topologyDigest,
         dt: this.dt,
         clipSeconds: input.clipSeconds,

@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { solveArrival, resolveArrivalTriggers } from '../solve/arrival.js';
+import { applyArrivalSolution, solveArrival, resolveArrivalTriggers } from '../solve/arrival.js';
 import { runSimulation } from '../sim/engine.js';
 import { nominalRun } from '../solve/nominal.js';
 import { buildRoute } from '../map/route.js';
@@ -117,10 +117,113 @@ describe('solveArrival', () => {
     expect(tEgo - tCh).toBeCloseTo(1.5, 1);
   });
 
-  it('rejects an arrival point that is not on the actor’s route', () => {
+  it('resolves a lane-offset arrival by exact reference-frame stations', () => {
     const result = solveArrival(
       twoActor(),
-      { of: 'challenger', at: { kind: 'point', at: { x: 300, z: -400 } }, syncWith: 'ego', ttc: 1.5 },
+      {
+        of: 'challenger',
+        at: {
+          kind: 'point',
+          at: { x: 300, z: 3.5 },
+          referenceFrame: {
+            stations: [
+              { rsl: LANE_LEFT, s: 300 },
+              { rsl: LANE_RIGHT, s: 300 },
+            ],
+          },
+        },
+        syncWith: 'ego',
+        ttc: 1.5,
+      },
+      graph,
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.solution.converged).toBe(true);
+    expect(Math.abs(result.solution.achievedTtc - 1.5)).toBeLessThan(0.05);
+  });
+
+  it('treats reference-frame stations as strict lane provenance, not a nearest-route hint', () => {
+    const result = solveArrival(
+      twoActor(),
+      {
+        of: 'challenger',
+        at: {
+          kind: 'point',
+          // Geometrically close enough to the challenger lane to pass the
+          // fallback, but semantically declared only on the ego lane.
+          at: { x: 300, z: 1.75 },
+          referenceFrame: { stations: [{ rsl: LANE_LEFT, s: 300 }] },
+        },
+        syncWith: 'ego',
+        ttc: 1.5,
+      },
+      graph,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.code).toBe('arrival_unsolvable');
+  });
+
+  it('keeps parameterized lateral and heading placement when moving a solved spawn', () => {
+    const input = twoActor();
+    const challenger = input.actors.find((actor) => actor.id === 'challenger')!;
+    const shifted = {
+      ...input,
+      actors: input.actors.map((actor) => actor.id === 'challenger'
+        ? {
+            ...actor,
+            initial: {
+              ...actor.initial,
+              laneRef: { ...actor.initial.laneRef!, tFrac: 0.6 },
+              pose: {
+                ...actor.initial.pose,
+                z: actor.initial.pose.z - 0.6 * 3.5,
+                headingRad: actor.initial.pose.headingRad + 0.2,
+              },
+            },
+          }
+        : actor),
+    };
+    const moved = applyArrivalSolution(
+      shifted,
+      {
+        interactionId: null,
+        actorId: 'challenger',
+        referenceActorId: 'ego',
+        spawnDeltaS: 90,
+        spawnS: 100,
+        targetDeltaT: 0,
+        achievedDeltaT: 0,
+        achievedTtc: 0,
+        fireTime: 0,
+        iterations: 1,
+        converged: true,
+      },
+      graph,
+    );
+    const actor = moved.actors.find((candidate) => candidate.id === 'challenger')!;
+    expect(actor.initial.laneRef?.tFrac).toBe(0.6);
+    expect(actor.initial.pose.x).toBeCloseTo(100, 6);
+    expect(actor.initial.pose.z).toBeCloseTo(challenger.initial.pose.z - 0.6 * 3.5, 6);
+    expect(actor.initial.pose.headingRad).toBeCloseTo(0.2, 6);
+  });
+
+  it('does not bind a geometric point to a merely nearby parallel road', () => {
+    const result = solveArrival(
+      twoActor(),
+      { of: 'challenger', at: { kind: 'point', at: { x: 300, z: 7 } }, syncWith: 'ego', ttc: 1.5 },
+      graph,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.issue.code).toBe('arrival_unsolvable');
+  });
+
+  it('rejects an arrival point far enough away to be on another road', () => {
+    const result = solveArrival(
+      twoActor(),
+      { of: 'challenger', at: { kind: 'point', at: { x: 300, z: -16 } }, syncWith: 'ego', ttc: 1.5 },
       graph,
     );
     expect(result.ok).toBe(false);

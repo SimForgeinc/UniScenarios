@@ -1,12 +1,16 @@
 {
-  "name": "scenario-studio-monorepo",
+  "name": "uniscenarios",
+  "description": "Portable driving-scenario authoring, simulation, rendering, validation, and standards export toolkit.",
   "private": true,
+  "license": "Apache-2.0",
   "packageManager": "pnpm@11.18.0",
   "scripts": {
-    "dev": "pnpm --filter @scenario-studio/studio dev",
+    "dev": "pnpm --filter @uniscenarios/studio dev",
     "build": "pnpm -r build",
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "render:export": "node scripts/export-render.mjs",
+    "trace:render": "node scripts/render-trace.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1",

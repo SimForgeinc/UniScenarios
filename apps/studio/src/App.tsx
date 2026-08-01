@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { CityView } from '@scenario-studio/city-renderer/react';
-import type { BenchResult, CityViewer, CityViewerOptions } from '@scenario-studio/city-renderer';
-import type { CatalogId } from '@scenario-studio/prop-catalog';
+import { CityView } from '@uniscenarios/city-renderer/react';
+import type { BenchResult, CityViewer, CityViewerOptions } from '@uniscenarios/city-renderer';
+import type { CatalogId } from '@uniscenarios/prop-catalog';
 import { Hud } from './Hud';
 import { LayerPanel } from './LayerPanel';
 import { loadMapOverlays, type MapOverlayHandle, type MapOverlayLayer } from './mapOverlays';
@@ -10,12 +10,15 @@ import { MAPS, initialMapId, mapById, rememberMapId, type MapEntry } from './map
 import { useEditor } from './editor/useEditor';
 import { Inspector, MapPicker, Palette, StatusBar } from './editor/ui';
 import type { EditorController } from './editor/controller';
+import { PlaybackPanel } from './playback/PlaybackPanel';
+import { PlaybackLoadError, type PlaybackBundle } from './playback/model';
+import { usePlayback } from './playback/usePlayback';
 
 /**
  * Overlay defaults.
  *
- * **Lanes on**: the lane surfaces are the substrate everything else in Scenario
- * Studio is authored against, and they are the fastest way to see that the map
+ * **Lanes on**: the lane surfaces are the substrate everything else in
+ * UniScenarios is authored against, and they are the fastest way to see that the map
  * is georeferenced correctly. They cost one translucent draw call for all 1,144
  * lanes, so leaving them on is close to free.
  *
@@ -78,6 +81,7 @@ export function App(): JSX.Element {
   const [overlays, setOverlays] = useState<MapOverlayHandle | null>(null);
   const [overlayError, setOverlayError] = useState<string | null>(null);
   const [benchRunning, setBenchRunning] = useState(false);
+  const [playbackBundle, setPlaybackBundle] = useState<PlaybackBundle | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const optionsRef = useRef<CityViewerOptions>(optionsFromUrl());
   const pendingMapId = useRef(mapId);
@@ -174,12 +178,43 @@ export function App(): JSX.Element {
     return null;
   }, [overlays, viewer, overlayError]);
 
-  const { controller, state, laneStats, error: editorError } = useEditor({
+  const { controller: editorController, state, laneStats, error: editorError } = useEditor({
     viewer,
     map,
     sampleHeight,
     hostRef,
   });
+
+  const activePlayback = playbackBundle?.instance.input.mapId === map.id ? playbackBundle : null;
+  const { controller: playbackController, state: playbackState } = usePlayback({
+    viewer,
+    bundle: activePlayback,
+    sampleHeight,
+  });
+
+  // Playback is a viewport mode, not an editor mutation. Keep the autosave
+  // document intact but hide its actors until the imported evidence is closed.
+  useEffect(() => {
+    if (!editorController) return;
+    editorController.renderer.group.visible = playbackBundle === null;
+    return () => {
+      editorController.renderer.group.visible = true;
+    };
+  }, [editorController, playbackBundle]);
+
+  const importPlayback = useCallback(
+    (bundle: PlaybackBundle) => {
+      const targetMap = mapById(bundle.instance.input.mapId);
+      if (!targetMap) {
+        throw new PlaybackLoadError('Scenario import failed', [
+          `No Studio map assets are registered for input.mapId ${JSON.stringify(bundle.instance.input.mapId)}.`,
+        ]);
+      }
+      setPlaybackBundle(bundle);
+      selectMap(targetMap);
+    },
+    [selectMap],
+  );
 
   // 1-5 switch maps. Deliberately global (not scoped to the picker) and
   // deliberately not swallowed when a modal edit is running — switching maps is
@@ -201,8 +236,8 @@ export function App(): JSX.Element {
   }, [selectMap]);
 
   const onPick = useCallback(
-    (id: CatalogId) => (controller as EditorController | null)?.togglePlacement(id),
-    [controller],
+    (id: CatalogId) => (editorController as EditorController | null)?.togglePlacement(id),
+    [editorController],
   );
 
   const loading = state === null;
@@ -219,11 +254,20 @@ export function App(): JSX.Element {
 
       <div style={styles.leftRail}>
         <MapPicker current={map} loading={loading} onSelect={selectMap} />
-        <Palette placing={state?.placing ?? null} onPick={onPick} />
+        <PlaybackPanel
+          bundle={playbackBundle}
+          controller={playbackController}
+          state={playbackState}
+          onImport={importPlayback}
+          onClear={() => setPlaybackBundle(null)}
+        />
+        {!playbackBundle ? <Palette placing={state?.placing ?? null} onPick={onPick} /> : null}
       </div>
 
       <div style={styles.rightRail}>
-        {controller && state ? <Inspector controller={controller} state={state} /> : null}
+        {!playbackBundle && editorController && state ? (
+          <Inspector controller={editorController} state={state} />
+        ) : null}
         <LayerPanel
           viewer={viewer}
           overlays={overlays}
@@ -231,19 +275,19 @@ export function App(): JSX.Element {
           overlayDefaults={OVERLAY_DEFAULTS}
           benchRunning={benchRunning}
           onBench={() => void window.__bench?.()}
-          actorCount={state?.actors.length ?? 0}
+          actorCount={playbackState?.actorCount ?? playbackBundle?.actors.length ?? state?.actors.length ?? 0}
           laneCount={laneStats?.lanes ?? null}
         />
         <Hud viewer={viewer} />
       </div>
 
-      {state ? (
+      {!playbackBundle && state ? (
         <StatusBar state={state} mapLabel={map.label} loading={loading} />
-      ) : (
+      ) : !playbackBundle ? (
         <div style={styles.loadingBar} data-testid="status-bar">
           loading {map.label}…
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

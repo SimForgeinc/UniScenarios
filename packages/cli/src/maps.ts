@@ -24,12 +24,12 @@ import {
   KNOWN_MAPS,
   type DerivedTopology,
   type LocationCatalog,
-} from '@scenario-studio/map-intel';
+} from '@uniscenarios/map-intel';
 import {
   normalizeDerivedMapIndex,
   type DerivedMapIndex,
-} from '@scenario-studio/anchor-matcher';
-import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@scenario-studio/sim-engine';
+} from '@uniscenarios/anchor-matcher';
+import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
 
@@ -83,7 +83,7 @@ async function readJsonGz<T>(file: string, code: string): Promise<T> {
   } catch {
     throw new CliError(code, `missing artifact ${path.relative(REPO_ROOT, file)}`, {
       path: file,
-      detail: { hint: 'run `pnpm --filter @scenario-studio/map-intel build:map -- --all`' },
+      detail: { hint: 'run `pnpm --filter @uniscenarios/map-intel build:map -- --all`' },
     });
   }
   const plain = bytes[0] === 0x1f && bytes[1] === 0x8b ? gunzipSync(bytes) : bytes;

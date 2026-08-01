@@ -1,8 +1,8 @@
 /**
- * `@scenario-studio/scenario-model` — the versioned scenario documents.
+ * `@uniscenarios/scenario-model` — the versioned scenario documents.
  *
  * Framework-free: no React, no three.js. Positions in v1 are plain `{x, y, z}`
- * in the y-up scene frame that `@scenario-studio/xodr-tools` produces, and
+ * in the y-up scene frame that `@uniscenarios/xodr-tools` produces, and
  * headings are radians CCW about +Y from +X (equal to the OpenDRIVE heading —
  * see `schema/v1.ts`).
  *
@@ -33,7 +33,7 @@
  *
  * @example v1: edit a scene
  * ```ts
- * import { ScenarioDocument, MemoryScenarioFileStore } from '@scenario-studio/scenario-model';
+ * import { ScenarioDocument, MemoryScenarioFileStore } from '@uniscenarios/scenario-model';
  *
  * const doc = ScenarioDocument.create({
  *   name: 'Yale & Grant left turn',
@@ -52,7 +52,7 @@
  *
  * @example v2: validate a template
  * ```ts
- * import { parseTemplate, validateTemplate } from '@scenario-studio/scenario-model';
+ * import { parseTemplate, validateTemplate } from '@uniscenarios/scenario-model';
  *
  * const template = parseTemplate(JSON.parse(text));
  * const report = validateTemplate(template);        // document-only checks

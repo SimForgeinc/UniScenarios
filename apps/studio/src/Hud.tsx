@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { CityViewer, CityViewerStats } from '@scenario-studio/city-renderer';
+import type { CityViewer, CityViewerStats } from '@uniscenarios/city-renderer';
 
 const MB = 1024 * 1024;
 

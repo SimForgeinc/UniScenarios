@@ -189,6 +189,7 @@ describe('visible / occluders', () => {
         vehicle(graph, { id: 'ego', rsl: LANE_LEFT, s: 20, speedMps: 12, cruiseSpeedMps: 12 }),
         vehicle(graph, { id: 'hidden', rsl: LANE_RIGHT, s: 150, speedMps: 10, cruiseSpeedMps: 10 }),
       ],
+      occlusionPairs: [{ observer: 'ego', target: 'hidden', occluderId: 'hoarding' }],
       occluders: [
         // A long hoarding between the lanes, hiding the right lane from the left.
         { id: 'hoarding', obb: { center: { x: 140, z: 1.75 }, lengthM: 120, widthM: 0.6, headingRad: 0, heightM: 3 } },

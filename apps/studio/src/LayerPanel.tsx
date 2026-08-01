@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { CameraMode, CityViewer } from '@scenario-studio/city-renderer';
+import type { CameraMode, CityViewer } from '@uniscenarios/city-renderer';
 import type { MapOverlayHandle, MapOverlayLayer } from './mapOverlays';
 
 export interface LayerPanelProps {

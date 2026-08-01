@@ -119,7 +119,7 @@ function checkRunway(
   // Pedestrians and freeform paths legitimately end mid-clip (a crossing is
   // *supposed* to finish), so the whole-clip runway rule applies to vehicles on
   // lane routes only.
-  if (r.spec.kind !== 'vehicle' || r.route.isFreeform) return;
+  if (r.spec.static || r.spec.kind !== 'vehicle' || r.route.isFreeform) return;
   // An actor the scenario explicitly despawns is allowed to run out of route.
   const despawned = input.interactions.some(
     (it) => it.actorId === r.spec.id && it.verb === 'exist' && it.target.state === 'absent',

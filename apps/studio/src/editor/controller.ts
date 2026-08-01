@@ -36,8 +36,8 @@
  */
 
 import { Raycaster, Vector2, Vector3, type Intersection } from 'three';
-import type { CityViewer } from '@scenario-studio/city-renderer';
-import { getEntry, type CatalogId } from '@scenario-studio/prop-catalog';
+import type { CityViewer } from '@uniscenarios/city-renderer';
+import { getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
 import {
   actorKindFor,

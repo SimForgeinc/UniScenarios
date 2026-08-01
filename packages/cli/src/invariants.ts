@@ -32,8 +32,8 @@ import {
   type Invariant,
   type Range,
   type ScenarioTemplateV2,
-} from '@scenario-studio/scenario-model';
-import type { ArrivalSolution, SimTrace } from '@scenario-studio/sim-engine';
+} from '@uniscenarios/scenario-model';
+import type { ArrivalSolution, SimTrace } from '@uniscenarios/sim-engine';
 
 export interface InvariantResidualReport {
   readonly id: string;

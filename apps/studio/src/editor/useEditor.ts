@@ -13,7 +13,7 @@
  */
 
 import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react';
-import type { CityViewer } from '@scenario-studio/city-renderer';
+import type { CityViewer } from '@uniscenarios/city-renderer';
 import { EditorController, type EditorState } from './controller';
 import { EditorDocument } from './document';
 import { LaneIndex } from './laneIndex';

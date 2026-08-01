@@ -53,7 +53,7 @@ export const MAPS: readonly MapEntry[] = [
 
 export const DEFAULT_MAP_ID = MAPS[0]!.id;
 
-const LAST_MAP_KEY = 'scenario-studio:last-map';
+const LAST_MAP_KEY = 'uniscenarios:last-map';
 
 export function mapById(id: string | null | undefined): MapEntry | undefined {
   return MAPS.find((m) => m.id === id);

@@ -38,7 +38,7 @@ import {
   type ScenarioTemplateV2,
   type AnchorFeature as V2Feature,
   type RoleBinding as V2Role,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 import {
   type AdjacentKind as MAdjacentKind,
   type ApproachRelation as MApproachRelation,
@@ -49,7 +49,7 @@ import {
   type Range as MRange,
   type RoleBinding as MRole,
   type Turn as MTurn,
-} from '@scenario-studio/anchor-matcher';
+} from '@uniscenarios/anchor-matcher';
 
 /**
  * Sentinel for an open range end. The matcher's `Range` is a closed
@@ -408,7 +408,7 @@ function adaptRole(
         ...base,
         kind: 'on_reference',
         dsM: numberish(role.pose.s, scope, 0),
-        tFrac: role.pose.tFrac,
+        tFrac: numberish(role.pose.tFrac, scope, 0),
       };
     case 'lane_offset':
       return {
@@ -417,7 +417,7 @@ function adaptRole(
         k: role.k,
         onMissing: role.onMissing,
         dsM: numberish(role.pose.s, scope, 0),
-        tFrac: role.pose.tFrac,
+        tFrac: numberish(role.pose.tFrac, scope, 0),
       };
     case 'opposing':
       return {
@@ -425,7 +425,7 @@ function adaptRole(
         kind: 'opposing',
         index: role.k,
         dsM: numberish(role.pose.s, scope, 0),
-        tFrac: role.pose.tFrac,
+        tFrac: numberish(role.pose.tFrac, scope, 0),
       };
     case 'conflicting_gate': {
       const angle = templateCrossingAngle(template, role.feature);

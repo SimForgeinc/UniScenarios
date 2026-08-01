@@ -19,13 +19,15 @@ export async function mapsList(options: MapsListOptions): Promise<number> {
       present,
       artifacts,
       catalogRevision: null,
-      topologyDigest: null,
+      matcherIndexDigest: null,
+      engineGraphDigest: null,
       stats: null,
     };
     if (present && artifacts.derivedTopology && artifacts.locations) {
       const bundle = await loadMap(mapId);
       entry['catalogRevision'] = bundle.derived.catalogRevision;
-      entry['topologyDigest'] = bundle.derived.topologyDigest;
+      entry['matcherIndexDigest'] = bundle.index.topologyDigest;
+      entry['engineGraphDigest'] = bundle.graph.topologyDigest;
       entry['stats'] = {
         locations: bundle.catalog.locations.length,
         segments: bundle.derived.segments.length,

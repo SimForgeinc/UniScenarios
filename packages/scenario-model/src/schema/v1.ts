@@ -23,7 +23,7 @@
  * ## Frame conventions
  *
  * `pose.position` is in the **scene frame**: metres, y-up, identical to the
- * frame `CoordinateFrame.localToScene` in `@scenario-studio/xodr-tools` emits
+ * frame `CoordinateFrame.localToScene` in `@uniscenarios/xodr-tools` emits
  * and to `manifest.scene.bounds` in the 3D tile manifest.
  *
  * `pose.headingRad` is radians **CCW about +Y from +X** (right-hand rule, so

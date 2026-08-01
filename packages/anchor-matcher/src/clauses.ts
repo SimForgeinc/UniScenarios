@@ -15,7 +15,7 @@
  * something it does not test.
  */
 
-import { curvatureDegPer10mAt } from './geometry.js';
+import { curvatureDegPer10mAt, pointAtS, projectPoint } from './geometry.js';
 import { adjacentKinds, crossSectionAt, type CrossSection } from './cross-section.js';
 import { laneAtS } from './frame.js';
 import {
@@ -34,7 +34,7 @@ import type {
   ToleranceOverrides,
 } from './types/anchor.js';
 import { clauseWeight, originFeature } from './types/anchor.js';
-import type { DerivedMapIndex, JunctionDescriptor, LaneRsl } from './types/map-index.js';
+import type { DerivedMapIndex, JunctionDescriptor, LaneRsl, PointFeature } from './types/map-index.js';
 import type { AnchorFrame, ClauseResult, MatchedSite } from './types/site.js';
 
 /** Sampling stride for worst-over-interval evaluation. */
@@ -166,6 +166,95 @@ function rangeClause(
 }
 
 const round = (v: number): number => Math.round(v * 100) / 100;
+
+function adjacentReferenceLane(index: DerivedMapIndex, frame: AnchorFrame, laneRsl: LaneRsl): LaneRsl | null {
+  if (frame.sOfLane[laneRsl] !== undefined) return laneRsl;
+  const refs = Object.keys(frame.sOfLane).sort();
+  for (const ref of refs) {
+    const refLane = index.lanes[ref];
+    if (!refLane) continue;
+    for (const side of ['left', 'right'] as const) {
+      const adj = refLane.adjacentLanes[side];
+      if (adj.laneRsl === laneRsl) return ref;
+    }
+    const lane = index.lanes[laneRsl];
+    if (lane) {
+      for (const side of ['left', 'right'] as const) {
+        const adj = lane.adjacentLanes[side];
+        if (adj.laneRsl === ref) return ref;
+      }
+    }
+  }
+  return null;
+}
+
+/** Geometry-only fallback for legacy points whose source lane is unavailable. */
+const POINT_FEATURE_GEOMETRIC_FALLBACK_M = 6;
+
+function pointFeatureWorldPoint(index: DerivedMapIndex, feature: PointFeature) {
+  if (feature.point) return feature.point;
+  const lane = index.lanes[feature.laneRsl];
+  if (!lane || lane.polyline.length < 2) return null;
+  return pointAtS(lane.polyline, feature.s);
+}
+
+function pointFeatureS(
+  index: DerivedMapIndex,
+  frame: AnchorFrame,
+  feature: PointFeature,
+): { s: number; adjacent: boolean; source: 'point-same-road' | 'point-nearby' | 'lane-adjacent'; distanceM: number; side: 'left' | 'right' | 'both' } | null {
+  const point = pointFeatureWorldPoint(index, feature);
+  if (point) {
+    const sourceLane = index.lanes[feature.laneRsl];
+    let bestSemantic: { s: number; adjacent: boolean; distanceM: number; side: 'left' | 'right' | 'both' } | null = null;
+    let bestNearby: { s: number; adjacent: boolean; distanceM: number; side: 'left' | 'right' | 'both' } | null = null;
+    for (const span of frame.referencePath) {
+      const lane = index.lanes[span.laneRsl];
+      if (!lane || lane.polyline.length < 2) continue;
+      const projected = projectPoint(lane.polyline, point);
+      const frameS = (frame.sOfLane[span.laneRsl] as number | undefined) ?? span.sStart;
+      const candidate = {
+        s: frameS + projected.s,
+        adjacent: span.laneRsl !== feature.laneRsl,
+        distanceM: projected.distance,
+        side: projected.distance < 0.25 ? ('both' as const) : projected.side > 0 ? ('left' as const) : ('right' as const),
+      };
+      const semantic = sourceLane && lane.roadId === sourceLane.roadId && lane.section === sourceLane.section;
+      const best = semantic ? bestSemantic : bestNearby;
+      if (!best || candidate.distanceM < best.distanceM || (candidate.distanceM === best.distanceM && candidate.s < best.s)) {
+        if (semantic) bestSemantic = candidate;
+        else bestNearby = candidate;
+      }
+    }
+    // Same OpenDRIVE road+section is the semantic proof for large legal
+    // offsets such as a sidewalk stop beyond four lanes. Only data with no
+    // usable source lane may use the deliberately small geometry fallback.
+    if (bestSemantic) return { ...bestSemantic, source: 'point-same-road' };
+    if (bestNearby && bestNearby.distanceM <= POINT_FEATURE_GEOMETRIC_FALLBACK_M) {
+      return { ...bestNearby, source: 'point-nearby' };
+    }
+    return null;
+  }
+
+  // Legacy self-derived fixtures may only know a lane+s anchor. Use adjacency
+  // only in that data-poor path; real location-catalog features carry a point
+  // and bind by projecting that point onto the reference polyline above.
+  const ref = adjacentReferenceLane(index, frame, feature.laneRsl);
+  if (!ref) return null;
+  return {
+    s: (frame.sOfLane[ref] as number) + feature.s,
+    adjacent: ref !== feature.laneRsl,
+    source: 'lane-adjacent',
+    distanceM: 0,
+    side: feature.side ?? 'both',
+  };
+}
+
+function featureSideMatches(actual: 'left' | 'right' | 'both', wanted: string): boolean {
+  if (wanted === 'either') return actual === 'left' || actual === 'right';
+  if (wanted === 'both') return actual === 'both';
+  return actual === wanted || actual === 'both';
+}
 
 function evaluateCorridor(
   collector: Collector,
@@ -690,13 +779,24 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
       continue;
     }
     const onPath = index.pointFeatures
-      .filter((p) => p.kind === feature.kind && frame.sOfLane[p.laneRsl] !== undefined)
-      .map((p) => ({ p, s: (frame.sOfLane[p.laneRsl] as number) + p.s }))
+      .filter((p) => p.kind === feature.kind)
+      .map((p) => {
+        const located = pointFeatureS(index, frame, p);
+        return located ? { p, ...located } : null;
+      })
+      .filter((e): e is { p: PointFeature; s: number; adjacent: boolean; source: 'point-same-road' | 'point-nearby' | 'lane-adjacent'; distanceM: number; side: 'left' | 'right' | 'both' } => e !== null)
       .map((e) => ({
         ...e,
+        sideScore: feature.side ? (featureSideMatches(e.side, feature.side.value) ? 1 : 0) : 1,
         ...scoreRange(e.s, feature.atM.value, 'distanceM', anchor.toleranceOverrides, feature.atM.tolerance),
       }))
-      .sort((a, b) => b.score - a.score || (a.p.id < b.p.id ? -1 : 1));
+      .sort((a, b) =>
+        b.score - a.score ||
+        b.sideScore - a.sideScore ||
+        a.distanceM - b.distanceM ||
+        (a.adjacent === b.adjacent ? 0 : a.adjacent ? 1 : -1) ||
+        (a.p.id < b.p.id ? -1 : 1),
+      );
     const best = onPath[0];
     if (!best) {
       push(collector, unsupported(`${path}.atM`, feature.atM, `no ${feature.kind} on the reference path`));
@@ -713,8 +813,25 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
       weight: clauseWeight(feature.atM),
       supported: true,
       worstAtS: best.s,
-      reason: `${feature.kind} ${best.p.id} at s=${round(best.s)} m`,
+      reason: `${feature.kind} ${best.p.id} at s=${round(best.s)} m${best.source === 'point-same-road' ? ` (same-road station, ${round(best.distanceM)} m lateral)` : best.source === 'point-nearby' ? ` (projected ${round(best.distanceM)} m from feature point)` : best.adjacent ? ' on an adjacent lane' : ''}`,
     });
+    if (feature.side) {
+      const matches = featureSideMatches(best.side, feature.side.value);
+      push(collector, {
+        path: `${path}.side`,
+        essentiality: feature.side.essentiality,
+        required: feature.side.value,
+        actual: best.side,
+        score: matches ? 1 : 0,
+        slack: matches ? 0 : 1,
+        weight: clauseWeight(feature.side),
+        supported: true,
+        worstAtS: best.s,
+        reason: matches
+          ? `${feature.kind} ${best.p.id} is on the ${best.side} side of travel`
+          : `${feature.kind} ${best.p.id} is on the ${best.side} side of travel, wanted ${feature.side.value}`,
+      });
+    }
   }
 
   collector.results.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

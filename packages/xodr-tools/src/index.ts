@@ -1,6 +1,6 @@
 /**
- * `@scenario-studio/xodr-tools` — OpenDRIVE georeferencing and map-overlay data
- * for Scenario Studio.
+ * `@uniscenarios/xodr-tools` — OpenDRIVE georeferencing and map-overlay data
+ * for UniScenarios.
  *
  * Three layers, all renderer-agnostic:
  *
@@ -14,7 +14,7 @@
  * import {
  *   CoordinateFrame, fetchXodrHeader, loadGzipJson,
  *   loadLanePolygons, loadSignals, buildLaneOverlay, buildSignalOverlay,
- * } from '@scenario-studio/xodr-tools';
+ * } from '@uniscenarios/xodr-tools';
  *
  * const manifest = await (await fetch('/maps/yale/3d/manifest.json')).json();
  * const header = await fetchXodrHeader('/maps/yale/map.xodr');

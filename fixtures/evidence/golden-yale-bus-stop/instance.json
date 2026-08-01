@@ -1,0 +1,375 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "bus-stop-emergence",
+      "templateVersion": 2,
+      "templateDigest": "917517ff993d0c45",
+      "mapId": "yale-street",
+      "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+      "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+      "siteId": "fa9fa19457cf576f",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.1.0",
+      "paramSeed": "085387c9dc6981bfc5743a61ef6d64c4dcfcdb29e1f791dc764b8f5a4d804df9",
+      "drawIndex": 8
+    },
+    "instanceId": "fa9fa19457cf576f#8",
+    "archetype": "C5.bus-stop-emergence",
+    "negativeControl": false,
+    "metricSubject": "ego",
+    "site": {
+      "siteId": "fa9fa19457cf576f",
+      "score": 0.7759999999999999,
+      "verdict": "degraded",
+      "originFeatureId": "seg_919951cc213aa6c9",
+      "entryLaneRsl": "128:0:1",
+      "egoTurn": null,
+      "degradationSummary": "Degraded match (score 0.78). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=30 m, wanted [25, 60]. Presentation was relaxed; the scenario still tests what it was written to test.",
+      "matchedReasons": [
+        "corridor.curvatureDegPer10m holds over the whole interval (worst 0.04)",
+        "every required adjacency present along the corridor",
+        "234.69 m of runway available, 210 m needed",
+        "corridor.throughLanesSameDir holds over the whole interval (worst 4)",
+        "bus_stop loc_92ea6eb02738f97c3061a3cd at s=113.98 m (same-road station, 12.35 m lateral)",
+        "bus_stop loc_92ea6eb02738f97c3061a3cd is on the right side of travel"
+      ]
+    },
+    "params": {
+      "values": {
+        "arrivalTtc": 1.2466376800555736,
+        "pedSpeedKph": 8.170849021174945,
+        "busGapM": 7.323679645080119
+      },
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "bus",
+        "roleKind": "lane_offset",
+        "laneRsl": "87:0:-4",
+        "spawnS": 91.13725225268686,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "ego",
+        "roleKind": "lane_offset",
+        "laneRsl": "133:0:1",
+        "spawnS": 11.604833061901594,
+        "initialSpeedMps": 13.88888888888889,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "ped",
+        "roleKind": "relative_to",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 2.269680283659707,
+        "bindingStatus": "bound"
+      }
+    ],
+    "arrival": [
+      {
+        "interactionId": "ped-reaches-the-lane",
+        "actorId": "ped",
+        "referenceActorId": "ego",
+        "spawnDeltaS": 3.8218286818617377,
+        "spawnS": 3.8218880850538013,
+        "targetDeltaT": -1.2466376800555736,
+        "achievedDeltaT": -1.2465913753543028,
+        "achievedTtc": 1.2465913753543028,
+        "fireTime": 5.773156435483819,
+        "iterations": 15,
+        "converged": true
+      }
+    ],
+    "inputHash": "29309981338d6ada82186b3a7e21d2138775dd8cedd16e587efbca5f4da66531",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "roles.ego.route",
+        "reason": "lane chain extended upstream by 1 lane(s) to reach the site-evaluated spawn at frame s=11.9 m"
+      },
+      {
+        "path": "choreography.interactions.ped-rounds-the-bus",
+        "reason": "route(polyline) at t=0 folded into ped's spawn route (21.9 m), so the arrival solver can place the actor along it"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "yale-street",
+    "clipSeconds": 14,
+    "warmupSeconds": 1,
+    "dt": 0.02,
+    "seed": "085387c9dc6981bf",
+    "metricSubject": "ego",
+    "actors": [
+      {
+        "id": "bus",
+        "kind": "vehicle",
+        "dims": {
+          "l": 12,
+          "w": 2.55,
+          "h": 3.2
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "87:0:-4",
+            "s": 24.07645006220845,
+            "tFrac": -0.4
+          },
+          "pose": {
+            "x": 813.8828737962899,
+            "z": -1635.2394792276575,
+            "headingRad": -0.5822775403975109
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "109:0:5",
+              "344:0:1",
+              "87:0:-4",
+              "1040:0:-1"
+            ]
+          }
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:bus",
+          "class:bus",
+          "binding:lane_offset",
+          "catalog:vehicle.bus"
+        ]
+      },
+      {
+        "id": "ego",
+        "kind": "vehicle",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "133:0:1",
+            "s": 12.86060473855827,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 729.7573497893538,
+            "z": -1696.641817107016,
+            "headingRad": -0.6633864320171838
+          },
+          "speedMps": 13.88888888888889
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "133:0:1",
+              "109:0:4",
+              "343:0:1",
+              "87:0:-3",
+              "1035:0:-1",
+              "26:0:-4"
+            ]
+          },
+          "cruiseSpeedMps": 13.88888888888889
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:ego",
+          "class:car",
+          "binding:lane_offset",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "ped",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "pose": {
+            "x": 810.9906836980787,
+            "z": -1634.807054665499,
+            "headingRad": -0.5826480600213676
+          },
+          "speedMps": 2.269680283659707
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": false,
+            "collisionAvoidance": false,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 807.7993745899067,
+                "z": -1636.9099989611889
+              },
+              {
+                "x": 808.6301639260579,
+                "z": -1636.3625422165867
+              },
+              {
+                "x": 809.4609532622089,
+                "z": -1635.8150854719845
+              },
+              {
+                "x": 810.2917425983601,
+                "z": -1635.2676287273823
+              },
+              {
+                "x": 811.1225319345111,
+                "z": -1634.7201719827804
+              },
+              {
+                "x": 811.9533212706623,
+                "z": -1634.1727152381782
+              },
+              {
+                "x": 812.7841106068133,
+                "z": -1633.625258493576
+              },
+              {
+                "x": 813.6148917766557,
+                "z": -1633.0777893564539
+              },
+              {
+                "x": 814.4456726926437,
+                "z": -1632.530319834103
+              },
+              {
+                "x": 815.2764536086318,
+                "z": -1631.9828503117524
+              },
+              {
+                "x": 816.1072345246197,
+                "z": -1631.4353807894017
+              },
+              {
+                "x": 816.9380154406077,
+                "z": -1630.887911267051
+              },
+              {
+                "x": 817.7687963565958,
+                "z": -1630.3404417447002
+              },
+              {
+                "x": 818.570575691704,
+                "z": -1629.9712567588915
+              },
+              {
+                "x": 819.185000217651,
+                "z": -1630.7538181367959
+              },
+              {
+                "x": 819.7994247435979,
+                "z": -1631.5363795147005
+              },
+              {
+                "x": 820.4138492695449,
+                "z": -1632.3189408926048
+              },
+              {
+                "x": 821.0282737954919,
+                "z": -1633.1015022705092
+              },
+              {
+                "x": 821.642698321439,
+                "z": -1633.8840636484135
+              },
+              {
+                "x": 822.2571228473859,
+                "z": -1634.666625026318
+              },
+              {
+                "x": 822.8284262815533,
+                "z": -1635.4800214708948
+              },
+              {
+                "x": 823.370292873873,
+                "z": -1636.3144676371635
+              },
+              {
+                "x": 823.9121594661926,
+                "z": -1637.1489138034324
+              }
+            ]
+          },
+          "cruiseSpeedMps": 2.269680283659707
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:ped",
+          "class:pedestrian",
+          "binding:relative_to"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "ped-reaches-the-lane",
+        "actorId": "ped",
+        "trigger": {
+          "kind": "at",
+          "t": 5.773156435483819
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 2.269680283659707
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      }
+    ],
+    "signalPrograms": [],
+    "occluders": [],
+    "occlusionPairs": [
+      {
+        "observer": "ego",
+        "target": "ped",
+        "occluderId": "actor:bus"
+      }
+    ]
+  }
+}

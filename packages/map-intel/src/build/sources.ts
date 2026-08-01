@@ -24,7 +24,7 @@ import { existsSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import path from 'node:path';
 
-import { CoordinateFrame } from '@scenario-studio/xodr-tools';
+import { CoordinateFrame } from '@uniscenarios/xodr-tools';
 
 import { asMapId, type MapId } from '../types/ids.js';
 import type {

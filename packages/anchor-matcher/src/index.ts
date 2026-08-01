@@ -1,11 +1,11 @@
 /**
- * `@scenario-studio/anchor-matcher` — logical anchor → ranked concrete sites.
+ * `@uniscenarios/anchor-matcher` — logical anchor → ranked concrete sites.
  *
  * ```ts
  * import {
  *   deriveMapIndexFromTopology, normalizeDerivedMapIndex,
  *   parseLogicalAnchor, matchAnchor, matchAnchorReport,
- * } from '@scenario-studio/anchor-matcher';
+ * } from '@uniscenarios/anchor-matcher';
  *
  * const index = normalizeDerivedMapIndex(derivedJson, { mapId: 'yale-street' });
  * const anchor = parseLogicalAnchor(json);

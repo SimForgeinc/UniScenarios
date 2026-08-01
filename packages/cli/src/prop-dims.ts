@@ -1,7 +1,7 @@
 /**
  * Occluder footprints for `props[]`.
  *
- * `@scenario-studio/prop-catalog` owns the real dimensions, but it depends on
+ * `@uniscenarios/prop-catalog` owns the real dimensions, but it depends on
  * three.js — importing it here would drag a renderer into the headless CLI for
  * the sake of three numbers per prop. So the length/width/height of the props
  * that can actually *occlude* are mirrored here, and a template can always

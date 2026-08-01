@@ -207,14 +207,15 @@ describe('role bindings', () => {
     ).toBe(false);
   });
 
-  it('accepts an expression for s', () => {
+  it('accepts expressions for frame pose s and tFrac', () => {
     const role = RoleBindingSchema.parse({
       id: 'a',
       kind: 'on_reference',
       actor,
-      pose: { s: '-2 * junction.sizeM' },
+      pose: { s: '-2 * junction.sizeM', tFrac: 'param.lateralBias' },
     });
     expect(role.kind === 'on_reference' && typeof role.pose.s).toBe('object');
+    expect(role.kind === 'on_reference' && typeof role.pose.tFrac).toBe('object');
   });
 
   it('falls back to class dimensions when none are given', () => {
@@ -513,7 +514,7 @@ describe('props and variants', () => {
       pose: { s: -20, tFrac: 0.9 },
       occludes: { observer: 'ego', target: 'ped' },
       targetRevealToConflictS: 0.9,
-      repeat: { count: 8, spacingM: 6 },
+      repeat: { count: 8, spacingM: 6, tFracStep: 'param.taperStep' },
     });
     expect(prop.essentiality).toBe('preferred');
     expect(prop.scale).toBe(1);

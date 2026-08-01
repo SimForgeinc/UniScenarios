@@ -46,7 +46,7 @@
  * frame budget even when it runs on every `pointermove`.
  */
 
-import { decodeMaybeGzippedJson } from '@scenario-studio/xodr-tools';
+import { decodeMaybeGzippedJson } from '@uniscenarios/xodr-tools';
 
 /** `road:section:lane`, the topology index's lane key. */
 export type LaneRsl = string;
@@ -146,6 +146,8 @@ export interface LaneIndexOptions {
 
 const DEFAULT_LANE_TYPES: readonly LaneType[] = ['driving'];
 const DEFAULT_CELL = 8;
+/** A true oncoming lane is comfortably beyond perpendicular; cross streets are not. */
+const OPPOSING_MIN_DEG = 120;
 /** Below this a "lane" is a stub the snapper should not fight the user over. */
 const MIN_LANE_LENGTH_M = 1;
 
@@ -457,14 +459,22 @@ export class LaneIndex {
   }
 
   /**
-   * Nearest centreline whose direction of travel opposes `headingRad`.
+   * Nearest centreline that genuinely *oncomes* relative to `headingRad`.
    *
    * This is what Tab does during placement: on a two-way street the opposing
    * lane is 3-4 m away and is otherwise unreachable, because the nearest lane to
    * the cursor is by definition the one under it.
+   *
+   * "Opposing" means at least {@link OPPOSING_MIN_DEG} away, not merely "more
+   * than 90°". At an intersection the nearest lane pointing the other side of
+   * perpendicular is usually the *cross street* — measured at 91.4° on Yale
+   * Street — so the loose test made Tab drop the car onto a road it was not
+   * being placed on. A carriageway that curves away from its opposite number
+   * still clears 120° comfortably.
    */
   nearestOpposing(x: number, z: number, headingRad: number, maxRadius = 30): LaneHit | null {
-    return this.search(x, z, maxRadius, (hit) => Math.cos(hit.headingRad - headingRad) < 0);
+    const limit = Math.cos((OPPOSING_MIN_DEG * Math.PI) / 180);
+    return this.search(x, z, maxRadius, (hit) => Math.cos(hit.headingRad - headingRad) < limit);
   }
 
   /** Point and travel heading at arc length `s` (clamped to the lane). */
@@ -501,7 +511,6 @@ export class LaneIndex {
   project(lane: IndexedLane, x: number, z: number): LaneHit {
     let bestDist = Infinity;
     let bestS = 0;
-    let bestSeg = 0;
     for (let i = 0; i < lane.xs.length - 1; i++) {
       const ax = lane.xs[i] as number;
       const az = lane.zs[i] as number;
@@ -516,11 +525,10 @@ export class LaneIndex {
       const d = (qx - x) ** 2 + (qz - z) ** 2;
       if (d < bestDist) {
         bestDist = d;
-        bestSeg = i;
         bestS = (lane.cum[i] as number) + f * Math.sqrt(len2);
       }
     }
-    return this.hitFrom(lane, bestSeg, bestS, x, z, Math.sqrt(bestDist));
+    return this.hitFrom(lane, bestS, x, z, Math.sqrt(bestDist));
   }
 
   // ------------------------------------------------------------- internals
@@ -565,7 +573,7 @@ export class LaneIndex {
             const d = (qx - x) ** 2 + (qz - z) ** 2;
             if (d >= bestDist) continue;
             const s = (lane.cum[vi] as number) + f * Math.sqrt(len2);
-            const hit = this.hitFrom(lane, vi, s, x, z, Math.sqrt(d));
+            const hit = this.hitFrom(lane, s, x, z, Math.sqrt(d));
             if (accept && !accept(hit)) continue;
             bestDist = d;
             best = hit;
@@ -576,14 +584,24 @@ export class LaneIndex {
     return best;
   }
 
-  private hitFrom(
-    lane: IndexedLane,
-    segment: number,
-    s: number,
-    x: number,
-    z: number,
-    distance: number,
-  ): LaneHit {
+  /**
+   * Build a hit from an arc length.
+   *
+   * The segment is re-derived with {@link segmentAt} rather than taken from the
+   * caller, and that is load-bearing. A point off the outside of a turn projects
+   * onto the shared *vertex* of two segments: `f` clamps to 1 on the first and 0
+   * on the second, both at the same distance, so which one a scan happens to
+   * visit first is arbitrary — but `s` is identical either way. If the heading
+   * came from the caller's segment, a placement could be stored with the
+   * incoming segment's heading while its own anchor (`poseAt(s)`, which uses
+   * `segmentAt`) resolves to the outgoing one. On Yale Street that is a 3.3°
+   * lie: the car is drawn straight but its `laneRef` says it is turning, and the
+   * next operation to re-derive the pose (an inspector edit, a duplicate, a
+   * reload of a v2 file) would snap it. Deriving both from `s` makes the anchor
+   * and the pose the same statement by construction.
+   */
+  private hitFrom(lane: IndexedLane, s: number, x: number, z: number, distance: number): LaneHit {
+    const segment = this.segmentAt(lane, Math.min(lane.length, Math.max(0, s)));
     const ax = lane.xs[segment] as number;
     const az = lane.zs[segment] as number;
     const bx = lane.xs[segment + 1] as number;

@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://scenario-studio.simforge.ai/schema/interactions.v2.schema.json",
-  "title": "Scenario Studio interaction list, schema v2",
+  "$id": "https://schemas.uniscenarios.dev/interactions.v2.schema.json",
+  "title": "UniScenarios interaction list, schema v2",
   "description": "A timeline of interactions: {id, actor, trigger, verb, target, dynamics?, until?}. Seven verbs over five axes — speed and gap (longitudinal), changeLane and laneOffset (lateral), route (topology), exist (existence), set (discrete state). One axis has one owner and later preempts earlier; there are no priorities and no nesting. Triggers are at(t), after(id, delay), when(condition, byLatest, ifNever) or arrival(of, at, syncWith, ttc|deltaT) — the last back-solves a start so the actor reaches a conflict point at a declared criticality, and is what makes a generated scenario non-trivial. Rules enforced by the reference validator that JSON Schema cannot express: (1) ids must be unique within each list; (2) every role/feature/interaction reference must resolve; (3) `dynamics` is REQUIRED on the continuous verbs (speed, gap, changeLane, laneOffset); (4) `byLatest` is REQUIRED on every `when` trigger; (5) one axis has one owner: two interactions on the same actor and axis may not start at the same time; (6) `set` keys must exist in the typed key registry (rules.*, lights.*, doors.*, pose.*, signal:*, env.*); (7) `env.*` and `signal:*` sets must be performed by the reserved actor \"@world\"; (8) `targetRevealToConflictS` requires `occludes`; (9) meta.modifiedAt must not precede meta.createdAt.",
   "maxItems": 256,
   "type": "array",
@@ -24,10 +24,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -160,10 +160,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -219,10 +219,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -313,10 +313,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -369,10 +369,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -388,7 +388,7 @@
                       "const": "turn"
                     },
                     "feature": {
-                      "$ref": "#/$defs/__schema9"
+                      "$ref": "#/$defs/__schema10"
                     },
                     "turn": {
                       "type": "string",
@@ -415,7 +415,7 @@
                       "const": "toFeature"
                     },
                     "feature": {
-                      "$ref": "#/$defs/__schema9"
+                      "$ref": "#/$defs/__schema10"
                     }
                   },
                   "required": [
@@ -432,7 +432,7 @@
                       "const": "crossing"
                     },
                     "feature": {
-                      "$ref": "#/$defs/__schema9"
+                      "$ref": "#/$defs/__schema10"
                     },
                     "fromFrac": {
                       "default": 0,
@@ -517,10 +517,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -565,10 +565,10 @@
               "$ref": "#/$defs/Trigger"
             },
             "until": {
-              "$ref": "#/$defs/__schema14"
+              "$ref": "#/$defs/__schema15"
             },
             "label": {
-              "$ref": "#/$defs/__schema15"
+              "$ref": "#/$defs/__schema16"
             },
             "verb": {
               "type": "string",
@@ -713,7 +713,7 @@
           "type": "object",
           "properties": {
             "kind": {
-              "$ref": "#/$defs/__schema11"
+              "$ref": "#/$defs/__schema12"
             },
             "of": {
               "$ref": "#/$defs/__schema3"
@@ -725,10 +725,10 @@
               "$ref": "#/$defs/__schema3"
             },
             "ttc": {
-              "$ref": "#/$defs/__schema12"
+              "$ref": "#/$defs/__schema13"
             },
             "deltaT": {
-              "$ref": "#/$defs/__schema13"
+              "$ref": "#/$defs/__schema14"
             }
           },
           "required": [
@@ -747,14 +747,17 @@
           "type": "number"
         },
         {
-          "anyOf": [
-            {
-              "type": "string"
-            },
-            {
-              "$ref": "#/$defs/Expr"
-            }
-          ]
+          "$ref": "#/$defs/__schema4"
+        }
+      ]
+    },
+    "__schema4": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "$ref": "#/$defs/Expr"
         }
       ]
     },
@@ -846,13 +849,13 @@
           "type": "object",
           "properties": {
             "kind": {
-              "$ref": "#/$defs/__schema4"
-            },
-            "fn": {
               "$ref": "#/$defs/__schema5"
             },
-            "args": {
+            "fn": {
               "$ref": "#/$defs/__schema6"
+            },
+            "args": {
+              "$ref": "#/$defs/__schema7"
             }
           },
           "required": [
@@ -864,11 +867,11 @@
         }
       ]
     },
-    "__schema4": {
+    "__schema5": {
       "type": "string",
       "const": "call"
     },
-    "__schema5": {
+    "__schema6": {
       "type": "string",
       "enum": [
         "clamp",
@@ -877,20 +880,20 @@
         "abs"
       ]
     },
-    "__schema6": {
+    "__schema7": {
       "minItems": 1,
       "type": "array",
       "items": {
-        "$ref": "#/$defs/__schema7"
+        "$ref": "#/$defs/__schema8"
       }
     },
-    "__schema7": {
+    "__schema8": {
       "$ref": "#/$defs/Expr"
     },
     "Condition": {
       "anyOf": [
         {
-          "$ref": "#/$defs/__schema8"
+          "$ref": "#/$defs/__schema9"
         },
         {
           "oneOf": [
@@ -906,7 +909,7 @@
                   "maxItems": 8,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema8"
+                    "$ref": "#/$defs/__schema9"
                   }
                 }
               },
@@ -928,7 +931,7 @@
                   "maxItems": 8,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema8"
+                    "$ref": "#/$defs/__schema9"
                   }
                 }
               },
@@ -946,7 +949,7 @@
                   "const": "not"
                 },
                 "operand": {
-                  "$ref": "#/$defs/__schema8"
+                  "$ref": "#/$defs/__schema9"
                 }
               },
               "required": [
@@ -959,7 +962,7 @@
         }
       ]
     },
-    "__schema8": {
+    "__schema9": {
       "oneOf": [
         {
           "type": "object",
@@ -983,7 +986,7 @@
               ]
             },
             "op": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema11"
             },
             "valueM": {
               "$ref": "#/$defs/NumberOrExpr"
@@ -1012,7 +1015,7 @@
               "$ref": "#/$defs/__schema3"
             },
             "op": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema11"
             },
             "valueS": {
               "$ref": "#/$defs/NumberOrExpr"
@@ -1041,7 +1044,7 @@
               "$ref": "#/$defs/__schema3"
             },
             "op": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema11"
             },
             "valueS": {
               "$ref": "#/$defs/NumberOrExpr"
@@ -1091,7 +1094,7 @@
               "$ref": "#/$defs/__schema3"
             },
             "op": {
-              "$ref": "#/$defs/__schema10"
+              "$ref": "#/$defs/__schema11"
             },
             "valueKph": {
               "$ref": "#/$defs/NumberOrExpr"
@@ -1132,7 +1135,7 @@
                   "type": "object",
                   "properties": {
                     "feature": {
-                      "$ref": "#/$defs/__schema9"
+                      "$ref": "#/$defs/__schema10"
                     },
                     "approach": {
                       "type": "string",
@@ -1274,7 +1277,7 @@
           "type": "object",
           "properties": {
             "feature": {
-              "$ref": "#/$defs/__schema9"
+              "$ref": "#/$defs/__schema10"
             },
             "at": {
               "default": "entry",
@@ -1305,7 +1308,7 @@
         }
       ]
     },
-    "__schema9": {
+    "__schema10": {
       "type": "string",
       "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"
     },
@@ -1322,10 +1325,16 @@
           "$ref": "#/$defs/NumberOrExpr"
         },
         "tFrac": {
-          "default": 0,
-          "type": "number",
-          "minimum": -1,
-          "maximum": 1
+          "anyOf": [
+            {
+              "type": "number",
+              "minimum": -1,
+              "maximum": 1
+            },
+            {
+              "$ref": "#/$defs/__schema4"
+            }
+          ]
         },
         "headingOffsetRad": {
           "default": 0,
@@ -1339,7 +1348,7 @@
       ],
       "additionalProperties": false
     },
-    "__schema10": {
+    "__schema11": {
       "type": "string",
       "enum": [
         "<",
@@ -1348,20 +1357,20 @@
         ">="
       ]
     },
-    "__schema11": {
+    "__schema12": {
       "type": "string",
       "const": "arrival"
-    },
-    "__schema12": {
-      "$ref": "#/$defs/NumberOrExpr"
     },
     "__schema13": {
       "$ref": "#/$defs/NumberOrExpr"
     },
     "__schema14": {
-      "$ref": "#/$defs/Trigger"
+      "$ref": "#/$defs/NumberOrExpr"
     },
     "__schema15": {
+      "$ref": "#/$defs/Trigger"
+    },
+    "__schema16": {
       "type": "string",
       "maxLength": 200
     },

@@ -1,6 +1,8 @@
-# Scenario Studio — agent-authoring architecture
+# UniScenarios — agent-authoring architecture
 
-**Date:** 2026-07-31 · **Status:** PROPOSED — awaiting Michael's review
+**Date:** 2026-07-31 · **Status:** APPROVED (Michael, 2026-07-31) — clip length
+is parameterized (`clipSeconds`, default 20); actor/editor UX approved with a
+"Premiere Pro / Blender-grade" interaction bar; full build ordered.
 **Inputs:** `docs/research/location-catalog.md`, `docs/research/retargeting.md`,
 `docs/research/interactions-and-edge-cases.md` (read those for full detail;
 this doc is the synthesis and the build contract).
@@ -82,7 +84,7 @@ ScenarioTemplate v2
                                    // frame-relative poses; occluders carry a
                                    // target reveal-to-conflict time
   choreography:
-    clipSeconds: 20                // fixed for now; warm-up t∈[-5,0) implicit
+    clipSeconds: number            // param, default 20; warm-up t∈[-5,0) implicit
     interactions: Interaction[]    // {actor, trigger, verb, target, dynamics}
                                    // 7 verbs; one-axis-one-owner enforced by
                                    // schema validation; later preempts earlier

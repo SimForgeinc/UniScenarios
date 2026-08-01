@@ -1,12 +1,12 @@
 /**
- * `@scenario-studio/cli` — layer 4 of `docs/agent-authoring-architecture.md`.
+ * `@uniscenarios/cli` — layer 4 of `docs/agent-authoring-architecture.md`.
  *
  * The `scen` binary is the product; this module is its library face, so the
  * editor, the workflows in layer 5 and the tests can call the same code paths
  * without shelling out.
  *
  * ```ts
- * import { loadMap, matchOnMap, materialize } from '@scenario-studio/cli';
+ * import { loadMap, matchOnMap, materialize } from '@uniscenarios/cli';
  *
  * const bundle = await loadMap('yale-street');
  * const { report } = await matchOnMap(template, 'yale-street');
@@ -104,6 +104,25 @@ export {
 } from './template-io.js';
 
 export { PROP_DIMS, propDims, type PropDims } from './prop-dims.js';
+
+export {
+  CATALOG_GENERATOR_VERSION,
+  CATALOG_KIND,
+  CATALOG_SLOTS_PER_MAP,
+  CATALOG_TEMPLATE_SOURCES,
+  CATALOG_VERSION,
+  DEFAULT_CATALOG_NAMESPACE,
+  createScenarioCatalog,
+  validateScenarioCatalog,
+  type CatalogEvidencePaths,
+  type CatalogIssue,
+  type CatalogMapProvenance,
+  type CatalogSlotStatus,
+  type CatalogTemplateProvenance,
+  type CatalogValidationReport,
+  type ScenarioCatalogManifest,
+  type ScenarioCatalogSlot,
+} from './catalog.js';
 
 export { criticalityBand, filtersFor, type EvaluateFilterMode } from './commands/evaluate.js';
 export { metricsSummary } from './commands/simulate.js';

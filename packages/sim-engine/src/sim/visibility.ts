@@ -19,6 +19,7 @@ import type { Occluder } from '../schema/input.js';
 
 export interface OccluderShape {
   readonly id: string;
+  readonly groupId?: string;
   readonly obb: Obb;
   readonly heightM: number;
   readonly corners: readonly Vec2[];
@@ -35,7 +36,7 @@ export function buildOccluders(occluders: readonly Occluder[]): OccluderShape[] 
         widthM: o.obb.widthM,
         headingRad: o.obb.headingRad,
       };
-      return { id: o.id, obb, heightM: o.obb.heightM, corners: obbCorners(obb) };
+      return { id: o.id, ...(o.groupId === undefined ? {} : { groupId: o.groupId }), obb, heightM: o.obb.heightM, corners: obbCorners(obb) };
     });
 }
 

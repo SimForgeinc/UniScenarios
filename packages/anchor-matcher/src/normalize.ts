@@ -203,12 +203,28 @@ export function pointFeaturesFromLocations(locations: unknown): PointFeature[] {
       kind,
       laneRsl,
       s: num(road['s'], 0),
+      ...(sceneAnchorPoint(item as AnyRecord) ? { point: sceneAnchorPoint(item as AnyRecord) } : {}),
       side: offset > 0 ? 'left' : offset < 0 ? 'right' : 'both',
       ...(typeof road['junctionId'] === 'string' ? { junctionId: road['junctionId'] } : {}),
     });
   }
   out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return out;
+}
+
+function sceneAnchorPoint(item: AnyRecord): PointFeature['point'] | undefined {
+  const anchor = isRecord(item['anchor']) ? (item['anchor'] as AnyRecord) : {};
+  const scene = isRecord(anchor['scene']) ? (anchor['scene'] as AnyRecord) : {};
+  const x = num(scene['x'], Number.NaN);
+  const z = num(scene['z'], Number.NaN);
+  return Number.isFinite(x) && Number.isFinite(z) ? { x, y: -z } : undefined;
+}
+
+function pointFromRecord(item: AnyRecord): PointFeature['point'] | undefined {
+  const point = isRecord(item['point']) ? (item['point'] as AnyRecord) : item;
+  const x = num(point['x'], Number.NaN);
+  const y = num(point['y'], Number.NaN);
+  return Number.isFinite(x) && Number.isFinite(y) ? { x, y } : undefined;
 }
 
 function adoptPointFeatures(input: AnyRecord): PointFeature[] {
@@ -224,6 +240,7 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
         kind,
         laneRsl,
         s: num(item['s'], 0),
+        ...(pointFromRecord(item) ? { point: pointFromRecord(item) } : {}),
         ...(side === 'left' || side === 'right' || side === 'both' ? { side } : {}),
         ...(typeof item['junctionId'] === 'string' ? { junctionId: item['junctionId'] } : {}),
       });

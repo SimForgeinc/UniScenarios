@@ -1,5 +1,5 @@
 /**
- * `scen` end to end, through the real binary.
+ * `uniscenarios` end to end, through the real binary.
  *
  * These exist because the CLI's contract is not its TypeScript signatures — it
  * is *stdout is JSON, stderr is a structured error, and the exit code says
@@ -7,7 +7,7 @@
  */
 
 import { existsSync } from 'node:fs';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -15,8 +15,9 @@ import { execa, type ExecaError } from 'execa';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { DEV_ASSETS, REPO_ROOT } from '../maps.js';
+import { readTraceFile, writeTraceFile } from '../template-io.js';
 
-const BIN = path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'scen.js');
+const BIN = path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js');
 const LTAP = path.join(REPO_ROOT, 'examples', 'ltap-opposing.template.json');
 const MAP = 'yale-street';
 const haveArtifacts =
@@ -50,11 +51,12 @@ afterAll(async () => {
   if (tmp) await rm(tmp, { recursive: true, force: true });
 });
 
-describe('scen — contract', () => {
+describe('uniscenarios — contract', () => {
   it('prints its command surface as JSON', async () => {
     const run = await scen();
     expect(run.code).toBe(0);
-    const payload = json<{ commands: Array<{ name: string }> }>(run);
+    const payload = json<{ bin: string; commands: Array<{ name: string }> }>(run);
+    expect(payload.bin).toBe('uniscenarios');
     expect(payload.commands.map((c) => c.name)).toContain('sites match');
   });
 
@@ -101,7 +103,7 @@ describe('scen — contract', () => {
   });
 });
 
-describe.skipIf(!haveArtifacts)('scen — the pipeline', () => {
+describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
   it('validates the worked example clean', async () => {
     const run = await scen('template', 'validate', LTAP);
     expect(run.code).toBe(0);
@@ -181,6 +183,59 @@ describe.skipIf(!haveArtifacts)('scen — the pipeline', () => {
     expect(['accept', 'reject']).toContain(verdict.verdict);
     expect(verdict.band).toBeTruthy();
   });
+
+  it('verifies instance/trace evidence hashes and actor ids, and fails stale/tampered pairs', async () => {
+    const match = await scen('sites', 'match', LTAP, '--map', MAP);
+    expect(match.code).toBe(0);
+    const siteId = json<{ maps: Array<{ sites: Array<{ siteId: string }> }> }>(match).maps[0]!.sites[0]!.siteId;
+    const instanceFile = path.join(tmp, 'evidence.instance.json');
+    const traceFile = path.join(tmp, 'evidence.trace.json.gz');
+
+    const inst = await scen('instantiate', LTAP, '--map', MAP, '--site', siteId, '--draw', '0', '--out', instanceFile);
+    expect([0, 2]).toContain(inst.code);
+    const sim = await scen('simulate', instanceFile, '--trace', traceFile);
+    expect([0, 2]).toContain(sim.code);
+
+    const ok = await scen('evidence', 'verify', instanceFile, traceFile);
+    expect(ok.code).toBe(0);
+    const okPayload = json<{ ok: boolean; actorCount: number; issues: Array<{ code: string }> }>(ok);
+    expect(okPayload.ok).toBe(true);
+    expect(okPayload.actorCount).toBeGreaterThan(0);
+    expect(okPayload.issues).toEqual([]);
+
+    const tamperedInstanceFile = path.join(tmp, 'evidence-tampered.instance.json');
+    const tampered = JSON.parse(await readFile(instanceFile, 'utf8'));
+    tampered.input.actors[0].initial.speedMps += 0.5;
+    await writeFile(tamperedInstanceFile, `${JSON.stringify(tampered, null, 2)}\n`, 'utf8');
+    const tamperedRun = await scen('evidence', 'verify', tamperedInstanceFile, traceFile);
+    expect(tamperedRun.code).toBe(2);
+    expect(json<{ issues: Array<{ code: string }> }>(tamperedRun).issues.map((i) => i.code)).toContain('instance_input_hash_mismatch');
+
+    const trace = await readTraceFile(traceFile);
+    const badHashTrace = path.join(tmp, 'evidence-bad-hash.trace.json.gz');
+    await writeTraceFile(badHashTrace, { ...trace, header: { ...trace.header, inputHash: '0'.repeat(64) } });
+    const badHash = await scen('evidence', 'verify', instanceFile, badHashTrace);
+    expect(badHash.code).toBe(2);
+    expect(json<{ issues: Array<{ code: string }> }>(badHash).issues.map((i) => i.code)).toContain('trace_input_hash_mismatch');
+
+    const missingActorTrace = path.join(tmp, 'evidence-missing-actor.trace.json.gz');
+    await writeTraceFile(missingActorTrace, {
+      ...trace,
+      header: { ...trace.header, actorIds: trace.header.actorIds.slice(0, -1) },
+    });
+    const missingActor = await scen('evidence', 'verify', instanceFile, missingActorTrace);
+    expect(missingActor.code).toBe(2);
+    expect(json<{ issues: Array<{ code: string }> }>(missingActor).issues.map((i) => i.code)).toContain('trace_actor_ids_mismatch');
+
+    const extraActorTrace = path.join(tmp, 'evidence-extra-actor.trace.json.gz');
+    await writeTraceFile(extraActorTrace, {
+      ...trace,
+      header: { ...trace.header, actorIds: [...trace.header.actorIds, '__ghost'].sort() },
+    });
+    const extraActor = await scen('evidence', 'verify', instanceFile, extraActorTrace);
+    expect(extraActor.code).toBe(2);
+    expect(json<{ issues: Array<{ code: string }> }>(extraActor).issues.map((i) => i.code)).toContain('trace_actor_ids_mismatch');
+  }, 240_000);
 
   it('runs tier-2 validation with invariant residuals', async () => {
     const run = await scen('validate', LTAP, '--tier', '2', '--map', MAP, '--draw', '0');

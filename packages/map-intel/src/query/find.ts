@@ -132,13 +132,7 @@ function resolveLimit(limit: number | undefined): number {
   if (!Number.isInteger(limit) || limit < 1) {
     throw new MapIntelQueryError('invalid_value', 'limit', 'must be a positive integer');
   }
-  if (limit > MAX_RESULT_LIMIT) {
-    throw new MapIntelQueryError(
-      'limit_exceeded',
-      'limit',
-      `maximum ${MAX_RESULT_LIMIT} results per call; narrow the query with type/tags/near or paginate by adding filters`,
-    );
-  }
+  if (limit > MAX_RESULT_LIMIT) return MAX_RESULT_LIMIT;
   return limit;
 }
 

@@ -303,6 +303,15 @@ export function distanceToStopLine(
     if (leg.sStart + leg.lengthM < a.routeS) continue;
     if (leg.sStart - a.routeS > lookaheadM) break;
     for (const line of signals.onLane(leg.rsl)) {
+      if (
+        line.connectingLaneRsls.length > 0 &&
+        !a.route.legs.some(
+          (candidate) =>
+            candidate.sStart >= leg.sStart && line.connectingLaneRsls.includes(candidate.rsl),
+        )
+      ) {
+        continue;
+      }
       const laneS = leg.reversed ? leg.lengthM - line.s : line.s;
       const routeS = leg.sStart + laneS;
       const d = routeS - a.routeS;

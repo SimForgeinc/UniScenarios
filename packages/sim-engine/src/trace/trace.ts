@@ -39,6 +39,11 @@ export interface ActorTrack {
   readonly present: number[];
 }
 
+/** Export/render-ready phase channel for one concrete signal program. */
+export interface SignalTrack {
+  readonly phase: Array<'green' | 'yellow' | 'red'>;
+}
+
 export type SimEvent =
   | { t: number; kind: 'trigger_fired'; interactionId: string; actorId: string; verb: string; forced: boolean }
   | { t: number; kind: 'trigger_skipped'; interactionId: string; actorId: string; reason: string }
@@ -73,9 +78,27 @@ export interface MinTtcRecord {
 export interface RevealToConflict {
   /** Seconds between line of sight opening and the conflict moment. */
   readonly value: number;
+  /** First time the declared occluder ref actually blocked this pair. */
+  readonly firstBlockedT: number;
   readonly losOpenT: number;
   readonly conflictT: number;
   readonly pair: [string, string];
+  /** Concrete id or author-level group id from the declared occlusion pair. */
+  readonly occluderId?: string;
+  /** Concrete occluder members that resolved from the declaration. */
+  readonly relevantOccluderIds: string[];
+}
+
+export interface OccluderIneffective {
+  /** Pair whose criticality was measured while the declared occluders never blocked LOS. */
+  readonly pair: [string, string];
+  readonly conflictT: number;
+  /** Present when the first block happened only after `conflictT`, so it was too late. */
+  readonly firstBlockedT?: number;
+  /** Specific declared occluder or group that was ineffective; absent means the declaration allowed any occluder. */
+  readonly occluderId?: string;
+  readonly relevantOccluderIds: string[];
+  readonly reason: 'never_blocked_before_conflict';
 }
 
 export interface InvariantResidual {
@@ -92,6 +115,8 @@ export interface EpisodeMetrics {
   readonly requiredDecelMax: Record<string, number>;
   readonly invariantResiduals?: InvariantResidual[];
   readonly revealToConflict?: RevealToConflict | null;
+  /** Declared occlusion pairs that were never hidden before their closest criticality sample. */
+  readonly occluderIneffective?: OccluderIneffective[];
   readonly collisions: Array<{ t: number; a: string; b: string }>;
   readonly triggerNeverFired: string[];
   /**
@@ -110,6 +135,9 @@ export interface TraceHeader {
   readonly inputHash: string;
   readonly seed: number | string;
   readonly mapId: string;
+  /** Engine graph digest (currently source XODR sha256). */
+  readonly engineGraphDigest: string;
+  /** @deprecated use engineGraphDigest; kept for older trace consumers. */
   readonly topologyDigest: string;
   readonly dt: number;
   readonly clipSeconds: number;
@@ -124,6 +152,8 @@ export interface SimTrace {
   readonly ticks: {
     readonly t: number[];
     readonly actors: Record<string, ActorTrack>;
+    /** Present on traces produced by signal-aware engines; empty on unsignalized maps. */
+    readonly signals?: Record<string, SignalTrack>;
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
@@ -146,7 +176,19 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
   }
   return {
     ...trace,
-    ticks: { t: trace.ticks.t.map((v) => quantize(v, TRACE_PRECISION.t)), actors },
+    ticks: {
+      t: trace.ticks.t.map((v) => quantize(v, TRACE_PRECISION.t)),
+      actors,
+      ...(trace.ticks.signals
+        ? {
+            signals: Object.fromEntries(
+              Object.keys(trace.ticks.signals)
+                .sort()
+                .map((id) => [id, { phase: [...trace.ticks.signals![id]!.phase] }]),
+            ),
+          }
+        : {}),
+    },
   };
 }
 
@@ -156,6 +198,7 @@ export interface SceneTrace {
   readonly ticks: {
     readonly t: number[];
     readonly actors: Record<string, Omit<ActorTrack, 'y'> & { z: number[] }>;
+    readonly signals?: Record<string, SignalTrack>;
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
@@ -185,7 +228,19 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
   }
   return {
     header: { ...trace.header, frame: 'scene' },
-    ticks: { t: [...trace.ticks.t], actors },
+    ticks: {
+      t: [...trace.ticks.t],
+      actors,
+      ...(trace.ticks.signals
+        ? {
+            signals: Object.fromEntries(
+              Object.keys(trace.ticks.signals)
+                .sort()
+                .map((id) => [id, { phase: [...trace.ticks.signals![id]!.phase] }]),
+            ),
+          }
+        : {}),
+    },
     events: trace.events,
     metrics: trace.metrics,
   };

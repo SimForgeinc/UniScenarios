@@ -13,7 +13,7 @@ import {
   parseAndValidateTemplate,
   toScenarioIssues,
   type ClauseResult,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 
 import { adaptTemplate } from '../adapt.js';
 import { EXIT } from '../errors.js';

@@ -1,6 +1,7 @@
 {
-  "name": "@scenario-studio/sim-engine",
+  "name": "@uniscenarios/sim-engine",
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",

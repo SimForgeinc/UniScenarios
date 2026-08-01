@@ -1,11 +1,15 @@
 node_modules/
 dist/
-dev-assets/
+/dev-assets
 *.local
 .DS_Store
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+# Local render and simulation evidence; publish through an artifact store or Git LFS.
+/artifacts
+/scripts/.ss-probe.mjs
 
 # campaign artefacts: batches are re-derivable from the templates + replay keys,
 # and traces are large binaries the library does not need to carry.

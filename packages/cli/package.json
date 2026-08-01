@@ -1,10 +1,12 @@
 {
-  "name": "@scenario-studio/cli",
+  "name": "@uniscenarios/cli",
   "version": "0.0.1",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
   "bin": {
+    "uniscenarios": "./bin/uniscenarios.js",
     "scen": "./bin/scen.js"
   },
   "exports": {
@@ -18,13 +20,14 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "scen": "tsx src/main.ts"
+    "scen": "tsx src/main.ts",
+    "uniscenarios": "tsx src/main.ts"
   },
   "dependencies": {
-    "@scenario-studio/anchor-matcher": "workspace:*",
-    "@scenario-studio/map-intel": "workspace:*",
-    "@scenario-studio/scenario-model": "workspace:*",
-    "@scenario-studio/sim-engine": "workspace:*",
+    "@uniscenarios/anchor-matcher": "workspace:*",
+    "@uniscenarios/map-intel": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
+    "@uniscenarios/sim-engine": "workspace:*",
     "tsx": "^4.20.0"
   },
   "devDependencies": {

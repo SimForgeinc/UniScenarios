@@ -39,6 +39,13 @@ import { nominalRun, type NominalActor } from './nominal.js';
 /** Spawn-`s` tolerance, metres. */
 export const ARRIVAL_TOLERANCE_M = 1e-3;
 const MAX_ITERATIONS = 80;
+/**
+ * A geometry-only point must actually lie on the route. Two metres covers
+ * centre-of-carriageway conflict points between ordinary lanes without being a
+ * nearest-road search radius. Wider authored offsets carry reference-frame
+ * stations and are resolved by lane identity instead.
+ */
+const MAX_GEOMETRIC_ARRIVAL_PROJECTION_M = 2;
 
 export interface ArrivalSolution {
   readonly interactionId: string | null;
@@ -89,10 +96,25 @@ function prepare(
   if (point.kind === 'laneS') {
     targetS = route.sOfLaneStorage(point.rsl, point.s);
   } else {
-    const proj = route.projectPoint(localFromScene(point.at));
-    // A conflict point the route never comes near is a binding failure, not a
-    // solve failure — reject rather than silently aiming at the closest pass.
-    targetS = proj.d <= 12 ? proj.s : null;
+    targetS = null;
+    if (point.referenceFrame && !route.isFreeform) {
+      for (const station of point.referenceFrame.stations) {
+        const routeS = route.sOfLaneStorage(station.rsl, station.s);
+        if (routeS !== null) {
+          targetS = routeS;
+          break;
+        }
+      }
+    }
+    // A declared reference frame is a lane-domain proof, not a hint. Falling
+    // back to nearest geometry when a lane route matches none of its stations
+    // would allow a parallel/off-route carriageway to inherit the arrival.
+    // Freeform crossing routes have no lane identity, so they necessarily use
+    // the tightly bounded geometric test.
+    if (targetS === null && (!point.referenceFrame || route.isFreeform)) {
+      const proj = route.projectPoint(localFromScene(point.at));
+      targetS = proj.d <= MAX_GEOMETRIC_ARRIVAL_PROJECTION_M ? proj.s : null;
+    }
   }
   if (targetS === null) return null;
 
@@ -247,13 +269,26 @@ export function applyArrivalSolution(
     if (a.id !== solution.actorId) return a;
     const built = buildRoute(graph, a.behavior.route);
     if (!built.ok) return a;
-    const pose = built.route.poseAt(solution.spawnS);
-    const scene = toSceneXZ(pose.point);
+    const route = built.route;
+    const oldPoint = localFromScene(a.initial.pose);
+    const oldRouteS = a.initial.laneRef
+      ? (route.sOfLaneStorage(a.initial.laneRef.rsl, a.initial.laneRef.s) ?? route.projectPoint(oldPoint).s)
+      : route.projectPoint(oldPoint).s;
+    const oldRoutePose = route.poseAt(oldRouteS);
+    const headingOffset = Math.atan2(
+      Math.sin(a.initial.pose.headingRad - oldRoutePose.headingRad),
+      Math.cos(a.initial.pose.headingRad - oldRoutePose.headingRad),
+    );
+    const lateralM = a.initial.laneRef
+      ? a.initial.laneRef.tFrac * route.widthAt(solution.spawnS)
+      : route.lateralOffsetAt(oldRouteS, oldPoint);
+    const pose = route.poseAt(solution.spawnS);
+    const scene = toSceneXZ(route.pointWithOffset(solution.spawnS, lateralM));
     return {
       ...a,
       initial: {
         ...a.initial,
-        pose: { x: scene.x, z: scene.z, headingRad: pose.headingRad },
+        pose: { x: scene.x, z: scene.z, headingRad: pose.headingRad + headingOffset },
         laneRef:
           pose.rsl === null
             ? a.initial.laneRef

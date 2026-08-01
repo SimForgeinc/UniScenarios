@@ -704,7 +704,7 @@ export function deriveMapIndexFromTopology(
       source: 'self-derived',
       contractVersion: DERIVED_INDEX_CONTRACT_VERSION,
       notes: [
-        'derived in @scenario-studio/anchor-matcher from topology-index',
+        'derived in @uniscenarios/anchor-matcher from topology-index',
         options.searchIndex ? 'junction control from search-index facts' : 'no junction control source',
         `${flippedJunctionLanes} junction lane(s) re-oriented from their gate approach`,
       ],

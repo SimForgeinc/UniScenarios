@@ -16,7 +16,7 @@ import {
   serializeTemplate,
   toScenarioIssues,
   type ScenarioTemplateV2,
-} from '@scenario-studio/scenario-model';
+} from '@uniscenarios/scenario-model';
 import {
   decodeTraceGz,
   encodeTraceGz,
@@ -24,7 +24,7 @@ import {
   safeParseSimScenarioInput,
   type SimScenarioInput,
   type SimTrace,
-} from '@scenario-studio/sim-engine';
+} from '@uniscenarios/sim-engine';
 
 import { CliError, EXIT } from './errors.js';
 import type { InstanceManifest } from './materialize.js';

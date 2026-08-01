@@ -9,11 +9,11 @@
  * arc-length, curvature and OBB overlap all happen without a per-tick
  * transform.
  *
- * The **scene frame** (what `@scenario-studio/city-renderer` and the studio
+ * The **scene frame** (what `@uniscenarios/city-renderer` and the studio
  * viewport use) is y-up: `scene = (x, z, -y)`. `headingRad` is numerically
  * identical in both frames — a rotation of `+X` about scene `+Y` and a rotation
  * of `+X` about local `+Z` describe the same direction under that mapping
- * (guarded by `frame-convention.test.ts` in `@scenario-studio/scenario-model`).
+ * (guarded by `frame-convention.test.ts` in `@uniscenarios/scenario-model`).
  *
  * ## Where each frame appears
  *

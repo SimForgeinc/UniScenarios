@@ -19,7 +19,7 @@ import {
   type FindLocationsQuery,
   type LocationMatch,
   type StudioLocation,
-} from '@scenario-studio/map-intel';
+} from '@uniscenarios/map-intel';
 
 import { CliError } from '../errors.js';
 import { loadMap } from '../maps.js';

@@ -32,7 +32,7 @@
 
 import { z } from 'zod';
 
-import { NumberOrExprSchema } from '../../expr/index.js';
+import { ExprSchema, NumberOrExprSchema } from '../../expr/index.js';
 import { LaneRefSchema as V1LaneRefSchema, PoseSchema as V1PoseSchema } from '../v1.js';
 import { ApproachRelationSchema, TurnDirectionSchema } from './anchor.js';
 import { FeatureRefSchema, RoleIdSchema, RoleRefSchema, V2ExtensionsSchema } from './common.js';
@@ -92,16 +92,24 @@ export const ActorSpecSchema = z.strictObject({
    */
   catalogId: z.string().min(1).max(200).optional(),
   dims: V2DimensionsSchema.optional(),
+  /**
+   * Parked/stopped context actor: collides and occludes, but is not a metric
+   * participant. Use this for roadside queues and parked vehicles whose purpose
+   * is to reveal/hide the incident actor, not to become the incident pair.
+   */
+  static: z.boolean().default(false),
 });
 
 /** A pose in the AnchorFrame. See the module docs for the convention. */
+const TFracOrExprSchema = z.union([z.number().min(-1).max(1), ExprSchema]);
+
 export const FramePoseSchema = z.strictObject({
   /** Signed same-direction lane index; 0 is the reference lane. */
   laneOffset: z.number().int().min(-8).max(8).default(0),
   /** Arc length from the frame origin, metres. Negative is upstream. */
   s: NumberOrExprSchema,
-  /** Lateral offset as a fraction of local lane width, −1..1 (0 = centre). */
-  tFrac: z.number().min(-1).max(1).default(0),
+  /** Lateral offset as a fraction of local lane width, −1..1 (0 = centre). May be parameterised. */
+  tFrac: TFracOrExprSchema.default(0),
   /** Yaw relative to the lane tangent, radians. */
   headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
 });

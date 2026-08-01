@@ -47,7 +47,7 @@ import {
   type Material,
   type Object3D,
 } from 'three';
-import { buildProp, getEntry, type CatalogId, type Dims } from '@scenario-studio/prop-catalog';
+import { buildProp, getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 
 /** What the renderer needs to draw one actor. */
 export interface ActorView {

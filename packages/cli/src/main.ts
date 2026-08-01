@@ -1,5 +1,5 @@
 /**
- * `scen` — the agent CLI (layer 4 of `docs/agent-authoring-architecture.md`).
+ * `uniscenarios` — the agent CLI (layer 4 of `docs/agent-authoring-architecture.md`).
  *
  * Contract, in three lines:
  *
@@ -25,7 +25,9 @@ import { CliError, EXIT, exitCodeOf, toStructuredError } from './errors.js';
 import { emit, emitError } from './output.js';
 import { availableMaps, resolveMapSelection } from './maps.js';
 import { batch } from './commands/batch.js';
+import { catalogCreate, catalogVerify } from './commands/catalog.js';
 import { evaluate, type EvaluateFilterMode } from './commands/evaluate.js';
+import { evidenceVerify } from './commands/evidence.js';
 import { instantiate } from './commands/instantiate.js';
 import { locationsFind, locationsGet, locationsResolve } from './commands/locations.js';
 import { mapsList } from './commands/maps.js';
@@ -46,6 +48,9 @@ const COMMANDS = [
   { name: 'simulate', summary: 'one engine pass over an instance, with an optional trace' },
   { name: 'validate', summary: 'tier-1, or tier-2 (one engine pass + invariant residuals)' },
   { name: 'evaluate', summary: 'reject filters over a trace' },
+  { name: 'evidence verify', summary: 'prove one instance/trace pair shares the same input hash' },
+  { name: 'catalog create', summary: 'reserve exactly 100 deterministic scenario identities per supported map' },
+  { name: 'catalog verify', summary: 'reject catalog identity, cardinality, provenance, or evidence gaps' },
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
   { name: 'schemas', summary: 'the published JSON Schemas — the LLM emission contract' },
 ] as const;
@@ -54,7 +59,7 @@ const GLOBAL_BOOLEANS = ['pretty', 'help'];
 
 function usage(pretty: boolean): number {
   const payload = {
-    bin: 'scen',
+    bin: 'uniscenarios',
     exitCodes: { 0: 'ok', 1: 'command error', 2: 'validation findings' },
     commands: COMMANDS,
     maps: availableMaps(),
@@ -64,9 +69,9 @@ function usage(pretty: boolean): number {
   } else {
     process.stdout.write(
       [
-        'scen — Scenario Studio agent CLI',
+        'uniscenarios — UniScenarios agent CLI (`scen` remains an alias)',
         '',
-        ...COMMANDS.map((c) => `  scen ${c.name.padEnd(20)}${c.summary}`),
+        ...COMMANDS.map((c) => `  uniscenarios ${c.name.padEnd(20)}${c.summary}`),
         '',
         '  --pretty   human-readable rendering of the same result',
         `  maps: ${availableMaps().join(', ')}`,
@@ -278,6 +283,50 @@ async function dispatch(argv: readonly string[]): Promise<number> {
       });
     }
 
+    case 'evidence': {
+      if (sub !== 'verify') {
+        throw new CliError('unknown_command', `scen evidence ${sub ?? ''}`.trim(), {
+          detail: { known: ['verify'] },
+        });
+      }
+      const args = parseArgs(argv.slice(2), { booleans: GLOBAL_BOOLEANS });
+      return evidenceVerify({
+        instance: positional(args, 0, 'instance.json'),
+        trace: positional(args, 1, 'trace.json.gz'),
+        pretty: boolFlag(args, 'pretty'),
+      });
+    }
+
+    case 'catalog': {
+      if (sub === 'create') {
+        const args = parseArgs(argv.slice(2), {
+          booleans: GLOBAL_BOOLEANS,
+          values: ['out', 'namespace', 'evidence-root'],
+        });
+        return catalogCreate({
+          out: requireString(args, 'out'),
+          namespace: optionalString(args, 'namespace'),
+          evidenceRoot: optionalString(args, 'evidence-root'),
+          pretty: boolFlag(args, 'pretty'),
+        });
+      }
+      if (sub === 'verify') {
+        const args = parseArgs(argv.slice(2), {
+          booleans: [...GLOBAL_BOOLEANS, 'require-evidence'],
+          values: ['evidence-root'],
+        });
+        return catalogVerify({
+          file: positional(args, 0, 'catalog.json'),
+          evidenceRoot: optionalString(args, 'evidence-root'),
+          requireEvidence: boolFlag(args, 'require-evidence'),
+          pretty: boolFlag(args, 'pretty'),
+        });
+      }
+      throw new CliError('unknown_command', `scen catalog ${sub ?? ''}`.trim(), {
+        detail: { known: ['create', 'verify'] },
+      });
+    }
+
     case 'batch': {
       const args = parseArgs(argv.slice(1), {
         booleans: [...GLOBAL_BOOLEANS, 'all-maps', 'force', 'no-trace'],
@@ -343,7 +392,9 @@ export async function run(argv: readonly string[]): Promise<number> {
 
 const invokedDirectly =
   process.argv[1] !== undefined &&
-  (process.argv[1].endsWith('main.ts') || process.argv[1].endsWith('scen.js'));
+  (process.argv[1].endsWith('main.ts') ||
+    process.argv[1].endsWith('scen.js') ||
+    process.argv[1].endsWith('uniscenarios.js'));
 
 if (invokedDirectly) {
   process.exitCode = await run(process.argv.slice(2));

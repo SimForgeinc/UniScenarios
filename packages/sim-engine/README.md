@@ -1,4 +1,4 @@
-# @scenario-studio/sim-engine
+# @uniscenarios/sim-engine
 
 Layer 3 of `docs/agent-authoring-architecture.md`: the deterministic scenario
 simulation engine. Pure TypeScript, `zod` for the input contract, **no rendering
@@ -11,7 +11,7 @@ import {
   parseSimScenarioInput,
   runSimulation,
   evaluateTrace,
-} from '@scenario-studio/sim-engine';
+} from '@uniscenarios/sim-engine';
 
 const graph = buildLaneGraph(topologyIndexJson); // dev-assets/<map>/topology-index.json.gz
 const input = parseSimScenarioInput(doc);

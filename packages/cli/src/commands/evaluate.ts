@@ -7,7 +7,7 @@
  * scenarios whose whole point is that nothing happens.
  */
 
-import { evaluateTrace, type EvaluateFilters } from '@scenario-studio/sim-engine';
+import { evaluateTrace, type EvaluateFilters } from '@uniscenarios/sim-engine';
 
 import { CliError, EXIT } from '../errors.js';
 import { emit, emitLines, fixed, pad } from '../output.js';

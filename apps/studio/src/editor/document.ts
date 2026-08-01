@@ -43,8 +43,8 @@ import {
   type Entity,
   type LaneRef,
   type ScenarioV1,
-} from '@scenario-studio/scenario-model';
-import { getEntry, type CatalogId, type Dims } from '@scenario-studio/prop-catalog';
+} from '@uniscenarios/scenario-model';
+import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { MapEntry } from '../maps';
 
 /** Extension key the prop sidecar lives under. */

@@ -19,7 +19,7 @@
 
 import { z } from 'zod';
 
-import { NumberOrExprSchema } from '../../expr/index.js';
+import { ExprSchema, NumberOrExprSchema } from '../../expr/index.js';
 import { FeatureRefSchema, PropIdSchema, RoleRefSchema, V2ExtensionsSchema } from './common.js';
 import { FramePoseSchema } from './roles.js';
 
@@ -31,13 +31,15 @@ export const OcclusionPairSchema = z.strictObject({
   target: RoleRefSchema,
 });
 
+const TFracOrExprSchema = z.union([z.number().min(-1).max(1), ExprSchema]);
+
 /** Repeat a prop along the corridor — parked rows, cone tapers, barrier runs. */
 export const PropRepeatSchema = z.strictObject({
   count: z.number().int().min(2).max(200),
   /** Longitudinal spacing between instances, metres. */
   spacingM: NumberOrExprSchema,
-  /** Lateral drift per instance, fraction of lane width — makes a taper. */
-  tFracStep: z.number().min(-1).max(1).default(0),
+  /** Lateral drift per instance, fraction of lane width — makes a taper. May be parameterised. */
+  tFracStep: TFracOrExprSchema.default(0),
 });
 
 /** One placed prop (or a repeated run of them). */
