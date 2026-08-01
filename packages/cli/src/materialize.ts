@@ -1302,18 +1302,48 @@ function parseActor(value: unknown): SimActor {
 }
 
 function parseInteraction(value: unknown): SimInteraction {
-  const record = value as { actorId?: string };
+  const record = value as {
+    id?: string;
+    actorId?: string;
+    trigger?: { kind?: string; interactionId?: string };
+  };
+  const actorId = record.actorId ?? 'probe';
+
+  // BUGFIX (occluded-pedestrian campaign, 2026-08-01): this probe validates one
+  // interaction inside a scenario that contains only that interaction, but
+  // `simScenarioInputSchema` resolves `after()` references at *scenario* level.
+  // So every `after()` trigger failed here with "after() references unknown
+  // interaction <id>" — the whole trigger kind was unreachable through `scen`,
+  // even though the engine runs it correctly once the real scenario is
+  // assembled. The probe now carries a stub for whatever the trigger names.
+  const afterId =
+    record.trigger?.kind === 'after' && typeof record.trigger.interactionId === 'string'
+      ? record.trigger.interactionId
+      : undefined;
+  const stubs =
+    afterId === undefined || afterId === record.id
+      ? []
+      : [
+          {
+            id: afterId,
+            actorId,
+            verb: 'exist',
+            trigger: { kind: 'at', t: 0 },
+            target: { state: 'present' },
+          },
+        ];
+
   const parsed = safeParseSimScenarioInput({
     actors: [
       {
-        id: record.actorId ?? 'probe',
+        id: actorId,
         kind: 'vehicle',
         dims: { l: 4, w: 2, h: 1.5 },
         initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
         behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
       },
     ],
-    interactions: [value],
+    interactions: [...stubs, value],
   });
   if (!parsed.ok) {
     throw new CliError('interaction_invalid', 'a materialized interaction failed the engine contract', {
@@ -1322,7 +1352,7 @@ function parseInteraction(value: unknown): SimInteraction {
       exitCode: 2,
     });
   }
-  return parsed.value.interactions[0] as SimInteraction;
+  return parsed.value.interactions[stubs.length] as SimInteraction;
 }
 
 function polylinePointsOf(route: Route): Array<{ x: number; z: number }> {

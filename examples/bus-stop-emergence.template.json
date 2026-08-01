@@ -1,0 +1,348 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Bus-stop emergence — pedestrian from in front of a dwelling bus",
+    "description": "A bus dwells at a kerbside stop with its doors open; a passenger who has just got off walks round the front of it and into the carriageway. The anchor requires a real `bus_stop` on the reference path, so the scenario lands where buses actually stop rather than at an arbitrary kerb. The bus itself is an L3 prop: it is stationary for the whole clip, and the engine's pairwise TTC circumscribes both footprints without regard to lanes, so a 12 m *actor* parked 3 m to the ego's side pins the episode min-TTC at zero and takes the metric away from the pedestrian (measured — see the campaign report). The cost of that choice is that `doors.left` is not settable on a prop; the open-doors cue is carried as a prop extension until the engine treats parked actors as scenery. The `bus_stop` anchor feature is declared but cosmetic: on all five maps the catalog anchors bus stops onto the sidewalk or shoulder lane beside the carriageway, and the matcher only searches point features lying on the driving reference path, so the clause can never bind. Required, it returns zero sites on every map; cosmetic, it records the intent and the corridor clauses carry the match.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "scen/0.0.1",
+    "archetype": "C5.bus-stop-emergence",
+    "tags": [
+      "vru",
+      "occlusion",
+      "bus-stop",
+      "transit",
+      "prop-occluder",
+      "campaign-occluded-pedestrian"
+    ],
+    "author": "agent/campaign-occluded-pedestrian",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "arrivalTtc",
+        "type": "continuous",
+        "description": "Seconds between the pedestrian reaching the ego lane centre and the ego reaching the same point.",
+        "unit": "s",
+        "tier": 1,
+        "range": [
+          0.8,
+          2.5
+        ],
+        "default": 1.6,
+        "distribution": "uniform"
+      },
+      {
+        "id": "pedSpeedKph",
+        "type": "continuous",
+        "description": "Pedestrian travel speed. An alighting passenger in a hurry runs; Euro NCAP walk = 5 km/h, run = 8 km/h.",
+        "unit": "kph",
+        "tier": 1,
+        "range": [
+          4.0,
+          8.5
+        ],
+        "default": 5.4,
+        "distribution": "uniform"
+      },
+      {
+        "id": "busGapM",
+        "type": "continuous",
+        "description": "Metres between the bus centre and the line the pedestrian crosses on. The bus is 12.2 m long, so 7 m puts the pedestrian right across its bumper and 14 m gives a clear car-length of daylight first.",
+        "unit": "m",
+        "tier": 1,
+        "range": [
+          7.0,
+          14.0
+        ],
+        "default": 9.0,
+        "distribution": "uniform"
+      },
+      {
+        "id": "dartLeadM",
+        "type": "continuous",
+        "description": "Metres upstream of the conflict point at which the pedestrian leaves the kerb line. With `pedSpeedKph` this is the reveal-to-conflict lever.",
+        "unit": "m",
+        "tier": 1,
+        "range": [
+          1.5,
+          4.5
+        ],
+        "default": 2.8,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "clear",
+    "timeOfDay": "afternoon"
+  },
+  "anchor": {
+    "id": "bus-stop-emergence",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          1,
+          4
+        ],
+        "essentiality": "required"
+      },
+      "speedLimitKph": {
+        "value": [
+          25,
+          60
+        ],
+        "essentiality": "preferred",
+        "weight": 3
+      },
+      "requiresAdjacent": {
+        "value": [
+          "sidewalk"
+        ],
+        "essentiality": "preferred",
+        "weight": 2
+      },
+      "curvatureDegPer10m": {
+        "value": [
+          0,
+          7
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          210,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "stop",
+        "kind": "bus_stop",
+        "label": "the kerbside bus stop — declared but never bound on these five maps (campaign defect D3); kept cosmetic so the intent is on record",
+        "essentiality": "cosmetic",
+        "atM": {
+          "value": [
+            70,
+            165
+          ],
+          "essentiality": "cosmetic"
+        },
+        "side": {
+          "value": "right",
+          "essentiality": "cosmetic"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": false,
+      "maxSitesPerMap": 8,
+      "diversity": "moderate",
+      "minScore": 0.5
+    }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "the vehicle under test",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "essentiality": "required",
+      "pose": {
+        "laneOffset": 0,
+        "s": "125 - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)"
+    },
+    {
+      "id": "ped",
+      "kind": "on_reference",
+      "label": "the alighting passenger that walks round the front of the bus",
+      "actor": {
+        "class": "pedestrian"
+      },
+      "essentiality": "required",
+      "pose": {
+        "laneOffset": 0,
+        "s": 60,
+        "tFrac": -1,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": "param.pedSpeedKph"
+    }
+  ],
+  "props": [
+    {
+      "id": "bus",
+      "catalogId": "vehicle.bus",
+      "label": "the dwelling bus, doors open on the kerb side; its nose sits `busGapM` upstream of the crossing line",
+      "essentiality": "required",
+      "pose": {
+        "laneOffset": 0,
+        "s": "125 - param.busGapM",
+        "tFrac": -0.75,
+        "headingOffsetRad": 0
+      },
+      "headingOffsetRad": 0,
+      "scale": 1,
+      "occludes": {
+        "observer": "ego",
+        "target": "ped"
+      },
+      "targetRevealToConflictS": 0.8,
+      "extensions": {
+        "doorsLeft": "open",
+        "doorsNote": "`set doors.left = open` is only expressible on an actor, and an actor bus steals the episode min-TTC; carried declaratively until the engine treats parked actors as scenery."
+      }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 14,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "ped-commits",
+        "label": "an alighting passenger stepping round a bus does not look for the second lane",
+        "actor": "ped",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      },
+      {
+        "id": "ped-ignores-traffic",
+        "actor": "ped",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "rules.yieldToVehicles",
+          "value": false
+        }
+      },
+      {
+        "id": "ped-rounds-the-bus",
+        "label": "along the kerb past the bus, then out into the carriageway",
+        "actor": "ped",
+        "verb": "route",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "polyline",
+          "points": [
+            {
+              "laneOffset": 0,
+              "s": 60,
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": 0,
+              "s": "125 - param.dartLeadM",
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": 0,
+              "s": 126,
+              "tFrac": 0.15,
+              "headingOffsetRad": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "ped-reaches-the-lane",
+        "label": "the arrival relation that makes the clip critical rather than incidental",
+        "actor": "ped",
+        "verb": "speed",
+        "trigger": {
+          "kind": "arrival",
+          "of": "ped",
+          "at": {
+            "pose": {
+              "laneOffset": 0,
+              "s": 125,
+              "tFrac": 0,
+              "headingOffsetRad": 0
+            }
+          },
+          "syncWith": "ego",
+          "ttc": "param.arrivalTtc"
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": "param.pedSpeedKph"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "criticality",
+      "kind": "ttc",
+      "label": "the ego must actually be threatened by the pedestrian",
+      "essentiality": "required",
+      "of": "ego",
+      "to": "ped",
+      "range": [
+        null,
+        3.0
+      ],
+      "mode": "min"
+    },
+    {
+      "id": "arrival-band",
+      "kind": "arrival",
+      "label": "the solved arrival offset must survive the run",
+      "essentiality": "required",
+      "of": "ped",
+      "at": {
+        "pose": {
+          "laneOffset": 0,
+          "s": 125,
+          "tFrac": 0,
+          "headingOffsetRad": 0
+        }
+      },
+      "syncWith": "ego",
+      "deltaTRange": [
+        -3.0,
+        -0.6
+      ]
+    },
+    {
+      "id": "ego-decel-budget",
+      "kind": "decel_budget",
+      "label": "beyond a hard stop the conflict was unavoidable, which is a different finding",
+      "essentiality": "preferred",
+      "of": "ego",
+      "maxMps2": 8.0
+    }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

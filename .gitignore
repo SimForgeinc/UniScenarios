@@ -6,3 +6,9 @@ dev-assets/
 *.tsbuildinfo
 playwright-report/
 test-results/
+
+# campaign artefacts: batches are re-derivable from the templates + replay keys,
+# and traces are large binaries the library does not need to carry.
+campaigns/*/batches/
+campaigns/**/*.trace.json.gz
+campaigns/**/work/*.match.json
