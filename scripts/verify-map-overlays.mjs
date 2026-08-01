@@ -422,12 +422,16 @@ const configs = {
   defaults: [defaults.lanes, defaults.signals],
   both: [true, true],
 };
-for (let round = 0; round < 3; round++) {
-  // Alternate the order: a config that always runs second would otherwise carry
-  // whatever bias the position in the sequence has.
-  const order = Object.entries(configs);
-  if (round % 2 === 1) order.reverse();
-  for (const [name, [lanes, signals]] of order) {
+const configNames = Object.keys(configs);
+for (let round = 0; round < configNames.length; round++) {
+  // Rotate, do not reverse. Position in the sequence carries a real penalty
+  // (the fly-through leaves the streamer in a different state each time), and
+  // reversing a 3-config list pins the middle one to the middle slot every
+  // round — which is exactly how the lane overlay first appeared to cost 5 fps
+  // it does not cost. Rotating gives every config every slot once.
+  const order = configNames.map((_, i) => configNames[(i + round) % configNames.length]);
+  for (const name of order) {
+    const [lanes, signals] = configs[name];
     await setLayers(lanes, signals);
     await page.waitForTimeout(500);
     const result = await page.evaluate((ms) => window.__bench(ms), benchMs);
