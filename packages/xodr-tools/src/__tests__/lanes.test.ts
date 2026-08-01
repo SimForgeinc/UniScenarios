@@ -1,7 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { CoordinateFrame } from '../coordinate-frame.js';
 import { lanePolygonsFromGeoJson, type LanePolygon } from '../lanes.js';
-import { buildLaneOverlay, laneIdForFace } from '../overlays/lanes.js';
+import { MissingHeightError } from '../overlays/height.js';
+import {
+  buildLaneOverlay,
+  laneIdForFace,
+  type LaneOverlayUserData,
+} from '../overlays/lanes.js';
 import type { FeatureCollection } from '../geojson.js';
 import type { LanePolygonProperties } from '../lanes.js';
 import { yaleHeaderText, yaleLanePolygonSample, yaleManifest } from './fixtures.js';
@@ -217,6 +222,36 @@ describe('buildLaneOverlay', () => {
     };
     const pos = mesh.geometry.attributes.position;
     for (let i = 0; i < pos.count; i++) expect(pos.array[i * 3 + 1]).toBe(7);
+  });
+
+  it('skips or throws on a missing height when asked to', async () => {
+    const lanes = await load();
+    // Answer only for the eastern half of the sample.
+    const mid = (lanes[0]?.bounds.minX ?? 0) + 1;
+    const sampler = (x: number): number | null => (x > mid ? 5 : null);
+
+    const all = buildLaneOverlay(lanes, { heightSampler: sampler });
+    expect((all.userData as LaneOverlayUserData).skippedLanes).toBe(0);
+    expect((all.userData as LaneOverlayUserData).laneCount).toBe(lanes.length);
+
+    const skipped = buildLaneOverlay(lanes, {
+      heightSampler: sampler,
+      onMissingHeight: 'skip',
+    });
+    const data = skipped.userData as LaneOverlayUserData;
+    expect(data.skippedLanes).toBeGreaterThan(0);
+    expect(data.laneCount + data.skippedLanes).toBe(lanes.length);
+    // Nothing landed at the default height: every surviving vertex was sampled.
+    const mesh = skipped.getObjectByName('lane-surfaces') as unknown as {
+      geometry: { attributes: { position: { array: ArrayLike<number>; count: number } } };
+    };
+    const pos = mesh.geometry.attributes.position;
+    for (let i = 0; i < pos.count; i++) {
+      expect(pos.array[i * 3 + 1]).toBeCloseTo(5.04, 5);
+    }
+
+    expect(() => buildLaneOverlay(lanes, { heightSampler: sampler, onMissingHeight: 'throw' }))
+      .toThrow(MissingHeightError);
   });
 
   it('merges to a single draw call and still resolves faces to lane ids', async () => {

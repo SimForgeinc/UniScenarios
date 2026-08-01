@@ -1,7 +1,15 @@
+import { Group, InstancedMesh, Matrix4 } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CoordinateFrame } from '../coordinate-frame.js';
+import { MissingHeightError } from '../overlays/height.js';
 import { signalsFromGeoJson } from '../signals.js';
-import { buildSignalOverlay } from '../overlays/signals.js';
+import {
+  buildSignalOverlay,
+  signalIdForHit,
+  signalPlacement,
+  type SignalHeadUserData,
+  type SignalOverlayUserData,
+} from '../overlays/signals.js';
 import { yaleHeaderText, yaleManifest, yaleSignals } from './fixtures.js';
 
 const frame = (): CoordinateFrame =>
@@ -118,7 +126,7 @@ describe('signalsFromGeoJson', () => {
 });
 
 describe('buildSignalOverlay', () => {
-  it('returns a "signals" group with poles and per-id pickable heads', async () => {
+  it('places every feature and reports it in byId', async () => {
     const signals = await load();
     const group = buildSignalOverlay(signals, { heightSampler: () => 12 });
     expect(group.name).toBe('signals');
@@ -126,23 +134,39 @@ describe('buildSignalOverlay', () => {
     const poles = group.getObjectByName('signal-poles')!;
     const heads = group.getObjectByName('signal-heads')!;
     expect(poles).toBeDefined();
-    // 164 features minus the 4 out-of-extent Stop Line rows.
-    expect(heads.children).toHaveLength(160);
-    expect(buildSignalOverlay(signals, { includeOutOfBounds: true }).getObjectByName(
-      'signal-heads',
-    )!.children).toHaveLength(164);
 
-    // Every head is named with its signal id and carries the feature.
+    const data = group.userData as SignalOverlayUserData;
+    // 164 features minus the 4 out-of-extent Stop Line rows.
+    expect(data.signalCount).toBe(160);
+    expect(Object.keys(data.byId)).toHaveLength(160);
+    expect(data.crosswalkCount).toBe(21);
+    expect(
+      (buildSignalOverlay(signals, { includeOutOfBounds: true }).userData as SignalOverlayUserData)
+        .signalCount,
+    ).toBe(164);
+
+    // Every kept feature resolves to a drawable and an instance slot.
     for (const s of signals.filter((x) => x.withinExtents)) {
-      const obj = group.getObjectByName(s.id)!;
-      expect(obj).toBeDefined();
-      expect(obj.userData.signalId).toBe(s.id);
+      const placement = signalPlacement(group, s.id)!;
+      expect(placement).toBeTruthy();
+      expect(placement.signal.id).toBe(s.id);
+      expect(placement.groundY).toBe(12);
+      if (s.featureKind === 'crosswalk') {
+        expect(placement.object.name).toBe('crosswalk-outlines');
+        expect(placement.instanceId).toBe(-1);
+      } else {
+        expect(placement.object.parent).toBe(heads);
+        expect(placement.instanceId).toBeGreaterThanOrEqual(0);
+      }
     }
 
     // Head sits at ground + z_offset; the pole spans that.
     const light = signals.find((s) => s.category === 'traffic_light')!;
-    const head = group.getObjectByName(light.id)!;
-    expect(head.position.y).toBeCloseTo(12 + light.zOffset, 6);
+    const head = signalPlacement(group, light.id)!;
+    expect(head.position[1]).toBeCloseTo(12 + light.zOffset, 6);
+    const matrix = new Matrix4();
+    (head.object as InstancedMesh).getMatrixAt(head.instanceId, matrix);
+    expect(matrix.elements[13]).toBeCloseTo(12 + light.zOffset, 4);
 
     const polePositions = (poles as unknown as { geometry: { attributes: { position: { count: number } } } })
       .geometry.attributes.position;
@@ -150,22 +174,91 @@ describe('buildSignalOverlay', () => {
     expect(polePositions.count % 2).toBe(0);
   });
 
-  it('shares geometry and material across same-category heads', async () => {
+  it('collapses 160 features into 13 draw calls, one per category', async () => {
     const signals = await load();
     const group = buildSignalOverlay(signals);
-    const lights = signals
-      .filter((s) => s.category === 'traffic_light')
-      .map((s) => group.getObjectByName(s.id) as unknown as { geometry: object; material: object });
-    expect(lights.length).toBe(59);
-    const geoms = new Set(lights.map((m) => m.geometry));
-    const mats = new Set(lights.map((m) => m.material));
-    expect(geoms.size).toBe(1);
-    expect(mats.size).toBe(1);
+    const data = group.userData as SignalOverlayUserData;
+    const heads = group.getObjectByName('signal-heads')!;
+
+    // 11 categories + merged poles + merged crosswalk rings.
+    expect(heads.children).toHaveLength(11);
+    expect(data.categories).toHaveLength(11);
+    expect(data.drawCalls).toBe(13);
+    for (const child of heads.children) {
+      expect((child as InstancedMesh).isInstancedMesh).toBe(true);
+    }
+
+    // The 59 traffic lights are one instanced draw, not 59 meshes.
+    const lights = heads.children.find(
+      (c) => (c.userData as SignalHeadUserData).category === 'traffic_light',
+    ) as InstancedMesh;
+    expect(lights.count).toBe(59);
+    expect((lights.userData as SignalHeadUserData).signalIds).toHaveLength(59);
+  });
+
+  it('resolves a raycast hit back to a signal id', async () => {
+    const signals = await load();
+    const group = buildSignalOverlay(signals);
+    const stop = signals.find((s) => s.category === 'stop_sign' && s.withinExtents)!;
+    const placement = signalPlacement(group, stop.id)!;
+    const hit = {
+      object: placement.object,
+      instanceId: placement.instanceId,
+    } as unknown as Parameters<typeof signalIdForHit>[0];
+    expect(signalIdForHit(hit)).toBe(stop.id);
+
+    // A hit on something else in the scene is not a signal.
+    expect(
+      signalIdForHit({ object: new Group(), instanceId: 0 } as unknown as Parameters<
+        typeof signalIdForHit
+      >[0]),
+    ).toBeNull();
   });
 
   it('can drop the crosswalk layer', async () => {
     const signals = await load();
     const group = buildSignalOverlay(signals, { includeCrosswalks: false });
-    expect(group.getObjectByName('signal-heads')!.children).toHaveLength(143 - 4);
+    const data = group.userData as SignalOverlayUserData;
+    expect(data.signalCount).toBe(143 - 4);
+    expect(data.crosswalkCount).toBe(0);
+    expect(group.getObjectByName('crosswalk-outlines')).toBeUndefined();
+    // No crosswalk ring draw, so one fewer call than the full build.
+    expect(data.drawCalls).toBe(12);
+  });
+
+  it('honours onMissingHeight', async () => {
+    const signals = await load();
+    // A sampler with a hole in it: answers only for the eastern half of the map.
+    const sampler = (x: number, _z: number): number | null => (x > 700 ? 9 : null);
+    const kept = signals.filter((s) => s.withinExtents && s.position[0] > 700).length;
+    expect(kept).toBeGreaterThan(0);
+    expect(kept).toBeLessThan(160);
+
+    const skipped = buildSignalOverlay(signals, {
+      heightSampler: sampler,
+      onMissingHeight: 'skip',
+    }).userData as SignalOverlayUserData;
+    expect(skipped.signalCount).toBeLessThanOrEqual(kept);
+    expect(skipped.signalCount).toBeGreaterThan(0);
+
+    const defaulted = buildSignalOverlay(signals, {
+      heightSampler: sampler,
+      defaultHeight: 4,
+      onMissingHeight: 'default',
+    });
+    expect((defaulted.userData as SignalOverlayUserData).signalCount).toBe(160);
+    const missed = signals.find((s) => s.withinExtents && s.position[0] <= 700);
+    if (missed) expect(signalPlacement(defaulted, missed.id)!.groundY).toBe(4);
+
+    expect(() =>
+      buildSignalOverlay(signals, { heightSampler: sampler, onMissingHeight: 'throw' }),
+    ).toThrow(MissingHeightError);
+  });
+
+  it('still accepts the deprecated groundHeight alias', async () => {
+    const signals = await load();
+    const group = buildSignalOverlay(signals, { groundHeight: 7 });
+    const light = signals.find((s) => s.category === 'traffic_light')!;
+    expect(signalPlacement(group, light.id)!.groundY).toBe(7);
   });
 });

@@ -156,7 +156,31 @@ export class CoordinateFrame {
     manifest?: SceneManifestLike,
     sceneOrigin?: Vec3,
   ): CoordinateFrame {
-    const header: XodrHeader = parseXodrHeader(xodrHeaderText);
+    return CoordinateFrame.fromHeader(parseXodrHeader(xodrHeaderText), manifest, sceneOrigin);
+  }
+
+  /**
+   * Build a frame from an already-parsed header.
+   *
+   * The same thing as {@link fromMapAssets} for callers that reached for
+   * {@link fetchXodrHeader} — which Range-requests 16 KB instead of pulling a
+   * 6 MB `.xodr` — and therefore hold a parsed {@link XodrHeader} rather than
+   * text. Without this, every such caller hand-wires `sceneBounds` and
+   * `tileGridOrigin` out of the manifest, and the one that forgets `sceneBounds`
+   * silently loses {@link calibrationReport}.
+   *
+   * @param header Parsed `.xodr` header.
+   * @param manifest The 3D scene manifest (`3d/manifest.json`). Optional; when
+   *   omitted the frame still works, it just cannot report calibration.
+   * @param sceneOrigin Override the post-swap translation. Only pass this for
+   *   pipelines that recentre their scenes; city-preprocess maps do not.
+   * @throws If the manifest declares a coordinate system other than `y-up`.
+   */
+  static fromHeader(
+    header: XodrHeader,
+    manifest?: SceneManifestLike,
+    sceneOrigin?: Vec3,
+  ): CoordinateFrame {
     const cs = manifest?.scene?.coordinateSystem;
     if (cs !== undefined && cs !== 'y-up') {
       throw new Error(

@@ -18,16 +18,12 @@ import {
   type Object3D,
 } from 'three';
 import type { LanePolygon } from '../lanes.js';
+import { createHeightResolver, type HeightOptions } from './height.js';
 
-/** Ground-height lookup in scene space. Return `null` where unknown. */
-export type HeightSampler = (x: number, z: number) => number | null;
+export type { HeightSampler, MissingHeightPolicy } from './height.js';
 
 /** Options for {@link buildLaneOverlay}. */
-export interface LaneOverlayOptions {
-  /** Per-vertex ground height. Without it every vertex sits at `defaultHeight`. */
-  heightSampler?: HeightSampler;
-  /** Scene Y used when there is no sampler, or the sampler returns null. Default `0`. */
-  defaultHeight?: number;
+export interface LaneOverlayOptions extends HeightOptions {
   /** Lift above the sampled ground so the overlay does not z-fight. Default `0.04` m. */
   drapeOffset?: number;
   /** Base tint. Default cyan `0x22d3ee`. */
@@ -70,6 +66,8 @@ export interface LaneOverlayUserData {
   triangleCount: number;
   /** Triangles dropped by the `minTriangleArea` filter. */
   degenerateTriangles: number;
+  /** Lanes dropped because the height sampler missed and `onMissingHeight` is `'skip'`. */
+  skippedLanes: number;
 }
 
 function srgbBytes(hex: number): [number, number, number] {
@@ -91,8 +89,6 @@ function srgbBytes(hex: number): [number, number, number] {
  */
 export function buildLaneOverlay(lanes: LanePolygon[], options: LaneOverlayOptions = {}): Group {
   const {
-    heightSampler,
-    defaultHeight = 0,
     drapeOffset = 0.04,
     color = 0x22d3ee,
     opacity = 0.28,
@@ -101,6 +97,10 @@ export function buildLaneOverlay(lanes: LanePolygon[], options: LaneOverlayOptio
     material,
     minTriangleArea = 1e-9,
   } = options;
+  const resolveHeight = createHeightResolver({
+    ...options,
+    defaultHeight: options.defaultHeight ?? 0,
+  });
 
   const positions: number[] = [];
   const colors: number[] = [];
@@ -109,6 +109,7 @@ export function buildLaneOverlay(lanes: LanePolygon[], options: LaneOverlayOptio
   const baseColor = srgbBytes(color);
   const useVertexColors = typeof colorFor === 'function';
   let degenerateTriangles = 0;
+  let skippedLanes = 0;
 
   for (const lane of lanes) {
     if (filter && !filter(lane)) continue;
@@ -143,15 +144,30 @@ export function buildLaneOverlay(lanes: LanePolygon[], options: LaneOverlayOptio
     // the GPU will actually see rather than on the double-precision source.
     const fx: number[] = [];
     const fz: number[] = [];
+    // Staged, not appended: with `onMissingHeight: 'skip'` a single unresolved
+    // vertex drops the whole lane, and a half-written lane would corrupt the
+    // shared buffer.
+    const staged: number[] = [];
+    let missing = false;
     for (const pt of flatPts) {
       const x = pt.x;
       const z = -pt.y;
-      const sampled = heightSampler?.(x, z);
-      const ground = sampled === undefined || sampled === null ? defaultHeight : sampled;
-      positions.push(x, ground + drapeOffset, z);
+      const ground = resolveHeight(x, z);
+      if (ground === null) {
+        missing = true;
+        break;
+      }
+      staged.push(x, ground + drapeOffset, z);
       fx.push(Math.fround(x));
       fz.push(Math.fround(z));
-      if (useVertexColors) colors.push(rgb[0], rgb[1], rgb[2]);
+    }
+    if (missing) {
+      skippedLanes++;
+      continue;
+    }
+    for (const value of staged) positions.push(value);
+    if (useVertexColors) {
+      for (let i = 0; i < flatPts.length; i++) colors.push(rgb[0], rgb[1], rgb[2]);
     }
 
     const indexStart = indices.length;
@@ -217,6 +233,7 @@ export function buildLaneOverlay(lanes: LanePolygon[], options: LaneOverlayOptio
     laneCount: ranges.length,
     triangleCount: indices.length / 3,
     degenerateTriangles,
+    skippedLanes,
   };
   group.userData = userData;
   return group;

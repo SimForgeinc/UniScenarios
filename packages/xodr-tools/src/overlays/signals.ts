@@ -3,11 +3,33 @@
  *
  * Renderer-agnostic: pure functions in, one `THREE.Group` out.
  *
- * Draw-call budget for Yale Street's 164 features: 1 `LineSegments` for every
- * pole (merged, vertex-coloured) + one small `Mesh` per head. Head geometries
- * and materials are cached per category, so the 59 traffic lights share a
- * single 3-lamp geometry and a single material. Each head is `.name`d with the
- * signal id so a raycast resolves straight to a feature.
+ * ## Draw-call budget
+ *
+ * The first version drew one `Mesh` per head. Correct, pickable by name, and
+ * ~160 draw calls on Yale Street — a 17% bump on a 967-call frame, which is why
+ * the layer shipped defaulted *off*. Nothing about the data needs that: heads of
+ * one category are the same geometry with the same material at different
+ * positions, i.e. the textbook `InstancedMesh` case.
+ *
+ * So the layer is now:
+ *
+ * | object | draws | contents |
+ * |---|---|---|
+ * | `signal-poles` | 1 | every mast, merged, vertex-coloured |
+ * | `signal-heads/<category>` | 1 each | every head of that category, instanced |
+ * | `crosswalk-outlines` | 1 | every crosswalk ring, merged |
+ *
+ * Yale Street's 164 features land on **11 draw calls** (9 categories present +
+ * poles + crosswalks) instead of 161. Geometry and material sharing is
+ * unchanged — it is now structural rather than incidental.
+ *
+ * ## Picking
+ *
+ * Instances have no names, so `getObjectByName(signalId)` is gone. Instead every
+ * feature has an entry in {@link SignalOverlayUserData.byId} carrying its
+ * drawable and instance index, each `InstancedMesh` carries `userData.signalIds`
+ * indexed by `instanceId` (so a raycast hit resolves in O(1) — see
+ * {@link signalIdForHit}), and {@link signalPlacement} is the reverse lookup.
  */
 
 import {
@@ -16,16 +38,21 @@ import {
   CircleGeometry,
   DoubleSide,
   Group,
+  InstancedMesh,
   LineBasicMaterial,
-  LineLoop,
   LineSegments,
-  Mesh,
+  Matrix4,
   MeshBasicMaterial,
+  Quaternion,
+  Vector3,
+  type Intersection,
   type Material,
   type Object3D,
 } from 'three';
 import type { SignalCategory, SignalFeature } from '../signals.js';
-import type { HeightSampler } from './lanes.js';
+import { createHeightResolver, type HeightOptions } from './height.js';
+
+export type { HeightSampler, MissingHeightPolicy } from './height.js';
 
 /** Default marker colour per category. */
 export const SIGNAL_CATEGORY_COLORS: Record<SignalCategory, number> = {
@@ -43,10 +70,13 @@ export const SIGNAL_CATEGORY_COLORS: Record<SignalCategory, number> = {
 };
 
 /** Options for {@link buildSignalOverlay}. */
-export interface SignalOverlayOptions {
-  /** Ground height in scene space; overrides the Y baked into `signal.position`. */
-  heightSampler?: HeightSampler;
-  /** Fallback ground Y when there is no sampler and the feature has none. Default `0`. */
+export interface SignalOverlayOptions extends HeightOptions {
+  /**
+   * Fallback ground Y when there is no sampler and the feature has none.
+   *
+   * @deprecated Use {@link HeightOptions.defaultHeight}; this is the same knob
+   *   under the old name and is still honoured.
+   */
   groundHeight?: number;
   /** Pole colour. Default `0x9aa5b1`. */
   poleColor?: number;
@@ -65,12 +95,40 @@ export interface SignalOverlayOptions {
   filter?: (signal: SignalFeature) => boolean;
 }
 
+/** Where one signal ended up, and in which drawable. */
+export interface SignalPlacement {
+  readonly signal: SignalFeature;
+  readonly category: SignalCategory;
+  /** Head centre in scene metres. For a crosswalk, the ring centroid at ground + 5 cm. */
+  readonly position: [number, number, number];
+  /** Ground height under the feature, in scene Y. */
+  readonly groundY: number;
+  /** The object that draws it: an `InstancedMesh` per category, or the merged crosswalk lines. */
+  readonly object: Object3D;
+  /** Index within `object`'s instance buffer, or `-1` for the merged crosswalk lines. */
+  readonly instanceId: number;
+}
+
 /** `userData` attached to the group returned by {@link buildSignalOverlay}. */
 export interface SignalOverlayUserData {
   layer: 'signals';
-  /** Signal id -> the head/outline object that represents it. */
-  byId: Record<string, Object3D>;
+  /** Signal id -> where it was drawn. */
+  byId: Record<string, SignalPlacement>;
   signalCount: number;
+  /** Crosswalk rings merged into `crosswalk-outlines`. */
+  crosswalkCount: number;
+  /** Categories that produced an `InstancedMesh`, in build order. */
+  categories: SignalCategory[];
+  /** Draw calls this overlay adds when fully visible. */
+  drawCalls: number;
+}
+
+/** `userData` on each per-category `InstancedMesh`. */
+export interface SignalHeadUserData {
+  layer: 'signals';
+  category: SignalCategory;
+  /** Signal id per instance index. */
+  signalIds: string[];
 }
 
 function srgbBytes(hex: number): [number, number, number] {
@@ -157,49 +215,68 @@ interface HeadKit {
   material: Material;
 }
 
-function makeHeadKits(colors: Record<SignalCategory, number>): Map<SignalCategory, HeadKit> {
-  const kits = new Map<SignalCategory, HeadKit>();
-  const shared = {
-    sign: signGeometry(),
-    octagon: octagonGeometry(),
-  };
-  for (const key of Object.keys(colors) as SignalCategory[]) {
-    if (key === 'traffic_light') {
-      kits.set(key, {
-        geometry: trafficLightHeadGeometry(),
-        material: new MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
-      });
-      continue;
-    }
-    kits.set(key, {
-      geometry: key === 'stop_sign' ? shared.octagon : shared.sign,
-      material: new MeshBasicMaterial({
-        color: colors[key],
-        side: DoubleSide,
-        toneMapped: false,
-      }),
-    });
+/**
+ * Geometry + material for one category, built lazily so a map with three
+ * categories does not allocate eleven geometries.
+ */
+function makeHeadKit(
+  category: SignalCategory,
+  colors: Record<SignalCategory, number>,
+  shared: { sign?: BufferGeometry; octagon?: BufferGeometry },
+): HeadKit {
+  if (category === 'traffic_light') {
+    return {
+      geometry: trafficLightHeadGeometry(),
+      material: new MeshBasicMaterial({ vertexColors: true, toneMapped: false }),
+    };
   }
-  return kits;
+  const geometry =
+    category === 'stop_sign'
+      ? (shared.octagon ??= octagonGeometry())
+      : (shared.sign ??= signGeometry());
+  return {
+    geometry,
+    material: new MeshBasicMaterial({
+      color: colors[category],
+      side: DoubleSide,
+      toneMapped: false,
+    }),
+  };
 }
 
+/** One head, resolved but not yet written to an instance buffer. */
+interface StagedHead {
+  signal: SignalFeature;
+  category: SignalCategory;
+  x: number;
+  z: number;
+  groundY: number;
+  headY: number;
+}
+
+const _matrix = new Matrix4();
+const _position = new Vector3();
+const _scale = new Vector3();
+/** Heads are axis-aligned markers: no rotation, ever. */
+const _noRotation = new Quaternion();
+
 /**
- * Build the signal layer: a pole per feature plus a category-coloured head.
+ * Build the signal layer: one instanced draw per category, one merged draw for
+ * the masts, one for the crosswalk rings.
  *
  * The head sits at `groundY + zOffset`; the pole runs from the ground to it.
  * Features with no meaningful `zOffset` (crosswalks, stop lines painted on the
  * road) get no pole and their marker is laid just above the surface.
  *
- * @returns A `Group` named `signals` containing `signal-poles` (`LineSegments`)
- *   and `signal-heads` (a `Group` of per-feature objects named by signal id).
+ * @returns A `Group` named `signals` containing `signal-poles` (`LineSegments`),
+ *   `signal-heads` (a `Group` of per-category `InstancedMesh`es) and
+ *   `crosswalk-outlines` (`LineSegments`).
  */
 export function buildSignalOverlay(
   signals: SignalFeature[],
   options: SignalOverlayOptions = {},
 ): Group {
   const {
-    heightSampler,
-    groundHeight,
     poleColor = 0x9aa5b1,
     headScale = 1,
     categoryColors,
@@ -207,9 +284,14 @@ export function buildSignalOverlay(
     includeOutOfBounds = false,
     filter,
   } = options;
+  const resolveHeight = createHeightResolver({
+    ...options,
+    ...(options.defaultHeight === undefined && options.groundHeight !== undefined
+      ? { defaultHeight: options.groundHeight }
+      : {}),
+  });
 
   const colors: Record<SignalCategory, number> = { ...SIGNAL_CATEGORY_COLORS, ...categoryColors };
-  const kits = makeHeadKits(colors);
 
   const group = new Group();
   group.name = 'signals';
@@ -220,7 +302,14 @@ export function buildSignalOverlay(
   const poleVerts: number[] = [];
   const poleColors: number[] = [];
   const poleRgb = srgbBytes(poleColor);
-  const byId: Record<string, Object3D> = {};
+  const byId: Record<string, SignalPlacement> = {};
+
+  // Crosswalk rings, merged into one LineSegments: closed loops emitted as
+  // explicit segment pairs so a single geometry can hold all 21 rings.
+  const crosswalkVerts: number[] = [];
+  const crosswalkPlacements: Array<{ signal: SignalFeature; position: [number, number, number]; groundY: number }> = [];
+
+  const staged = new Map<SignalCategory, StagedHead[]>();
   let count = 0;
 
   for (const signal of signals) {
@@ -230,50 +319,89 @@ export function buildSignalOverlay(
     if (isCrosswalk && !includeCrosswalks) continue;
 
     const [x, bakedY, z] = signal.position;
-    const sampled = heightSampler?.(x, z);
-    const groundY =
-      sampled === undefined || sampled === null ? (groundHeight ?? bakedY) : sampled;
+    const groundY = resolveHeight(x, z, bakedY);
+    if (groundY === null) continue; // onMissingHeight: 'skip'
 
-    let object: Object3D;
     if (isCrosswalk && signal.outline && signal.outline.length >= 6) {
       const n = signal.outline.length / 2;
-      const pts = new Float32Array(n * 3);
+      const ring: number[] = [];
+      let dropped = false;
       for (let i = 0; i < n; i++) {
         const ox = signal.outline[i * 2] as number;
         const oz = signal.outline[i * 2 + 1] as number;
-        const oy = heightSampler?.(ox, oz);
-        pts[i * 3] = ox;
-        pts[i * 3 + 1] = (oy === undefined || oy === null ? groundY : oy) + 0.05;
-        pts[i * 3 + 2] = oz;
+        const oy = resolveHeight(ox, oz, groundY);
+        if (oy === null) {
+          dropped = true;
+          break;
+        }
+        ring.push(ox, oy + 0.05, oz);
       }
-      const g = new BufferGeometry();
-      g.setAttribute('position', new BufferAttribute(pts, 3));
-      g.computeBoundingSphere();
-      const loop = new LineLoop(
-        g,
-        new LineBasicMaterial({ color: colors.unknown, toneMapped: false }),
-      );
-      object = loop;
-    } else {
-      const kit = kits.get(signal.category) ?? (kits.get('unknown') as HeadKit);
-      const mesh = new Mesh(kit.geometry, kit.material);
-      const headY = groundY + Math.max(signal.zOffset, 0.06);
-      mesh.position.set(x, headY, z);
-      mesh.scale.setScalar(headScale);
-      object = mesh;
-
-      if (signal.zOffset > 0.2) {
-        poleVerts.push(x, groundY, z, x, headY, z);
-        for (let i = 0; i < 2; i++) poleColors.push(poleRgb[0], poleRgb[1], poleRgb[2]);
+      if (dropped) continue;
+      for (let i = 0; i < n; i++) {
+        const a = i * 3;
+        const b = ((i + 1) % n) * 3;
+        crosswalkVerts.push(
+          ring[a] as number,
+          ring[a + 1] as number,
+          ring[a + 2] as number,
+          ring[b] as number,
+          ring[b + 1] as number,
+          ring[b + 2] as number,
+        );
       }
+      crosswalkPlacements.push({ signal, position: [x, groundY + 0.05, z], groundY });
+      count++;
+      continue;
     }
 
-    object.name = signal.id;
-    object.renderOrder = 11;
-    object.userData = { layer: 'signals', signalId: signal.id, signal };
-    heads.add(object);
-    byId[signal.id] = object;
+    const headY = groundY + Math.max(signal.zOffset, 0.06);
+    const category = colors[signal.category] === undefined ? 'unknown' : signal.category;
+    let list = staged.get(category);
+    if (!list) {
+      list = [];
+      staged.set(category, list);
+    }
+    list.push({ signal, category, x, z, groundY, headY });
+
+    if (signal.zOffset > 0.2) {
+      poleVerts.push(x, groundY, z, x, headY, z);
+      for (let i = 0; i < 2; i++) poleColors.push(poleRgb[0], poleRgb[1], poleRgb[2]);
+    }
     count++;
+  }
+
+  // --- per-category instanced heads ---------------------------------------
+  const shared: { sign?: BufferGeometry; octagon?: BufferGeometry } = {};
+  const categories: SignalCategory[] = [];
+  _scale.setScalar(headScale);
+  for (const [category, list] of staged) {
+    const kit = makeHeadKit(category, colors, shared);
+    const mesh = new InstancedMesh(kit.geometry, kit.material, list.length);
+    mesh.name = `signal-heads.${category}`;
+    mesh.renderOrder = 11;
+    // Instanced heads are scattered over the whole map, so the base geometry's
+    // bounding sphere would cull the batch as soon as one head leaves the
+    // frustum. computeBoundingSphere() on the InstancedMesh fixes the extent.
+    const signalIds: string[] = [];
+    list.forEach((head, index) => {
+      _position.set(head.x, head.headY, head.z);
+      mesh.setMatrixAt(index, _matrix.compose(_position, _noRotation, _scale));
+      signalIds.push(head.signal.id);
+      byId[head.signal.id] = {
+        signal: head.signal,
+        category,
+        position: [head.x, head.headY, head.z],
+        groundY: head.groundY,
+        object: mesh,
+        instanceId: index,
+      };
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+    const userData: SignalHeadUserData = { layer: 'signals', category, signalIds };
+    mesh.userData = userData;
+    heads.add(mesh);
+    categories.push(category);
   }
 
   if (poleVerts.length > 0) {
@@ -290,8 +418,61 @@ export function buildSignalOverlay(
     group.add(poles);
   }
 
+  if (crosswalkVerts.length > 0) {
+    const g = new BufferGeometry();
+    g.setAttribute('position', new BufferAttribute(new Float32Array(crosswalkVerts), 3));
+    g.computeBoundingSphere();
+    const outlines = new LineSegments(
+      g,
+      new LineBasicMaterial({ color: colors.unknown, toneMapped: false }),
+    );
+    outlines.name = 'crosswalk-outlines';
+    outlines.renderOrder = 11;
+    outlines.userData = { layer: 'signals', category: 'crosswalk' };
+    group.add(outlines);
+    for (const entry of crosswalkPlacements) {
+      byId[entry.signal.id] = {
+        signal: entry.signal,
+        category: entry.signal.category,
+        position: entry.position,
+        groundY: entry.groundY,
+        object: outlines,
+        instanceId: -1,
+      };
+    }
+  }
+
   group.add(heads);
-  const userData: SignalOverlayUserData = { layer: 'signals', byId, signalCount: count };
+  const drawCalls =
+    categories.length + (poleVerts.length > 0 ? 1 : 0) + (crosswalkVerts.length > 0 ? 1 : 0);
+  const userData: SignalOverlayUserData = {
+    layer: 'signals',
+    byId,
+    signalCount: count,
+    crosswalkCount: crosswalkPlacements.length,
+    categories,
+    drawCalls,
+  };
   group.userData = userData;
   return group;
+}
+
+/** Look up where a signal was drawn. */
+export function signalPlacement(group: Object3D, signalId: string): SignalPlacement | null {
+  const byId = (group.userData as Partial<SignalOverlayUserData>).byId;
+  return byId?.[signalId] ?? null;
+}
+
+/**
+ * Resolve a raycast hit against the overlay back to a signal id.
+ *
+ * @param hit A `THREE.Intersection` whose `object` is one of the per-category
+ *   `InstancedMesh`es.
+ */
+export function signalIdForHit(hit: Intersection): string | null {
+  const data = hit.object.userData as Partial<SignalHeadUserData>;
+  if (data.layer !== 'signals' || !data.signalIds) return null;
+  const index = hit.instanceId;
+  if (index === undefined || index < 0) return null;
+  return data.signalIds[index] ?? null;
 }

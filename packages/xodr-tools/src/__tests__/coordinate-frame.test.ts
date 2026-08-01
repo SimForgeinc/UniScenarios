@@ -172,4 +172,39 @@ describe('CoordinateFrame — the empirically calibrated local -> scene axes', (
     expect(f.localToScene(10, 20, 30)).toEqual([-90, 25, 180]);
     expect(f.sceneToLocal(f.localToScene(10, 20, 30))).toEqual([10, 20, 30]);
   });
+
+  it('builds the same frame from a parsed header as from raw text', () => {
+    // `fetchXodrHeader` Range-requests 16 KB and hands back a parsed header, so
+    // the app never has the text `fromMapAssets` wants. Both paths must agree —
+    // including the manifest-derived fields, which callers used to wire by hand
+    // (and which `calibrationReport` needs).
+    const manifest = yaleManifest();
+    const fromText = CoordinateFrame.fromMapAssets(yaleHeaderText(), manifest);
+    const fromParsed = CoordinateFrame.fromHeader(parseXodrHeader(yaleHeaderText()), manifest);
+
+    expect(fromParsed.projString).toBe(fromText.projString);
+    expect(fromParsed.extents).toEqual(fromText.extents);
+    expect(fromParsed.sceneBounds).toEqual(fromText.sceneBounds);
+    expect(fromParsed.tileGridOrigin).toEqual(fromText.tileGridOrigin);
+    expect(fromParsed.calibrationReport()).toEqual(fromText.calibrationReport());
+    expect(fromParsed.wgs84ToScene(-122.1490743, 37.4275916)).toEqual(
+      fromText.wgs84ToScene(-122.1490743, 37.4275916),
+    );
+  });
+
+  it('rejects a non-y-up manifest through fromHeader too', () => {
+    expect(() =>
+      CoordinateFrame.fromHeader(parseXodrHeader(yaleHeaderText()), {
+        scene: { coordinateSystem: 'z-up' },
+      }),
+    ).toThrow(/y-up/);
+  });
+
+  it('works from a header with no manifest at all', () => {
+    const f = CoordinateFrame.fromHeader(parseXodrHeader(yaleHeaderText()));
+    expect(f.sceneBounds).toBeUndefined();
+    expect(f.tileGridOrigin).toBeUndefined();
+    expect(() => f.calibrationReport()).toThrow(/scene bounds/);
+    expect(f.localToScene(1, 2, 3)).toEqual([1, 3, -2]);
+  });
 });

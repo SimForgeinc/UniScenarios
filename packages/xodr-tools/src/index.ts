@@ -81,9 +81,17 @@ export {
 } from './signals.js';
 
 export {
+  createHeightResolver,
+  MissingHeightError,
+  type HeightOptions,
+  type HeightResolver,
+  type HeightSampler,
+  type MissingHeightPolicy,
+} from './overlays/height.js';
+
+export {
   buildLaneOverlay,
   laneIdForFace,
-  type HeightSampler,
   type LaneOverlayOptions,
   type LaneOverlayUserData,
   type LaneRange,
@@ -91,7 +99,11 @@ export {
 
 export {
   buildSignalOverlay,
+  signalIdForHit,
+  signalPlacement,
   SIGNAL_CATEGORY_COLORS,
+  type SignalHeadUserData,
   type SignalOverlayOptions,
   type SignalOverlayUserData,
+  type SignalPlacement,
 } from './overlays/signals.js';

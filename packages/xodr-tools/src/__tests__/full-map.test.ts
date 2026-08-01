@@ -15,7 +15,7 @@ import type { FeatureCollection } from '../geojson.js';
 import { lanePolygonsFromGeoJson, type LanePolygonProperties } from '../lanes.js';
 import { signalsFromGeoJson, type SignalProperties } from '../signals.js';
 import { buildLaneOverlay, type LaneOverlayUserData } from '../overlays/lanes.js';
-import { buildSignalOverlay } from '../overlays/signals.js';
+import { buildSignalOverlay, type SignalOverlayUserData } from '../overlays/signals.js';
 
 const MAP = fileURLToPath(new URL('../../../../dev-assets/yale-street/', import.meta.url));
 const available = existsSync(`${MAP}map.xodr`);
@@ -78,6 +78,9 @@ describe.skipIf(!available)('full Yale Street map', () => {
     expect(signals.filter((s) => s.category === 'traffic_light')).toHaveLength(59);
 
     const sigGroup = buildSignalOverlay(signals, { heightSampler: () => 12 });
-    expect(sigGroup.getObjectByName('signal-heads')!.children).toHaveLength(160);
+    const sigData = sigGroup.userData as SignalOverlayUserData;
+    expect(sigData.signalCount).toBe(160);
+    // The whole signal layer is a handful of draws, not one per feature.
+    expect(sigData.drawCalls).toBeLessThan(15);
   }, 60_000);
 });
