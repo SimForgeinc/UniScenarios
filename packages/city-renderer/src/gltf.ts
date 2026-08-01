@@ -1,0 +1,114 @@
+import type { BufferGeometry, Material, Object3D, Texture, WebGLRenderer } from 'three';
+import { Mesh } from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+
+let sharedLoader: GLTFLoader | null = null;
+
+/**
+ * One GLTFLoader for the whole app.
+ *
+ * - meshopt decoding runs on a small worker pool (the tiles are all
+ *   EXT_meshopt_compression, and decoding LOD0 on the main thread stalls it for
+ *   tens of ms).
+ * - GLTFLoader picks ImageBitmapLoader on its own when `createImageBitmap`
+ *   exists, which moves PNG decode off the main thread. That is the single
+ *   biggest hitch source here: a LOD0 tile carries up to 41 x 2048px PNGs.
+ */
+export function getGLTFLoader(): GLTFLoader {
+  if (!sharedLoader) {
+    const loader = new GLTFLoader();
+    MeshoptDecoder.useWorkers(Math.min(4, Math.max(1, (navigator.hardwareConcurrency ?? 4) - 2)));
+    loader.setMeshoptDecoder(MeshoptDecoder);
+    sharedLoader = loader;
+  }
+  return sharedLoader;
+}
+
+export function disposeSharedLoader(): void {
+  sharedLoader = null;
+}
+
+export interface AssetResources {
+  geometries: BufferGeometry[];
+  materials: Material[];
+  textures: Texture[];
+}
+
+export function collectResources(root: Object3D): AssetResources {
+  const geometries = new Set<BufferGeometry>();
+  const materials = new Set<Material>();
+  const textures = new Set<Texture>();
+  root.traverse((obj) => {
+    const mesh = obj as Mesh;
+    if (!(mesh as unknown as { isMesh?: boolean }).isMesh) return;
+    if (mesh.geometry) geometries.add(mesh.geometry);
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      if (!mat) continue;
+      materials.add(mat);
+      for (const value of Object.values(mat as unknown as Record<string, unknown>)) {
+        const tex = value as Texture | null;
+        if (tex && (tex as unknown as { isTexture?: boolean }).isTexture) textures.add(tex);
+      }
+    }
+  });
+  return {
+    geometries: [...geometries],
+    materials: [...materials],
+    textures: [...textures],
+  };
+}
+
+function textureBytes(tex: Texture): number {
+  const img = tex.image as { width?: number; height?: number } | undefined;
+  const w = img?.width ?? 0;
+  const h = img?.height ?? 0;
+  if (!w || !h) return 0;
+  const mip = tex.generateMipmaps ? 4 / 3 : 1;
+  return w * h * 4 * mip;
+}
+
+function geometryBytes(geo: BufferGeometry): number {
+  let bytes = 0;
+  for (const attr of Object.values(geo.attributes)) {
+    const a = attr as { array?: ArrayBufferView };
+    bytes += a.array?.byteLength ?? 0;
+  }
+  if (geo.index) bytes += geo.index.array.byteLength;
+  return bytes;
+}
+
+/** Estimated GPU-resident bytes of an asset (textures dominate by ~10x here). */
+export function estimateResourceBytes(res: AssetResources): number {
+  let bytes = 0;
+  for (const geo of res.geometries) bytes += geometryBytes(geo);
+  for (const tex of res.textures) bytes += textureBytes(tex);
+  return bytes;
+}
+
+/**
+ * Push one texture to the GPU and drop the CPU-side copy.
+ *
+ * ImageBitmaps stay resident in the renderer process until explicitly closed,
+ * so an un-closed LOD0 tile would cost its texture footprint twice. Once
+ * uploaded, three never reads `texture.image` again unless `needsUpdate` is set
+ * (we never do for streamed assets).
+ */
+export function uploadTexture(renderer: WebGLRenderer, tex: Texture): void {
+  renderer.initTexture(tex);
+  const data = tex.image as unknown;
+  if (typeof ImageBitmap !== 'undefined' && data instanceof ImageBitmap) {
+    data.close();
+  }
+}
+
+export function disposeResources(res: AssetResources): void {
+  for (const geo of res.geometries) geo.dispose();
+  for (const tex of res.textures) {
+    const data = tex.image as unknown;
+    if (typeof ImageBitmap !== 'undefined' && data instanceof ImageBitmap) data.close();
+    tex.dispose();
+  }
+  for (const mat of res.materials) mat.dispose();
+}

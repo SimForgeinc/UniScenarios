@@ -11,7 +11,7 @@ function devAssets(): Plugin {
     name: 'dev-assets',
     configureServer(server) {
       server.middlewares.use('/dev-assets', (req, res, next) => {
-        const urlPath = decodeURIComponent((req.url ?? '/').split('?')[0]);
+        const urlPath = decodeURIComponent((req.url ?? '/').split('?')[0] ?? '/');
         const file = path.join(root, urlPath);
         if (!file.startsWith(root) || !fs.existsSync(file) || !fs.statSync(file).isFile()) {
           return next();
