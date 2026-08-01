@@ -1,22 +1,44 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { CameraMode, CityViewer } from '@scenario-studio/city-renderer';
+import type { MapOverlayHandle, MapOverlayLayer } from './mapOverlays';
 
 export interface LayerPanelProps {
   viewer: CityViewer | null;
+  /** `null` until the overlays have finished loading (they wait for map settle). */
+  overlays: MapOverlayHandle | null;
+  overlayError: string | null;
+  overlayDefaults: Record<MapOverlayLayer, boolean>;
   benchRunning: boolean;
   onBench: () => void;
 }
 
+const OVERLAY_LAYERS: readonly MapOverlayLayer[] = ['lanes', 'signals'];
+
 /** Layer toggles + camera mode. Stub surface that the scenario tools grow into. */
-export function LayerPanel({ viewer, benchRunning, onBench }: LayerPanelProps): JSX.Element {
+export function LayerPanel({
+  viewer,
+  overlays,
+  overlayError,
+  overlayDefaults,
+  benchRunning,
+  onBench,
+}: LayerPanelProps): JSX.Element {
   const [layers, setLayers] = useState({ city: true, vegetation: true, road: true });
+  const [overlayLayers, setOverlayLayers] = useState(overlayDefaults);
   const [mode, setMode] = useState<CameraMode>('orbit');
 
   const toggle = (key: keyof typeof layers) => {
     const next = { ...layers, [key]: !layers[key] };
     setLayers(next);
     viewer?.setLayerVisible(key, next[key]);
+  };
+
+  // Pure visibility flip — the overlay geometry is built once and kept.
+  const toggleOverlay = (key: MapOverlayLayer) => {
+    const value = !overlayLayers[key];
+    setOverlayLayers({ ...overlayLayers, [key]: value });
+    overlays?.setVisible(key, value);
   };
 
   return (
@@ -28,6 +50,31 @@ export function LayerPanel({ viewer, benchRunning, onBench }: LayerPanelProps): 
           <span>{key}</span>
         </label>
       ))}
+
+      <div style={{ ...styles.heading, marginTop: 10 }}>Map overlays</div>
+      {OVERLAY_LAYERS.map((key) => (
+        <label
+          key={key}
+          style={{ ...styles.check, opacity: overlays ? 1 : 0.45 }}
+          title={overlays ? undefined : 'loads after the map settles'}
+        >
+          <input
+            type="checkbox"
+            data-testid={`overlay-${key}`}
+            checked={overlayLayers[key]}
+            disabled={!overlays}
+            onChange={() => toggleOverlay(key)}
+          />
+          <span>{key}</span>
+        </label>
+      ))}
+      <div style={styles.hint}>
+        {overlayError
+          ? `overlay error: ${overlayError}`
+          : overlays
+            ? `${overlays.stats.laneCount} lanes · ${overlays.stats.signalCount} signals`
+            : 'loading after map settle…'}
+      </div>
 
       <div style={{ ...styles.heading, marginTop: 10 }}>Camera</div>
       <div style={styles.buttons}>
