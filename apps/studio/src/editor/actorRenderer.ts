@@ -173,8 +173,18 @@ const _quaternion = new Quaternion();
 const _scale = new Vector3(1, 1, 1);
 const _up = new Vector3(0, 1, 0);
 
-/** Height of the contact shadow above the ground, metres. */
-const SHADOW_LIFT = 0.03;
+/**
+ * Height of the contact shadow above the sampled ground, metres.
+ *
+ * Not a cosmetic number. `GroundIndex` answers with the *lowest* covering
+ * surface (that is what keeps draped overlays off lamp posts), and the road
+ * glTF stacks lane-marking decals over the asphalt, so "the ground" under an
+ * actor can be a centimetre or two below the surface actually on screen. At the
+ * 3 cm this started with, the shadow was depth-buried and invisible. 6 cm clears
+ * the decals *and* the lane overlay's own 4 cm drape, and the polygon offset on
+ * the material covers the co-planar remainder.
+ */
+const SHADOW_LIFT = 0.06;
 
 /** Selection colour — amber, the one hue the city never produces. */
 export const SELECTION_COLOR = 0xffb020;
@@ -210,6 +220,11 @@ export class ActorRenderer {
       depthWrite: false,
       opacity: 0.55,
       toneMapped: false,
+      // Co-planar with the road for most of its area; the offset is what stops
+      // the asphalt winning the depth test along the blob's outer edge.
+      polygonOffset: true,
+      polygonOffsetFactor: -4,
+      polygonOffsetUnits: -4,
     });
     // A unit quad in the XZ plane, so the instance matrix carries footprint size.
     this.shadowGeometry = new PlaneGeometry(1, 1);
@@ -368,7 +383,9 @@ export class ActorRenderer {
         this.shadowCapacity,
       );
       this.shadows.name = 'actor-contact-shadows';
-      this.shadows.renderOrder = 9;
+      // After the lane overlay (10), so the shadow reads as contact with the
+      // road rather than as something seen through 28% cyan.
+      this.shadows.renderOrder = 12;
       this.group.add(this.shadows);
     }
     this.shadows.count = actors.length;
