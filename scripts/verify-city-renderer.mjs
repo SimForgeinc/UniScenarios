@@ -122,7 +122,42 @@ await page.waitForTimeout(2500);
 await shot('03-street');
 const streetStats = await stats();
 
-// 4. Benchmark.
+// 4. Interaction: layer toggles, orbit drag, fly-mode WASD.
+console.log('> interaction');
+const interaction = { layers: {}, orbit: null, fly: null };
+for (const layer of ['vegetation', 'city']) {
+  const before = await page.evaluate(() => window.__viewer.getStats().drawCalls);
+  await page.locator(`[data-testid="layer-panel"] input`).nth(layer === 'city' ? 0 : 1).click();
+  await page.waitForTimeout(400);
+  const after = await page.evaluate(() => window.__viewer.getStats().drawCalls);
+  interaction.layers[layer] = { before, after, dropped: before - after };
+  await page.locator(`[data-testid="layer-panel"] input`).nth(layer === 'city' ? 0 : 1).click();
+  await page.waitForTimeout(300);
+}
+const poseOf = () => page.evaluate(() => window.__viewer.camera.position.toArray());
+const orbitBefore = await poseOf();
+await page.mouse.move(800, 500);
+await page.mouse.down();
+await page.mouse.move(1000, 560, { steps: 12 });
+await page.mouse.up();
+await page.waitForTimeout(500);
+interaction.orbit = { before: orbitBefore, after: await poseOf() };
+
+await page.evaluate(() => window.__viewer.setCameraMode('fly'));
+const flyBefore = await poseOf();
+await page.keyboard.down('KeyW');
+await page.waitForTimeout(700);
+await page.keyboard.up('KeyW');
+await page.waitForTimeout(200);
+interaction.fly = { before: flyBefore, after: await poseOf() };
+await page.evaluate(() => window.__viewer.setCameraMode('orbit'));
+const moved = (a, b) => Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]);
+console.log(`  layer toggles: ${JSON.stringify(interaction.layers)}`);
+console.log(`  orbit drag moved camera ${moved(interaction.orbit.before, interaction.orbit.after).toFixed(1)} m`);
+console.log(`  fly W moved camera ${moved(interaction.fly.before, interaction.fly.after).toFixed(1)} m`);
+await shot('05-interaction');
+
+// 5. Benchmark.
 console.log('> benchmark');
 const bench = await page.evaluate((ms) => window.__bench(ms), benchMs);
 await shot('04-post-bench');
@@ -134,6 +169,7 @@ const report = {
   startupStats,
   settledStats,
   streetStats,
+  interaction,
   finalStats,
   bench,
   consoleErrors,

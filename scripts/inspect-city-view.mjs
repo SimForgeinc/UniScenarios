@@ -1,6 +1,17 @@
+#!/usr/bin/env node
+/**
+ * Park the viewer at an exact pose in real Chrome and screenshot it.
+ *
+ * Used for look/QA passes that need a repeatable camera — e.g. comparing the
+ * lit render against `?debugShadow=1` (which renders the baked shadow term
+ * instead of shading) to confirm the lightmap projection lands on the geometry:
+ *
+ *   node scripts/inspect-city-view.mjs 'http://localhost:5199/?debugShadow=1' \
+ *     /tmp/shadow.png 14000  410 250 -1859.9  410 10 -1860
+ *
+ * args: url out waitMs eyeX eyeY eyeZ tgtX tgtY tgtZ
+ */
 import { chromium } from 'playwright-core';
-
-// args: url out waitMs eyeX eyeY eyeZ tgtX tgtY tgtZ
 const [, , url, out, waitMs, ex, ey, ez, tx, ty, tz] = process.argv;
 const browser = await chromium.launch({ channel: 'chrome', headless: false });
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
