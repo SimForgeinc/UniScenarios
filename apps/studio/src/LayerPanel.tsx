@@ -11,6 +11,10 @@ export interface LayerPanelProps {
   overlayDefaults: Record<MapOverlayLayer, boolean>;
   benchRunning: boolean;
   onBench: () => void;
+  /** Placed actors, from the editor. */
+  actorCount: number;
+  /** Driving lanes in the snapping index, or `null` before it is built. */
+  laneCount: number | null;
 }
 
 const OVERLAY_LAYERS: readonly MapOverlayLayer[] = ['lanes', 'signals'];
@@ -23,6 +27,8 @@ export function LayerPanel({
   overlayDefaults,
   benchRunning,
   onBench,
+  actorCount,
+  laneCount,
 }: LayerPanelProps): JSX.Element {
   const [layers, setLayers] = useState({ city: true, vegetation: true, road: true });
   const [overlayLayers, setOverlayLayers] = useState(overlayDefaults);
@@ -72,8 +78,13 @@ export function LayerPanel({
         {overlayError
           ? `overlay error: ${overlayError}`
           : overlays
-            ? `${overlays.stats.laneCount} lanes · ${overlays.stats.signalCount} signals`
+            ? `${overlays.stats.laneCount} lanes · ${overlays.stats.signalCount} signals · ${overlays.stats.signalDrawCalls} draws`
             : 'loading after map settle…'}
+      </div>
+
+      <div style={{ ...styles.heading, marginTop: 10 }}>Scenario</div>
+      <div style={styles.hint}>
+        {`${actorCount} placed · ${laneCount === null ? 'lane index loading…' : `${laneCount} driving lanes`}`}
       </div>
 
       <div style={{ ...styles.heading, marginTop: 10 }}>Camera</div>
@@ -110,10 +121,8 @@ export function LayerPanel({
 
 const styles: Record<string, CSSProperties> = {
   panel: {
-    position: 'absolute',
-    top: 12,
-    right: 12,
-    width: 190,
+    // Position is the rail's business (see App.tsx); this is just a card.
+    marginBottom: 8,
     padding: '10px 12px',
     borderRadius: 10,
     background: 'rgba(12, 15, 20, 0.72)',

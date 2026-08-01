@@ -86,10 +86,7 @@ function Row({
 
 const styles: Record<string, CSSProperties> = {
   panel: {
-    position: 'absolute',
-    top: 12,
-    left: 12,
-    minWidth: 210,
+    // Position is the rail's business (see App.tsx); this is just a card.
     padding: '10px 12px',
     borderRadius: 10,
     background: 'rgba(12, 15, 20, 0.72)',

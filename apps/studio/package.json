@@ -11,6 +11,8 @@
   },
   "dependencies": {
     "@scenario-studio/city-renderer": "workspace:*",
+    "@scenario-studio/prop-catalog": "workspace:*",
+    "@scenario-studio/scenario-model": "workspace:*",
     "@scenario-studio/xodr-tools": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",

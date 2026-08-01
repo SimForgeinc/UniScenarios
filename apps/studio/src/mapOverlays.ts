@@ -82,6 +82,8 @@ export interface MapOverlayStats {
   signalCount: number;
   /** Signal features present in the source but skipped (bad rows). */
   signalsSkipped: number;
+  /** Draw calls the signal layer costs — one per category plus poles and crosswalks. */
+  signalDrawCalls: number;
   /** Where each lane/signal vertex height came from. */
   heights: { direct: number; near: number; datum: number };
   /** Ground datum used for rung 3, in scene Y. */
@@ -212,28 +214,11 @@ export async function loadMapOverlays(
       return r.json() as Promise<SceneManifestLike>;
     }),
   ]);
-  // NB: `CoordinateFrame.fromMapAssets` wants raw `.xodr` *text*, but
-  // `fetchXodrHeader` (the one that Range-requests 16 KB instead of pulling the
-  // 6 MB file) hands back a parsed `XodrHeader`. There is no
-  // `fromHeader(header, manifest)`, so the manifest fields are wired up by hand
-  // here — `sceneBounds` is what makes `calibrationReport()` available.
-  const bounds = manifest.scene?.bounds;
-  const origin = manifest.scene?.origin;
-  const frame = new CoordinateFrame({
-    projString: header.projString,
-    extents: header.extents,
-    ...(bounds && bounds.min.length >= 3 && bounds.max.length >= 3
-      ? {
-          sceneBounds: {
-            min: [bounds.min[0] as number, bounds.min[1] as number, bounds.min[2] as number],
-            max: [bounds.max[0] as number, bounds.max[1] as number, bounds.max[2] as number],
-          },
-        }
-      : {}),
-    ...(origin && origin.length >= 3
-      ? { tileGridOrigin: [origin[0] as number, origin[1] as number, origin[2] as number] }
-      : {}),
-  });
+  // `fetchXodrHeader` Range-requests 16 KB and returns a *parsed* header rather
+  // than the 6 MB of text `fromMapAssets` wants, so this is the header-shaped
+  // half of the same factory. It carries `sceneBounds` across, which is what
+  // makes `calibrationReport()` available below.
+  const frame = CoordinateFrame.fromHeader(header, manifest);
   const [lanes, signals] = await Promise.all([
     loadLanePolygons(urls.lanePolygons, frame),
     loadSignals(urls.signals, frame),
@@ -286,6 +271,7 @@ export async function loadMapOverlays(
     degenerateTriangles: laneData.degenerateTriangles,
     signalCount: signalData.signalCount,
     signalsSkipped: signals.length - signalData.signalCount,
+    signalDrawCalls: signalData.drawCalls,
     heights: { ...heights },
     datum,
     ground: {
