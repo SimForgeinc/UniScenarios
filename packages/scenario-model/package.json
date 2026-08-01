@@ -6,7 +6,10 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./schema.json": "./schema/scenario.v1.schema.json"
+    "./schema.json": "./schema/scenario.v1.schema.json",
+    "./schema/template.v2.json": "./schema/scenario-template.v2.schema.json",
+    "./schema/anchor.v2.json": "./schema/logical-anchor.v2.schema.json",
+    "./schema/interactions.v2.json": "./schema/interactions.v2.schema.json"
   },
   "files": [
     "src",

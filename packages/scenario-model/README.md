@@ -1,8 +1,21 @@
 # @scenario-studio/scenario-model
 
-The scenario document: schema, edit history, (de)serialization, migrations and
-persistence. Framework-free TypeScript — no React, no three.js, no DOM beyond an
-optional `localStorage`. Positions are plain `{x, y, z}` numbers.
+The scenario document: schemas, edit history, (de)serialization, migrations,
+validation and persistence. Framework-free TypeScript — no React, no three.js,
+no DOM beyond an optional `localStorage`.
+
+Two document kinds live here, and they are genuinely different claims:
+
+| | v1 — **scene** | v2 — **template** |
+|---|---|---|
+| what it says | "these actors, at these coordinates, on this map" | "this kind of place, these roles, this choreography" |
+| portable? | no, by construction | yes, by construction |
+| entry points | `ScenarioDocument`, `parseScenario`, `migrate` | `parseTemplate`, `validateTemplate`, `migrateToTemplate` |
+| schema | `src/schema/v1.ts` | `src/schema/v2/` |
+
+v1 is unchanged and still what `apps/studio` edits. v2 is the authoring format
+for retargetable scenarios and the emission target for LLM agents — jump to
+[Schema v2](#schema-v2--the-portable-scenariotemplate).
 
 ```ts
 import { ScenarioDocument, WebScenarioFileStore } from '@scenario-studio/scenario-model';
@@ -35,8 +48,10 @@ doc.markClean();
 | `operations.ts` | The closed set of edits (`ScenarioOp`) and how they apply. |
 | `document.ts` | `ScenarioDocument`: apply, undo/redo, dirty flag, `subscribe`. |
 | `serialize.ts` | Canonical text: key order, float precision, freezing. |
-| `migrate.ts` | Version dispatch. v1 is baseline; the chain is empty and ready. |
+| `migrate.ts` | Version dispatch for the v1 lane. |
 | `stores/` | `ScenarioFileStore` + in-memory and `localStorage` implementations. |
+
+(The v2 modules are listed [below](#modules).)
 
 ## Frame conventions
 
@@ -76,16 +91,17 @@ it, and serialization preserves it verbatim.
 **Scene pose is authoritative; `laneRef` is advisory.** When a placement was
 lane-snapped we store both representations, but a loader must reconstruct the
 transform from `pose`. That keeps files renderable without an `.xodr` in hand
-and avoids making every load depend on lane-graph resolution. Promoting
-`laneRef` to authoritative is a v2 decision, and the migration harness is there
-for exactly that kind of change.
+and avoids making every load depend on lane-graph resolution. v2 did not promote
+`laneRef` to authoritative — it replaced the whole placement model with
+frame-relative roles instead, and carries the v1 `laneRef` through the migration
+untouched.
 
 **Reserved blocks are present but empty.** `routes`, `triggers`, `lightPrograms`
-(`maxItems: 0`) and `parameters` (`additionalProperties: false`) exist in v1.
-Files therefore always carry the final key set, and v2 can define real element
-shapes without a compat break — no v1 file can contain an element that v2 would
-have to reinterpret. Writing anything into them today is a validation error, on
-purpose.
+(`maxItems: 0`) and `parameters` (`additionalProperties: false`) exist in v1 and
+writing anything into them is a validation error, on purpose. They paid off in a
+way worth recording: because no v1 file can contain a route or a trigger, v2 was
+free to define those concepts from scratch (as `route` interactions and the
+trigger grammar) without a single compat question.
 
 **Two constraints live in code, not in JSON Schema:** entity ids must be unique
 within a document, and `meta.modifiedAt` must not precede `meta.createdAt`. Both
@@ -156,22 +172,157 @@ through the canonical serializer and corruption fails at the boundary.
   holds thousands of documents — and when it does not, the answer is the
   Electron `fs` adapter, which the async interface already accommodates.
 
-## Adding schema v2
-
-1. Add `src/schema/v2.ts` (usually `ScenarioV1ObjectSchema.extend(...)`).
-2. Append one `ScenarioMigration` to `SCENARIO_MIGRATIONS` in `migrate.ts`.
-3. Bump `SCENARIO_VERSION`.
-4. Add a fixture test per step — `runMigrations` takes the chain and the
-   validator as options precisely so each step is testable in isolation.
-5. `pnpm run schema` to regenerate the JSON Schema (a test fails if you forget).
-
 Files from a *newer* schema are rejected with an actionable message rather than
 being partially parsed.
+
+## Schema v2 — the portable `ScenarioTemplate`
+
+```ts
+import { parseTemplate, validateTemplate } from '@scenario-studio/scenario-model';
+
+const template = parseTemplate({
+  scenarioVersion: 2,
+  meta: { name: 'LTAP/OD', createdAt, modifiedAt, appVersion, archetype: 'C3.ltap-od' },
+  params: { declarations: [{ id: 'vEgo', type: 'continuous', range: [30, 55], tier: 1 }] },
+  anchor: {
+    corridor: { throughLanesSameDir: { value: [1, 2] } },
+    features: [{
+      id: 'jx',
+      kind: 'junction',
+      arms: { value: [4, 4] },
+      control: { value: ['signalized'] },
+      conflictingApproach: { value: { from: 'opposing', turn: 'left' } },
+    }],
+  },
+  roles: [
+    { id: 'ego', kind: 'on_reference', actor: { class: 'car' },
+      pose: { s: -80 }, initialSpeedKph: 'param.vEgo' },
+    { id: 'challenger', kind: 'conflicting_gate', actor: { class: 'car' },
+      feature: 'jx', from: 'opposing', turn: 'left',
+      arriveAtConflict: { relativeTo: 'ego', deltaT: 0.4 },
+      initialSpeedKph: 'clamp(0.6 * lane.speedLimitKph, 15, 40)' },
+  ],
+  choreography: {
+    clipSeconds: 20,
+    interactions: [
+      { id: 'commit', actor: 'challenger', verb: 'set', trigger: { kind: 'at', t: 0 },
+        target: { key: 'rules.collisionAvoidance', value: false } },
+      { id: 'turn', actor: 'challenger', verb: 'route',
+        trigger: { kind: 'when', byLatest: 12,
+          condition: { kind: 'ttc', of: 'challenger', to: 'ego', op: '<', valueS: 2.2 } },
+        target: { mode: 'turn', feature: 'jx', turn: 'left' } },
+    ],
+  },
+  invariants: [{ id: 'crit', kind: 'ttc', of: 'ego', to: 'challenger', range: [1.2, 2.5] }],
+  metricSubject: 'ego',
+});
+
+const report = validateTemplate(template);          // document-only checks
+const bound  = validateTemplate(template, context); // + map-dependent checks
+```
+
+There is no coordinate and no road id anywhere in that document, and none is
+expressible: an anchor names lane counts, junction classes and turn relations,
+and every pose is `(k, s, tFrac, headingOffsetRad)` in the frame the matcher
+establishes. That is the whole retargeting mechanism — see
+`docs/research/retargeting.md`.
+
+### Modules
+
+| Module | What it owns |
+| --- | --- |
+| `schema/v2/anchor.ts` | `LogicalAnchor`: corridor clauses, features, policy, pin. |
+| `schema/v2/roles.ts` | `RoleBinding` (8 kinds) and `FramePose`. |
+| `schema/v2/interactions.ts` | 7 verbs, 4 triggers, 11 conditions, dynamics, `clipSeconds`. |
+| `schema/v2/set-keys.ts` | The typed key registry behind the `set` verb. |
+| `schema/v2/invariants.ts` | What must survive retargeting. |
+| `schema/v2/params.ts`, `variants.ts`, `props.ts`, `environment.ts` | Parameterisation, author-defined renditions, L3 props, L5 environment. |
+| `expr/` | Typed numeric expression AST, string parser, evaluator. No `eval`. |
+| `validate/` | Tier-1 validator, `ClauseResult`, the `MapContext` seam, an in-memory fake. |
+| `migrate-v2.ts` | v1 scene → v2 template, with notes for everything it will not guess. |
+| `json-schema-v2.ts` + `schema/*.v2.schema.json` | Three published schemas. |
+
+### Expressions, not literals
+
+`65` is wrong on a residential street and wrong on a motorway;
+`clamp(0.9 * lane.speedLimitKph, 25, 65)` transfers. Every speed, gap, offset,
+time and threshold in v2 is `number | Expr`. Authors write the string form and
+it is parsed to an AST on load (`printExpr` converts back). The identifier set
+is closed — `lane.speedLimitKph`, `lane.widthM`, `junction.sizeM`,
+`clip.seconds`, `param.*` — with `+ - * /` and `clamp/min/max/abs`, so an
+expression can be rejected but never executed.
+
+Site-dependent expressions are **indeterminate**, not invalid, before a map is
+bound; parameter-only expressions evaluate at their declared defaults, which is
+what makes the static timeline analysis possible at authoring time.
+
+### One axis, one owner
+
+Five axes — longitudinal, lateral, topology, existence, and one per `set` key.
+Later preempts earlier, so a *sequence* on one axis is legal by construction and
+the validator only has to find what is genuinely undecidable:
+
+- two statically equal exact start times on one `(actor, axis)` → **error**;
+- an explicit `until` that a later exact start truncates → **error** (the
+  `until` is a lie);
+- two conditional windows that overlap → **warning** (order not statically
+  determined);
+- exact-vs-window → **silent**, because "cruise, then brake when close" is the
+  normal shape and warning on it teaches people to ignore the validator.
+
+### Validation output
+
+One `ClauseResult` shape — `{path, severity, code, message, required?, actual?}`
+— shared with the future matcher, so a failed anchor clause and a failed check
+render through the same component and repair loop. Codes are stable strings
+(`ISSUE_CODES`); an agent keys off them.
+
+Map-dependent checks (`role_unbound`, `route_disconnected`,
+`illegal_lane_change`, `wrong_lane_type`, `spawn_off_lane`, `spawn_overlap`,
+`runway_insufficient`, `trigger_unbindable`, `speed_over_limit`) run only when a
+`MapContext` is injected. That interface is declared here and implemented by
+`map-intel` later; `createFakeMapContext` is a working in-memory implementation
+for tests and for anyone who needs the validator before `map-intel` lands.
+
+### Published JSON Schemas
+
+`pnpm run schema` writes four files, all drift-guarded by tests:
+
+- `schema/scenario.v1.schema.json` — the v1 scene;
+- `schema/scenario-template.v2.schema.json` — the whole template;
+- `schema/logical-anchor.v2.schema.json` — **the LLM emission target**;
+- `schema/interactions.v2.schema.json` — the timeline alone.
+
+The recursive expression AST is shared through `$defs` rather than inlined —
+without that the template schema is 2.4 MB instead of 99 KB and useless as a
+decoding grammar. Rules JSON Schema cannot express (mandatory `dynamics`,
+mandatory `byLatest`, one-axis-one-owner, the `set` registry) are spelled out in
+each schema's `description`, so a model reading the schema still sees them.
+
+### Migrating a v1 scene to a v2 template
+
+`migrateToTemplate(json)` accepts either version and always returns a v2
+template plus a list of `MigrationNote`s. What it will **not** do is invent
+frame coordinates: converting `(x, y, z)` to `(k, s, tFrac)` needs the lane
+graph, which lives in `map-intel`. So every v1 entity becomes a
+`scene_absolute` role that keeps its pose verbatim, the anchor is pinned to the
+source map with **no** `siteId` (v1 had none to preserve), and the validator
+reports `non_portable_role` + `pin_site_unresolved` until someone rebinds it.
+A migration that says "I cannot do this part" is worth more than one that
+quietly does it wrong.
+
+### Adding schema v3
+
+1. Add `src/schema/v3/` and a `ScenarioMigration` to `TEMPLATE_MIGRATIONS`.
+2. Bump `SCENARIO_TEMPLATE_VERSION`.
+3. Add a fixture test per step — `runMigrations` takes the chain and the
+   validator as options precisely so each step is testable in isolation.
+4. `pnpm run schema` to regenerate (a test fails if you forget).
 
 ## Scripts
 
 ```sh
 pnpm --filter @scenario-studio/scenario-model test        # vitest
 pnpm --filter @scenario-studio/scenario-model typecheck   # tsc --noEmit
-pnpm --filter @scenario-studio/scenario-model schema      # regenerate JSON Schema
+pnpm --filter @scenario-studio/scenario-model schema      # regenerate JSON Schemas
 ```

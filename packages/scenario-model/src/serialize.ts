@@ -29,6 +29,7 @@
 
 import { ScenarioValidationError, toScenarioIssues } from './errors.js';
 import { ScenarioV1Schema, type ScenarioV1 } from './schema/v1.js';
+import { ScenarioTemplateV2Schema, type ScenarioTemplateV2 } from './schema/v2/template.js';
 
 /** Decimal places kept for every non-integer number. See module docs. */
 export const FLOAT_DECIMALS = 6;
@@ -98,6 +99,32 @@ export function parseScenario(json: unknown): ScenarioV1 {
     );
   }
   return result.data;
+}
+
+/**
+ * Validate an already-parsed object as a v2 template.
+ *
+ * Note what parsing *normalises*: string expressions become AST nodes, and
+ * every default is materialised. So `serializeTemplate(parseTemplate(x))` is
+ * not byte-identical to `x` when `x` was hand-authored — it is the canonical
+ * form of the same document, and re-parsing it is a fixed point.
+ *
+ * @throws {ScenarioValidationError} With every issue found.
+ */
+export function parseTemplate(json: unknown): ScenarioTemplateV2 {
+  const result = ScenarioTemplateV2Schema.safeParse(json);
+  if (!result.success) {
+    throw new ScenarioValidationError(
+      'invalid scenario template',
+      toScenarioIssues(result.error.issues),
+    );
+  }
+  return result.data;
+}
+
+/** Render a v2 template as canonical text. Same rules as {@link serializeScenario}. */
+export function serializeTemplate(template: ScenarioTemplateV2): string {
+  return `${JSON.stringify(canonicalize(template), null, 2)}\n`;
 }
 
 /**

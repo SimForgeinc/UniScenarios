@@ -25,6 +25,39 @@ export function toScenarioIssues(issues: ReadonlyArray<$ZodIssue>): ScenarioIssu
   const out: ScenarioIssue[] = [];
   for (const issue of issues) {
     const base = issue.path ?? [];
+    if (issue.code === 'invalid_union') {
+      // A union reports one issue per branch, and the raw list is unreadable
+      // ("expected number", "expected object", ...). Prefer the branch that
+      // structurally matched and failed a *semantic* check — for a
+      // `number | expression-string | expression-AST` field that is the branch
+      // carrying the real message ("unknown identifier \"lane.speed\"").
+      const branches = issue.errors ?? [];
+      const semantic = branches.filter((branch) =>
+        branch.every((i) => i.code !== 'invalid_type' || (i.path?.length ?? 0) > 0),
+      );
+      if (semantic.length === 1) {
+        for (const nested of toScenarioIssues(semantic[0] as $ZodIssue[])) {
+          out.push({
+            path: formatPath([...base, ...(nested.path ? nested.path.split('.') : [])]),
+            message: nested.message,
+            code: nested.code,
+          });
+        }
+        continue;
+      }
+      const alternatives = branches
+        .map((branch) => branch[0]?.message)
+        .filter((m): m is string => Boolean(m));
+      out.push({
+        path: formatPath(base),
+        message:
+          alternatives.length > 0
+            ? `no accepted form matched: ${[...new Set(alternatives)].join(' | ')}`
+            : issue.message,
+        code: issue.code,
+      });
+      continue;
+    }
     if (issue.code === 'unrecognized_keys') {
       for (const key of issue.keys) {
         out.push({

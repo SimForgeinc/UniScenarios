@@ -1,22 +1,37 @@
 /**
- * `@scenario-studio/scenario-model` — the versioned scenario document.
+ * `@scenario-studio/scenario-model` — the versioned scenario documents.
  *
- * Framework-free: no React, no three.js. Positions are plain `{x, y, z}` in the
- * y-up scene frame that `@scenario-studio/xodr-tools` produces, and headings are
- * radians CCW about +Y from +X (equal to the OpenDRIVE heading — see
- * `schema/v1.ts`).
+ * Framework-free: no React, no three.js. Positions in v1 are plain `{x, y, z}`
+ * in the y-up scene frame that `@scenario-studio/xodr-tools` produces, and
+ * headings are radians CCW about +Y from +X (equal to the OpenDRIVE heading —
+ * see `schema/v1.ts`).
  *
- * Four layers:
+ * Two document kinds, deliberately different in kind and not just in version:
  *
- * 1. **Schema** — {@link ScenarioV1Schema} and friends (zod v4, strict, with a
- *    generated JSON Schema at `schema/scenario.v1.schema.json`).
- * 2. **Document** — {@link ScenarioDocument}: typed operations, immer-patch
+ * - **v1, a scene** — actors at absolute coordinates on one named map.
+ *   {@link ScenarioDocument} edits it, {@link parseScenario} reads it,
+ *   {@link migrate} versions it. Unchanged by v2.
+ * - **v2, a template** — a {@link LogicalAnchorSchema logical anchor} (a
+ *   predicate over road structure, no coordinates, no road ids), roles bound to
+ *   the matched structure, and a frame-relative timeline of seven verbs.
+ *   {@link parseTemplate} reads it, {@link validateTemplate} checks it,
+ *   {@link migrateToTemplate} converts a v1 scene into one.
+ *
+ * Layers:
+ *
+ * 1. **Schema** — {@link ScenarioV1Schema} / {@link ScenarioTemplateV2Schema}
+ *    (zod v4, strict, with generated JSON Schemas under `schema/`).
+ * 2. **Expressions** — {@link parseExpr}, {@link evaluateExpr}: typed numeric
+ *    ASTs over lane/junction/param facts, so speeds are portable.
+ * 3. **Document** — {@link ScenarioDocument}: typed operations, immer-patch
  *    undo/redo, dirty flag, `subscribe()`.
- * 3. **Migration** — {@link migrate} and the {@link SCENARIO_MIGRATIONS} chain.
- * 4. **Persistence** — {@link ScenarioFileStore} with in-memory and
+ * 4. **Validation** — {@link validateTemplate}: tier-1 static checks emitting
+ *    {@link ClauseResult}s, with map-dependent checks behind {@link MapContext}.
+ * 5. **Migration** — {@link migrate} (v1 chain) and {@link migrateToTemplate}.
+ * 6. **Persistence** — {@link ScenarioFileStore} with in-memory and
  *    `localStorage` implementations.
  *
- * @example
+ * @example v1: edit a scene
  * ```ts
  * import { ScenarioDocument, MemoryScenarioFileStore } from '@scenario-studio/scenario-model';
  *
@@ -33,6 +48,15 @@
  * const store = new MemoryScenarioFileStore();
  * await store.write('yale-left-turn', doc);
  * doc.markClean();
+ * ```
+ *
+ * @example v2: validate a template
+ * ```ts
+ * import { parseTemplate, validateTemplate } from '@scenario-studio/scenario-model';
+ *
+ * const template = parseTemplate(JSON.parse(text));
+ * const report = validateTemplate(template);        // document-only checks
+ * if (!report.ok) console.error(report.issues);     // {path, severity, code, message}
  * ```
  *
  * @packageDocumentation
@@ -111,11 +135,78 @@ export {
 export {
   serializeScenario,
   parseScenario,
+  parseTemplate,
+  serializeTemplate,
   canonicalize,
   roundFloat,
   deepFreeze,
   FLOAT_DECIMALS,
 } from './serialize.js';
+
+// --- schema v2: the portable ScenarioTemplate -------------------------------
+
+export * from './schema/v2/index.js';
+
+export * from './expr/index.js';
+
+export {
+  CURRENT_TEMPLATE_VERSION,
+  TEMPLATE_MIGRATIONS,
+  detectScenarioKind,
+  migrateToTemplate,
+  v1ToTemplateV2,
+  type MigrationNote,
+  type TemplateMigrationResult,
+} from './migrate-v2.js';
+
+export {
+  ISSUE_CODES,
+  axisTimeline,
+  collectExpressions,
+  createFakeMapContext,
+  earliestOf,
+  endBound,
+  isPortableTemplate,
+  joinPath,
+  latestOf,
+  mapIssues,
+  parseAndValidateTemplate,
+  resolveTriggerTime,
+  staticScope,
+  structuralIssues,
+  toReport,
+  unusedRoles,
+  validateTemplate,
+  type AxisSlot,
+  type AxisTimeline,
+  type ClauseResult,
+  type FakeLane,
+  type FakeMapOptions,
+  type FeatureFacts,
+  type GateFacts,
+  type IssueCode,
+  type LaneChangePermissions,
+  type LaneFacts,
+  type LaneRsl,
+  type LaneType,
+  type MapContext,
+  type Severity,
+  type SignalFacts,
+  type TimeBound,
+  type TimingContext,
+  type ValidationReport,
+} from './validate/index.js';
+
+export {
+  ANCHOR_JSON_SCHEMA_PATH,
+  INTERACTIONS_JSON_SCHEMA_PATH,
+  TEMPLATE_JSON_SCHEMA_PATH,
+  V2_SCHEMA_BASE,
+  buildAllV2JsonSchemas,
+  buildAnchorJsonSchema,
+  buildInteractionsJsonSchema,
+  buildTemplateJsonSchema,
+} from './json-schema-v2.js';
 
 export { newId, sequentialIds, ULID_PATTERN } from './ids.js';
 
