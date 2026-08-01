@@ -22,6 +22,7 @@ import {
   getGLTFLoader,
 } from './gltf';
 import { createSun, loadEnvironment } from './environment';
+import { GroundIndex, type GroundIndexOptions } from './ground-index';
 import { boundsToBox3, normalizeLods, resolveUrl } from './manifest';
 import { patchTree, type ShadowPatchOptions } from './materials';
 import { ShadowAtlas } from './shadow-atlas';
@@ -662,6 +663,41 @@ export class CityViewer {
       if (hit.object.visible) return hit.point.y;
     }
     return null;
+  }
+
+  /** True once the road layer has geometry, i.e. ground sampling can work. */
+  get roadReady(): boolean {
+    let found = false;
+    this.roadGroup.traverse((obj) => {
+      if (!found && (obj as Mesh).isMesh) found = true;
+    });
+    return found;
+  }
+
+  /**
+   * Bake the road layer into a {@link GroundIndex} for bulk height queries.
+   *
+   * {@link sampleGroundHeight} is the right tool for one-off picks; it is ~9.5 ms
+   * a call on Yale Street, so anything draping thousands of points (lane
+   * overlays, actor placement, path snapping) wants this instead — ~30 ms to
+   * build, ~0.2 µs a query, and identical answers over the road surface.
+   *
+   * The result is a snapshot. The road layer is pinned with a single LOD so it
+   * never changes after load, but callers must wait for {@link roadReady};
+   * building early returns `null`.
+   *
+   * Street furniture baked into the road glTF (mast arms, lamp posts, signal
+   * heads, insulators — 783 of Yale Street's 807 road meshes) is filtered out
+   * by `isGroundSurfaceMesh`; without that, anything draped under a lamp post
+   * drapes onto the lamp. Pass `meshFilter` to override.
+   */
+  buildGroundIndex(options?: GroundIndexOptions): GroundIndex | null {
+    const index = GroundIndex.build(this.roadGroup, options);
+    if (index) return index;
+    // The filter matched nothing. That means this map does not export its
+    // ground as large sheets, not that it has no ground — an unfiltered index
+    // is far better than none.
+    return GroundIndex.build(this.roadGroup, { ...options, meshFilter: () => true });
   }
 
   /**
