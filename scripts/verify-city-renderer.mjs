@@ -107,7 +107,18 @@ const street = await page.evaluate(() => {
   return { groundY: y };
 });
 console.log(`  sampleGroundHeight -> ${JSON.stringify(street)}`);
-await page.waitForTimeout(9000);
+// Let the near LOD0/LOD1 tiles land before judging the street-level frame.
+await page
+  .waitForFunction(
+    () => {
+      const s = window.__viewer?.getStats();
+      return s ? s.loading === 0 && s.uploading === 0 : false;
+    },
+    null,
+    { timeout: 40000 },
+  )
+  .catch(() => console.log('  (still streaming at street timeout)'));
+await page.waitForTimeout(2500);
 await shot('03-street');
 const streetStats = await stats();
 

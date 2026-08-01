@@ -1,5 +1,5 @@
 import { DirectionalLight, EquirectangularReflectionMapping, PMREMGenerator, Scene, Vector3, WebGLRenderer } from 'three';
-import { RGBELoader } from 'three/addons/loaders/RGBELoader.js';
+import { HDRLoader } from 'three/addons/loaders/HDRLoader.js';
 
 export interface SunOptions {
   /** Direction the light travels, from the manifest. */
@@ -31,7 +31,8 @@ export async function loadEnvironment(
   scene: Scene,
   url: string,
 ): Promise<() => void> {
-  const source = await new RGBELoader().loadAsync(url);
+  // HDRLoader is the r182 replacement for RGBELoader (same Radiance .hdr).
+  const source = await new HDRLoader().loadAsync(url);
   source.mapping = EquirectangularReflectionMapping;
 
   const pmrem = new PMREMGenerator(renderer);

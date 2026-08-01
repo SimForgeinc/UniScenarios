@@ -36,7 +36,8 @@ const _final = new Matrix4();
 export function buildVegetation(
   source: Object3D,
   data: VegetationInstanceFile,
-  bandCount: number,
+  /** `lodKeepCounts` row to use for each distance band, near to far. */
+  bandKeepRows: number[],
 ): VegetationBuildResult {
   source.updateMatrixWorld(true);
   const byName = new Map<string, Object3D>();
@@ -64,10 +65,9 @@ export function buildVegetation(
     });
     if (sourceMeshes.length === 0) continue;
 
-    const keepPerBand: number[] = [];
-    for (let band = 0; band < bandCount; band++) {
-      keepPerBand.push(Math.max(1, Math.min(count, data.lodKeepCounts?.[band]?.[p] ?? count)));
-    }
+    const keepPerBand = bandKeepRows.map((row) =>
+      Math.max(1, Math.min(count, data.lodKeepCounts?.[row]?.[p] ?? count)),
+    );
 
     const group: VegPrototypeGroup = { name, meshes: [], keepPerBand };
     for (const sourceMesh of sourceMeshes) {

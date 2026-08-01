@@ -46,5 +46,9 @@ function devAssets(): Plugin {
 
 export default defineConfig({
   plugins: [react(), devAssets()],
+  // The workspace packages import `three` from their own node_modules link;
+  // without dedupe vite ends up with two module instances (three warns, and
+  // instanceof checks across the boundary would break).
+  resolve: { dedupe: ['three'] },
   server: { port: 5199 },
 });

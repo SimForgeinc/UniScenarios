@@ -82,13 +82,19 @@ const DEFAULTS = {
   sunIntensity: 5,
   environmentIntensity: 0.6,
   exposure: 1,
-  vegetationMaxDistance: 400,
+  vegetationMaxDistance: 260,
   shadowAtlasCellSize: 512,
   shadowStrength: 1,
   debugShadowProjection: false,
 };
 
-const VEG_BAND_DISTANCES = [70, 150, 260];
+/**
+ * Distance bands for vegetation density, and the `lodKeepCounts` row each band
+ * uses. Row 1 is skipped on purpose: this dataset ships it identical to row 0,
+ * so bands map to rows 0 / 2 / 3 to actually thin the instances out.
+ */
+const VEG_BAND_DISTANCES = [80, 170];
+const VEG_BAND_KEEP_ROW = [0, 2, 3];
 
 const _rayOrigin = new Vector3();
 const _down = new Vector3(0, -1, 0);
@@ -432,7 +438,7 @@ export class CityViewer {
         const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
         const gltf = await getGLTFLoader().parseAsync(buffer, '');
         this.prepareTree(gltf.scene);
-        const built = buildVegetation(gltf.scene, data, VEG_BAND_DISTANCES.length + 1);
+        const built = buildVegetation(gltf.scene, data, VEG_BAND_KEEP_ROW);
         built.object.name = `${def.id}.lod${lod.level}`;
         built.object.userData.prototypes = built.prototypes;
         patchTree(built.object, this.shadowOptions(def.box, 6, 14));
