@@ -1,0 +1,64 @@
+import { z } from 'zod';
+
+import { PROP_CLASSES, PROP_TAGS } from './types.js';
+import type { CatalogEntry } from './types.js';
+
+/**
+ * The catalog ships as `catalog.json` for consumers that do not want to pull in
+ * three.js. This schema is what makes that file trustworthy: it is enforced
+ * both when the JSON is generated and in the test suite.
+ */
+export const dimsSchema = z.object({
+  l: z.number().positive(),
+  w: z.number().positive(),
+  h: z.number().positive(),
+});
+
+export const paramValueSchema = z.union([z.number(), z.string(), z.boolean()]);
+
+export const catalogEntrySchema = z.object({
+  id: z
+    .string()
+    .regex(/^[a-z]+\.[a-z0-9_]+$/, 'id must be <class>.<snake_case_name>'),
+  label: z.string().min(1),
+  class: z.enum(PROP_CLASSES as unknown as [string, ...string[]]),
+  description: z.string().min(20),
+  dims: dimsSchema,
+  tags: z.array(z.enum(PROP_TAGS as unknown as [string, ...string[]])).min(1),
+  defaultParams: z.record(z.string(), paramValueSchema),
+});
+
+export const catalogSchema = z
+  .array(catalogEntrySchema)
+  .min(1)
+  .superRefine((entries, ctx) => {
+    const seen = new Set<string>();
+    for (const entry of entries) {
+      if (seen.has(entry.id)) {
+        ctx.addIssue({ code: 'custom', message: `duplicate catalog id: ${entry.id}` });
+      }
+      seen.add(entry.id);
+      if (!entry.id.startsWith(`${entry.class}.`)) {
+        // `street` and `occluder` props are addressed by their own prefix, so
+        // the id prefix must agree with the class it is filed under.
+        ctx.addIssue({
+          code: 'custom',
+          message: `id ${entry.id} does not match class ${entry.class}`,
+        });
+      }
+      const tagged = entry.tags.filter((tag) => tag.startsWith('occlusion:'));
+      if (tagged.length !== 1) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${entry.id} must carry exactly one occlusion:* tag`,
+        });
+      }
+    }
+  });
+
+export type CatalogEntryInput = z.infer<typeof catalogEntrySchema>;
+
+/** Validate an arbitrary catalog payload (e.g. a loaded `catalog.json`). */
+export function parseCatalog(data: unknown): CatalogEntry[] {
+  return catalogSchema.parse(data) as unknown as CatalogEntry[];
+}

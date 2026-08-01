@@ -1,0 +1,423 @@
+import type { CatalogEntry, PropClass, PropTag } from './types.js';
+
+/**
+ * The catalog is the contract: other packages address props by `id` and select
+ * them by `class`/`tags`, never by importing a builder directly. Hi-fi meshes
+ * can replace the procedural builders later behind these same ids.
+ *
+ * `dims` are the real-world extents of the default build and are asserted
+ * against the built bounding box in the test suite, so they cannot drift.
+ */
+export const CATALOG = [
+  // ---------------------------------------------------------------- vehicles
+  {
+    id: 'vehicle.sedan',
+    label: 'Sedan',
+    class: 'vehicle',
+    description:
+      'Mid-size four-door passenger car. The default other-vehicle: use it for lead, following and oncoming traffic when nothing special is required.',
+    dims: { l: 4.7, w: 1.82, h: 1.45 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway'],
+    defaultParams: { color: '#2f4f74' },
+  },
+  {
+    id: 'vehicle.hatchback',
+    label: 'Hatchback',
+    class: 'vehicle',
+    description:
+      'Compact five-door hatchback. Short, agile city car — good for tight parking rows and gap-acceptance scenarios.',
+    dims: { l: 4.05, w: 1.75, h: 1.46 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway'],
+    defaultParams: { color: '#8f2f2f' },
+  },
+  {
+    id: 'vehicle.suv',
+    label: 'SUV',
+    class: 'vehicle',
+    description:
+      'Mid-size sport-utility vehicle. Tall enough to hide a child or a cyclist from a following driver; the common suburban parked vehicle.',
+    dims: { l: 4.85, w: 1.95, h: 1.78 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway'],
+    defaultParams: { color: '#25282c' },
+  },
+  {
+    id: 'vehicle.pickup',
+    label: 'Pickup truck',
+    class: 'vehicle',
+    description:
+      'Full-size crew-cab pickup with an open bed. Long and tall; a parked one at a kerb blocks the sightline into a driveway.',
+    dims: { l: 5.9, w: 2.03, h: 1.95 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway'],
+    defaultParams: { color: '#5a6068' },
+  },
+  {
+    id: 'vehicle.van',
+    label: 'Cargo van',
+    class: 'vehicle',
+    description:
+      'High-roof delivery van. A double-parked one is the canonical occluder for a pedestrian stepping out mid-block.',
+    dims: { l: 5.3, w: 2.0, h: 2.4 },
+    tags: ['occlusion:high', 'mobile', 'parkable', 'roadway'],
+    defaultParams: { color: '#e8e9ea' },
+  },
+  {
+    id: 'vehicle.box_truck',
+    label: 'Box truck',
+    class: 'vehicle',
+    description:
+      'Two-axle straight truck with a 24 ft cargo body. Completely blocks the sightline across an adjacent lane.',
+    dims: { l: 7.6, w: 2.44, h: 3.4 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle'],
+    defaultParams: { color: '#e8e9ea' },
+  },
+  {
+    id: 'vehicle.semi_truck',
+    label: 'Semi tractor-trailer',
+    class: 'vehicle',
+    description:
+      'Conventional tractor with a 53 ft box trailer. The strongest mobile occluder in the catalog and the reference articulated vehicle for turning and blind-spot cases.',
+    dims: { l: 20.1, w: 2.6, h: 4.1 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle'],
+    defaultParams: { color: '#8f2f2f' },
+  },
+  {
+    id: 'vehicle.bus',
+    label: 'Transit bus',
+    class: 'vehicle',
+    description:
+      'Forty-foot city bus with kerb-side doors. Stopped at a bus stop it hides boarding and alighting pedestrians from through traffic.',
+    dims: { l: 12.2, w: 2.55, h: 3.2 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle'],
+    defaultParams: { color: '#2f5b45' },
+  },
+  {
+    id: 'vehicle.motorcycle',
+    label: 'Motorcycle',
+    class: 'vehicle',
+    description:
+      'Standard motorcycle, no rider. Narrow silhouette used for lane-filtering, late-detection and misclassification cases.',
+    dims: { l: 2.1, w: 0.75, h: 1.23 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'parkable', 'roadway'],
+    defaultParams: { color: '#25282c' },
+  },
+  {
+    id: 'vehicle.bicycle',
+    label: 'Cyclist',
+    class: 'vehicle',
+    description:
+      'Bicycle with a seated rider. The reference vulnerable road user for bike-lane, dooring and right-hook conflicts.',
+    dims: { l: 1.75, w: 0.5, h: 1.71 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadway'],
+    defaultParams: { color: '#2f4f74' },
+  },
+
+  // ------------------------------------------------------------- pedestrians
+  {
+    id: 'pedestrian.adult_standing',
+    label: 'Adult standing',
+    class: 'pedestrian',
+    description:
+      'Adult pedestrian at rest, 1.75 m. Use at kerbs, refuge islands and bus stops where the person is waiting rather than crossing.',
+    dims: { l: 0.32, w: 0.5, h: 1.75 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.75, pose: 'standing' },
+  },
+  {
+    id: 'pedestrian.adult_walking',
+    label: 'Adult walking',
+    class: 'pedestrian',
+    description:
+      'Adult pedestrian in a mid-stride pose, 1.75 m. Use for crossings and for anyone the ego must yield to.',
+    dims: { l: 0.85, w: 0.5, h: 1.75 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.75, pose: 'walking' },
+  },
+  {
+    id: 'pedestrian.child_standing',
+    label: 'Child standing',
+    class: 'pedestrian',
+    description:
+      'Child pedestrian at rest, 1.20 m — short enough to be hidden by a parked sedan. Top-heavy proportions on purpose.',
+    dims: { l: 0.24, w: 0.35, h: 1.2 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.2, pose: 'standing' },
+  },
+  {
+    id: 'pedestrian.child_walking',
+    label: 'Child walking',
+    class: 'pedestrian',
+    description:
+      'Child pedestrian mid-stride, 1.20 m. The darting-child case: pair with a parked-vehicle occluder.',
+    dims: { l: 0.58, w: 0.35, h: 1.2 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.2, pose: 'walking' },
+  },
+
+  // ------------------------------------------------------------ construction
+  {
+    id: 'construction.traffic_cone',
+    label: 'Traffic cone',
+    class: 'construction',
+    description:
+      'Standard 700 mm orange channelizing cone with two reflective bands. The unit of any taper or lane closure.',
+    dims: { l: 0.36, w: 0.36, h: 0.7 },
+    tags: ['workzone', 'occlusion:low', 'roadway'],
+    defaultParams: { height: 0.7 },
+  },
+  {
+    id: 'construction.channelizer_drum',
+    label: 'Channelizer drum',
+    class: 'construction',
+    description:
+      'Plastic 1070 mm drum with four reflective bands. Delineates long-duration work areas; more conspicuous than a cone.',
+    dims: { l: 0.58, w: 0.58, h: 1.07 },
+    tags: ['workzone', 'occlusion:low', 'roadway'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.barricade_type3',
+    label: 'Type III barricade',
+    class: 'construction',
+    description:
+      'Full 8 ft type-III barricade with three striped rails and a warning light. Used to close a road or a ramp outright.',
+    dims: { l: 0.62, w: 2.44, h: 1.66 },
+    tags: ['workzone', 'occlusion:medium', 'roadway'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.jersey_barrier',
+    label: 'Jersey barrier',
+    class: 'construction',
+    description:
+      'Single precast concrete barrier segment, 10 ft. Hard separation between live traffic and a work area.',
+    dims: { l: 3.05, w: 0.61, h: 0.81 },
+    tags: ['workzone', 'occlusion:medium', 'roadway'],
+    defaultParams: { length: 3.05 },
+  },
+  {
+    id: 'construction.jersey_barrier_run',
+    label: 'Jersey barrier run',
+    class: 'construction',
+    description:
+      'Continuous line of jersey barriers of a given length, running along +X. Use to wall off a work zone or a contraflow.',
+    dims: { l: 12.2, w: 0.61, h: 0.81 },
+    tags: ['workzone', 'occlusion:medium', 'roadway', 'run'],
+    defaultParams: { length: 12.2, segmentLength: 3.05 },
+  },
+  {
+    id: 'construction.sign_road_work',
+    label: 'Road work sign',
+    class: 'construction',
+    description:
+      'Orange 48 in diamond warning sign on a portable stand (ROAD WORK AHEAD style), facing +X. Place upstream of every closure.',
+    dims: { l: 0.9, w: 1.73, h: 2.21 },
+    tags: ['workzone', 'occlusion:medium', 'roadside'],
+    defaultParams: { boardSize: 1.22, textLines: 3 },
+  },
+  {
+    id: 'construction.flagger',
+    label: 'Flagger',
+    class: 'construction',
+    description:
+      'Worker in a hi-vis vest and hard hat holding a STOP/SLOW paddle out to the side. A vulnerable road user standing in the roadway.',
+    dims: { l: 0.73, w: 0.7, h: 2.19 },
+    tags: ['workzone', 'vru', 'occlusion:low', 'roadway'],
+    defaultParams: { height: 1.78, paddle: 'stop' },
+  },
+  {
+    id: 'construction.arrow_board',
+    label: 'Arrow board trailer',
+    class: 'construction',
+    description:
+      'Trailer-mounted flashing arrow board directing traffic left or right. Sits at the start of a lane-closure taper.',
+    dims: { l: 3.45, w: 2.44, h: 2.53 },
+    tags: ['workzone', 'occlusion:medium', 'roadway'],
+    defaultParams: { direction: 'left', raised: true },
+  },
+  {
+    id: 'construction.excavator',
+    label: 'Excavator',
+    class: 'construction',
+    description:
+      'Tracked excavator with the boom stowed forward. A large static machine inside a work area; blocks sightlines completely.',
+    dims: { l: 5.15, w: 2.24, h: 2.71 },
+    tags: ['workzone', 'occlusion:high', 'roadway', 'large-vehicle'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.portable_toilet',
+    label: 'Portable toilet',
+    class: 'construction',
+    description:
+      'Site toilet cabin, 2.3 m tall on a 1.16 m footprint. Small, very tall occluder often parked right at a kerb line.',
+    dims: { l: 1.24, w: 1.22, h: 2.26 },
+    tags: ['workzone', 'occlusion:medium', 'roadside'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.spoil_pile',
+    label: 'Spoil pile',
+    class: 'construction',
+    description:
+      'Heap of excavated soil and broken pavement. Low, irregular obstacle that narrows the drivable surface.',
+    dims: { l: 2.6, w: 2.55, h: 0.9 },
+    tags: ['workzone', 'occlusion:low', 'roadway'],
+    defaultParams: { length: 2.5, height: 0.9, seed: 7 },
+  },
+
+  // --------------------------------------------------------------- occluders
+  {
+    id: 'occluder.dumpster',
+    label: 'Dumpster',
+    class: 'occluder',
+    description:
+      'Six-yard front-load waste container. Standard kerbside occluder at alley and driveway mouths.',
+    dims: { l: 1.9, w: 1.52, h: 1.25 },
+    tags: ['occlusion:medium', 'roadside'],
+    defaultParams: {},
+  },
+  {
+    id: 'occluder.covered_car',
+    label: 'Covered car',
+    class: 'occluder',
+    description:
+      'Car under a fitted cover: a vehicle-sized mass that is deliberately not classifiable as a vehicle model. Long-term parked.',
+    dims: { l: 4.58, w: 1.93, h: 1.48 },
+    tags: ['occlusion:medium', 'roadside', 'parkable'],
+    defaultParams: {},
+  },
+  {
+    id: 'occluder.hedge_run',
+    label: 'Hedge run',
+    class: 'occluder',
+    description:
+      'Clipped hedge of parametric length and height along +X. The classic sightline problem on a stop-controlled minor approach.',
+    dims: { l: 6.0, w: 0.8, h: 1.2 },
+    tags: ['occlusion:high', 'roadside', 'run'],
+    defaultParams: { length: 6, height: 1.2 },
+  },
+  {
+    id: 'occluder.fence_run',
+    label: 'Chain-link fence run',
+    class: 'occluder',
+    description:
+      'Chain-link fence of parametric length and height along +X. Partially transparent: it degrades detection without hiding outright.',
+    dims: { l: 6.0, w: 0.065, h: 1.8 },
+    tags: ['occlusion:medium', 'roadside', 'run'],
+    defaultParams: { length: 6, height: 1.8 },
+  },
+
+  // ------------------------------------------------------------------ street
+  {
+    id: 'street.mailbox_cluster',
+    label: 'Mailbox cluster',
+    class: 'street',
+    description:
+      'Pedestal-mounted cluster mailbox unit with the doors facing +X. Small sidewalk fixture; a reason for pedestrians to stop at a kerb.',
+    dims: { l: 0.54, w: 0.98, h: 1.52 },
+    tags: ['occlusion:low', 'sidewalk'],
+    defaultParams: {},
+  },
+  {
+    id: 'street.bus_shelter',
+    label: 'Bus shelter',
+    class: 'street',
+    description:
+      'Glazed transit shelter with a bench, open on the kerb (+Z) side. Hides waiting pedestrians until they step out.',
+    dims: { l: 4.0, w: 1.6, h: 2.5 },
+    tags: ['occlusion:high', 'sidewalk'],
+    defaultParams: {},
+  },
+  {
+    id: 'street.food_cart',
+    label: 'Food cart',
+    class: 'street',
+    description:
+      'Sidewalk vending cart with a canopy. Draws a queue of pedestrians onto the kerb and blocks the view down the footway.',
+    dims: { l: 1.84, w: 1.0, h: 2.18 },
+    tags: ['occlusion:medium', 'sidewalk'],
+    defaultParams: {},
+  },
+
+  // ----------------------------------------------------------------- hazards
+  {
+    id: 'hazard.tire_debris',
+    label: 'Tyre debris',
+    class: 'hazard',
+    description:
+      'Shredded truck retread lying in the lane. Small dark object that must be classified as drivable-over rather than braked for.',
+    dims: { l: 0.74, w: 0.56, h: 0.24 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
+  {
+    id: 'hazard.cardboard_box',
+    label: 'Cardboard box',
+    class: 'hazard',
+    description:
+      'Empty cardboard box with open flaps. The canonical false-positive obstacle: large enough to trigger a brake, light enough to ignore.',
+    dims: { l: 0.58, w: 0.44, h: 0.47 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
+  {
+    id: 'hazard.trash_bags',
+    label: 'Refuse sacks',
+    class: 'hazard',
+    description:
+      'Cluster of tied rubbish bags at the kerb. Ambiguous low mass that narrows the usable lane on collection day.',
+    dims: { l: 1.02, w: 0.93, h: 0.58 },
+    tags: ['debris', 'roadside', 'occlusion:low'],
+    defaultParams: { count: 3, seed: 11 },
+  },
+  {
+    id: 'hazard.downed_branch',
+    label: 'Downed branch',
+    class: 'hazard',
+    description:
+      'Storm-broken tree limb lying across the lane, with foliage still attached. Irregular, partly drivable, partly not.',
+    dims: { l: 2.44, w: 1.2, h: 0.45 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
+] as const satisfies readonly CatalogEntry[];
+
+/** Every catalog id, as a literal union. */
+export type CatalogId = (typeof CATALOG)[number]['id'];
+
+const BY_ID = new Map<string, CatalogEntry>(CATALOG.map((entry) => [entry.id, entry]));
+
+export const CATALOG_IDS = CATALOG.map((entry) => entry.id) as readonly CatalogId[];
+
+export function isCatalogId(id: string): id is CatalogId {
+  return BY_ID.has(id);
+}
+
+/** Look up an entry, throwing on an unknown id (ids are a hard contract). */
+export function getEntry(id: CatalogId): CatalogEntry {
+  const entry = BY_ID.get(id);
+  if (!entry) throw new Error(`Unknown catalog id: ${id}`);
+  return entry;
+}
+
+export interface CatalogQuery {
+  class?: PropClass | readonly PropClass[];
+  /** Entries must carry *every* tag listed. */
+  tags?: readonly PropTag[];
+}
+
+/** Query the catalog the way an agent would: by class and by tag. */
+export function queryCatalog(query: CatalogQuery = {}): CatalogEntry[] {
+  const classes = query.class === undefined
+    ? undefined
+    : Array.isArray(query.class)
+      ? (query.class as readonly PropClass[])
+      : [query.class as PropClass];
+  return CATALOG.filter((entry) => {
+    if (classes && !classes.includes(entry.class)) return false;
+    if (query.tags && !query.tags.every((tag) => (entry.tags as readonly PropTag[]).includes(tag))) {
+      return false;
+    }
+    return true;
+  });
+}

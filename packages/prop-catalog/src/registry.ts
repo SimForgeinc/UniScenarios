@@ -1,0 +1,174 @@
+import type { Group } from 'three';
+
+import { type CatalogId, getEntry } from './catalog.js';
+import type {
+  ArrowBoardParams,
+  BarrierParams,
+  BarrierRunParams,
+  ConeParams,
+  FlaggerParams,
+  SignParams,
+  SpoilPileParams,
+} from './builders/construction.js';
+import {
+  buildArrowBoard,
+  buildBarricadeTypeIII,
+  buildChannelizerDrum,
+  buildConstructionSign,
+  buildExcavator,
+  buildFlagger,
+  buildJerseyBarrier,
+  buildJerseyBarrierRun,
+  buildPortableToilet,
+  buildSpoilPile,
+  buildTrafficCone,
+} from './builders/construction.js';
+import type { TrashBagParams } from './builders/hazards.js';
+import {
+  buildCardboardBox,
+  buildDownedBranch,
+  buildTireDebris,
+  buildTrashBags,
+} from './builders/hazards.js';
+import type { PedestrianParams } from './builders/pedestrians.js';
+import {
+  buildAdultStanding,
+  buildAdultWalking,
+  buildChildStanding,
+  buildChildWalking,
+} from './builders/pedestrians.js';
+import type { RunParams } from './builders/street.js';
+import {
+  buildBusShelter,
+  buildCoveredCar,
+  buildDumpster,
+  buildFenceRun,
+  buildFoodCart,
+  buildHedgeRun,
+  buildMailboxCluster,
+} from './builders/street.js';
+import type { VehicleParams } from './builders/vehicles.js';
+import {
+  buildBoxTruck,
+  buildBus,
+  buildCyclist,
+  buildHatchback,
+  buildMotorcycle,
+  buildPickup,
+  buildSedan,
+  buildSemiTruck,
+  buildSuv,
+  buildVan,
+} from './builders/vehicles.js';
+
+/** Build parameters accepted by each catalog id. */
+export interface PropParamMap {
+  'vehicle.sedan': VehicleParams;
+  'vehicle.hatchback': VehicleParams;
+  'vehicle.suv': VehicleParams;
+  'vehicle.pickup': VehicleParams;
+  'vehicle.van': VehicleParams;
+  'vehicle.box_truck': VehicleParams;
+  'vehicle.semi_truck': VehicleParams;
+  'vehicle.bus': VehicleParams;
+  'vehicle.motorcycle': VehicleParams;
+  'vehicle.bicycle': VehicleParams;
+  'pedestrian.adult_standing': PedestrianParams;
+  'pedestrian.adult_walking': PedestrianParams;
+  'pedestrian.child_standing': PedestrianParams;
+  'pedestrian.child_walking': PedestrianParams;
+  'construction.traffic_cone': ConeParams;
+  'construction.channelizer_drum': Record<string, never>;
+  'construction.barricade_type3': Record<string, never>;
+  'construction.jersey_barrier': BarrierParams;
+  'construction.jersey_barrier_run': BarrierRunParams;
+  'construction.sign_road_work': SignParams;
+  'construction.flagger': FlaggerParams;
+  'construction.arrow_board': ArrowBoardParams;
+  'construction.excavator': Record<string, never>;
+  'construction.portable_toilet': Record<string, never>;
+  'construction.spoil_pile': SpoilPileParams;
+  'occluder.dumpster': Record<string, never>;
+  'occluder.covered_car': Record<string, never>;
+  'occluder.hedge_run': RunParams;
+  'occluder.fence_run': RunParams;
+  'street.mailbox_cluster': Record<string, never>;
+  'street.bus_shelter': Record<string, never>;
+  'street.food_cart': Record<string, never>;
+  'hazard.tire_debris': Record<string, never>;
+  'hazard.cardboard_box': Record<string, never>;
+  'hazard.trash_bags': TrashBagParams;
+  'hazard.downed_branch': Record<string, never>;
+}
+
+type Builders = { [K in CatalogId]: (params: PropParamMap[K]) => Group };
+
+/**
+ * Id -> builder. The mapped type makes this exhaustive: adding a catalog entry
+ * without a builder (or vice versa) is a type error, which is the whole point
+ * of keeping the ids in one place.
+ */
+const BUILDERS: Builders = {
+  'vehicle.sedan': buildSedan,
+  'vehicle.hatchback': buildHatchback,
+  'vehicle.suv': buildSuv,
+  'vehicle.pickup': buildPickup,
+  'vehicle.van': buildVan,
+  'vehicle.box_truck': buildBoxTruck,
+  'vehicle.semi_truck': buildSemiTruck,
+  'vehicle.bus': buildBus,
+  'vehicle.motorcycle': buildMotorcycle,
+  'vehicle.bicycle': buildCyclist,
+  'pedestrian.adult_standing': buildAdultStanding,
+  'pedestrian.adult_walking': buildAdultWalking,
+  'pedestrian.child_standing': buildChildStanding,
+  'pedestrian.child_walking': buildChildWalking,
+  'construction.traffic_cone': buildTrafficCone,
+  'construction.channelizer_drum': buildChannelizerDrum,
+  'construction.barricade_type3': buildBarricadeTypeIII,
+  'construction.jersey_barrier': buildJerseyBarrier,
+  'construction.jersey_barrier_run': buildJerseyBarrierRun,
+  'construction.sign_road_work': buildConstructionSign,
+  'construction.flagger': buildFlagger,
+  'construction.arrow_board': buildArrowBoard,
+  'construction.excavator': buildExcavator,
+  'construction.portable_toilet': buildPortableToilet,
+  'construction.spoil_pile': buildSpoilPile,
+  'occluder.dumpster': buildDumpster,
+  'occluder.covered_car': buildCoveredCar,
+  'occluder.hedge_run': buildHedgeRun,
+  'occluder.fence_run': buildFenceRun,
+  'street.mailbox_cluster': buildMailboxCluster,
+  'street.bus_shelter': buildBusShelter,
+  'street.food_cart': buildFoodCart,
+  'hazard.tire_debris': buildTireDebris,
+  'hazard.cardboard_box': buildCardboardBox,
+  'hazard.trash_bags': buildTrashBags,
+  'hazard.downed_branch': buildDownedBranch,
+};
+
+/**
+ * Build a prop by catalog id.
+ *
+ * Parameters are merged over the entry's `defaultParams`, so `buildProp(id)`
+ * always produces the object whose dimensions the catalog advertises. The
+ * returned group is ground-centred, faces +X and carries
+ * `userData.catalogId` for round-tripping back to the catalog.
+ */
+export function buildProp<K extends CatalogId>(
+  id: K,
+  params?: Partial<PropParamMap[K]>,
+): Group {
+  const builder = BUILDERS[id];
+  if (!builder) throw new Error(`Unknown catalog id: ${id}`);
+  const entry = getEntry(id);
+  const merged = { ...entry.defaultParams, ...params } as PropParamMap[K];
+  const group = builder(merged);
+  group.name = id;
+  group.userData.catalogId = id;
+  group.userData.params = merged;
+  return group;
+}
+
+/** The set of ids that have a builder — identical to the catalog ids. */
+export const BUILDER_IDS = Object.keys(BUILDERS) as readonly CatalogId[];
