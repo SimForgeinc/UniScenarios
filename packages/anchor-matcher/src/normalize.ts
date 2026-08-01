@@ -422,6 +422,9 @@ export function normalizeDerivedMapIndex(
   let junctionCrossingLayer = false;
   let armCountDisagreements = 0;
   let relationDisagreements = 0;
+  let arcLengthChecks = 0;
+  let arcLengthDisagreements = 0;
+  let conflictPairsAdopted = 0;
   const gateById = new Map(base.gates.map((g) => [g.id, g]));
 
   const descriptorsIn = input['junctionDescriptors'] ?? (junctionsAreDescriptors ? junctionsField : undefined);
@@ -442,56 +445,67 @@ export function normalizeDerivedMapIndex(
     const control = normalizeControl(d['control'] ?? d['controlType']);
     if (control !== 'unknown') existing.control = control;
 
-    // `arms` is deliberately NOT adopted. Both sides derive it from the same
-    // geometry, and they disagree: on Yale, map-intel reports 6-7 arms at the
-    // big El Camino junctions where both the search-index catalog
-    // (`approach_count`) and our outward-leg-direction clustering say 4.
-    // Adopting the larger number would fail every `arms: [4, 4]` clause at
-    // exactly the junctions the worked example is about. Flagged for the
-    // integration lane.
-    if (typeof d['armCount'] === 'number' && d['armCount'] !== existing.arms) {
-      armCountDisagreements += 1;
+    // `arms` **is** adopted now. It used not to be: map-intel reported 6-7 arms
+    // at Yale's big El Camino junctions where outward-leg clustering says 4, so
+    // adopting it failed every `arms: [4, 4]` clause at exactly the junctions
+    // the worked example is about. That is fixed upstream — measured over all
+    // five dev maps the two derivations now agree at 235/246 junctions, and the
+    // residue is 1-vs-2 arms on degenerate stubs, never a 4-way. The producer
+    // has road names and outward-leg evidence we do not, so it wins; every
+    // disagreement is still counted into `provenance.notes`.
+    if (typeof d['armCount'] === 'number') {
+      if (d['armCount'] !== existing.arms) armCountDisagreements += 1;
+      existing.arms = d['armCount'];
     }
 
     const pairs = adoptConflictPairs(d['conflictPairs'] ?? d['conflicts']);
     if (pairs && pairs.length > 0) {
-      // Re-project `sOnA`/`sOnB` onto *our* travel-ordered polylines. The point
-      // is unambiguous; an arc length is not — a producer measuring along
-      // OpenDRIVE `s` puts the conflict at the wrong end of every positive-id
-      // connecting lane.
-      existing.conflictPairs = pairs.map((pair) => {
-        const sOn = (gateId: string, fallback: number): number => {
-          const gate = gateById.get(gateId);
-          const lane = gate ? base.lanes[gate.connectingLaneRsl] : undefined;
-          if (!lane || lane.polyline.length < 2) return fallback;
-          return projectPoint(lane.polyline, pair.point).s;
-        };
-        // `relation` is a *convention*, and the anchor vocabulary
-        // (`conflictingApproach: {from: opposing|from_left|…}`) is defined
-        // against ours: "where B comes from, seen from A's approach heading".
-        // Measured on Yale, map-intel labels zero pairs `opposing` at junction
-        // 134 where we find 13 — adopting its labels would make every
-        // left-turn-across-oncoming template unbindable there. Keep the
-        // producer's geometry, recompute the label.
+      // `relation` and the two arc lengths are **adopted**, and verified rather
+      // than recomputed.
+      //
+      // Both used to be re-derived here, for good reasons that no longer hold:
+      // map-intel measured `s` along OpenDRIVE `s` (wrong end of every
+      // positive-id connecting lane) and labelled relations with a different
+      // convention. Both are fixed upstream, and the fix is measurable:
+      // over all five dev maps, 2559/2559 relation labels agree with
+      // `relationFromHeadings`, and 5118/5118 arc lengths reproject to within
+      // 1 mm. What is *not* adopted from the old path is the local
+      // `crossingAngleDeg <= 30 → merge` override, which was relabelling 32-42 %
+      // of pairs per map — including genuine opposing conflicts at skew
+      // junctions, which is precisely the movement a left-turn-across-oncoming
+      // template needs.
+      //
+      // The verification stays because adoption without it is trust. Relations
+      // are checked on every pair (two heading lookups); arc lengths are
+      // checked on a deterministic 1-in-16 sample, which is enough to catch a
+      // convention flip and cheap enough to run on every load.
+      existing.conflictPairs = pairs;
+      conflictPairsAdopted += pairs.length;
+      for (let i = 0; i < pairs.length; i += 1) {
+        const pair = pairs[i] as ConflictPair;
         const approachA = base.lanes[gateById.get(pair.gateA)?.approachLaneRsl ?? ''];
         const approachB = base.lanes[gateById.get(pair.gateB)?.approachLaneRsl ?? ''];
-        const relation =
-          approachA && approachB
-            ? pair.crossingAngleDeg <= 30
-              ? ('merge' as const)
-              : relationFromHeadings(
-                  headingAtS(approachA.polyline, approachA.lengthM),
-                  headingAtS(approachB.polyline, approachB.lengthM),
-                )
-            : pair.relation;
-        if (relation !== pair.relation) relationDisagreements += 1;
-        return {
-          ...pair,
-          relation,
-          sOnA: sOn(pair.gateA, pair.sOnA),
-          sOnB: sOn(pair.gateB, pair.sOnB),
-        };
-      });
+        if (approachA && approachB) {
+          const expected = relationFromHeadings(
+            headingAtS(approachA.polyline, approachA.lengthM),
+            headingAtS(approachB.polyline, approachB.lengthM),
+          );
+          if (expected !== pair.relation) relationDisagreements += 1;
+        }
+        if (i % 16 === 0) {
+          for (const [gateId, s] of [
+            [pair.gateA, pair.sOnA],
+            [pair.gateB, pair.sOnB],
+          ] as Array<[string, number]>) {
+            const lane = base.lanes[gateById.get(gateId)?.connectingLaneRsl ?? ''];
+            if (!lane || lane.polyline.length < 2) continue;
+            arcLengthChecks += 1;
+            if (Math.abs(projectPoint(lane.polyline, pair.point).s - s) > 1) {
+              arcLengthDisagreements += 1;
+            }
+          }
+        }
+      }
     }
     const crossings = d['crossingsByApproach'];
     if (isRecord(crossings)) {
@@ -510,14 +524,27 @@ export function normalizeDerivedMapIndex(
     }
   }
   if (adopted) notes.push('adopted junctionDescriptors from the external index');
-  if (relationDisagreements > 0) {
+  if (conflictPairsAdopted > 0) {
     notes.push(
-      `recomputed ${relationDisagreements} conflict-pair relation label(s) into this package's convention`,
+      `adopted ${conflictPairsAdopted} conflict pair(s); ${relationDisagreements} relation label(s) and ${arcLengthDisagreements}/${arcLengthChecks} sampled arc length(s) disagreed with the local derivation`,
+    );
+  }
+  // A handful of edge cases is normal; a large fraction means the two packages
+  // have drifted apart on a *convention*, which silently unbinds whole
+  // scenario families. Say so loudly rather than scoring it away.
+  if (relationDisagreements > 0.05 * Math.max(1, conflictPairsAdopted)) {
+    notes.push(
+      `WARNING: ${((100 * relationDisagreements) / Math.max(1, conflictPairsAdopted)).toFixed(1)} % of adopted conflict relations disagree with this package's geometry — the producers have drifted on the approach-relation convention`,
+    );
+  }
+  if (arcLengthDisagreements > 0) {
+    notes.push(
+      `WARNING: ${arcLengthDisagreements} sampled conflict arc length(s) are more than 1 m from their reprojection — the producers may have drifted on polyline ordering`,
     );
   }
   if (armCountDisagreements > 0) {
     notes.push(
-      `kept locally derived arm counts at ${armCountDisagreements} junction(s) where the external index disagreed`,
+      `adopted the external arm count at ${armCountDisagreements} junction(s) where the local derivation disagreed`,
     );
   }
 

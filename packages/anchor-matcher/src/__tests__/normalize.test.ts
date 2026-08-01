@@ -55,31 +55,50 @@ describe('normalizeDerivedMapIndex — map-intel shape', () => {
     expect(index.capabilities.junctionControl).toBe(true);
   });
 
-  it('keeps its own arm count when the producer disagrees, and says so', () => {
-    expect(mapIntelSample.junctions[0]!.armCount).toBe(6);
+  it('adopts the producer arm count, which now agrees with the local derivation', () => {
+    expect(mapIntelSample.junctions[0]!.armCount).toBe(4);
     expect(index.junctionDescriptors['100']!.arms).toBe(4);
-    expect(index.provenance.notes.join(' ')).toContain('kept locally derived arm counts');
   });
 
-  it('converts pointXY/radians and recomputes the relation label', () => {
+  it('records an adopted arm count that disagrees, rather than hiding it', () => {
+    const drifted = structuredClone(mapIntelSample) as typeof mapIntelSample;
+    drifted.junctions[0]!.armCount = 6;
+    const out = normalizeDerivedMapIndex(drifted, {
+      mapId: 'synthetic',
+      topology: syntheticTopology(),
+    });
+    expect(out.junctionDescriptors['100']!.arms).toBe(6);
+    expect(out.provenance.notes.join(' ')).toContain('adopted the external arm count at 1 junction');
+  });
+
+  it('converts pointXY/radians and adopts the relation label and arc lengths', () => {
     const pair = index.junctionDescriptors['100']!.conflictPairs.find(
       (p) => p.gateA === 'g_ego_left' && p.gateB === 'g_opp_straight',
     )!;
-    expect(pair.point).toEqual({ x: 0.98, y: 1.75 });
-    expect(pair.crossingAngleDeg).toBeCloseTo((1.9 * 180) / Math.PI, 3);
-    // The file says `same_dir_merge`; the two approaches are head-on.
+    expect(pair.point).toEqual({ x: -0.6774691358024688, y: 1.75 });
+    expect(pair.crossingAngleDeg).toBeCloseTo(127.87498365, 4);
     expect(pair.relation).toBe('opposing');
-    expect(index.provenance.notes.join(' ')).toContain('recomputed');
+    // Adopted verbatim — the producer measures arc length the same way we do.
+    expect(pair.sOnA).toBeCloseTo(10.294256462, 6);
+    expect(pair.sOnB).toBeCloseTo(10.677469136, 6);
+    expect(index.provenance.notes.join(' ')).toContain('adopted 2 conflict pair(s)');
   });
 
-  it('re-projects conflict arc lengths onto our travel-ordered polylines', () => {
-    const pair = index.junctionDescriptors['100']!.conflictPairs[0]!;
-    // The file's 999 is meaningless in our parameterization; the re-projected
-    // value must sit inside the connecting lane.
-    expect(pair.sOnA).toBeGreaterThan(0);
-    expect(pair.sOnA).toBeLessThan(index.lanes['10:0:-1']!.lengthM);
-    expect(pair.sOnB).toBeGreaterThan(0);
-    expect(pair.sOnB).toBeLessThan(index.lanes['14:0:-1']!.lengthM);
+  it('flags a relation label and an arc length that drifted from the geometry', () => {
+    // The fixture's first pair says `same_dir_merge` where the two approaches
+    // are 114° apart, and `sOnA: 999` on a 19 m lane.
+    const notes = index.provenance.notes.join(' ');
+    expect(notes).toContain('1 relation label(s)');
+    expect(notes).toContain('WARNING');
+    expect(notes).toContain('drifted on the approach-relation convention');
+    expect(notes).toContain('conflict arc length(s) are more than 1 m from their reprojection');
+    // Adoption still happened: the seam reports drift, it does not silently
+    // paper over it with a value the producer never emitted.
+    const pair = index.junctionDescriptors['100']!.conflictPairs.find(
+      (p) => p.gateB === 'g_north_left',
+    )!;
+    expect(pair.relation).toBe('merge');
+    expect(pair.sOnA).toBe(999);
   });
 
   it('adopts segment ids, because corridor site ids embed them', () => {

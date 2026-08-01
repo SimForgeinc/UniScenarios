@@ -562,7 +562,14 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
   const transitions = laneCountTransitions(samples);
 
   for (const feature of anchor.features) {
-    const isOrigin = !!origin && feature.id === origin.id;
+    // `originFeature()` returns `features[0]`, but a **corridor** frame's origin
+    // is a segment head, not that feature: only a junction-kind origin actually
+    // establishes the frame. Treating a leading `crossing` / `parking_zone`
+    // feature as the origin bound it to the *segment id* and made every
+    // `on_crossing` / `in_parking_zone` role unbindable on corridor anchors —
+    // which is exactly the shape `scenario-model` v2 emits, since v2 has no
+    // `originFeatureId` field to redirect with.
+    const isOrigin = !!origin && feature.id === origin.id && frame.origin.kind !== 'corridor';
     const path = `features.${feature.id}`;
 
     if (isOrigin) {
