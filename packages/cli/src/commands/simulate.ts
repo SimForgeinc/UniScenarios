@@ -1,0 +1,114 @@
+/**
+ * `scen simulate <instance> [--trace out.trace.json.gz]`.
+ *
+ * One engine pass. `guards: 'collect'` rather than `'throw'`: a scenario that
+ * fails a feasibility guard is still worth simulating — the resulting metrics
+ * are how you tell "the runway is 8 m short" from "the runway is 200 m short".
+ */
+
+import path from 'node:path';
+
+import { runSimulation, traceDigest, type SimTrace } from '@scenario-studio/sim-engine';
+
+import { EXIT } from '../errors.js';
+import { loadMap } from '../maps.js';
+import { emit, emitLines, fixed, pad } from '../output.js';
+import { readInstance, writeTraceFile } from '../template-io.js';
+
+export interface SimulateOptions {
+  readonly file: string;
+  readonly trace?: string | undefined;
+  readonly pretty: boolean;
+}
+
+/** The metrics block every command that runs the engine prints. */
+export function metricsSummary(trace: SimTrace): Record<string, unknown> {
+  const m = trace.metrics;
+  return {
+    minTTC: m.minTTC
+      ? { value: round(m.minTTC.value), t: round(m.minTTC.t), pair: m.minTTC.pair }
+      : null,
+    minDistance: m.minDistance.map((d) => ({
+      pair: d.pair,
+      minDistanceM: round(d.minDistanceM),
+      t: round(d.t),
+    })),
+    requiredDecelMax: Object.fromEntries(
+      Object.entries(m.requiredDecelMax).map(([k, v]) => [k, round(v)]),
+    ),
+    revealToConflict: m.revealToConflict
+      ? {
+          value: round(m.revealToConflict.value),
+          losOpenT: round(m.revealToConflict.losOpenT),
+          conflictT: round(m.revealToConflict.conflictT),
+          pair: m.revealToConflict.pair,
+        }
+      : null,
+    collisions: m.collisions,
+    triggerNeverFired: m.triggerNeverFired,
+    clippedCriticality: m.clippedCriticality,
+    ticksSimulated: m.ticksSimulated,
+  };
+}
+
+function round(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+export async function simulate(options: SimulateOptions): Promise<number> {
+  const instance = await readInstance(options.file);
+  const bundle = await loadMap(instance.input.mapId);
+  const result = runSimulation(instance.input, { graph: bundle.graph, guards: 'collect' });
+
+  if (options.trace) {
+    await writeTraceFile(options.trace, result.trace);
+  }
+
+  const payload = {
+    file: options.file,
+    mapId: instance.input.mapId,
+    header: result.trace.header,
+    traceDigest: traceDigest(result.trace),
+    metrics: metricsSummary(result.trace),
+    events: countEvents(result.trace),
+    issues: result.issues,
+    arrival: result.arrival,
+    trace: options.trace ? path.resolve(options.trace) : null,
+  };
+
+  if (!options.pretty) {
+    emit(payload, options);
+  } else {
+    const m = result.trace.metrics;
+    const lines = [
+      `${options.file} on ${instance.input.mapId} — ${result.trace.ticks.t.length} recorded ticks, engine ${result.trace.header.engineVersion}`,
+      `inputHash ${result.trace.header.inputHash.slice(0, 16)}…  traceDigest ${traceDigest(result.trace).slice(0, 16)}…`,
+      '',
+      `minTTC              ${m.minTTC ? `${fixed(m.minTTC.value)} s at t=${fixed(m.minTTC.t)} s (${m.minTTC.pair.join(' / ')})` : '— (no pair ever closed)'}`,
+      `minDistance         ${m.minDistance
+        .map((d) => `${d.pair.join('/')}: ${fixed(d.minDistanceM)} m @ ${fixed(d.t)} s`)
+        .join(', ') || '—'}`,
+      `requiredDecelMax    ${Object.entries(m.requiredDecelMax)
+        .map(([k, v]) => `${k}: ${fixed(v)}`)
+        .join(', ')}`,
+      `revealToConflict    ${m.revealToConflict ? `${fixed(m.revealToConflict.value)} s (LOS opened ${fixed(m.revealToConflict.losOpenT)} s, conflict ${fixed(m.revealToConflict.conflictT)} s)` : '—'}`,
+      `collisions          ${m.collisions.length}`,
+      `triggerNeverFired   ${m.triggerNeverFired.join(', ') || '—'}`,
+      `clippedCriticality  ${m.clippedCriticality}`,
+    ];
+    if (result.issues.length > 0) {
+      lines.push('', 'issues:');
+      for (const i of result.issues) lines.push(`  ${pad(i.severity, 9)}${pad(i.code, 26)}${i.reason}`);
+    }
+    if (options.trace) lines.push('', `trace: ${path.resolve(options.trace)}`);
+    emitLines(lines);
+  }
+
+  return result.issues.some((i) => i.severity === 'error') ? EXIT.validationFindings : EXIT.ok;
+}
+
+function countEvents(trace: SimTrace): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const event of trace.events) out[event.kind] = (out[event.kind] ?? 0) + 1;
+  return out;
+}

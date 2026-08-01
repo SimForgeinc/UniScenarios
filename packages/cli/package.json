@@ -1,0 +1,36 @@
+{
+  "name": "@scenario-studio/cli",
+  "version": "0.0.1",
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "bin": {
+    "scen": "./bin/scen.js"
+  },
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "bin"
+  ],
+  "scripts": {
+    "build": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "scen": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@scenario-studio/anchor-matcher": "workspace:*",
+    "@scenario-studio/map-intel": "workspace:*",
+    "@scenario-studio/scenario-model": "workspace:*",
+    "@scenario-studio/sim-engine": "workspace:*",
+    "tsx": "^4.20.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "execa": "^9.5.2",
+    "typescript": "^5.6.0",
+    "vitest": "^3.0.0"
+  }
+}
