@@ -82,7 +82,8 @@ describe('declared fact vocabulary', () => {
 });
 
 describe.skipIf(!devAssetsAvailable())('declared facts across every real map', () => {
-  it('produces every declared key on at least one map, and every `always` key on all of them', async () => {
+  // Builds all five real maps; ~4-6 s on this machine, over vitest's 5 s default.
+  it('produces every declared key on at least one map, and every `always` key on all of them', { timeout: 30_000 }, async () => {
     const producedAnywhere = new Set<string>();
     for (const mapId of ALL_MAPS) {
       const built = await buildMapIntelFromDir(path.join(DEV_ASSETS, mapId));
