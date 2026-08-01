@@ -1,0 +1,5532 @@
+{
+  "version": "1.2.0",
+  "generator": "city-preprocess",
+  "created": "2026-05-12T09:04:59.449Z",
+  "scene": {
+    "bounds": {
+      "min": [
+        327.6726722717285,
+        1.5782859091354045,
+        -2051.2367248535156
+      ],
+      "max": [
+        1091.638397905214,
+        30.600047617032033,
+        -1423.2600212097168
+      ]
+    },
+    "totalTriangles": 1622020,
+    "gridDimensions": [
+      8,
+      8
+    ],
+    "cellSize": [
+      76.42404863864859,
+      64.14439949694705
+    ],
+    "origin": [
+      357.78450109739856,
+      8.102421760559082,
+      -2022.895583691945
+    ],
+    "lodLevels": 4,
+    "coordinateSystem": "y-up"
+  },
+  "tiles": [
+    {
+      "id": "tile_5_5",
+      "gridX": 5,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          8.102421760559082,
+          -1702.1735862072096
+        ],
+        "max": [
+          816.3287929292901,
+          30.600047617032033,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_5_5.lod0.glb",
+          "triangles": 10698,
+          "fileSize": 22622308,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_5_5.lod1.glb",
+          "triangles": 7182,
+          "fileSize": 6296680,
+          "geometricError": 4.558465401434793
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_5_5.lod2.glb",
+          "triangles": 6072,
+          "fileSize": 1540816,
+          "geometricError": 18.233861605739172
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_5_5.lod3.glb",
+          "triangles": 5970,
+          "fileSize": 525676,
+          "geometricError": 72.93544642295669
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_5_5.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_5_5.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_5_5.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_5_5.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_3_3",
+      "gridX": 3,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          8.102421760559082,
+          -1830.4623852011039
+        ],
+        "max": [
+          663.4806956519928,
+          30.600047617032033,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_3_3.lod0.glb",
+          "triangles": 324,
+          "fileSize": 5775764,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_3_3.lod1.glb",
+          "triangles": 222,
+          "fileSize": 1754084,
+          "geometricError": 0.5513574671502788
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_3_3.lod2.glb",
+          "triangles": 208,
+          "fileSize": 373892,
+          "geometricError": 2.205429868601115
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_3_3.lod3.glb",
+          "triangles": 208,
+          "fileSize": 112584,
+          "geometricError": 8.82171947440446
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_3_3.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_3_3.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_3_3.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_3_3.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_4_4",
+      "gridX": 4,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          739.9047442906415,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_4_4.lod0.glb",
+          "triangles": 84250,
+          "fileSize": 39362484,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_4_4.lod1.glb",
+          "triangles": 46302,
+          "fileSize": 13701988,
+          "geometricError": 25.02777352244173
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_4_4.lod2.glb",
+          "triangles": 26714,
+          "fileSize": 3695524,
+          "geometricError": 100.11109408976692
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_4_4.lod3.glb",
+          "triangles": 26116,
+          "fileSize": 1340080,
+          "geometricError": 400.4443763590677
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_4_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_4_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_4_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_4_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_5_4",
+      "gridX": 5,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          816.3287929292901,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_5_4.lod0.glb",
+          "triangles": 15006,
+          "fileSize": 7277260,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_5_4.lod1.glb",
+          "triangles": 14554,
+          "fileSize": 2348224,
+          "geometricError": 28.853235813837966
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_5_4.lod2.glb",
+          "triangles": 14418,
+          "fileSize": 797512,
+          "geometricError": 115.41294325535186
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_5_4.lod3.glb",
+          "triangles": 14296,
+          "fileSize": 426076,
+          "geometricError": 461.65177302140745
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_5_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_5_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_5_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_5_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_1_1",
+      "gridX": 1,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          8.102421760559082,
+          -1958.751184194998
+        ],
+        "max": [
+          510.6325983746957,
+          30.600047617032033,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_1_1.lod0.glb",
+          "triangles": 70684,
+          "fileSize": 45207772,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_1_1.lod1.glb",
+          "triangles": 45504,
+          "fileSize": 13089812,
+          "geometricError": 47.59326392132557
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_1_1.lod2.glb",
+          "triangles": 35056,
+          "fileSize": 3839384,
+          "geometricError": 190.3730556853023
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_1_1.lod3.glb",
+          "triangles": 34568,
+          "fileSize": 1485024,
+          "geometricError": 761.4922227412092
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_1_1.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_1_1.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_1_1.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_1_1.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_1",
+      "gridX": 2,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1958.751184194998
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_1.lod0.glb",
+          "triangles": 47774,
+          "fileSize": 73186408,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_1.lod1.glb",
+          "triangles": 34996,
+          "fileSize": 25417988,
+          "geometricError": 38.05187537279806
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_1.lod2.glb",
+          "triangles": 33504,
+          "fileSize": 6953560,
+          "geometricError": 152.20750149119223
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_1.lod3.glb",
+          "triangles": 33380,
+          "fileSize": 2312552,
+          "geometricError": 608.8300059647689
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_1.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_1.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_1.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_1.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_0",
+      "gridX": 2,
+      "gridZ": 0,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -2022.895583691945
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1958.751184194998
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_0.lod0.glb",
+          "triangles": 1736,
+          "fileSize": 3410552,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_0.lod1.glb",
+          "triangles": 1634,
+          "fileSize": 3400032,
+          "geometricError": 0.027962406599529414
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_0.lod2.glb",
+          "triangles": 1594,
+          "fileSize": 1058976,
+          "geometricError": 0.11184962639811766
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_0.lod3.glb",
+          "triangles": 1582,
+          "fileSize": 296000,
+          "geometricError": 0.44739850559247063
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_0.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_0.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_0.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_0.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_1_0",
+      "gridX": 1,
+      "gridZ": 0,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          8.102421760559082,
+          -2022.895583691945
+        ],
+        "max": [
+          510.6325983746957,
+          30.600047617032033,
+          -1958.751184194998
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_1_0.lod0.glb",
+          "triangles": 28943,
+          "fileSize": 43130056,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_1_0.lod1.glb",
+          "triangles": 20633,
+          "fileSize": 14573332,
+          "geometricError": 16.46508562356331
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_1_0.lod2.glb",
+          "triangles": 20481,
+          "fileSize": 3799312,
+          "geometricError": 65.86034249425325
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_1_0.lod3.glb",
+          "triangles": 20473,
+          "fileSize": 1298904,
+          "geometricError": 263.441369977013
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_1_0.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_1_0.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_1_0.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_1_0.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_4",
+      "gridX": 2,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_4.lod0.glb",
+          "triangles": 37137,
+          "fileSize": 105607960,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_4.lod1.glb",
+          "triangles": 28743,
+          "fileSize": 31068696,
+          "geometricError": 25.843689049860124
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_4.lod2.glb",
+          "triangles": 26079,
+          "fileSize": 8812448,
+          "geometricError": 103.3747561994405
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_4.lod3.glb",
+          "triangles": 25825,
+          "fileSize": 2816840,
+          "geometricError": 413.499024797762
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_1_3",
+      "gridX": 1,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          8.102421760559082,
+          -1830.4623852011039
+        ],
+        "max": [
+          510.6325983746957,
+          30.600047617032033,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_1_3.lod0.glb",
+          "triangles": 82707,
+          "fileSize": 93289072,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_1_3.lod1.glb",
+          "triangles": 67789,
+          "fileSize": 26955152,
+          "geometricError": 39.910474412207755
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_1_3.lod2.glb",
+          "triangles": 49121,
+          "fileSize": 8012680,
+          "geometricError": 159.64189764883102
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_1_3.lod3.glb",
+          "triangles": 47253,
+          "fileSize": 2850284,
+          "geometricError": 638.5675905953241
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_1_3.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_1_3.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_1_3.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_1_3.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_3",
+      "gridX": 2,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1830.4623852011039
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_3.lod0.glb",
+          "triangles": 71040,
+          "fileSize": 116446348,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_3.lod1.glb",
+          "triangles": 50670,
+          "fileSize": 34994872,
+          "geometricError": 26.637329077280697
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_3.lod2.glb",
+          "triangles": 49658,
+          "fileSize": 10345652,
+          "geometricError": 106.54931630912279
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_3.lod3.glb",
+          "triangles": 49678,
+          "fileSize": 3562364,
+          "geometricError": 426.19726523649115
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_3.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_3.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_3.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_3.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_1_4",
+      "gridX": 1,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          510.6325983746957,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_1_4.lod0.glb",
+          "triangles": 56200,
+          "fileSize": 73870024,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_1_4.lod1.glb",
+          "triangles": 56950,
+          "fileSize": 20129636,
+          "geometricError": 15.742044519515199
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_1_4.lod2.glb",
+          "triangles": 30766,
+          "fileSize": 5588220,
+          "geometricError": 62.968178078060795
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_1_4.lod3.glb",
+          "triangles": 27640,
+          "fileSize": 1868388,
+          "geometricError": 251.87271231224318
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_1_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_1_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_1_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_1_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_0_3",
+      "gridX": 0,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          8.102421760559082,
+          -1830.4623852011039
+        ],
+        "max": [
+          434.20854973604713,
+          30.600047617032033,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_0_3.lod0.glb",
+          "triangles": 70304,
+          "fileSize": 126376360,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_0_3.lod1.glb",
+          "triangles": 47800,
+          "fileSize": 37202620,
+          "geometricError": 29.69097403276346
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_0_3.lod2.glb",
+          "triangles": 35712,
+          "fileSize": 10974844,
+          "geometricError": 118.76389613105384
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_0_3.lod3.glb",
+          "triangles": 34948,
+          "fileSize": 3579372,
+          "geometricError": 475.05558452421536
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_0_3.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_0_3.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_0_3.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_0_3.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_0_2",
+      "gridX": 0,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          8.102421760559082,
+          -1894.606784698051
+        ],
+        "max": [
+          434.20854973604713,
+          30.600047617032033,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_0_2.lod0.glb",
+          "triangles": 67900,
+          "fileSize": 138609920,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_0_2.lod1.glb",
+          "triangles": 47332,
+          "fileSize": 40799176,
+          "geometricError": 23.361063232951523
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_0_2.lod2.glb",
+          "triangles": 33740,
+          "fileSize": 11573292,
+          "geometricError": 93.44425293180609
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_0_2.lod3.glb",
+          "triangles": 32710,
+          "fileSize": 3761948,
+          "geometricError": 373.77701172722436
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_0_2.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_0_2.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_0_2.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_0_2.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_0_4",
+      "gridX": 0,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          434.20854973604713,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_0_4.lod0.glb",
+          "triangles": 8031,
+          "fileSize": 36808236,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_0_4.lod1.glb",
+          "triangles": 6603,
+          "fileSize": 9879812,
+          "geometricError": 20.476162771987042
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_0_4.lod2.glb",
+          "triangles": 6603,
+          "fileSize": 2775828,
+          "geometricError": 81.90465108794817
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_0_4.lod3.glb",
+          "triangles": 6603,
+          "fileSize": 863916,
+          "geometricError": 327.61860435179267
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_0_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_0_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_0_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_0_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_5",
+      "gridX": 2,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1702.1735862072096
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_5.lod0.glb",
+          "triangles": 6893,
+          "fileSize": 21756492,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_5.lod1.glb",
+          "triangles": 6669,
+          "fileSize": 6498312,
+          "geometricError": 23.306529128348952
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_5.lod2.glb",
+          "triangles": 6353,
+          "fileSize": 1947128,
+          "geometricError": 93.22611651339581
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_5.lod3.glb",
+          "triangles": 6145,
+          "fileSize": 639536,
+          "geometricError": 372.90446605358323
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_5.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_5.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_5.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_5.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_6_5",
+      "gridX": 6,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          8.102421760559082,
+          -1702.1735862072096
+        ],
+        "max": [
+          892.7528415679386,
+          30.600047617032033,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_6_5.lod0.glb",
+          "triangles": 144845,
+          "fileSize": 28821468,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_6_5.lod1.glb",
+          "triangles": 113553,
+          "fileSize": 9039156,
+          "geometricError": 18.60879861388785
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_6_5.lod2.glb",
+          "triangles": 111725,
+          "fileSize": 3559652,
+          "geometricError": 74.4351944555514
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_6_5.lod3.glb",
+          "triangles": 111721,
+          "fileSize": 2164460,
+          "geometricError": 297.7407778222056
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_6_5.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_6_5.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_6_5.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_6_5.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_5_6",
+      "gridX": 5,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          816.3287929292901,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_5_6.lod0.glb",
+          "triangles": 28340,
+          "fileSize": 185116,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_5_6.lod1.glb",
+          "triangles": 14170,
+          "fileSize": 110604,
+          "geometricError": 29.108703081510157
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_5_6.lod2.glb",
+          "triangles": 4312,
+          "fileSize": 52124,
+          "geometricError": 116.43481232604063
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_5_6.lod3.glb",
+          "triangles": 4340,
+          "fileSize": 52276,
+          "geometricError": 465.7392493041625
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_5_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_5_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_5_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_5_6.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_6_6",
+      "gridX": 6,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          892.7528415679386,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_6_6.lod0.glb",
+          "triangles": 41637,
+          "fileSize": 1816016,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_6_6.lod1.glb",
+          "triangles": 34701,
+          "fileSize": 1748812,
+          "geometricError": 0.5390111783387423
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_6_6.lod2.glb",
+          "triangles": 34701,
+          "fileSize": 805624,
+          "geometricError": 2.1560447133549694
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_6_6.lod3.glb",
+          "triangles": 34701,
+          "fileSize": 549760,
+          "geometricError": 8.624178853419878
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_6_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_6_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_6_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_6_6.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_7_6",
+      "gridX": 7,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          892.7528415679386,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          969.1768902065872,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_7_6.lod0.glb",
+          "triangles": 49295,
+          "fileSize": 6721352,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_7_6.lod1.glb",
+          "triangles": 31119,
+          "fileSize": 2447484,
+          "geometricError": 42.06582747476571
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_7_6.lod2.glb",
+          "triangles": 31127,
+          "fileSize": 919172,
+          "geometricError": 168.26330989906285
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_7_6.lod3.glb",
+          "triangles": 31127,
+          "fileSize": 539116,
+          "geometricError": 673.0532395962514
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_7_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_7_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_7_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_7_6.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_7_7",
+      "gridX": 7,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          892.7528415679386,
+          8.102421760559082,
+          -1573.8847872133156
+        ],
+        "max": [
+          969.1768902065872,
+          30.600047617032033,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_7_7.lod0.glb",
+          "triangles": 33190,
+          "fileSize": 6247808,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_7_7.lod1.glb",
+          "triangles": 23496,
+          "fileSize": 2257440,
+          "geometricError": 35.198670430959446
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_7_7.lod2.glb",
+          "triangles": 23496,
+          "fileSize": 805964,
+          "geometricError": 140.79468172383778
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_7_7.lod3.glb",
+          "triangles": 23496,
+          "fileSize": 459872,
+          "geometricError": 563.1787268953511
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_7_7.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_7_7.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_7_7.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_7_7.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_4_5",
+      "gridX": 4,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          8.102421760559082,
+          -1702.1735862072096
+        ],
+        "max": [
+          739.9047442906415,
+          30.600047617032033,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_4_5.lod0.glb",
+          "triangles": 43093,
+          "fileSize": 27867112,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_4_5.lod1.glb",
+          "triangles": 30885,
+          "fileSize": 8554432,
+          "geometricError": 30.797356417701998
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_4_5.lod2.glb",
+          "triangles": 26807,
+          "fileSize": 2622684,
+          "geometricError": 123.1894256077335
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_4_5.lod3.glb",
+          "triangles": 26803,
+          "fileSize": 1048740,
+          "geometricError": 492.757702430934
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_4_5.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_4_5.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_4_5.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_4_5.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_3_2",
+      "gridX": 3,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          8.102421760559082,
+          -1894.606784698051
+        ],
+        "max": [
+          663.4806956519928,
+          30.600047617032033,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_3_2.lod0.glb",
+          "triangles": 42027,
+          "fileSize": 40281000,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_3_2.lod1.glb",
+          "triangles": 22971,
+          "fileSize": 12031728,
+          "geometricError": 30.154241293355977
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_3_2.lod2.glb",
+          "triangles": 20195,
+          "fileSize": 3529172,
+          "geometricError": 120.6169651734239
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_3_2.lod3.glb",
+          "triangles": 20011,
+          "fileSize": 1266904,
+          "geometricError": 482.4678606936956
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_3_2.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_3_2.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_3_2.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_3_2.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_2",
+      "gridX": 2,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1894.606784698051
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_2.lod0.glb",
+          "triangles": 2486,
+          "fileSize": 7713376,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_2.lod1.glb",
+          "triangles": 1646,
+          "fileSize": 2107496,
+          "geometricError": 32.037068775788846
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_2.lod2.glb",
+          "triangles": 1650,
+          "fileSize": 613640,
+          "geometricError": 128.14827510315538
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_2.lod3.glb",
+          "triangles": 1650,
+          "fileSize": 202296,
+          "geometricError": 512.5931004126215
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_2.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_2.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_2.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_2.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_4_3",
+      "gridX": 4,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          8.102421760559082,
+          -1830.4623852011039
+        ],
+        "max": [
+          739.9047442906415,
+          30.600047617032033,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_4_3.lod0.glb",
+          "triangles": 45612,
+          "fileSize": 37885528,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_4_3.lod1.glb",
+          "triangles": 42182,
+          "fileSize": 11035944,
+          "geometricError": 31.58178321129545
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_4_3.lod2.glb",
+          "triangles": 42172,
+          "fileSize": 3316616,
+          "geometricError": 126.3271328451818
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_4_3.lod3.glb",
+          "triangles": 42172,
+          "fileSize": 1410752,
+          "geometricError": 505.3085313807272
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_4_3.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_4_3.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_4_3.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_4_3.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_3_4",
+      "gridX": 3,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          8.102421760559082,
+          -1766.3179857041569
+        ],
+        "max": [
+          663.4806956519928,
+          30.600047617032033,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_3_4.lod0.glb",
+          "triangles": 28617,
+          "fileSize": 28615328,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_3_4.lod1.glb",
+          "triangles": 25657,
+          "fileSize": 8878692,
+          "geometricError": 33.40068970899917
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_3_4.lod2.glb",
+          "triangles": 25569,
+          "fileSize": 2828684,
+          "geometricError": 133.60275883599667
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_3_4.lod3.glb",
+          "triangles": 25555,
+          "fileSize": 1167240,
+          "geometricError": 534.4110353439867
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_3_4.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_3_4.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_3_4.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_3_4.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_0_1",
+      "gridX": 0,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          8.102421760559082,
+          -1958.751184194998
+        ],
+        "max": [
+          434.20854973604713,
+          30.600047617032033,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_0_1.lod0.glb",
+          "triangles": 13654,
+          "fileSize": 17365436,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_0_1.lod1.glb",
+          "triangles": 10720,
+          "fileSize": 4653636,
+          "geometricError": 13.768046284443821
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_0_1.lod2.glb",
+          "triangles": 10720,
+          "fileSize": 1366512,
+          "geometricError": 55.072185137775286
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_0_1.lod3.glb",
+          "triangles": 10720,
+          "fileSize": 504572,
+          "geometricError": 220.28874055110114
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_0_1.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_0_1.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_0_1.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_0_1.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_1_2",
+      "gridX": 1,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          8.102421760559082,
+          -1894.606784698051
+        ],
+        "max": [
+          510.6325983746957,
+          30.600047617032033,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_1_2.lod0.glb",
+          "triangles": 15427,
+          "fileSize": 75685688,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_1_2.lod1.glb",
+          "triangles": 11837,
+          "fileSize": 20060140,
+          "geometricError": 56.21722035730094
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_1_2.lod2.glb",
+          "triangles": 11829,
+          "fileSize": 5536060,
+          "geometricError": 224.86888142920375
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_1_2.lod3.glb",
+          "triangles": 11829,
+          "fileSize": 1703436,
+          "geometricError": 899.475525716815
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_1_2.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_1_2.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_1_2.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_1_2.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_3_5",
+      "gridX": 3,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          8.102421760559082,
+          -1702.1735862072096
+        ],
+        "max": [
+          663.4806956519928,
+          30.600047617032033,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_3_5.lod0.glb",
+          "triangles": 41057,
+          "fileSize": 89633096,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_3_5.lod1.glb",
+          "triangles": 31031,
+          "fileSize": 25035292,
+          "geometricError": 35.752955400109876
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_3_5.lod2.glb",
+          "triangles": 28561,
+          "fileSize": 7153868,
+          "geometricError": 143.0118216004395
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_3_5.lod3.glb",
+          "triangles": 28563,
+          "fileSize": 2348416,
+          "geometricError": 572.047286401758
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_3_5.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_3_5.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_3_5.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_3_5.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_4_6",
+      "gridX": 4,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          739.9047442906415,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_4_6.lod0.glb",
+          "triangles": 30543,
+          "fileSize": 74705468,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_4_6.lod1.glb",
+          "triangles": 26655,
+          "fileSize": 20823380,
+          "geometricError": 30.385836840479143
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_4_6.lod2.glb",
+          "triangles": 26655,
+          "fileSize": 6011904,
+          "geometricError": 121.54334736191657
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_4_6.lod3.glb",
+          "triangles": 26655,
+          "fileSize": 2017720,
+          "geometricError": 486.1733894476663
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_4_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_4_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_4_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_4_6.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_3_6",
+      "gridX": 3,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          663.4806956519928,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_3_6.lod0.glb",
+          "triangles": 25472,
+          "fileSize": 107007328,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_3_6.lod1.glb",
+          "triangles": 22326,
+          "fileSize": 30312456,
+          "geometricError": 21.868362044482243
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_3_6.lod2.glb",
+          "triangles": 22326,
+          "fileSize": 8670852,
+          "geometricError": 87.47344817792897
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_3_6.lod3.glb",
+          "triangles": 22326,
+          "fileSize": 2720316,
+          "geometricError": 349.8937927117159
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_3_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_3_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_3_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_3_6.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_4_7",
+      "gridX": 4,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          8.102421760559082,
+          -1573.8847872133156
+        ],
+        "max": [
+          739.9047442906415,
+          30.600047617032033,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_4_7.lod0.glb",
+          "triangles": 28610,
+          "fileSize": 60219024,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_4_7.lod1.glb",
+          "triangles": 20992,
+          "fileSize": 17105444,
+          "geometricError": 16.486276361432274
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_4_7.lod2.glb",
+          "triangles": 20996,
+          "fileSize": 4889840,
+          "geometricError": 65.9451054457291
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_4_7.lod3.glb",
+          "triangles": 20996,
+          "fileSize": 1591748,
+          "geometricError": 263.7804217829164
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_4_7.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_4_7.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_4_7.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_4_7.shadow.lod3.png"
+        }
+      ]
+    },
+    {
+      "id": "tile_2_6",
+      "gridX": 2,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          8.102421760559082,
+          -1638.0291867102626
+        ],
+        "max": [
+          587.0566470133443,
+          30.600047617032033,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/tile_2_6.lod0.glb",
+          "triangles": 23790,
+          "fileSize": 18743452,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/tile_2_6.lod1.glb",
+          "triangles": 20098,
+          "fileSize": 5274420,
+          "geometricError": 16.47514778427886
+        },
+        {
+          "level": 2,
+          "file": "tiles/tile_2_6.lod2.glb",
+          "triangles": 19586,
+          "fileSize": 1750372,
+          "geometricError": 65.900575490886
+        },
+        {
+          "level": 3,
+          "file": "tiles/tile_2_6.lod3.glb",
+          "triangles": 19582,
+          "fileSize": 807232,
+          "geometricError": 263.602301963544
+        }
+      ],
+      "shadowLightmaps": [
+        {
+          "lod": 0,
+          "file": "tiles/tile_2_6.shadow.lod0.png"
+        },
+        {
+          "lod": 1,
+          "file": "tiles/tile_2_6.shadow.lod1.png"
+        },
+        {
+          "lod": 2,
+          "file": "tiles/tile_2_6.shadow.lod2.png"
+        },
+        {
+          "lod": 3,
+          "file": "tiles/tile_2_6.shadow.lod3.png"
+        }
+      ]
+    }
+  ],
+  "staticLayers": [
+    {
+      "id": "road",
+      "file": "tiles/road.glb",
+      "triangles": 254238,
+      "fileSize": 73797668
+    }
+  ],
+  "vegetationTiles": [
+    {
+      "id": "veg_2_3",
+      "gridX": 2,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          1.0979807333541558,
+          -1830.4623852011039
+        ],
+        "max": [
+          587.0566470133443,
+          24.569714579145845,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_3.lod0.glb",
+          "triangles": 157338,
+          "fileSize": 4671004,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_3.lod1.glb",
+          "triangles": 157338,
+          "fileSize": 4671004,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_3.lod2.glb",
+          "triangles": 157338,
+          "fileSize": 3404464,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_3.lod3.glb",
+          "triangles": 157338,
+          "fileSize": 2749072,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v1_LOD0",
+          "triangles": 7648,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 9
+        }
+      ],
+      "instanceFile": "tiles/veg_2_3.instances.json"
+    },
+    {
+      "id": "veg_4_6",
+      "gridX": 4,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          0.7240952353072796,
+          -1638.0291867102626
+        ],
+        "max": [
+          739.9047442906415,
+          24.417317118208345,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_6.lod0.glb",
+          "triangles": 246871,
+          "fileSize": 6221312,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_6.lod1.glb",
+          "triangles": 246871,
+          "fileSize": 6221312,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_6.lod2.glb",
+          "triangles": 246871,
+          "fileSize": 4954772,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_6.lod3.glb",
+          "triangles": 246871,
+          "fileSize": 4299388,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v1_LOD0",
+          "triangles": 7648,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_4_6.instances.json"
+    },
+    {
+      "id": "veg_5_6",
+      "gridX": 5,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          0.23440163179165552,
+          -1638.0291867102626
+        ],
+        "max": [
+          816.3287929292901,
+          28.503952860395845,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_5_6.lod0.glb",
+          "triangles": 216541,
+          "fileSize": 5761952,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_5_6.lod1.glb",
+          "triangles": 216541,
+          "fileSize": 5761952,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_5_6.lod2.glb",
+          "triangles": 216541,
+          "fileSize": 4495412,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_5_6.lod3.glb",
+          "triangles": 216541,
+          "fileSize": 3840032,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v1_LOD0",
+          "triangles": 7648,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 37
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_5_6.instances.json"
+    },
+    {
+      "id": "veg_5_5",
+      "gridX": 5,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          0.18080910249478066,
+          -1702.1735862072096
+        ],
+        "max": [
+          816.3287929292901,
+          29.853537821333344,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_5_5.lod0.glb",
+          "triangles": 215895,
+          "fileSize": 5733884,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_5_5.lod1.glb",
+          "triangles": 215895,
+          "fileSize": 5733884,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_5_5.lod2.glb",
+          "triangles": 215895,
+          "fileSize": 4467348,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_5_5.lod3.glb",
+          "triangles": 215895,
+          "fileSize": 3811964,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v1_LOD0",
+          "triangles": 7648,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 10
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_5_5.instances.json"
+    },
+    {
+      "id": "veg_2_1",
+      "gridX": 2,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          0.7707541708541559,
+          -1958.751184194998
+        ],
+        "max": [
+          587.0566470133443,
+          34.647771219770846,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_1.lod0.glb",
+          "triangles": 139503,
+          "fileSize": 4374488,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_1.lod1.glb",
+          "triangles": 139503,
+          "fileSize": 4374488,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_1.lod2.glb",
+          "triangles": 139503,
+          "fileSize": 3107952,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_1.lod3.glb",
+          "triangles": 139503,
+          "fileSize": 2503368,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 6
+        }
+      ],
+      "instanceFile": "tiles/veg_2_1.instances.json"
+    },
+    {
+      "id": "veg_2_2",
+      "gridX": 2,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          0.9389963583541547,
+          -1894.606784698051
+        ],
+        "max": [
+          587.0566470133443,
+          24.569699930708346,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_2.lod0.glb",
+          "triangles": 153288,
+          "fileSize": 4690080,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_2.lod1.glb",
+          "triangles": 153288,
+          "fileSize": 4690080,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_2.lod2.glb",
+          "triangles": 153288,
+          "fileSize": 3423544,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_2.lod3.glb",
+          "triangles": 153288,
+          "fileSize": 2768152,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_2_2.instances.json"
+    },
+    {
+      "id": "veg_3_2",
+      "gridX": 3,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          0.6631296591354054,
+          -1894.606784698051
+        ],
+        "max": [
+          663.4806956519928,
+          23.907673563520845,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_2.lod0.glb",
+          "triangles": 239193,
+          "fileSize": 6141860,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_2.lod1.glb",
+          "triangles": 239193,
+          "fileSize": 6141860,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_2.lod2.glb",
+          "triangles": 239193,
+          "fileSize": 4875320,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_2.lod3.glb",
+          "triangles": 239193,
+          "fileSize": 4219940,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 7
+        }
+      ],
+      "instanceFile": "tiles/veg_3_2.instances.json"
+    },
+    {
+      "id": "veg_4_5",
+      "gridX": 4,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          0.5762815146041547,
+          -1702.1735862072096
+        ],
+        "max": [
+          739.9047442906415,
+          29.853537821333344,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_5.lod0.glb",
+          "triangles": 208247,
+          "fileSize": 5655964,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_5.lod1.glb",
+          "triangles": 208247,
+          "fileSize": 5655964,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_5.lod2.glb",
+          "triangles": 208247,
+          "fileSize": 4389428,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_5.lod3.glb",
+          "triangles": 208247,
+          "fileSize": 3734044,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 8
+        }
+      ],
+      "instanceFile": "tiles/veg_4_5.instances.json"
+    },
+    {
+      "id": "veg_7_7",
+      "gridX": 7,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          892.7528415679386,
+          -0.7816725869583454,
+          -1573.8847872133156
+        ],
+        "max": [
+          969.1768902065872,
+          23.732761454145844,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_7_7.lod0.glb",
+          "triangles": 71728,
+          "fileSize": 2562896,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_7_7.lod1.glb",
+          "triangles": 71728,
+          "fileSize": 2562896,
+          "geometricError": 13.860182877979781
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_7_7.lod2.glb",
+          "triangles": 71728,
+          "fileSize": 1785560,
+          "geometricError": 55.440731511919125
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_7_7.lod3.glb",
+          "triangles": 71728,
+          "fileSize": 1300528,
+          "geometricError": 221.7629260476765
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 67
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 18
+        },
+        {
+          "meshName": "SM_Bush_L_v1_LOD0",
+          "triangles": 10195,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 8
+        }
+      ],
+      "instanceFile": "tiles/veg_7_7.instances.json"
+    },
+    {
+      "id": "veg_7_6",
+      "gridX": 7,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          892.7528415679386,
+          -0.6070290322708445,
+          -1638.0291867102626
+        ],
+        "max": [
+          969.1768902065872,
+          22.865642313520844,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_7_6.lod0.glb",
+          "triangles": 233392,
+          "fileSize": 5897224,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_7_6.lod1.glb",
+          "triangles": 233392,
+          "fileSize": 5897224,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_7_6.lod2.glb",
+          "triangles": 233392,
+          "fileSize": 4630688,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_7_6.lod3.glb",
+          "triangles": 233392,
+          "fileSize": 4026124,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 13
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_7_6.instances.json"
+    },
+    {
+      "id": "veg_6_5",
+      "gridX": 6,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          -0.06386008695834455,
+          -1702.1735862072096
+        ],
+        "max": [
+          892.7528415679386,
+          26.801736063520845,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_6_5.lod0.glb",
+          "triangles": 149690,
+          "fileSize": 4593076,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_6_5.lod1.glb",
+          "triangles": 149690,
+          "fileSize": 4593076,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_6_5.lod2.glb",
+          "triangles": 149690,
+          "fileSize": 3326540,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_6_5.lod3.glb",
+          "triangles": 149690,
+          "fileSize": 2671140,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v2_LOD0",
+          "triangles": 7612,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_6_5.instances.json"
+    },
+    {
+      "id": "veg_2_5",
+      "gridX": 2,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          1.4612912802291547,
+          -1702.1735862072096
+        ],
+        "max": [
+          587.0566470133443,
+          36.454822001020844,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_5.lod0.glb",
+          "triangles": 172408,
+          "fileSize": 4976424,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_5.lod1.glb",
+          "triangles": 172408,
+          "fileSize": 4976424,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_5.lod2.glb",
+          "triangles": 172408,
+          "fileSize": 3709884,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_5.lod3.glb",
+          "triangles": 172408,
+          "fileSize": 3054500,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_2_5.instances.json"
+    },
+    {
+      "id": "veg_0_4",
+      "gridX": 0,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          2.3309983114791546,
+          -1766.3179857041569
+        ],
+        "max": [
+          434.20854973604713,
+          26.948264383833347,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_0_4.lod0.glb",
+          "triangles": 81023,
+          "fileSize": 3426984,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_0_4.lod1.glb",
+          "triangles": 81023,
+          "fileSize": 3426984,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_0_4.lod2.glb",
+          "triangles": 81023,
+          "fileSize": 2126956,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_0_4.lod3.glb",
+          "triangles": 81023,
+          "fileSize": 1566644,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_0_4.instances.json"
+    },
+    {
+      "id": "veg_3_6",
+      "gridX": 3,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          1.3620627646041559,
+          -1638.0291867102626
+        ],
+        "max": [
+          663.4806956519928,
+          26.226657938520844,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_6.lod0.glb",
+          "triangles": 235973,
+          "fileSize": 6041444,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_6.lod1.glb",
+          "triangles": 235973,
+          "fileSize": 6041444,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_6.lod2.glb",
+          "triangles": 235973,
+          "fileSize": 4774904,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_6.lod3.glb",
+          "triangles": 235973,
+          "fileSize": 4119524,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_3_6.instances.json"
+    },
+    {
+      "id": "veg_1_4",
+      "gridX": 1,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          1.927258077104156,
+          -1766.3179857041569
+        ],
+        "max": [
+          510.6325983746957,
+          25.551897196333343,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_1_4.lod0.glb",
+          "triangles": 216475,
+          "fileSize": 5762012,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_1_4.lod1.glb",
+          "triangles": 216475,
+          "fileSize": 5762012,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_1_4.lod2.glb",
+          "triangles": 216475,
+          "fileSize": 4495472,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_1_4.lod3.glb",
+          "triangles": 216475,
+          "fileSize": 3840092,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 10
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 10
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 13
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 19
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 11
+        }
+      ],
+      "instanceFile": "tiles/veg_1_4.instances.json"
+    },
+    {
+      "id": "veg_1_3",
+      "gridX": 1,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          1.5737180380416547,
+          -1830.4623852011039
+        ],
+        "max": [
+          510.6325983746957,
+          28.302981180708347,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_1_3.lod0.glb",
+          "triangles": 162455,
+          "fileSize": 4743116,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_1_3.lod1.glb",
+          "triangles": 162455,
+          "fileSize": 4743116,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_1_3.lod2.glb",
+          "triangles": 162455,
+          "fileSize": 3476576,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_1_3.lod3.glb",
+          "triangles": 162455,
+          "fileSize": 2821184,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_L_v5_LOD0",
+          "triangles": 10165,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Bush_L_v2_LOD0",
+          "triangles": 10212,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_1_3.instances.json"
+    },
+    {
+      "id": "veg_0_3",
+      "gridX": 0,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          1.803268819291656,
+          -1830.4623852011039
+        ],
+        "max": [
+          434.20854973604713,
+          30.611848368208346,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_0_3.lod0.glb",
+          "triangles": 208893,
+          "fileSize": 5684028,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_0_3.lod1.glb",
+          "triangles": 208893,
+          "fileSize": 5684028,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_0_3.lod2.glb",
+          "triangles": 208893,
+          "fileSize": 4417492,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_0_3.lod3.glb",
+          "triangles": 208893,
+          "fileSize": 3762108,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 11
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 3
+        }
+      ],
+      "instanceFile": "tiles/veg_0_3.instances.json"
+    },
+    {
+      "id": "veg_3_4",
+      "gridX": 3,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          0.5732688192916555,
+          -1766.3179857041569
+        ],
+        "max": [
+          663.4806956519928,
+          27.557434305708345,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_4.lod0.glb",
+          "triangles": 96923,
+          "fileSize": 3730304,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_4.lod1.glb",
+          "triangles": 96923,
+          "fileSize": 3730304,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_4.lod2.glb",
+          "triangles": 96923,
+          "fileSize": 2463764,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_4.lod3.glb",
+          "triangles": 96923,
+          "fileSize": 1808360,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 7
+        }
+      ],
+      "instanceFile": "tiles/veg_3_4.instances.json"
+    },
+    {
+      "id": "veg_4_4",
+      "gridX": 4,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          0.3748215536666546,
+          -1766.3179857041569
+        ],
+        "max": [
+          739.9047442906415,
+          24.008288797895844,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_4.lod0.glb",
+          "triangles": 153957,
+          "fileSize": 4530148,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_4.lod1.glb",
+          "triangles": 153957,
+          "fileSize": 4530148,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_4.lod2.glb",
+          "triangles": 153957,
+          "fileSize": 3230116,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_4.lod3.glb",
+          "triangles": 153957,
+          "fileSize": 2720628,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_4_4.instances.json"
+    },
+    {
+      "id": "veg_3_3",
+      "gridX": 3,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          0.6616330771041561,
+          -1830.4623852011039
+        ],
+        "max": [
+          663.4806956519928,
+          23.686848368208345,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_3.lod0.glb",
+          "triangles": 139527,
+          "fileSize": 4374104,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_3.lod1.glb",
+          "triangles": 139527,
+          "fileSize": 4374104,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_3.lod2.glb",
+          "triangles": 139527,
+          "fileSize": 3107568,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_3.lod3.glb",
+          "triangles": 139527,
+          "fileSize": 2502984,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_3_3.instances.json"
+    },
+    {
+      "id": "veg_3_5",
+      "gridX": 3,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          0.8971897177291552,
+          -1702.1735862072096
+        ],
+        "max": [
+          663.4806956519928,
+          31.556921610395847,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_5.lod0.glb",
+          "triangles": 96923,
+          "fileSize": 3730304,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_5.lod1.glb",
+          "triangles": 96923,
+          "fileSize": 3730304,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_5.lod2.glb",
+          "triangles": 96923,
+          "fileSize": 2463764,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_5.lod3.glb",
+          "triangles": 96923,
+          "fileSize": 1808360,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 13
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 5
+        }
+      ],
+      "instanceFile": "tiles/veg_3_5.instances.json"
+    },
+    {
+      "id": "veg_2_4",
+      "gridX": 2,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          0.7648996786666551,
+          -1766.3179857041569
+        ],
+        "max": [
+          587.0566470133443,
+          24.988322977583344,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_4.lod0.glb",
+          "triangles": 201251,
+          "fileSize": 5606216,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_4.lod1.glb",
+          "triangles": 201251,
+          "fileSize": 5606216,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_4.lod2.glb",
+          "triangles": 201251,
+          "fileSize": 4339676,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_4.lod3.glb",
+          "triangles": 201251,
+          "fileSize": 3684296,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_2_4.instances.json"
+    },
+    {
+      "id": "veg_4_3",
+      "gridX": 4,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          0.48119484468228,
+          -1830.4623852011039
+        ],
+        "max": [
+          739.9047442906415,
+          29.018161844770844,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_3.lod0.glb",
+          "triangles": 163340,
+          "fileSize": 4183492,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_3.lod1.glb",
+          "triangles": 163340,
+          "fileSize": 4183492,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_3.lod2.glb",
+          "triangles": 163340,
+          "fileSize": 3406156,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_3.lod3.glb",
+          "triangles": 163340,
+          "fileSize": 2971960,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 6
+        }
+      ],
+      "instanceFile": "tiles/veg_4_3.instances.json"
+    },
+    {
+      "id": "veg_6_7",
+      "gridX": 6,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          -2.293816141645845,
+          -1573.8847872133156
+        ],
+        "max": [
+          892.7528415679386,
+          23.811789774458347,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_6_7.lod0.glb",
+          "triangles": 238586,
+          "fileSize": 6077360,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_6_7.lod1.glb",
+          "triangles": 238586,
+          "fileSize": 6077360,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_6_7.lod2.glb",
+          "triangles": 238586,
+          "fileSize": 4810820,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_6_7.lod3.glb",
+          "triangles": 238586,
+          "fileSize": 4155440,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 25
+        },
+        {
+          "meshName": "SM_Bush_L_v1_LOD0",
+          "triangles": 10195,
+          "instanceCount": 9
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 16
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 5
+        }
+      ],
+      "instanceFile": "tiles/veg_6_7.instances.json"
+    },
+    {
+      "id": "veg_6_6",
+      "gridX": 6,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          -0.040617899458345263,
+          -1638.0291867102626
+        ],
+        "max": [
+          892.7528415679386,
+          37.95009055570834,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_6_6.lod0.glb",
+          "triangles": 146075,
+          "fileSize": 4442464,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_6_6.lod1.glb",
+          "triangles": 146075,
+          "fileSize": 4442464,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_6_6.lod2.glb",
+          "triangles": 146075,
+          "fileSize": 3175924,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_6_6.lod3.glb",
+          "triangles": 146075,
+          "fileSize": 2520532,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_6_6.instances.json"
+    },
+    {
+      "id": "veg_7_5",
+      "gridX": 7,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          892.7528415679386,
+          -0.22211692289584484,
+          -1702.1735862072096
+        ],
+        "max": [
+          969.1768902065872,
+          22.939231180708347,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_7_5.lod0.glb",
+          "triangles": 23476,
+          "fileSize": 860008,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_7_5.lod1.glb",
+          "triangles": 23476,
+          "fileSize": 860008,
+          "geometricError": 22.292113614322822
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_7_5.lod2.glb",
+          "triangles": 23476,
+          "fileSize": 674360,
+          "geometricError": 89.16845445729129
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_7_5.lod3.glb",
+          "triangles": 23476,
+          "fileSize": 408296,
+          "geometricError": 356.67381782916516
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_7_5.instances.json"
+    },
+    {
+      "id": "veg_5_7",
+      "gridX": 5,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          -0.7413820596145957,
+          -1573.8847872133156
+        ],
+        "max": [
+          816.3287929292901,
+          23.706496805708348,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_5_7.lod0.glb",
+          "triangles": 185789,
+          "fileSize": 5213056,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_5_7.lod1.glb",
+          "triangles": 185789,
+          "fileSize": 5213056,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_5_7.lod2.glb",
+          "triangles": 185789,
+          "fileSize": 3946516,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_5_7.lod3.glb",
+          "triangles": 185789,
+          "fileSize": 3291132,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 11
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 26
+        },
+        {
+          "meshName": "SM_Bush_L_v1_LOD0",
+          "triangles": 10195,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 12
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 5
+        }
+      ],
+      "instanceFile": "tiles/veg_5_7.instances.json"
+    },
+    {
+      "id": "veg_1_1",
+      "gridX": 1,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          1.2244162802291552,
+          -1958.751184194998
+        ],
+        "max": [
+          510.6325983746957,
+          27.467927469770846,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_1_1.lod0.glb",
+          "triangles": 220968,
+          "fileSize": 5802020,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_1_1.lod1.glb",
+          "triangles": 220968,
+          "fileSize": 5802020,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_1_1.lod2.glb",
+          "triangles": 220968,
+          "fileSize": 4535480,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_1_1.lod3.glb",
+          "triangles": 220968,
+          "fileSize": 3880100,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 8
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Bush_L_v5_LOD0",
+          "triangles": 10165,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 10
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_L_v4_LOD0",
+          "triangles": 10168,
+          "instanceCount": 18
+        }
+      ],
+      "instanceFile": "tiles/veg_1_1.instances.json"
+    },
+    {
+      "id": "veg_1_2",
+      "gridX": 1,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          1.582682881791655,
+          -1894.606784698051
+        ],
+        "max": [
+          510.6325983746957,
+          25.414724344770846,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_1_2.lod0.glb",
+          "triangles": 251079,
+          "fileSize": 6344740,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_1_2.lod1.glb",
+          "triangles": 251079,
+          "fileSize": 6344740,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_1_2.lod2.glb",
+          "triangles": 251079,
+          "fileSize": 5078200,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_1_2.lod3.glb",
+          "triangles": 251079,
+          "fileSize": 4422820,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_1_2.instances.json"
+    },
+    {
+      "id": "veg_0_2",
+      "gridX": 0,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          1.5782859091354045,
+          -1894.606784698051
+        ],
+        "max": [
+          434.20854973604713,
+          25.529826883833344,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_0_2.lod0.glb",
+          "triangles": 258721,
+          "fileSize": 6422820,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_0_2.lod1.glb",
+          "triangles": 258721,
+          "fileSize": 6422820,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_0_2.lod2.glb",
+          "triangles": 258721,
+          "fileSize": 5156284,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_0_2.lod3.glb",
+          "triangles": 258721,
+          "fileSize": 4500900,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v4_LOD0",
+          "triangles": 7636,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_M_LOD0",
+          "triangles": 30330,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 4
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_S_LOD0",
+          "triangles": 19498,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_0_2.instances.json"
+    },
+    {
+      "id": "veg_1_5",
+      "gridX": 1,
+      "gridZ": 5,
+      "bounds": {
+        "min": [
+          434.20854973604713,
+          2.184933858354155,
+          -1702.1735862072096
+        ],
+        "max": [
+          510.6325983746957,
+          25.403445047895843,
+          -1638.0291867102626
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_1_5.lod0.glb",
+          "triangles": 82450,
+          "fileSize": 3011152,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_1_5.lod1.glb",
+          "triangles": 82450,
+          "fileSize": 3011152,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_1_5.lod2.glb",
+          "triangles": 82450,
+          "fileSize": 1930260,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_1_5.lod3.glb",
+          "triangles": 82450,
+          "fileSize": 1540940,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 5
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 5
+        }
+      ],
+      "instanceFile": "tiles/veg_1_5.instances.json"
+    },
+    {
+      "id": "veg_4_7",
+      "gridX": 4,
+      "gridZ": 7,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          -0.7413820596145957,
+          -1573.8847872133156
+        ],
+        "max": [
+          739.9047442906415,
+          24.407483133833345,
+          -1509.7403877163686
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_7.lod0.glb",
+          "triangles": 201197,
+          "fileSize": 5605680,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_7.lod1.glb",
+          "triangles": 201197,
+          "fileSize": 5605680,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_7.lod2.glb",
+          "triangles": 201197,
+          "fileSize": 4339140,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_7.lod3.glb",
+          "triangles": 201197,
+          "fileSize": 3683764,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Cypress_Bush_LOD0",
+          "triangles": 2551,
+          "instanceCount": 16
+        },
+        {
+          "meshName": "SM_Bush_M_v3_LOD0",
+          "triangles": 7582,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 7
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_4_7.instances.json"
+    },
+    {
+      "id": "veg_5_4",
+      "gridX": 5,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          0.5837180380416545,
+          -1766.3179857041569
+        ],
+        "max": [
+          816.3287929292901,
+          38.181384501020844,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_5_4.lod0.glb",
+          "triangles": 154356,
+          "fileSize": 4511788,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_5_4.lod1.glb",
+          "triangles": 154356,
+          "fileSize": 4511788,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_5_4.lod2.glb",
+          "triangles": 154356,
+          "fileSize": 3302048,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_5_4.lod3.glb",
+          "triangles": 154356,
+          "fileSize": 2791312,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Bush_M_v5_LOD0",
+          "triangles": 7642,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 3
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_5_4.instances.json"
+    },
+    {
+      "id": "veg_2_6",
+      "gridX": 2,
+      "gridZ": 6,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          1.7265061239791546,
+          -1638.0291867102626
+        ],
+        "max": [
+          587.0566470133443,
+          24.767322001020844,
+          -1573.8847872133156
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_6.lod0.glb",
+          "triangles": 124249,
+          "fileSize": 4217784,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_6.lod1.glb",
+          "triangles": 124249,
+          "fileSize": 4217784,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_6.lod2.glb",
+          "triangles": 124249,
+          "fileSize": 2951244,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_6.lod3.glb",
+          "triangles": 124249,
+          "fileSize": 2346672,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_2_6.instances.json"
+    },
+    {
+      "id": "veg_5_3",
+      "gridX": 5,
+      "gridZ": 3,
+      "bounds": {
+        "min": [
+          739.9047442906415,
+          0.6050266317916559,
+          -1830.4623852011039
+        ],
+        "max": [
+          816.3287929292901,
+          23.597238993208343,
+          -1766.3179857041569
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_5_3.lod0.glb",
+          "triangles": 45155,
+          "fileSize": 1614984,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_5_3.lod1.glb",
+          "triangles": 45155,
+          "fileSize": 1614984,
+          "geometricError": 27.441259190318114
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_5_3.lod2.glb",
+          "triangles": 45155,
+          "fileSize": 1023304,
+          "geometricError": 109.76503676127246
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_5_3.lod3.glb",
+          "triangles": 45155,
+          "fileSize": 855180,
+          "geometricError": 439.0601470450898
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 2
+        }
+      ],
+      "instanceFile": "tiles/veg_5_3.instances.json"
+    },
+    {
+      "id": "veg_0_1",
+      "gridX": 0,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          357.78450109739856,
+          1.8511057333541547,
+          -1958.751184194998
+        ],
+        "max": [
+          434.20854973604713,
+          25.390666727583344,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_0_1.lod0.glb",
+          "triangles": 156882,
+          "fileSize": 4544932,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_0_1.lod1.glb",
+          "triangles": 156882,
+          "fileSize": 4544932,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_0_1.lod2.glb",
+          "triangles": 156882,
+          "fileSize": 3335192,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_0_1.lod3.glb",
+          "triangles": 156882,
+          "fileSize": 2824460,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Maple_M_LOD0",
+          "triangles": 45155,
+          "instanceCount": 6
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Oak_L_v1_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Bush_L_v4_LOD0",
+          "triangles": 10168,
+          "instanceCount": 7
+        }
+      ],
+      "instanceFile": "tiles/veg_0_1.instances.json"
+    },
+    {
+      "id": "veg_3_1",
+      "gridX": 3,
+      "gridZ": 1,
+      "bounds": {
+        "min": [
+          587.0566470133443,
+          1.1746799521041549,
+          -1958.751184194998
+        ],
+        "max": [
+          663.4806956519928,
+          24.138952860395847,
+          -1894.606784698051
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_3_1.lod0.glb",
+          "triangles": 137651,
+          "fileSize": 3895640,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_3_1.lod1.glb",
+          "triangles": 137651,
+          "fileSize": 3895640,
+          "geometricError": 49.037172037716495
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_3_1.lod2.glb",
+          "triangles": 137651,
+          "fileSize": 2814752,
+          "geometricError": 196.14868815086598
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_3_1.lod3.glb",
+          "triangles": 137651,
+          "fileSize": 2476248,
+          "geometricError": 784.5947526034639
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 2
+        },
+        {
+          "meshName": "SM_Maple_L_LOD0",
+          "triangles": 66815,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_3_1.instances.json"
+    },
+    {
+      "id": "veg_2_0",
+      "gridX": 2,
+      "gridZ": 0,
+      "bounds": {
+        "min": [
+          510.6325983746957,
+          1.232555928666656,
+          -2022.895583691945
+        ],
+        "max": [
+          587.0566470133443,
+          24.067190165083346,
+          -1958.751184194998
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_2_0.lod0.glb",
+          "triangles": 34744,
+          "fileSize": 1254184,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_2_0.lod1.glb",
+          "triangles": 34744,
+          "fileSize": 1254184,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_2_0.lod2.glb",
+          "triangles": 34744,
+          "fileSize": 764976,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_2_0.lod3.glb",
+          "triangles": 34744,
+          "fileSize": 594592,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_2_0.instances.json"
+    },
+    {
+      "id": "veg_6_4",
+      "gridX": 6,
+      "gridZ": 4,
+      "bounds": {
+        "min": [
+          816.3287929292901,
+          0.5707102255416547,
+          -1766.3179857041569
+        ],
+        "max": [
+          892.7528415679386,
+          23.567365946333346,
+          -1702.1735862072096
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_6_4.lod0.glb",
+          "triangles": 43002,
+          "fileSize": 1957060,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_6_4.lod1.glb",
+          "triangles": 43002,
+          "fileSize": 1957060,
+          "geometricError": 47.63471760832883
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_6_4.lod2.glb",
+          "triangles": 43002,
+          "fileSize": 1282196,
+          "geometricError": 190.5388704333153
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_6_4.lod3.glb",
+          "triangles": 43002,
+          "fileSize": 845744,
+          "geometricError": 762.1554817332612
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Oak_L_v2_LOD0",
+          "triangles": 34744,
+          "instanceCount": 1
+        },
+        {
+          "meshName": "SM_Pine_L_v4_LOD0",
+          "triangles": 8258,
+          "instanceCount": 1
+        }
+      ],
+      "instanceFile": "tiles/veg_6_4.instances.json"
+    },
+    {
+      "id": "veg_4_2",
+      "gridX": 4,
+      "gridZ": 2,
+      "bounds": {
+        "min": [
+          663.4806956519928,
+          0.8550998739791549,
+          -1894.606784698051
+        ],
+        "max": [
+          739.9047442906415,
+          23.743493876020846,
+          -1830.4623852011039
+        ]
+      },
+      "lods": [
+        {
+          "level": 0,
+          "file": "tiles/veg_4_2.lod0.glb",
+          "triangles": 36092,
+          "fileSize": 1474920,
+          "geometricError": 0
+        },
+        {
+          "level": 1,
+          "file": "tiles/veg_4_2.lod1.glb",
+          "triangles": 36092,
+          "fileSize": 1474920,
+          "geometricError": 11.014786146107545
+        },
+        {
+          "level": 2,
+          "file": "tiles/veg_4_2.lod2.glb",
+          "triangles": 36092,
+          "fileSize": 883236,
+          "geometricError": 44.05914458443018
+        },
+        {
+          "level": 3,
+          "file": "tiles/veg_4_2.lod3.glb",
+          "triangles": 36092,
+          "fileSize": 715116,
+          "geometricError": 176.23657833772072
+        }
+      ],
+      "prototypes": [
+        {
+          "meshName": "SM_Maple_S_v4_LOD0",
+          "triangles": 36092,
+          "instanceCount": 3
+        }
+      ],
+      "instanceFile": "tiles/veg_4_2.instances.json"
+    }
+  ],
+  "shadowLightmap": {
+    "sunDirection": [
+      -0.5256163127554034,
+      -0.5256163127554034,
+      -0.6689207602779479
+    ],
+    "bakedAt": "2026-05-12T09:04:59.449Z",
+    "method": "path-traced"
+  },
+  "actorCounts": {
+    "building": 87,
+    "road": 1,
+    "vegetation": 5,
+    "prop": 96
+  }
+}
