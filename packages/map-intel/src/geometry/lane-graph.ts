@@ -1,13 +1,32 @@
 /**
  * The lane graph: an indexed, query-ready view over the topology index.
  *
- * Two things live here that everything else in the package leans on:
+ * Three things live here that everything else in the package leans on:
  *
- * 1. **`nearestLane`** — the anchor-lift primitive. A uniform grid over every
+ * 1. **Travel-ordered polylines.** The topology index stores every polyline in
+ *    OpenDRIVE `s` order, and a positive-id lane travels *against* `s`. Stored
+ *    order is therefore the direction of travel for negative-id lanes and the
+ *    reverse of it for positive-id ones — measured on Yale, 225 of 234
+ *    positive-id approach lanes have the junction at their polyline *start*,
+ *    and 198 of 239 positive-id connecting lanes run exit-to-approach.
+ *
+ *    Consuming that raw is catastrophic and silent: the "heading into the
+ *    junction" of a positive-id approach comes out 180° wrong, so head-on
+ *    conflicts get labelled same-direction merges; arc length along a
+ *    connecting lane is measured from the wrong end, so a precomputed conflict
+ *    point lands at the far side of the intersection; and "successor" tests
+ *    compare the wrong endpoints. {@link LaneGraph} therefore reverses
+ *    positive-id polylines at construction, and **every `s` in this package is
+ *    travel-ordered arc length from the lane's entry**, not OpenDRIVE `s`.
+ *    {@link LaneNode.reversed} records which lanes were flipped, and
+ *    {@link LaneGraph.toXodrS} converts back for export.
+ *
+ * 2. **`nearestLane`** — the anchor-lift primitive. A uniform grid over every
  *    polyline *segment* (not vertex — polylines sample at ~1–4 m and a vertex
  *    index would miss the middle of long straights). No raycasting is needed:
  *    the polylines are already in the same metric frame as everything else.
- * 2. **Lane rows** — the topology index's `adjacentLanes` only reports
+ *
+ * 3. **Lane rows** — the topology index's `adjacentLanes` only reports
  *    *drivable* neighbours (lane `-2`'s left is `null` even when shoulder `-1`
  *    exists), so parking/bike/sidewalk adjacency has to be reconstructed from
  *    the `road:section` lane row by lane-id ordering. That reconstruction is
@@ -29,11 +48,18 @@ import {
 /** Grid cell size for the nearest-lane index, metres. */
 const GRID_CELL_M = 20;
 
-/** Precomputed per-lane geometry. */
+/** Precomputed per-lane geometry. All arc lengths are travel-ordered. */
 export interface LaneNode {
   rsl: LaneRef;
   raw: TopologyLane;
+  /** Polyline **in travel order** — reversed from the source when `reversed`. */
   points: Point2[];
+  /**
+   * True when the source polyline ran against the direction of travel and was
+   * flipped. Starts from the OpenDRIVE sign rule (`laneId > 0`) and is then
+   * settled against the gate for junction connecting lanes.
+   */
+  reversed: boolean;
   /** Cumulative arc length; `cum[cum.length - 1]` is the lane length. */
   cum: number[];
   lengthM: number;
@@ -95,18 +121,24 @@ export class LaneGraph {
   /** cellKey → [laneRsl, segmentIndex] pairs, flattened. */
   readonly #grid: Map<string, { rsl: string; i: number }[]> = new Map();
 
+
   constructor(index: TopologyIndex) {
     this.index = index;
     const rsls = Object.keys(index.lanes).sort();
     for (const rsl of rsls) {
       const raw = index.lanes[rsl];
       if (!raw || !Array.isArray(raw.polyline) || raw.polyline.length < 2) continue;
-      const points = raw.polyline.map((p) => ({ x: p.x, y: p.y }));
+      // Positive lane ids run against OpenDRIVE `s`; flip so index 0 is where a
+      // vehicle enters the lane.
+      const reversed = raw.laneId > 0;
+      const source = raw.polyline.map((p) => ({ x: p.x, y: p.y }));
+      const points = reversed ? source.reverse() : source;
       const cum = cumulativeLengths(points);
       const node: LaneNode = {
         rsl: asLaneRef(rsl),
         raw,
         points,
+        reversed,
         cum,
         lengthM: cum[cum.length - 1] as number,
         laneType: raw.laneType,
@@ -121,10 +153,49 @@ export class LaneGraph {
       const row = this.rows.get(node.rowKey);
       if (row) row.push(node);
       else this.rows.set(node.rowKey, [node]);
-      this.#indexLane(node);
     }
+    this.#orientConnectingLanes();
+    for (const node of this.lanes.values()) this.#indexLane(node);
     // Lane rows are ordered by lane id: ... -3, -2, -1, 1, 2, 3 ...
     for (const row of this.rows.values()) row.sort((a, b) => a.laneId - b.laneId);
+  }
+
+  /**
+   * Re-orient junction connecting lanes from their gate.
+   *
+   * The lane-sign rule is the OpenDRIVE semantic and is right for the open
+   * road, but it is only right for ~92% of connecting lanes: on Yale, 41 of 239
+   * positive-id connecting lanes are already stored approach-to-exit. The gate
+   * is ground truth — a connecting lane *begins* where its approach lane ends —
+   * so it is used to settle the direction rather than the sign.
+   *
+   * Getting this wrong is invisible until it is expensive: `sOnA` for a
+   * precomputed conflict would be measured from the far side of the
+   * intersection, so an actor backed up from it would start on the wrong side
+   * of the junction it was supposed to be entering.
+   */
+  #orientConnectingLanes(): void {
+    const gates = [...(this.index.gates ?? [])].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const settled = new Set<string>();
+    for (const gate of gates) {
+      if (settled.has(gate.connectingLaneRsl)) continue;
+      const approach = this.lanes.get(gate.approachLaneRsl);
+      const connecting = this.lanes.get(gate.connectingLaneRsl);
+      if (!approach || !connecting) continue;
+      settled.add(gate.connectingLaneRsl);
+      const entry = approach.points[approach.points.length - 1] as Point2;
+      const toStart = dist2(entry, connecting.points[0] as Point2);
+      const toEnd = dist2(entry, connecting.points[connecting.points.length - 1] as Point2);
+      if (toEnd < toStart) this.#flip(connecting);
+    }
+  }
+
+  #flip(node: LaneNode): void {
+    node.points.reverse();
+    const cum = cumulativeLengths(node.points);
+    node.cum.length = 0;
+    node.cum.push(...cum);
+    node.reversed = !node.reversed;
   }
 
   #indexLane(node: LaneNode): void {
@@ -351,20 +422,49 @@ export class LaneGraph {
   widthAt(lane: LaneNode, s: number): number {
     const samples = lane.raw.widthSamples;
     if (!samples || samples.length === 0) return lane.widthM;
+    // `widthSamples[].s` is OpenDRIVE `s`; the argument is travel-ordered.
+    const query = this.toXodrS(lane, s);
     const sorted = [...samples].sort((a, b) => a.s - b.s);
     const first = sorted[0] as { s: number; widthM: number };
     const last = sorted[sorted.length - 1] as { s: number; widthM: number };
-    if (s <= first.s) return first.widthM;
-    if (s >= last.s) return last.widthM;
+    if (query <= first.s) return first.widthM;
+    if (query >= last.s) return last.widthM;
     for (let i = 0; i + 1 < sorted.length; i++) {
       const a = sorted[i] as { s: number; widthM: number };
       const b = sorted[i + 1] as { s: number; widthM: number };
-      if (s < a.s || s > b.s) continue;
+      if (query < a.s || query > b.s) continue;
       const span = b.s - a.s;
-      const t = span === 0 ? 0 : (s - a.s) / span;
+      const t = span === 0 ? 0 : (query - a.s) / span;
       return a.widthM + t * (b.widthM - a.widthM);
     }
     return lane.widthM;
+  }
+
+  /**
+   * Convert travel-ordered arc length back to OpenDRIVE `s`.
+   *
+   * Needed wherever source data keyed on `s` is consulted (width samples,
+   * lane-change permissions) and by any exporter that has to emit an
+   * OpenSCENARIO `LanePosition`.
+   */
+  toXodrS(lane: LaneNode, travelS: number): number {
+    return lane.reversed ? lane.lengthM - travelS : travelS;
+  }
+
+  /** Convert OpenDRIVE `s` to travel-ordered arc length. */
+  fromXodrS(lane: LaneNode, xodrS: number): number {
+    return lane.reversed ? lane.lengthM - xodrS : xodrS;
+  }
+
+  /**
+   * Convert a source-declared side (`left`/`right` looking along `+s`) into the
+   * driver's frame. For a lane travelling against `s` the two are swapped, and
+   * a lane-change permission that says "left" would otherwise send a vehicle
+   * into oncoming traffic.
+   */
+  driverSide(lane: LaneNode, sourceSide: 'left' | 'right'): 'left' | 'right' {
+    if (!lane.reversed) return sourceSide;
+    return sourceSide === 'left' ? 'right' : 'left';
   }
 
   /** Absolute heading change per 10 m around arc length `s`, in degrees. */

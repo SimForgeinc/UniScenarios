@@ -96,7 +96,16 @@ export interface ScenePoint {
 export interface RoadAnchor {
   /** Placement anchor. Branded so it cannot be confused with a display string. */
   rsl: LaneRef;
-  /** Arc length along the lane polyline, metres. */
+  /**
+   * Arc length along the lane **in the direction of travel**, metres from where
+   * a vehicle enters the lane.
+   *
+   * This is *not* OpenDRIVE `s`: the topology index stores polylines in `s`
+   * order, and a positive-id lane travels against `s`, so the two run opposite
+   * on ~40% of lanes. Travel order is what every consumer actually wants (a
+   * spawn point 20 m into the lane, a conflict 8 m into a movement); an
+   * exporter that needs OpenDRIVE `s` converts with `LaneGraph.toXodrS`.
+   */
   s: number;
   /** Signed lateral offset from the lane centreline, metres (left positive). */
   offsetM: number;

@@ -164,10 +164,17 @@ function materialise(ctx: BuildContext, chain: string[]): Segment | null {
     const lane = lanes[i] as LaneNode;
     const base = laneStartS[i] as number;
     for (const perm of lane.raw.laneChangePermissions ?? []) {
+      // Source `s` and `side` are stated looking along OpenDRIVE `+s`. On a
+      // lane travelling against `s` both have to be flipped, or a permission
+      // that reads "left, 0-13 m" would send a vehicle into oncoming traffic
+      // at the wrong end of the block.
+      const a = ctx.graph.fromXodrS(lane, perm.startS);
+      const b = ctx.graph.fromXodrS(lane, perm.endS);
+      const side = ctx.graph.driverSide(lane, perm.side);
       laneChangeIntervals.push({
-        side: perm.side,
-        startS: round(base + perm.startS, 2),
-        endS: round(base + perm.endS, 2),
+        side,
+        startS: round(base + Math.min(a, b), 2),
+        endS: round(base + Math.max(a, b), 2),
         allowed: perm.allowed,
         targetRsl: targetOfPermission(lane, perm.side),
       });
