@@ -109,6 +109,8 @@ export interface CityViewerOptions {
   maxConcurrentLoads?: number;
   /** Per-frame milliseconds spent pushing new textures to the GPU. */
   uploadBudgetMs?: number;
+  /** Per-frame texel budget for GPU uploads. */
+  uploadPixelsPerFrame?: number;
   /** HDRI environment, relative to baseUrl. */
   environmentUrl?: string;
   /** Directional light intensity. */
@@ -123,6 +125,8 @@ export interface CityViewerOptions {
   shadowAtlasCellSize?: number;
   /** 0 disables the baked shadow term entirely. */
   shadowStrength?: number;
+  /** Render the baked shadow term instead of shading (projection QA). */
+  debugShadowProjection?: boolean;
 }
 
 export interface CityViewerStats {
@@ -137,6 +141,8 @@ export interface CityViewerStats {
   /** Resident (tile, lod) assets across city + vegetation. */
   residentAssets: number;
   residentBytes: number;
+  /** Decoded but not yet uploaded/swapped bytes; counts against the budget. */
+  pendingBytes: number;
   byteBudget: number;
   loading: number;
   queued: number;

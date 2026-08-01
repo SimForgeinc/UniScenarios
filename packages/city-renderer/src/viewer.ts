@@ -51,26 +51,41 @@ const DEFAULTS = {
   /**
    * Pixel threshold for the LOD selector. The Yale Street geometric errors are
    * a 4x chain (4.6 / 18.2 / 72.9 m for a 76 m cell), so at a 1600 px tall
-   * buffer this puts LOD0 inside ~35 m, LOD1 inside ~140 m and LOD2 inside
-   * ~560 m — which is what keeps the resident set near the byte budget, since
-   * one LOD0 tile can cost 900 MB of RGBA.
+   * buffer this puts LOD0 inside ~23 m, LOD1 inside ~93 m and LOD2 inside
+   * ~370 m — which is what keeps the resident set near the byte budget, since
+   * LOD here is really texture resolution (2048 -> 256 px) and one LOD0 tile
+   * can cost 900 MB of RGBA.
    */
-  maxScreenSpaceError: 200,
+  maxScreenSpaceError: 300,
   /**
    * Vegetation errors in this manifest are ~16x the city's for the same cell,
    * so they need their own threshold or every tree tile would pin to LOD0.
    */
   vegetationScreenSpaceError: 2000,
-  byteBudget: 2.5 * 1024 * 1024 * 1024,
-  maxConcurrentLoads: 3,
-  uploadBudgetMs: 3,
+  /**
+   * Estimated GPU bytes. 1.5 GB, not the 2.5 GB the textures would happily
+   * fill: Chrome's GPU process on an M-series MacBook kills the tab somewhere
+   * above ~2 GB of live RGBA8 + mips, and the in-flight decode queue adds its
+   * own copy on top of whatever is already resident.
+   */
+  byteBudget: 1.5 * 1024 * 1024 * 1024,
+  maxConcurrentLoads: 2,
+  uploadBudgetMs: 5,
+  /** ~one 2048px texture per frame; the pacer stops as soon as this is spent. */
+  uploadPixelsPerFrame: 4.2e6,
   environmentUrl: 'env/sky.hdr',
-  sunIntensity: 3.2,
-  environmentIntensity: 1,
-  exposure: 1.05,
+  /**
+   * Sun vs sky balance. The baked lightmap only removes *direct* light, so a
+   * sky-dominant balance makes the shadows invisible; 5.0 / 0.6 is where the
+   * path-traced shadows read at street level without crushing the ambient.
+   */
+  sunIntensity: 5,
+  environmentIntensity: 0.6,
+  exposure: 1,
   vegetationMaxDistance: 400,
   shadowAtlasCellSize: 512,
   shadowStrength: 1,
+  debugShadowProjection: false,
 };
 
 const VEG_BAND_DISTANCES = [70, 150, 260];
@@ -119,13 +134,19 @@ export class CityViewer {
   private resizeObserver: ResizeObserver | null = null;
   private disposed = false;
   private benchmarkActive = false;
+  private uploadSkips = 0;
   private lastDrawCalls = 0;
   private lastTriangles = 0;
   private fps = 0;
 
   constructor(canvas: HTMLCanvasElement, options: CityViewerOptions = {}) {
     this.canvas = canvas;
-    this.options = { ...DEFAULTS, baseUrl: '', ...options };
+    // Explicit undefined must not clobber a default (callers routinely spread
+    // partially-filled option objects).
+    const provided = Object.fromEntries(
+      Object.entries(options).filter(([, value]) => value !== undefined),
+    ) as CityViewerOptions;
+    this.options = { ...DEFAULTS, baseUrl: '', ...provided };
 
     this.renderer = new WebGLRenderer({
       canvas,
@@ -178,6 +199,16 @@ export class CityViewer {
   // ---------------------------------------------------------------- loading
 
   async loadMap(manifestUrl: string): Promise<void> {
+    try {
+      await this.loadMapInner(manifestUrl);
+    } catch (err) {
+      // dispose() aborts every in-flight request; that is not a failure.
+      if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
+      throw err;
+    }
+  }
+
+  private async loadMapInner(manifestUrl: string): Promise<void> {
     const url = this.options.baseUrl ? resolveUrl(this.options.baseUrl, manifestUrl) : manifestUrl;
     this.assetBase = url.replace(/[^/]*$/, '');
     const manifest = (await fetch(url, { signal: this.abort.signal }).then((r) => {
@@ -226,9 +257,9 @@ export class CityViewer {
   private frameCamera(center: Vector3, size: Vector3): void {
     const span = Math.max(size.x, size.z);
     const position = new Vector3(
-      center.x - span * 0.45,
-      center.y + span * 0.55,
-      center.z + span * 0.62,
+      center.x - span * 0.3,
+      center.y + span * 0.31,
+      center.z + span * 0.42,
     );
     this.controls.minDistance = 3;
     this.controls.maxDistance = span * 4;
@@ -243,6 +274,7 @@ export class CityViewer {
       rect: atlas.rect,
       strength: this.options.shadowStrength,
       wallWeight: 0.5,
+      debug: this.options.debugShadowProjection,
       fadeStartY: box.min.y + fadeFrom,
       fadeEndY: box.min.y + fadeTo,
     };
@@ -299,6 +331,7 @@ export class CityViewer {
       scene: this.scene,
       defs: [def],
       maxConcurrent: 1,
+      memory: this.memory,
       pinCoarsest: true,
       build: async (tileDef, lod, signal) => {
         const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
@@ -334,6 +367,7 @@ export class CityViewer {
       scene: this.scene,
       defs,
       maxConcurrent: this.options.maxConcurrentLoads,
+      memory: this.memory,
       pinCoarsest: true,
       build: async (def, lod, signal) => {
         const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
@@ -389,6 +423,7 @@ export class CityViewer {
       scene: this.scene,
       defs,
       maxConcurrent: 2,
+      memory: this.memory,
       pinCoarsest: false,
       want: (_def, distance) => distance <= this.options.vegetationMaxDistance,
       build: async (def, lod, signal) => {
@@ -456,10 +491,21 @@ export class CityViewer {
     }
     this.vegLayer?.tickDisplayed();
 
-    const deadline = now + this.options.uploadBudgetMs;
-    this.roadLayer?.pumpUploads(deadline, this.camera);
-    this.cityLayer?.pumpUploads(deadline, this.camera);
-    this.vegLayer?.pumpUploads(deadline, this.camera);
+    // Adaptive upload backoff: a 2048px texture costs ~30 ms of GPU time on
+    // this class of machine, so after a frame that already ran long we skip the
+    // pacer entirely and let the pipeline drain instead of stacking stalls.
+    // The counter guarantees forward progress if frames stay heavy.
+    const ceiling = Math.max(14, this.frameStats.percentile(0.5) * 2);
+    if (dt * 1000 <= ceiling || this.uploadSkips >= 4) {
+      this.uploadSkips = 0;
+      const deadline = now + this.options.uploadBudgetMs;
+      const pixelBudget = { remaining: this.options.uploadPixelsPerFrame };
+      this.roadLayer?.pumpUploads(deadline, pixelBudget, this.camera);
+      this.cityLayer?.pumpUploads(deadline, pixelBudget, this.camera);
+      this.vegLayer?.pumpUploads(deadline, pixelBudget, this.camera);
+    } else {
+      this.uploadSkips++;
+    }
 
     this.renderer.info.reset();
     this.renderer.render(this.scene, this.camera);
@@ -485,19 +531,43 @@ export class CityViewer {
     this.enforceBudget();
   }
 
+  /**
+   * Shared ledger for both layers. In-flight decodes count against the budget
+   * too — a parsed-but-not-yet-uploaded LOD0 tile holds its whole texture set
+   * as ImageBitmaps, and three concurrent ones are what took the tab down
+   * before this existed.
+   */
+  private readonly memory = {
+    admit: (bytes: number, priority: number): boolean => {
+      const budget = this.options.byteBudget;
+      if (this.totalBytes() + bytes <= budget) return true;
+      return this.freeSpace(budget - bytes, priority);
+    },
+    maxAssetBytes: (): number => this.options.byteBudget * 0.45,
+  };
+
   private enforceBudget(): void {
-    const budget = this.options.byteBudget;
-    let total = this.residentBytes();
-    if (total <= budget) return;
+    this.freeSpace(this.options.byteBudget, Infinity);
+  }
+
+  /**
+   * Evicts until `this.totalBytes() <= limit`, touching only assets that score
+   * worse than `priority`. Returns whether the limit was reached.
+   */
+  private freeSpace(limit: number, priority: number): boolean {
+    let total = this.totalBytes();
+    if (total <= limit) return true;
     const candidates: EvictionCandidate[] = [];
     this.cityLayer?.evictionCandidates(candidates);
     this.vegLayer?.evictionCandidates(candidates);
     // Worst score first: out-of-range tiles, then overshoot, then distance.
     candidates.sort((a, b) => b.score - a.score);
     for (const candidate of candidates) {
-      if (total <= budget) break;
+      if (total <= limit) break;
+      if (candidate.score <= priority) break; // nothing cheaper left to give up
       total -= candidate.layer.evict(candidate);
     }
+    return total <= limit;
   }
 
   private residentBytes(): number {
@@ -505,6 +575,15 @@ export class CityViewer {
       (this.cityLayer?.residentBytes ?? 0) +
       (this.vegLayer?.residentBytes ?? 0) +
       (this.roadLayer?.residentBytes ?? 0)
+    );
+  }
+
+  private totalBytes(): number {
+    return (
+      this.residentBytes() +
+      (this.cityLayer?.pendingBytes ?? 0) +
+      (this.vegLayer?.pendingBytes ?? 0) +
+      (this.roadLayer?.pendingBytes ?? 0)
     );
   }
 
@@ -526,6 +605,7 @@ export class CityViewer {
       residentTiles: sum((s) => s.residentTiles),
       residentAssets: sum((s) => s.residentAssets),
       residentBytes: this.residentBytes(),
+      pendingBytes: this.totalBytes() - this.residentBytes(),
       byteBudget: this.options.byteBudget,
       loading: sum((s) => s.loading),
       queued: sum((s) => s.queued),
@@ -600,6 +680,7 @@ export class CityViewer {
     const start = performance.now();
     let frames = 0;
     let worstFrameMs = 0;
+    let drawCallTotal = 0;
     let last = start;
 
     await new Promise<void>((resolve) => {
@@ -611,6 +692,7 @@ export class CityViewer {
         if (frames > 2) {
           stats.push(frameMs);
           worstFrameMs = Math.max(worstFrameMs, frameMs);
+          drawCallTotal += this.lastDrawCalls;
         }
         frames++;
 
@@ -646,7 +728,7 @@ export class CityViewer {
       avgFps: frames / durationSeconds,
       p95FrameMs: stats.percentile(0.95),
       minFps: worstFrameMs > 0 ? 1000 / worstFrameMs : 0,
-      drawCalls: this.lastDrawCalls,
+      drawCalls: frames > 3 ? Math.round(drawCallTotal / (frames - 3)) : this.lastDrawCalls,
       residentBytes: this.residentBytes(),
       frames,
       durationMs: durationSeconds * 1000,

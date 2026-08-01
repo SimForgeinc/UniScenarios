@@ -3,6 +3,7 @@ import type { Camera, Object3D, Texture, WebGLRenderer, Scene } from 'three';
 import type { ManifestLod } from './types';
 import type { AssetResources } from './gltf';
 import { disposeResources, uploadTexture } from './gltf';
+import { estimateLodBytes } from './manifest';
 
 export interface StreamTileDef {
   id: string;
@@ -54,9 +55,22 @@ export interface LayerStats {
   residentTiles: number;
   residentAssets: number;
   bytes: number;
+  pendingBytes: number;
   loading: number;
   queued: number;
   uploading: number;
+}
+
+export interface MemoryGovernor {
+  /**
+   * True if `bytes` more may be brought in right now. `priority` is the
+   * requester's eviction score (smaller = more valuable); the governor may only
+   * evict assets that score worse than that, which is what stops a distant tile
+   * from kicking out a near one and thrashing the pipe.
+   */
+  admit(bytes: number, priority: number): boolean;
+  /** Largest single asset worth holding; coarser LODs are used above this. */
+  maxAssetBytes(): number;
 }
 
 export interface TileStreamLayerOptions {
@@ -66,6 +80,8 @@ export interface TileStreamLayerOptions {
   defs: StreamTileDef[];
   build: AssetBuilder;
   maxConcurrent: number;
+  /** Shared byte ledger; keeps in-flight decodes from blowing past the budget. */
+  memory: MemoryGovernor;
   /**
    * Load the coarsest LOD of every tile before anything finer is fetched, and
    * never evict it. Used for the city so the full map is on screen in the first
@@ -81,6 +97,7 @@ export interface TileStreamLayerOptions {
 }
 
 const MAX_FAILURES = 2;
+const MAX_UPLOAD_BACKLOG = 3;
 
 /**
  * Screen-space-error driven LOD streaming for one class of tiles.
@@ -101,6 +118,7 @@ export class TileStreamLayer {
   private readonly uploadQueue: { entry: Entry; index: number; asset: PreparedAsset }[] = [];
   private readonly compiling = new Set<PreparedAsset>();
   private bytes = 0;
+  private pending = 0;
   private disposed = false;
   private bootstrapped: boolean;
 
@@ -126,6 +144,11 @@ export class TileStreamLayer {
     return this.bytes;
   }
 
+  /** Estimated bytes of assets that are decoding or waiting on the GPU. */
+  get pendingBytes(): number {
+    return this.pending;
+  }
+
   /** True once every tile has its coarsest LOD on screen. */
   get ready(): boolean {
     return this.bootstrapped;
@@ -146,6 +169,7 @@ export class TileStreamLayer {
       residentTiles,
       residentAssets,
       bytes: this.bytes,
+      pendingBytes: this.pending,
       loading,
       queued,
       uploading: this.uploadQueue.length + this.compiling.size,
@@ -182,6 +206,14 @@ export class TileStreamLayer {
             break;
           }
         }
+        // A single asset that would eat most of the budget is never worth it:
+        // one LOD0 tile in this dataset can be ~900 MB of RGBA.
+        const cap = this.opts.memory.maxAssetBytes();
+        while (desired > 0) {
+          const candidate = lods[desired];
+          if (!candidate || estimateLodBytes(candidate) <= cap) break;
+          desired--;
+        }
         if (!this.bootstrapped) desired = 0;
       }
       entry.desired = desired;
@@ -208,6 +240,11 @@ export class TileStreamLayer {
   }
 
   private pumpFetches(): void {
+    // A decoded asset holds its whole texture set as ImageBitmaps until the
+    // pacer uploads it. Letting the fetchers run ahead of the (deliberately
+    // slow) upload pacer is how the transient footprint explodes, so the
+    // backlog is capped.
+    if (this.uploadQueue.length >= MAX_UPLOAD_BACKLOG) return;
     let active = 0;
     for (const entry of this.entries.values()) if (entry.loading) active++;
     if (active >= this.opts.maxConcurrent) return;
@@ -225,54 +262,66 @@ export class TileStreamLayer {
 
     for (const entry of wanted) {
       if (active >= this.opts.maxConcurrent) break;
-      active++;
-      this.startLoad(entry, entry.desired);
+      // Admission can refuse (budget full); try the next tile instead of stalling.
+      if (this.startLoad(entry, entry.desired)) active++;
     }
   }
 
-  private startLoad(entry: Entry, index: number): void {
+  private startLoad(entry: Entry, index: number): boolean {
     const lod = entry.def.lods[index];
-    if (!lod) return;
+    if (!lod) return false;
+    const estimate = estimateLodBytes(lod);
+    if (!this.opts.memory.admit(estimate, entry.distance)) return false;
+    this.pending += estimate;
     const controller = new AbortController();
     entry.loading = { index, controller };
     this.opts
       .build(entry.def, lod, controller.signal)
       .then((asset) => {
         entry.loading = null;
+        this.pending -= estimate;
         if (this.disposed || controller.signal.aborted) {
           asset.dispose?.();
           disposeResources(asset.resources);
           return;
         }
+        this.pending += asset.bytes;
         this.uploadQueue.push({ entry, index, asset });
       })
       .catch((err: unknown) => {
         entry.loading = null;
+        this.pending -= estimate;
         if (!controller.signal.aborted && !this.disposed) {
           entry.failures++;
           console.error(`[city-renderer] ${entry.def.id} lod${lod.level} failed`, err);
         }
       });
+    return true;
   }
 
   /**
    * Pushes queued textures to the GPU under a per-frame time budget so a 140 MB
    * LOD0 tile cannot stall a frame, then compiles and swaps the asset in.
    */
-  pumpUploads(deadline: number, camera: Camera): void {
+  pumpUploads(deadline: number, pixelBudget: { remaining: number }, camera: Camera): void {
     if (this.disposed || this.uploadQueue.length === 0) return;
     this.uploadQueue.sort(
       (a, b) => b.entry.gain - a.entry.gain || a.entry.distance - b.entry.distance,
     );
-    while (this.uploadQueue.length > 0 && performance.now() < deadline) {
+    while (this.uploadQueue.length > 0 && performance.now() < deadline && pixelBudget.remaining > 0) {
       const job = this.uploadQueue[0];
       if (!job) break;
       const tex = job.asset.pendingTextures.pop();
       if (tex) {
+        const image = tex.image as { width?: number; height?: number } | undefined;
+        // Charged before the upload so one 2048px texture (~4.2 Mpx, the
+        // dominant cost at LOD0/LOD1) is all a frame ever does.
+        pixelBudget.remaining -= (image?.width ?? 0) * (image?.height ?? 0);
         uploadTexture(this.opts.renderer, tex);
         continue;
       }
       this.uploadQueue.shift();
+      this.pending -= job.asset.bytes;
       this.finishAsset(job.entry, job.index, job.asset, camera);
     }
   }
@@ -280,11 +329,13 @@ export class TileStreamLayer {
   private finishAsset(entry: Entry, index: number, asset: PreparedAsset, camera: Camera): void {
     asset.object.updateMatrixWorld(true);
     this.compiling.add(asset);
+    this.pending += asset.bytes;
     void this.opts.renderer
       .compileAsync(asset.object, camera, this.opts.scene)
       .catch(() => undefined)
       .then(() => {
         this.compiling.delete(asset);
+        this.pending -= asset.bytes;
         if (this.disposed) {
           asset.dispose?.();
           disposeResources(asset.resources);
@@ -387,6 +438,7 @@ export class TileStreamLayer {
       disposeResources(job.asset.resources);
     }
     this.uploadQueue.length = 0;
+    this.pending = 0;
     this.group.clear();
     this.entries.clear();
     this.bytes = 0;

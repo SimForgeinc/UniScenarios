@@ -12,6 +12,8 @@ export interface ShadowPatchOptions {
   /** World Y where the term starts fading out, and where it is fully gone. */
   fadeStartY: number;
   fadeEndY: number;
+  /** Render the shadow term itself instead of shaded colour (projection QA). */
+  debug?: boolean;
 }
 
 interface PatchUniforms {
@@ -69,28 +71,33 @@ export function patchMaterialWithBakedShadow(material: Material, opts: ShadowPat
     shader.fragmentShader = FRAG_DECL + shader.fragmentShader.replace(
       '#include <aomap_fragment>',
       /* glsl */ `
-	{
-		vec2 cityShadowUv = ( vCityWorldPos.xz - uShadowRect.xy ) * uShadowRect.zw;
-		if ( uShadowTerm.x > 0.0 && all( greaterThanEqual( cityShadowUv, vec2( 0.0 ) ) ) && all( lessThanEqual( cityShadowUv, vec2( 1.0 ) ) ) ) {
-			float cityShadowRaw = texture2D( uShadowMap, cityShadowUv ).r;
-			vec3 cityUpView = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
-			float cityFacing = mix( uShadowTerm.y, 1.0, smoothstep( 0.0, 0.6, abs( dot( normalize( normal ), cityUpView ) ) ) );
-			float cityHeight = 1.0 - smoothstep( uShadowTerm.z, uShadowTerm.w, vCityWorldPos.y );
-			float cityShadow = mix( 1.0, cityShadowRaw, clamp( uShadowTerm.x * cityFacing * cityHeight, 0.0, 1.0 ) );
-			reflectedLight.directDiffuse *= cityShadow;
-			reflectedLight.directSpecular *= cityShadow;
-			float cityIndirect = mix( 1.0, cityShadow, 0.35 );
-			reflectedLight.indirectDiffuse *= cityIndirect;
-			reflectedLight.indirectSpecular *= cityIndirect;
-		}
+	float cityShadow = 1.0;
+	vec2 cityShadowUv = ( vCityWorldPos.xz - uShadowRect.xy ) * uShadowRect.zw;
+	if ( uShadowTerm.x > 0.0 && all( greaterThanEqual( cityShadowUv, vec2( 0.0 ) ) ) && all( lessThanEqual( cityShadowUv, vec2( 1.0 ) ) ) ) {
+		float cityShadowRaw = texture2D( uShadowMap, cityShadowUv ).r;
+		vec3 cityUpView = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
+		float cityFacing = mix( uShadowTerm.y, 1.0, smoothstep( 0.0, 0.6, abs( dot( normalize( normal ), cityUpView ) ) ) );
+		float cityHeight = 1.0 - smoothstep( uShadowTerm.z, uShadowTerm.w, vCityWorldPos.y );
+		cityShadow = mix( 1.0, cityShadowRaw, clamp( uShadowTerm.x * cityFacing * cityHeight, 0.0, 1.0 ) );
+		reflectedLight.directDiffuse *= cityShadow;
+		reflectedLight.directSpecular *= cityShadow;
+		float cityIndirect = mix( 1.0, cityShadow, 0.35 );
+		reflectedLight.indirectDiffuse *= cityIndirect;
+		reflectedLight.indirectSpecular *= cityIndirect;
 	}
 	#include <aomap_fragment>`,
     );
+    if (opts.debug) {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        '\toutgoingLight = vec3( cityShadow );\n\t#include <opaque_fragment>',
+      );
+    }
   };
   // All patched materials compile to the same program; without this every
   // material clone would get its own program (three keys the cache on the
   // stringified onBeforeCompile, which is shared here, but be explicit).
-  material.customProgramCacheKey = () => 'city-baked-shadow-v1';
+  material.customProgramCacheKey = () => (opts.debug ? 'city-shadow-debug' : 'city-baked-shadow-v1');
   material.needsUpdate = true;
 }
 

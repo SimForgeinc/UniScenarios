@@ -55,7 +55,7 @@ export function Hud({ viewer }: { viewer: CityViewer | null }): JSX.Element | nu
         value={
           streaming === 0
             ? 'idle'
-            : `${stats.loading} load · ${stats.queued} queue · ${stats.uploading} gpu`
+            : `${stats.loading}L ${stats.queued}Q ${stats.uploading}U +${formatBytes(stats.pendingBytes)}`
         }
       />
       <Row
