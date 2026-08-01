@@ -2,11 +2,13 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { PlaybackController, type PlaybackState } from './controller';
 import type { PlaybackBundle } from './model';
+import type { MapOverlayHandle } from '../mapOverlays';
 
 export interface UsePlaybackOptions {
   viewer: CityViewer | null;
   bundle: PlaybackBundle | null;
   sampleHeight: ((x: number, z: number) => number | null) | null;
+  overlays: MapOverlayHandle | null;
 }
 
 declare global {
@@ -20,12 +22,19 @@ export function usePlayback({
   viewer,
   bundle,
   sampleHeight,
+  overlays,
 }: UsePlaybackOptions): { controller: PlaybackController | null; state: PlaybackState | null } {
   const [controller, setController] = useState<PlaybackController | null>(null);
 
   useEffect(() => {
     if (!viewer || !bundle || !sampleHeight) return;
-    const next = new PlaybackController({ viewer, bundle, sampleHeight });
+    const next = new PlaybackController({
+      viewer,
+      bundle,
+      sampleHeight,
+      setSignalStates: (states) => overlays?.setSignalStates(states) ?? 0,
+      clearSignalStates: () => overlays?.clearSignalStates(),
+    });
     window.__playback = next;
     setController(next);
     return () => {
@@ -33,7 +42,7 @@ export function usePlayback({
       next.dispose();
       setController(null);
     };
-  }, [viewer, bundle, sampleHeight]);
+  }, [viewer, bundle, sampleHeight, overlays]);
 
   const state = useSyncExternalStore(
     controller ? controller.subscribe : noopSubscribe,

@@ -1,5 +1,5 @@
 /**
- * `scen simulate <instance> [--trace out.trace.json.gz]`.
+ * `uniscenarios simulate <instance> [--trace out.trace.json.gz]`.
  *
  * One engine pass. `guards: 'collect'` rather than `'throw'`: a scenario that
  * fails a feasibility guard is still worth simulating — the resulting metrics
@@ -38,6 +38,8 @@ export function metricsSummary(trace: SimTrace): Record<string, unknown> {
     ),
     revealToConflict: m.revealToConflict
       ? {
+          observer: m.revealToConflict.observer,
+          target: m.revealToConflict.target,
           value: round(m.revealToConflict.value),
           firstBlockedT: round(m.revealToConflict.firstBlockedT),
           losOpenT: round(m.revealToConflict.losOpenT),
@@ -47,7 +49,21 @@ export function metricsSummary(trace: SimTrace): Record<string, unknown> {
           relevantOccluderIds: m.revealToConflict.relevantOccluderIds,
         }
       : null,
+    declaredOcclusion: (m.declaredOcclusion ?? []).map((entry) => ({
+      observer: entry.observer,
+      target: entry.target,
+      pair: entry.pair,
+      occluderId: entry.occluderId ?? null,
+      relevantOccluderIds: entry.relevantOccluderIds,
+      status: entry.status,
+      firstBlockedT: entry.firstBlockedT === null ? null : round(entry.firstBlockedT),
+      losOpenT: entry.losOpenT === null ? null : round(entry.losOpenT),
+      conflictT: entry.conflictT === null ? null : round(entry.conflictT),
+      revealToConflictS: entry.revealToConflictS === null ? null : round(entry.revealToConflictS),
+    })),
     occluderIneffective: (m.occluderIneffective ?? []).map((entry) => ({
+      observer: entry.observer,
+      target: entry.target,
       pair: entry.pair,
       conflictT: round(entry.conflictT),
       firstBlockedT: entry.firstBlockedT === undefined ? null : round(entry.firstBlockedT),

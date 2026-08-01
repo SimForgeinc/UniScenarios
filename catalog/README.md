@@ -28,10 +28,10 @@ The initial manifest is `500 authored / 0 generated / 0 simulated / 0 rendered /
 ## Reproduce and verify
 
 ```sh
-node packages/cli/bin/scen.js catalog create \
+node packages/cli/bin/uniscenarios.js catalog create \
   --out catalog/uniscenarios-five-map-v2.catalog.json
 
-node packages/cli/bin/scen.js catalog verify \
+node packages/cli/bin/uniscenarios.js catalog verify \
   catalog/uniscenarios-five-map-v2.catalog.json
 ```
 

@@ -28,6 +28,7 @@ import { batch } from './commands/batch.js';
 import { catalogCreate, catalogVerify } from './commands/catalog.js';
 import { evaluate, type EvaluateFilterMode } from './commands/evaluate.js';
 import { evidenceVerify } from './commands/evidence.js';
+import { exportScenario } from './commands/export.js';
 import { instantiate } from './commands/instantiate.js';
 import { locationsFind, locationsGet, locationsResolve } from './commands/locations.js';
 import { mapsList } from './commands/maps.js';
@@ -49,6 +50,7 @@ const COMMANDS = [
   { name: 'validate', summary: 'tier-1, or tier-2 (one engine pass + invariant residuals)' },
   { name: 'evaluate', summary: 'reject filters over a trace' },
   { name: 'evidence verify', summary: 'prove one instance/trace pair shares the same input hash' },
+  { name: 'export', summary: 'concrete instance → ASAM OpenSCENARIO XML 1.4.0 or DSL 2.2.0' },
   { name: 'catalog create', summary: 'reserve exactly 100 deterministic scenario identities per supported map' },
   { name: 'catalog verify', summary: 'reject catalog identity, cardinality, provenance, or evidence gaps' },
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
@@ -112,7 +114,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
     case 'maps': {
       const args = parseArgs(argv.slice(2), { booleans: GLOBAL_BOOLEANS });
       if (sub !== 'list') {
-        throw new CliError('unknown_command', `scen maps ${sub ?? ''}`.trim(), {
+        throw new CliError('unknown_command', `uniscenarios maps ${sub ?? ''}`.trim(), {
           detail: { known: ['list'] },
         });
       }
@@ -174,14 +176,14 @@ async function dispatch(argv: readonly string[]): Promise<number> {
           pretty: boolFlag(args, 'pretty'),
         });
       }
-      throw new CliError('unknown_command', `scen locations ${sub ?? ''}`.trim(), {
+      throw new CliError('unknown_command', `uniscenarios locations ${sub ?? ''}`.trim(), {
         detail: { known: ['find', 'get', 'resolve'] },
       });
     }
 
     case 'template': {
       if (sub !== 'validate') {
-        throw new CliError('unknown_command', `scen template ${sub ?? ''}`.trim(), {
+        throw new CliError('unknown_command', `uniscenarios template ${sub ?? ''}`.trim(), {
           detail: { known: ['validate'] },
         });
       }
@@ -199,7 +201,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
 
     case 'sites': {
       if (sub !== 'match') {
-        throw new CliError('unknown_command', `scen sites ${sub ?? ''}`.trim(), {
+        throw new CliError('unknown_command', `uniscenarios sites ${sub ?? ''}`.trim(), {
           detail: { known: ['match'] },
         });
       }
@@ -283,9 +285,33 @@ async function dispatch(argv: readonly string[]): Promise<number> {
       });
     }
 
+    case 'export': {
+      const args = parseArgs(argv.slice(1), {
+        booleans: GLOBAL_BOOLEANS,
+        values: ['format', 'out', 'road-file', 'author', 'description', 'route-sample-m'],
+      });
+      const format = requireString(args, 'format');
+      if (format !== 'xosc-1.4' && format !== 'osc-2.2') {
+        throw new CliError('bad_value', '--format must be xosc-1.4 | osc-2.2', {
+          path: '--format',
+          detail: { known: ['xosc-1.4', 'osc-2.2'] },
+        });
+      }
+      return exportScenario({
+        file: positional(args, 0, 'instance.json'),
+        format,
+        out: requireString(args, 'out'),
+        roadFile: optionalString(args, 'road-file'),
+        author: optionalString(args, 'author'),
+        description: optionalString(args, 'description'),
+        routeSampleM: optionalNumber(args, 'route-sample-m'),
+        pretty: boolFlag(args, 'pretty'),
+      });
+    }
+
     case 'evidence': {
       if (sub !== 'verify') {
-        throw new CliError('unknown_command', `scen evidence ${sub ?? ''}`.trim(), {
+        throw new CliError('unknown_command', `uniscenarios evidence ${sub ?? ''}`.trim(), {
           detail: { known: ['verify'] },
         });
       }
@@ -322,7 +348,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
           pretty: boolFlag(args, 'pretty'),
         });
       }
-      throw new CliError('unknown_command', `scen catalog ${sub ?? ''}`.trim(), {
+      throw new CliError('unknown_command', `uniscenarios catalog ${sub ?? ''}`.trim(), {
         detail: { known: ['create', 'verify'] },
       });
     }

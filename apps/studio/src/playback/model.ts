@@ -55,9 +55,16 @@ export interface PlaybackBundle {
   readonly instance: ConcreteInstance;
   readonly trace: SceneTrace;
   readonly actors: readonly PlaybackActor[];
+  readonly signals: readonly PlaybackSignal[];
   readonly source: PlaybackSource;
   readonly startTime: number;
   readonly endTime: number;
+}
+
+export interface PlaybackSignal {
+  readonly id: string;
+  readonly headIds: readonly string[];
+  readonly timingSource: 'map' | 'synthetic-default' | 'authored' | 'unbound';
 }
 
 export interface PlaybackFile {
@@ -74,6 +81,10 @@ export interface SampledActor {
   readonly headingRad: number;
   readonly present: boolean;
   readonly static: boolean;
+}
+
+export interface SampledSignal extends PlaybackSignal {
+  readonly phase: 'green' | 'yellow' | 'red';
 }
 
 /** One import failure with all repairable findings, rather than the first opaque throw. */
@@ -99,7 +110,7 @@ export async function readPlaybackFiles(
   } catch (error) {
     throw new PlaybackLoadError(`Could not read instance “${instanceFile.name}”`, [
       `instance JSON is invalid: ${messageOf(error)}`,
-      'Choose a concrete *.instance.json file produced by scen instantiate.',
+      'Choose a concrete *.instance.json file produced by uniscenarios instantiate.',
     ]);
   }
 
@@ -110,7 +121,7 @@ export async function readPlaybackFiles(
   } catch (error) {
     throw new PlaybackLoadError(`Could not read trace “${traceFile.name}”`, [
       `trace is neither valid plain JSON nor gzip JSON: ${messageOf(error)}`,
-      'Choose the matching *.trace.json or *.trace.json.gz file produced by scen simulate.',
+      'Choose the matching *.trace.json or *.trace.json.gz file produced by uniscenarios simulate.',
     ]);
   }
 
@@ -198,9 +209,11 @@ export function parsePlaybackPair(
     }
     validateActorIdentity(input, manifest, trace, source, issues);
     validateTracks(input, trace, source.traceName, issues);
+    validateSignalTracks(input, trace, source.traceName, issues);
   }
 
   const actors = mapPlaybackActors(input.actors, source.instanceName, issues);
+  const signals = mapPlaybackSignals(input, source.instanceName, issues);
   if (issues.length > 0 || !trace) throw new PlaybackLoadError('Scenario/trace identity validation failed', issues);
 
   const times = trace.ticks.t;
@@ -214,10 +227,56 @@ export function parsePlaybackPair(
     },
     trace: traceToSceneFrame(trace),
     actors,
+    signals,
     source,
     startTime: times[0] as number,
     endTime: times[times.length - 1] as number,
   };
+}
+
+function validateSignalTracks(
+  input: SimScenarioInput,
+  trace: SimTrace,
+  name: string,
+  issues: string[],
+): void {
+  const expected = input.signalPrograms.map((program) => program.id).sort();
+  const actual = Object.keys(trace.ticks.signals ?? {}).sort();
+  if (expected.length !== actual.length || expected.some((id, index) => id !== actual[index])) {
+    issues.push(`signal program ids differ: instance input=[${expected.join(',')}] trace tracks=[${actual.join(',')}]`);
+  }
+  for (const id of expected) {
+    const phases = trace.ticks.signals?.[id]?.phase;
+    if (!Array.isArray(phases) || phases.length !== trace.ticks.t.length) {
+      issues.push(
+        `${name}: ticks.signals.${id}.phase length ${Array.isArray(phases) ? phases.length : 'missing'} does not match ticks.t length ${trace.ticks.t.length}`,
+      );
+      continue;
+    }
+    if (phases.some((phase) => phase !== 'green' && phase !== 'yellow' && phase !== 'red')) {
+      issues.push(`${name}: ticks.signals.${id}.phase contains an unknown phase`);
+    }
+  }
+}
+
+function mapPlaybackSignals(
+  input: SimScenarioInput,
+  name: string,
+  issues: string[],
+): PlaybackSignal[] {
+  const claimedHeads = new Set<string>();
+  return input.signalPrograms.map((program) => {
+    const headIds = program.mapBinding?.headIds ?? [];
+    for (const headId of headIds) {
+      if (claimedHeads.has(headId)) issues.push(`${name}: physical signal head ${headId} is bound by multiple programs`);
+      claimedHeads.add(headId);
+    }
+    return {
+      id: program.id,
+      headIds,
+      timingSource: program.mapBinding?.timingSource ?? 'unbound',
+    };
+  });
 }
 
 function validateTrace(value: unknown, name: string, issues: string[]): SimTrace | null {
@@ -426,6 +485,16 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
       present,
       static: false,
     };
+  });
+}
+
+/** Sample discrete signal phases at the same trace bracket as actor transforms. */
+export function samplePlaybackSignals(bundle: PlaybackBundle, time: number): SampledSignal[] {
+  const bracket = sampleBracket(bundle.trace.ticks.t, time);
+  return bundle.signals.map((signal) => {
+    const phase = bundle.trace.ticks.signals?.[signal.id]?.phase[bracket.lower];
+    if (!phase) throw new Error(`validated trace lost signal track ${signal.id}`);
+    return { ...signal, phase };
   });
 }
 

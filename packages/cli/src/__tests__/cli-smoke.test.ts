@@ -29,7 +29,7 @@ interface Run {
   stderr: string;
 }
 
-async function scen(...args: string[]): Promise<Run> {
+async function uniscenarios(...args: string[]): Promise<Run> {
   try {
     const r = await execa('node', [BIN, ...args], { reject: false, timeout: 180_000 });
     return { code: r.exitCode ?? 0, stdout: r.stdout, stderr: r.stderr };
@@ -45,7 +45,7 @@ function json<T = Record<string, unknown>>(run: Run): T {
 
 let tmp: string;
 beforeAll(async () => {
-  tmp = await mkdtemp(path.join(os.tmpdir(), 'scen-smoke-'));
+  tmp = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-smoke-'));
 });
 afterAll(async () => {
   if (tmp) await rm(tmp, { recursive: true, force: true });
@@ -53,15 +53,25 @@ afterAll(async () => {
 
 describe('uniscenarios — contract', () => {
   it('prints its command surface as JSON', async () => {
-    const run = await scen();
+    const run = await uniscenarios();
     expect(run.code).toBe(0);
     const payload = json<{ bin: string; commands: Array<{ name: string }> }>(run);
     expect(payload.bin).toBe('uniscenarios');
     expect(payload.commands.map((c) => c.name)).toContain('sites match');
+    expect(payload.commands.map((c) => c.name)).toContain('export');
   });
 
+  it('rejects unknown ASAM export formats before touching the input file', async () => {
+    const run = await uniscenarios('export', 'missing.instance.json', '--format', 'xosc-1.3', '--out', 'out.xosc');
+    expect(run.code).toBe(1);
+    const error = JSON.parse(run.stderr) as { code: string; path: string; detail: { known: string[] } };
+    expect(error.code).toBe('bad_value');
+    expect(error.path).toBe('--format');
+    expect(error.detail.known).toEqual(['xosc-1.4', 'osc-2.2']);
+  }, 60_000);
+
   it('reports an unknown flag as a structured error on stderr, exit 1', async () => {
-    const run = await scen('maps', 'list', '--limt', '3');
+    const run = await uniscenarios('maps', 'list', '--limt', '3');
     expect(run.code).toBe(1);
     expect(run.stdout).toBe('');
     const error = JSON.parse(run.stderr) as { code: string; path: string; detail: { known: string[] } };
@@ -71,7 +81,7 @@ describe('uniscenarios — contract', () => {
   });
 
   it('reports an unknown map with the closed vocabulary attached', async () => {
-    const run = await scen('locations', 'find', '--map', 'not-a-map');
+    const run = await uniscenarios('locations', 'find', '--map', 'not-a-map');
     expect(run.code).toBe(1);
     const error = JSON.parse(run.stderr) as { code: string; detail: { known: string[] } };
     expect(error.code).toBe('unknown_map');
@@ -79,7 +89,7 @@ describe('uniscenarios — contract', () => {
   });
 
   it('lists the five maps and their artifacts', async () => {
-    const run = await scen('maps', 'list');
+    const run = await uniscenarios('maps', 'list');
     expect(run.code).toBe(0);
     const payload = json<{ maps: Array<{ mapId: string; artifacts: Record<string, boolean> }> }>(run);
     expect(payload.maps).toHaveLength(5);
@@ -87,7 +97,7 @@ describe('uniscenarios — contract', () => {
   });
 
   it('prints the published JSON Schema paths', async () => {
-    const run = await scen('schemas');
+    const run = await uniscenarios('schemas');
     expect(run.code).toBe(0);
     const payload = json<{ schemas: Array<{ name: string; exists: boolean }> }>(run);
     expect(payload.schemas.map((s) => s.name).sort()).toEqual(['anchor', 'interactions', 'template']);
@@ -95,7 +105,7 @@ describe('uniscenarios — contract', () => {
   });
 
   it('exits 2 with structured issues on a malformed template', async () => {
-    const run = await scen('template', 'validate', path.join(REPO_ROOT, 'package.json'));
+    const run = await uniscenarios('template', 'validate', path.join(REPO_ROOT, 'package.json'));
     expect(run.code).toBe(2);
     const payload = json<{ ok: boolean; issues: Array<{ code: string }> }>(run);
     expect(payload.ok).toBe(false);
@@ -104,8 +114,42 @@ describe('uniscenarios — contract', () => {
 });
 
 describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
+  it('exports a concrete instance through the real CLI in both current ASAM formats', async () => {
+    const instance = path.join(tmp, 'asam.instance.json');
+    const xosc = path.join(tmp, 'asam.xosc');
+    const osc = path.join(tmp, 'asam.osc');
+    await writeFile(instance, JSON.stringify({
+      mapId: MAP,
+      clipSeconds: 5,
+      warmupSeconds: 0,
+      actors: [{
+        id: 'ego',
+        kind: 'vehicle',
+        dims: { l: 4.5, w: 1.8, h: 1.5 },
+        initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 2 },
+        behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 30, z: 0 }] } },
+      }],
+    }), 'utf8');
+
+    const xmlRun = await uniscenarios('export', instance, '--format', 'xosc-1.4', '--out', xosc);
+    expect(xmlRun.code).toBe(0);
+    expect(json<{ standard: string; out: string }>(xmlRun)).toMatchObject({
+      standard: 'ASAM OpenSCENARIO XML 1.4.0',
+      out: xosc,
+    });
+    expect(await readFile(xosc, 'utf8')).toContain('revMajor="1" revMinor="4"');
+
+    const dslRun = await uniscenarios('export', instance, '--format', 'osc-2.2', '--out', osc);
+    expect(dslRun.code).toBe(0);
+    expect(json<{ standard: string; out: string }>(dslRun)).toMatchObject({
+      standard: 'ASAM OpenSCENARIO DSL 2.2.0',
+      out: osc,
+    });
+    expect(await readFile(osc, 'utf8')).toContain('import osc.standard');
+  }, 180_000);
+
   it('validates the worked example clean', async () => {
-    const run = await scen('template', 'validate', LTAP);
+    const run = await uniscenarios('template', 'validate', LTAP);
     expect(run.code).toBe(0);
     const payload = json<{ ok: boolean; counts: { error: number } }>(run);
     expect(payload.ok).toBe(true);
@@ -113,7 +157,7 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
   });
 
   it('answers a structured location query with handles and road anchors', async () => {
-    const run = await scen(
+    const run = await uniscenarios(
       'locations',
       'find',
       '--map',
@@ -136,14 +180,14 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
   });
 
   it('resolves free text to ranked handles', async () => {
-    const run = await scen('locations', 'resolve', '--map', MAP, 'the intersection on el camino real');
+    const run = await uniscenarios('locations', 'resolve', '--map', MAP, 'the intersection on el camino real');
     expect(run.code).toBe(0);
     const payload = json<{ results: Array<{ handle: string; score: number }> }>(run);
     expect(payload.results.length).toBeGreaterThan(0);
   });
 
   it('matches sites and then runs one all the way to a verdict', async () => {
-    const match = await scen('sites', 'match', LTAP, '--map', MAP);
+    const match = await uniscenarios('sites', 'match', LTAP, '--map', MAP);
     expect(match.code).toBe(0);
     const sites = json<{ maps: Array<{ sites: Array<{ siteId: string; score: number }> }> }>(match)
       .maps[0]!.sites;
@@ -152,7 +196,7 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
     const instanceFile = path.join(tmp, 'cell.instance.json');
     const traceFile = path.join(tmp, 'cell.trace.json.gz');
 
-    const inst = await scen(
+    const inst = await uniscenarios(
       'instantiate',
       LTAP,
       '--map',
@@ -170,14 +214,14 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
     expect(instance.manifest.replayKey.siteId).toBe(sites[0]!.siteId);
     expect(instance.manifest.arrival.length).toBe(1);
 
-    const sim = await scen('simulate', instanceFile, '--trace', traceFile);
+    const sim = await uniscenarios('simulate', instanceFile, '--trace', traceFile);
     expect([0, 2]).toContain(sim.code);
     expect(existsSync(traceFile)).toBe(true);
     const simulated = json<{ metrics: { minTTC: { value: number } | null }; traceDigest: string }>(sim);
     expect(simulated.metrics.minTTC).not.toBeNull();
     expect(simulated.traceDigest).toMatch(/^[0-9a-f]{64}$/);
 
-    const evaluated = await scen('evaluate', traceFile);
+    const evaluated = await uniscenarios('evaluate', traceFile);
     expect([0, 2]).toContain(evaluated.code);
     const verdict = json<{ verdict: string; band: string }>(evaluated);
     expect(['accept', 'reject']).toContain(verdict.verdict);
@@ -185,18 +229,18 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
   });
 
   it('verifies instance/trace evidence hashes and actor ids, and fails stale/tampered pairs', async () => {
-    const match = await scen('sites', 'match', LTAP, '--map', MAP);
+    const match = await uniscenarios('sites', 'match', LTAP, '--map', MAP);
     expect(match.code).toBe(0);
     const siteId = json<{ maps: Array<{ sites: Array<{ siteId: string }> }> }>(match).maps[0]!.sites[0]!.siteId;
     const instanceFile = path.join(tmp, 'evidence.instance.json');
     const traceFile = path.join(tmp, 'evidence.trace.json.gz');
 
-    const inst = await scen('instantiate', LTAP, '--map', MAP, '--site', siteId, '--draw', '0', '--out', instanceFile);
+    const inst = await uniscenarios('instantiate', LTAP, '--map', MAP, '--site', siteId, '--draw', '0', '--out', instanceFile);
     expect([0, 2]).toContain(inst.code);
-    const sim = await scen('simulate', instanceFile, '--trace', traceFile);
+    const sim = await uniscenarios('simulate', instanceFile, '--trace', traceFile);
     expect([0, 2]).toContain(sim.code);
 
-    const ok = await scen('evidence', 'verify', instanceFile, traceFile);
+    const ok = await uniscenarios('evidence', 'verify', instanceFile, traceFile);
     expect(ok.code).toBe(0);
     const okPayload = json<{ ok: boolean; actorCount: number; issues: Array<{ code: string }> }>(ok);
     expect(okPayload.ok).toBe(true);
@@ -207,14 +251,14 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
     const tampered = JSON.parse(await readFile(instanceFile, 'utf8'));
     tampered.input.actors[0].initial.speedMps += 0.5;
     await writeFile(tamperedInstanceFile, `${JSON.stringify(tampered, null, 2)}\n`, 'utf8');
-    const tamperedRun = await scen('evidence', 'verify', tamperedInstanceFile, traceFile);
+    const tamperedRun = await uniscenarios('evidence', 'verify', tamperedInstanceFile, traceFile);
     expect(tamperedRun.code).toBe(2);
     expect(json<{ issues: Array<{ code: string }> }>(tamperedRun).issues.map((i) => i.code)).toContain('instance_input_hash_mismatch');
 
     const trace = await readTraceFile(traceFile);
     const badHashTrace = path.join(tmp, 'evidence-bad-hash.trace.json.gz');
     await writeTraceFile(badHashTrace, { ...trace, header: { ...trace.header, inputHash: '0'.repeat(64) } });
-    const badHash = await scen('evidence', 'verify', instanceFile, badHashTrace);
+    const badHash = await uniscenarios('evidence', 'verify', instanceFile, badHashTrace);
     expect(badHash.code).toBe(2);
     expect(json<{ issues: Array<{ code: string }> }>(badHash).issues.map((i) => i.code)).toContain('trace_input_hash_mismatch');
 
@@ -223,7 +267,7 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
       ...trace,
       header: { ...trace.header, actorIds: trace.header.actorIds.slice(0, -1) },
     });
-    const missingActor = await scen('evidence', 'verify', instanceFile, missingActorTrace);
+    const missingActor = await uniscenarios('evidence', 'verify', instanceFile, missingActorTrace);
     expect(missingActor.code).toBe(2);
     expect(json<{ issues: Array<{ code: string }> }>(missingActor).issues.map((i) => i.code)).toContain('trace_actor_ids_mismatch');
 
@@ -232,13 +276,13 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
       ...trace,
       header: { ...trace.header, actorIds: [...trace.header.actorIds, '__ghost'].sort() },
     });
-    const extraActor = await scen('evidence', 'verify', instanceFile, extraActorTrace);
+    const extraActor = await uniscenarios('evidence', 'verify', instanceFile, extraActorTrace);
     expect(extraActor.code).toBe(2);
     expect(json<{ issues: Array<{ code: string }> }>(extraActor).issues.map((i) => i.code)).toContain('trace_actor_ids_mismatch');
   }, 240_000);
 
   it('runs tier-2 validation with invariant residuals', async () => {
-    const run = await scen('validate', LTAP, '--tier', '2', '--map', MAP, '--draw', '0');
+    const run = await uniscenarios('validate', LTAP, '--tier', '2', '--map', MAP, '--draw', '0');
     expect([0, 2]).toContain(run.code);
     const payload = json<{ invariants: Array<{ id: string; status: string }> }>(run);
     expect(payload.invariants.map((i) => i.id)).toContain('criticality');
@@ -247,19 +291,19 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
 
   it('runs a resumable batch and reproduces every cell on the second pass', async () => {
     const out = path.join(tmp, 'batch');
-    const first = await scen('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--concurrency', '2');
+    const first = await uniscenarios('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--concurrency', '2');
     expect(first.code).toBe(0);
     const a = json<{ cells: number; resumed: number; results: Array<{ traceDigest: string; instanceId: string }> }>(first);
     expect(a.cells).toBeGreaterThan(0);
     expect(a.resumed).toBe(0);
 
-    const second = await scen('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--concurrency', '2');
+    const second = await uniscenarios('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--concurrency', '2');
     expect(second.code).toBe(0);
     const b = json<{ cells: number; resumed: number; results: Array<{ traceDigest: string; instanceId: string }> }>(second);
     expect(b.resumed).toBe(b.cells);
     expect(b.results.map((r) => r.traceDigest)).toEqual(a.results.map((r) => r.traceDigest));
 
-    const forced = await scen('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--force', '--concurrency', '2');
+    const forced = await uniscenarios('batch', LTAP, '--map', MAP, '--draws', '2', '--out', out, '--force', '--concurrency', '2');
     expect(forced.code).toBe(0);
     const c = json<{ resumed: number; results: Array<{ traceDigest: string }> }>(forced);
     expect(c.resumed).toBe(0);

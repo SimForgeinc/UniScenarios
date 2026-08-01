@@ -113,7 +113,7 @@ describe('UniScenarios authored scenario catalog', () => {
   it('creates and verifies the 500-design manifest through the real CLI', async () => {
     const out = path.join(tmp, 'cli-catalog.json');
     const created = await execa('node', [
-      path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'scen.js'),
+      path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js'),
       'catalog', 'create', '--out', out,
     ], { reject: false, timeout: 120_000 });
     expect(created.exitCode).toBe(0);
@@ -125,7 +125,7 @@ describe('UniScenarios authored scenario catalog', () => {
     });
 
     const verified = await execa('node', [
-      path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'scen.js'),
+      path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js'),
       'catalog', 'verify', out,
     ], { reject: false, timeout: 120_000 });
     expect(verified.exitCode).toBe(0);

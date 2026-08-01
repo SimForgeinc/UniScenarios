@@ -49,6 +49,7 @@ import {
   type Interaction as V2Interaction,
   type NumberOrExpr,
   type ScenarioTemplateV2,
+  type SignalRef,
   type Condition as V2Condition,
   type PointRef,
   type PropPlacement,
@@ -90,6 +91,7 @@ import { CliError } from './errors.js';
 import type { MapBundle } from './maps.js';
 import { paramsVersion, resolveParams, templateId, type ParamDraw } from './params.js';
 import { propDims } from './prop-dims.js';
+import { buildSiteSignalPlan, type SiteSignalPlan } from './map-signals.js';
 
 const KPH_TO_MPS = 1 / 3.6;
 
@@ -393,6 +395,7 @@ class Materializer {
   private readonly initialRules = new Map<string, Record<string, boolean | number>>();
   private readonly foldedInteractions = new Set<string>();
   private readonly foldedTriggerStart = new Map<string, number>();
+  private signalPlan: SiteSignalPlan | null = null;
   private refRoute: Route | null = null;
 
   constructor(
@@ -843,7 +846,9 @@ class Materializer {
 
     const base = {
       id: it.id,
-      actorId: it.actor,
+      // Engine interactions remain actor-addressed; world state uses the first
+      // concrete actor as an event carrier while the key itself is global.
+      actorId: it.actor === '@world' ? this.actors[0]!.id : it.actor,
       trigger,
       ...(until ? { until } : {}),
     };
@@ -953,7 +958,13 @@ class Materializer {
       case 'exist':
         return parseInteraction({ ...base, verb: 'exist', target: { state: it.target.state } });
       case 'set': {
-        const key = mapSetKey(it.target.key);
+        const signalKey = /^signal:(.+)\.phase$/.exec(it.target.key);
+        const signalProgram = signalKey
+          ? this.resolveSignalProgram({ handle: signalKey[1]! }, `${path}.target`)
+          : null;
+        const key = signalKey
+          ? (signalProgram ? `signal:${signalProgram}.phase` : null)
+          : mapSetKey(it.target.key);
         if (!key) {
           this.notes.push({
             path: `${path}.target.key`,
@@ -1193,11 +1204,18 @@ class Materializer {
           ...(condition.with === 'any' ? {} : { b: condition.with }),
         };
       case 'signal':
-        this.notes.push({
-          path,
-          reason: 'signal conditions need a signal program; none is derived for a site yet, so the condition was dropped',
-        });
-        return undefined;
+        {
+          const signalId = this.resolveSignalProgram(condition.signal, path);
+          if (!signalId) return undefined;
+          if (condition.phase !== 'green' && condition.phase !== 'yellow' && condition.phase !== 'red') {
+            this.notes.push({
+              path: `${path}.phase`,
+              reason: `engine signal programs do not yet model authored phase "${condition.phase}"; condition was dropped`,
+            });
+            return undefined;
+          }
+          return { kind: 'signal', signalId, phase: condition.phase };
+        }
       case 'and':
       case 'or': {
         const operands = condition.operands
@@ -1212,6 +1230,82 @@ class Materializer {
         return operand ? ({ kind: 'not', of: operand } as SimCondition) : undefined;
       }
     }
+  }
+
+  private resolveSignalProgram(ref: SignalRef, path: string): string | null {
+    const plan = this.signalPlan ?? buildSiteSignalPlan(this.bundle, this.site);
+    this.signalPlan = plan;
+    if ('handle' in ref) {
+      const direct = plan.programs.find((program) => program.id === ref.handle)?.id;
+      const mapped = plan.programByHeadId.get(ref.handle);
+      if (direct ?? mapped) return direct ?? mapped ?? null;
+      this.notes.push({
+        path: `${path}.signal.handle`,
+        reason: `map signal handle "${ref.handle}" is not controlled at site junction ${plan.junctionId ?? '<none>'}; condition was dropped`,
+      });
+      return null;
+    }
+
+    const match = this.site.featureMatches[ref.feature];
+    const expectedJunction = match?.mapFeatureId.startsWith('junction:')
+      ? match.mapFeatureId.slice('junction:'.length)
+      : null;
+    if (!expectedJunction || expectedJunction !== plan.junctionId) {
+      this.notes.push({
+        path: `${path}.signal.feature`,
+        reason: `feature "${ref.feature}" is not the signalized site junction; condition was dropped`,
+      });
+      return null;
+    }
+
+    const gateById = new Map(this.bundle.index.gates.map((gate) => [gate.id, gate]));
+    let gateId: string | undefined;
+    if (ref.approach === 'ego') {
+      gateId = this.site.frame.egoGateId;
+    } else {
+      const relation = ref.approach === 'opposing' ? 'opposing' : `from_${ref.approach}`;
+      gateId = this.site.bindings.find((binding) => binding.conflict?.relation === relation)?.conflict?.gateId;
+      if (!gateId && this.site.frame.egoGateId) {
+        const descriptor = this.bundle.index.junctionDescriptors[expectedJunction];
+        for (const pair of descriptor?.conflictPairs ?? []) {
+          if (pair.gateA !== this.site.frame.egoGateId && pair.gateB !== this.site.frame.egoGateId) continue;
+          const pairRelation = pair.gateA === this.site.frame.egoGateId
+            ? pair.relation
+            : pair.relation === 'from_left'
+              ? 'from_right'
+              : pair.relation === 'from_right'
+                ? 'from_left'
+                : pair.relation;
+          if (pairRelation === relation) {
+            gateId = pair.gateA === this.site.frame.egoGateId ? pair.gateB : pair.gateA;
+            break;
+          }
+        }
+      }
+    }
+    const connectingLane = gateId ? gateById.get(gateId)?.connectingLaneRsl : undefined;
+    let candidates = connectingLane ? plan.programsByConnectingLane.get(connectingLane) : undefined;
+    if ((!candidates || candidates.length === 0) && gateId) {
+      // An unprotected movement often has no dedicated head: it follows the
+      // through head on the same physical approach. Preserve that map fact by
+      // resolving through the descriptor's approach group, not by choosing an
+      // arbitrary junction signal.
+      const descriptor = this.bundle.index.junctionDescriptors[expectedJunction];
+      const approach = descriptor?.approaches.find((candidate) => candidate.gateIds.includes(gateId!));
+      const sameApproachPrograms = (approach?.gateIds ?? [])
+        .flatMap((candidateGateId) => {
+          const candidateLane = gateById.get(candidateGateId)?.connectingLaneRsl;
+          return candidateLane ? [...(plan.programsByConnectingLane.get(candidateLane) ?? [])] : [];
+        })
+        .sort();
+      candidates = [...new Set(sameApproachPrograms)];
+    }
+    if (candidates?.[0]) return candidates[0];
+    this.notes.push({
+      path: `${path}.signal.approach`,
+      reason: `no physical signal head binds the ${ref.approach} movement at junction ${expectedJunction}; condition was dropped`,
+    });
+    return null;
   }
 
   private declareOcclusionPair(pair: { observer: string; target: string; occluderId?: string }): void {
@@ -1314,6 +1408,13 @@ class Materializer {
         });
       }
     }
+    this.signalPlan = buildSiteSignalPlan(this.bundle, this.site);
+    if (this.signalPlan.programs.length > 0) {
+      this.notes.push({
+        path: 'signalPrograms',
+        reason: `${this.signalPlan.programs.length} physical map signal head(s) bound to junction ${this.signalPlan.junctionId}; phase durations use the explicit synthetic-default plan because authoritative timing is absent`,
+      });
+    }
     this.buildInteractions();
     this.buildRoleOcclusionPairs();
     this.buildOccluders();
@@ -1330,7 +1431,7 @@ class Materializer {
         : {}),
       actors: this.actors,
       interactions: this.interactions,
-      signalPrograms: [],
+      signalPrograms: this.signalPlan.programs,
       occluders: this.occluders,
       occlusionPairs: this.occlusionPairs,
     });
@@ -1349,11 +1450,33 @@ class Materializer {
         `roles.${role.id}.arriveAtConflict.deltaT`,
       );
       const scene = toSceneXZ(binding.conflict.point);
+      const stationByLane = new Map<string, number>();
+      for (const actorId of [role.id, role.arriveAtConflict.relativeTo]) {
+        const route = this.routeByRole.get(actorId);
+        if (!route || route.isFreeform) continue;
+        const projection = route.projectPoint(binding.conflict.point);
+        if (projection.d > 2) {
+          this.notes.push({
+            path: `roles.${role.id}.arriveAtConflict`,
+            reason: `matcher conflict is ${projection.d.toFixed(2)} m from ${actorId}'s bound route; refusing to mint lane provenance for an off-route point`,
+          });
+          continue;
+        }
+        const pose = route.poseAt(projection.s);
+        if (pose.rsl) stationByLane.set(pose.rsl, pose.storageS);
+      }
+      const stations = [...stationByLane]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([rsl, s]) => ({ rsl, s }));
       const solved = solveArrival(
         input,
         {
           of: role.id,
-          at: { kind: 'point', at: { x: scene.x, z: scene.z } },
+          at: {
+            kind: 'point',
+            at: { x: scene.x, z: scene.z },
+            ...(stations.length > 0 ? { referenceFrame: { stations } } : {}),
+          },
           syncWith: role.arriveAtConflict.relativeTo,
           deltaT,
         },
@@ -1470,7 +1593,7 @@ function parseInteraction(value: unknown): SimInteraction {
   // interaction inside a scenario that contains only that interaction, but
   // `simScenarioInputSchema` resolves `after()` references at *scenario* level.
   // So every `after()` trigger failed here with "after() references unknown
-  // interaction <id>" — the whole trigger kind was unreachable through `scen`,
+  // interaction <id>" — the whole trigger kind was unreachable through `uniscenarios`,
   // even though the engine runs it correctly once the real scenario is
   // assembled. The probe now carries a stub for whatever the trigger names.
   const afterId =

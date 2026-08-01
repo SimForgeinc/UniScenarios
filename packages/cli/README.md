@@ -45,12 +45,44 @@ uniscenarios validate          <instance|template> [--tier 1|2 --map --site --dr
 uniscenarios evaluate          <trace> [--filter critical|negative-control|all]
                        [--trivial-ttc S --reject-collisions]
 uniscenarios evidence verify   <instance.json> <trace.json.gz>
+uniscenarios export            <instance.json> --format xosc-1.4|osc-2.2 --out <file>
+                       [--road-file map.xodr --route-sample-m 20]
 uniscenarios catalog create    --out <catalog.json> [--namespace ID --evidence-root DIR]
 uniscenarios catalog verify    <catalog.json> [--evidence-root DIR --require-evidence]
 uniscenarios batch             <template.json> --maps a,b,c --draws N --out dir/
                        [--concurrency N --min-score --max-sites --force --no-trace]
 uniscenarios schemas           [--name template|anchor|interactions] [--content]
 ```
+
+## ASAM interchange
+
+`uniscenarios export` targets the current official releases: ASAM OpenSCENARIO XML
+1.4.0 (`.xosc`) and ASAM OpenSCENARIO DSL 2.2.0 (`.osc`). It exports the
+**concrete instance**, after matching, parameter sampling and arrival solving.
+Every lane/follow/polyline route is resolved through the instance map graph and
+sampled into world-coordinate waypoints, so an exported file never mistakes
+UniScenarios' lane-local `rsl:s` for OpenDRIVE road `s`.
+
+Both profiles export vehicle/pedestrian dimensions, initial world pose and
+speed, resolved paths, static occluder geometry, clip duration and absolute
+speed changes. XML 1.4 additionally supports relative speed targets, relative
+left/right lane changes, dynamic route replacement, add/delete entity actions,
+`at`/`after` triggers, a documented subset of `when` conditions, and looping
+traffic-signal controllers. DSL 2.2 supports statically resolvable `at`/`after`
+schedules, linear speed transitions, time-constrained lane changes, gaps and
+metre lane offsets.
+
+The command never silently substitutes a different behavior. Unsupported
+controller rules, dynamics, conditions, deadlines, entity lifecycle, signal
+bindings or action forms produce exit 2 with
+`{code:"asam_export_unsupported", detail:{issues:[{code,path,reason}]}}`.
+UniScenarios-only metric subjects and occlusion-evaluation pairs are reported as
+warnings; their physical actors and occluders are still exported.
+
+The default referenced road file is `<mapId>.xodr`. Use `--road-file` to write
+the path used by the target simulator. XML output is exercised against ASAM's
+official 1.4.0 XSD when `ASAM_OPENSCENARIO_14_XSD` points to the official schema
+deliverable.
 
 `locations` is the model's spatial awareness: it never sees a road id, it
 queries by semantics and receives **handles**, road anchors and
@@ -106,6 +138,22 @@ bookkeeping.
   constant. A 16-second clip at 51 kph covers 227 m. The chain is extended
   forward until it covers the clip, because the materializer is the only layer
   that knows both the clip length and the actor's speed.
+
+### Traffic-light materialization
+
+On signalized sites with OpenDRIVE controller data, UniScenarios binds the
+physical map head ids, junction controller sequences and concrete gate
+movements into engine `signalPrograms`. Stop lines retain their junction
+connecting-lane filter, so a protected turn head cannot govern an unrelated
+movement on the same approach. Authored signal conditions resolve either a
+physical head handle or a junction feature plus `ego|opposing|left|right`
+approach.
+
+The checked-in maps do not contain authoritative phase-duration timing files.
+Generated cycles are therefore marked `mapBinding.timingSource =
+"synthetic-default"`; the ids and movement bindings are real, the durations are
+not presented as field truth. Maps with no dynamic heads/controllers emit an
+empty `signalPrograms` list, with no invented fallback signals.
 
 ## Replay keys
 

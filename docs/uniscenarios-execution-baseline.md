@@ -29,8 +29,8 @@ images cited below.
 
 | Requirement | Implemented | Tested | Visually proven | Missing / exact boundary |
 |---|---|---|---|---|
-| Canonical five-map registry | Yes: `KNOWN_MAPS` and Studio `MAPS` enumerate the same five IDs | `scen maps list`; CLI suite | Map selector visible in five editor screenshots | Registry is local-dev data, not a distributable asset package |
-| Map topology, semantic locations, search and derived indexes | Yes on all five local maps | `scen maps list` reports all four CLI artifacts present for every map; map-intel tests exist | Not a visual claim | Grade capability is false on all maps; semantic coverage differs by map |
+| Canonical five-map registry | Yes: `KNOWN_MAPS` and Studio `MAPS` enumerate the same five IDs | `uniscenarios maps list`; CLI suite | Map selector visible in five editor screenshots | Registry is local-dev data, not a distributable asset package |
+| Map topology, semantic locations, search and derived indexes | Yes on all five local maps | `uniscenarios maps list` reports all four CLI artifacts present for every map; map-intel tests exist | Not a visual claim | Grade capability is false on all maps; semantic coverage differs by map |
 | Streamed 3D scene and lane/signal overlays | Yes on all five; 3D manifests and overlay payloads are present | Five-map renderer/editor evidence manifests and tests | Yes: one editor screenshot for each map was opened | Asset fidelity is uneven; Easterbrook/Richmond use v1.1 manifests and lack shadow lightmaps |
 | Manual editor placement/persistence | Yes | `artifacts/qa/milestone-20260801T120835Z/editor-five-map/report.json` records placement on all maps and persistence checks | Yes: five editor screenshots opened | Editor authors actor-placement documents, not full v2 anchor/parameter/choreography campaigns |
 | V2 portable template/schema | Yes: anchors, params, roles, props, choreography, invariants, variants | Scenario-model and CLI suites | N/A | Variants are parsed but not applied; several authored actions are dropped or rewritten during materialization |
@@ -53,7 +53,7 @@ images cited below.
 
 ## Five-map asset and readiness inventory
 
-`node packages/cli/bin/scen.js maps list` was run against the local
+`node packages/cli/bin/uniscenarios.js maps list` was run against the local
 `dev-assets/`. All five report topology index, derived topology, locations and
 search index present. Raw overlay counts come from the committed-format local
 GeoJSON sidecars; rendered counts may be smaller when corrupt features are
@@ -135,9 +135,9 @@ Files:
 CLI:
 
 ```bash
-node packages/cli/bin/scen.js catalog create \
+node packages/cli/bin/uniscenarios.js catalog create \
   --out artifacts/qa/uniscenarios-catalog-sample-20260801/catalog.json
-node packages/cli/bin/scen.js catalog verify \
+node packages/cli/bin/uniscenarios.js catalog verify \
   artifacts/qa/uniscenarios-catalog-sample-20260801/catalog.json
 ```
 
@@ -196,7 +196,7 @@ pnpm --filter @uniscenarios/map-intel typecheck
 pnpm --filter @uniscenarios/scenario-model typecheck
   PASS — all four
 
-node packages/cli/bin/scen.js catalog verify \
+node packages/cli/bin/uniscenarios.js catalog verify \
   artifacts/qa/uniscenarios-catalog-sample-20260801/catalog.json
   PASS — 500 slots, 100/map, 500 reserved, 0 issues
 

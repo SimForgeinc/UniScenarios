@@ -1,5 +1,5 @@
 /**
- * `scen schemas [--name <id>] [--content]` — the LLM emission contract.
+ * `uniscenarios schemas [--name <id>] [--content]` — the LLM emission contract.
  *
  * The three v2 JSON Schemas plus the engine's `SimScenarioInput` are the whole
  * interface a generating model has to hit. Printing their *paths* by default

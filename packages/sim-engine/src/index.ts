@@ -128,6 +128,8 @@ export {
 } from './trace/trace.js';
 export type {
   ActorTrack,
+  DeclaredOcclusionMetric,
+  DeclaredOcclusionStatus,
   EpisodeMetrics,
   InvariantResidual,
   OccluderIneffective,
@@ -135,6 +137,7 @@ export type {
   PairMinDistance,
   RevealToConflict,
   SceneTrace,
+  SignalTrack,
   SimEvent,
   SimTrace,
   TraceHeader,

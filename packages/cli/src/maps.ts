@@ -9,7 +9,7 @@
  * | `derived/topology-derived.json.gz` | `map-intel` | the matcher's `DerivedMapIndex` |
  * | `derived/locations.json.gz` | `map-intel` | the location catalog + the matcher's crossing / parking point features |
  *
- * Everything is loaded lazily and memoised per process, because `scen batch`
+ * Everything is loaded lazily and memoised per process, because `uniscenarios batch`
  * runs hundreds of cells against the same three files and the `LaneGraph` build
  * is the single most expensive thing in the CLI.
  */
@@ -32,6 +32,7 @@ import {
 import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
+import { loadMapSignalCatalog, type MapSignalCatalog } from './map-signals.js';
 
 export { KNOWN_MAPS };
 
@@ -100,6 +101,8 @@ export interface MapBundle {
   readonly index: DerivedMapIndex;
   /** The engine's view — directed lanes with geometric successors. */
   readonly graph: LaneGraph;
+  /** Physical heads + OpenDRIVE controller/junction sequence bindings. */
+  readonly signalCatalog: MapSignalCatalog;
 }
 
 const cache = new Map<string, Promise<MapBundle>>();
@@ -126,10 +129,11 @@ export function loadMap(mapId: string): Promise<MapBundle> {
   const built = (async (): Promise<MapBundle> => {
     assertKnownMap(mapId);
     const dir = mapDir(mapId);
-    const [topology, derived, catalog] = await Promise.all([
+    const [topology, derived, catalog, signalCatalog] = await Promise.all([
       readJsonGz<TopologyIndex>(path.join(dir, ARTIFACTS.topology), 'missing_topology_index'),
       readJsonGz<DerivedTopology>(path.join(dir, ARTIFACTS.derived), 'missing_derived_topology'),
       readJsonGz<LocationCatalog>(path.join(dir, ARTIFACTS.locations), 'missing_location_catalog'),
+      loadMapSignalCatalog(path.join(dir, 'map.xodr'), path.join(dir, 'signals.geojson.gz')),
     ]);
     const index = normalizeDerivedMapIndex(derived as unknown, {
       mapId,
@@ -139,7 +143,7 @@ export function loadMap(mapId: string): Promise<MapBundle> {
       locations: catalog as unknown,
     });
     const graph = buildLaneGraph(topology);
-    return { mapId, catalog, derived, topology, index, graph };
+    return { mapId, catalog, derived, topology, index, graph, signalCatalog };
   })();
   cache.set(mapId, built);
   return built;

@@ -1,7 +1,7 @@
 /**
- * `scen validate <instance|template> [--tier 2 --map --site]`.
+ * `uniscenarios validate <instance|template> [--tier 2 --map --site]`.
  *
- * Tier 1 is the static pass (`scen template validate` in one word). **Tier 2 is
+ * Tier 1 is the static pass (`uniscenarios template validate` in one word). **Tier 2 is
  * one engine pass**: the invariant residuals the template declared, the engine
  * issues, the never-fired triggers and the axis conflicts that only a run can
  * settle. It is the acceptance test for a *transfer* — "did the thing the

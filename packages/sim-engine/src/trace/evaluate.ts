@@ -40,6 +40,7 @@ export type RejectCode =
   | 'never_fired'
   | 'out_of_window'
   | 'collision'
+  | 'occlusion_unproven'
   | 'no_interaction';
 
 export interface RejectFinding {
@@ -59,6 +60,7 @@ export interface TraceEvaluation {
     readonly requiredDecelMax: number;
     readonly collisions: number;
     readonly neverFired: number;
+    readonly occlusionUnproven: number;
   };
 }
 
@@ -139,6 +141,24 @@ export function evaluateMetrics(
     }
   }
 
+  const occlusionUnproven = (metrics.declaredOcclusion ?? []).filter(
+    (entry) => entry.status !== 'revealed_before_conflict',
+  );
+  if (occlusionUnproven.length > 0) {
+    findings.push({
+      code: 'occlusion_unproven',
+      reason: `${occlusionUnproven.length} declared occlusion relation(s) did not produce a blocked-to-clear reveal before conflict`,
+      detail: {
+        declarations: occlusionUnproven.map((entry) => ({
+          observer: entry.observer,
+          target: entry.target,
+          occluderId: entry.occluderId ?? null,
+          status: entry.status,
+        })),
+      },
+    });
+  }
+
   const blocking = findings.filter(
     (f) => !(f.code === 'trivially_safe' && filters.negativeControl),
   );
@@ -153,6 +173,7 @@ export function evaluateMetrics(
       requiredDecelMax: worstDecel,
       collisions: metrics.collisions.length,
       neverFired: neverFired.length,
+      occlusionUnproven: occlusionUnproven.length,
     },
   };
 }

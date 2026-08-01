@@ -1,5 +1,5 @@
 /**
- * `scen template validate <file>` — schema + tier-1.
+ * `uniscenarios template validate <file>` — schema + tier-1.
  *
  * With `--map` the map-dependent half of tier 1 runs too, against a **real**
  * `MapContext` built from the best matched site (or `--site`). Without a site

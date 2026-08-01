@@ -2,7 +2,7 @@
   "kind": "campaign-manifest",
   "version": 1,
   "campaign": "occluded-pedestrian",
-  "generatedFrom": "scen batch --all-maps --draws 8",
+  "generatedFrom": "uniscenarios batch --all-maps --draws 8",
   "templates": {
     "cpnco-parked-row": {
       "archetype": "C5.cpnco-dartout",

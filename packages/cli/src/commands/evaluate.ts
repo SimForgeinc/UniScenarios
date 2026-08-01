@@ -1,5 +1,5 @@
 /**
- * `scen evaluate <trace> [--filter critical|negative-control|all]`.
+ * `uniscenarios evaluate <trace> [--filter critical|negative-control|all]`.
  *
  * The reject filters, applied to a trace. `--filter negative-control` is not a
  * different set of filters — it is the same set with `trivially_safe` demoted

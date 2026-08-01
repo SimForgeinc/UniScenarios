@@ -99,6 +99,8 @@ export {
 
 export {
   buildSignalOverlay,
+  clearTrafficLightStates,
+  setTrafficLightStates,
   signalIdForHit,
   signalPlacement,
   SIGNAL_CATEGORY_COLORS,
@@ -106,4 +108,6 @@ export {
   type SignalOverlayOptions,
   type SignalOverlayUserData,
   type SignalPlacement,
+  type TrafficLightStateUserData,
+  type TrafficLightVisualPhase,
 } from './overlays/signals.js';

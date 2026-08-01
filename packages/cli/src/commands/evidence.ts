@@ -27,6 +27,9 @@ export async function evidenceVerify(options: EvidenceVerifyOptions): Promise<nu
     const lines = [
       `${options.instance} ↔ ${options.trace}: ${report.ok ? 'OK' : 'MISMATCH'}`,
       `inputHash manifest=${report.manifestInputHash ?? '—'} trace=${report.traceInputHash ?? '—'} recomputed=${report.recomputedInputHash}`,
+      `mapId input=${report.inputMapId} manifest=${report.manifestMapId ?? '—'} trace=${report.traceMapId ?? '—'}`,
+      `matcherIndexDigest ${report.matcherIndexDigest ?? '—'}`,
+      `engineGraphDigest manifest=${report.manifestEngineGraphDigest ?? '—'} trace=${report.traceEngineGraphDigest ?? '—'}`,
       `input actors ${report.inputActorIds.length}: ${report.inputActorIds.join(', ') || '—'}`,
       `trace actors ${report.traceActorIds.length}: ${report.traceActorIds.join(', ') || '—'}`,
     ];

@@ -1,7 +1,7 @@
 /**
  * `@uniscenarios/cli` — layer 4 of `docs/agent-authoring-architecture.md`.
  *
- * The `scen` binary is the product; this module is its library face, so the
+ * The `uniscenarios` binary is the product; this module is its library face, so the
  * editor, the workflows in layer 5 and the tests can call the same code paths
  * without shelling out.
  *
@@ -40,6 +40,19 @@ export {
   type MapArtifactPresence,
   type MapBundle,
 } from './maps.js';
+
+export {
+  buildSiteSignalPlan,
+  defaultPhasesForHead,
+  loadMapSignalCatalog,
+  parseMapSignalCatalog,
+  SYNTHETIC_SIGNAL_OFFSET_S,
+  type MapSignalCatalog,
+  type MapSignalController,
+  type MapSignalHead,
+  type MapSignalJunction,
+  type SiteSignalPlan,
+} from './map-signals.js';
 
 export {
   OPEN_END_M,
@@ -108,15 +121,22 @@ export { PROP_DIMS, propDims, type PropDims } from './prop-dims.js';
 export {
   CATALOG_GENERATOR_VERSION,
   CATALOG_KIND,
+  CATALOG_RESEARCH_SOURCES,
   CATALOG_SLOTS_PER_MAP,
   CATALOG_TEMPLATE_SOURCES,
   CATALOG_VERSION,
   DEFAULT_CATALOG_NAMESPACE,
+  INCIDENT_DOMAINS,
+  INCIDENT_TAXONOMY,
+  OPERATIONAL_VARIANTS,
   createScenarioCatalog,
   validateScenarioCatalog,
+  type CatalogAcceptanceCheck,
   type CatalogEvidencePaths,
   type CatalogIssue,
   type CatalogMapProvenance,
+  type CatalogProgressCounts,
+  type CatalogSiteBinding,
   type CatalogSlotStatus,
   type CatalogTemplateProvenance,
   type CatalogValidationReport,
@@ -127,3 +147,16 @@ export {
 export { criticalityBand, filtersFor, type EvaluateFilterMode } from './commands/evaluate.js';
 export { metricsSummary } from './commands/simulate.js';
 export { SCHEMAS, type SchemaEntry } from './commands/schemas.js';
+
+export {
+  ASAM_FORMATS,
+  AsamExportError,
+  exportAsamScenario,
+  exportOpenScenarioDsl22,
+  exportOpenScenarioXml14,
+  type AsamExportIssue,
+  type AsamExportOptions,
+  type AsamExportResult,
+  type AsamExportWarning,
+  type AsamFormat,
+} from './asam/index.js';

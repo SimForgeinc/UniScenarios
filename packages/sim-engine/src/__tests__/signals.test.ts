@@ -110,6 +110,45 @@ describe('signal compliance', () => {
     const fired = trace.events.find((e) => e.kind === 'trigger_fired');
     expect(fired?.t).toBeCloseTo(8, 1);
     expect(trace.ticks.actors['ego']!.speedMps[trace.ticks.t.length - 1]!).toBeLessThan(0.05);
+    expect(trace.ticks.signals?.['sig-main']?.phase).toHaveLength(trace.ticks.t.length);
+    expect(trace.ticks.signals?.['sig-main']?.phase[0]).toBe('green');
+    expect(trace.ticks.signals?.['sig-main']?.phase.at(-1)).toBe('red');
+  });
+
+  it('records a forced signal phase and applies it to the same controller book', () => {
+    const base = signalScenario(false);
+    const input = {
+      ...base,
+      interactions: [
+        {
+          id: 'force-green',
+          actorId: 'ego',
+          trigger: { kind: 'at' as const, t: 2 },
+          verb: 'set' as const,
+          target: { key: 'signal:sig-main.phase', value: 'green' },
+        },
+      ],
+    };
+    const { trace } = runSimulation(input, { graph });
+    const at = trace.ticks.t.findIndex((time) => time >= 2);
+    expect(trace.ticks.signals?.['sig-main']?.phase[at]).toBe('green');
+    expect(trace.ticks.signals?.['sig-main']?.phase.at(-1)).toBe('green');
+  });
+
+  it('filters a stop line to its bound junction movement', () => {
+    const base = signalScenario(true);
+    const unrelated = {
+      ...base,
+      signalPrograms: base.signalPrograms.map((program) => ({
+        ...program,
+        stopLines: program.stopLines.map((line) => ({
+          ...line,
+          connectingLaneRsls: ['junction:other'],
+        })),
+      })),
+    };
+    const { trace } = runSimulation(unrelated, { graph });
+    expect(trace.ticks.actors['ego']!.x.at(-1)).toBeGreaterThan(STOP_LINE_S);
   });
 });
 

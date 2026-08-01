@@ -43,6 +43,8 @@ import {
   LineSegments,
   Matrix4,
   MeshBasicMaterial,
+  Points,
+  PointsMaterial,
   Quaternion,
   Vector3,
   type Intersection,
@@ -131,6 +133,14 @@ export interface SignalHeadUserData {
   signalIds: string[];
 }
 
+export type TrafficLightVisualPhase = 'green' | 'yellow' | 'red';
+
+export interface TrafficLightStateUserData {
+  layer: 'traffic-light-state';
+  states: Record<string, TrafficLightVisualPhase>;
+  count: number;
+}
+
 function srgbBytes(hex: number): [number, number, number] {
   return [((hex >> 16) & 0xff) / 255, ((hex >> 8) & 0xff) / 255, (hex & 0xff) / 255];
 }
@@ -171,6 +181,7 @@ function boxTriangles(w: number, h: number, d: number, cy: number): number[] {
  * colours so all 59 lights share one geometry and one material.
  */
 function trafficLightHeadGeometry(): BufferGeometry {
+  const inactiveBrightness = 0.12;
   const lamp = 0.24;
   const gap = 0.28;
   const lamps: Array<[number, number]> = [
@@ -183,7 +194,7 @@ function trafficLightHeadGeometry(): BufferGeometry {
   for (const [cy, hex] of lamps) {
     const tri = boxTriangles(lamp, lamp, lamp, cy);
     positions.push(...tri);
-    const rgb = srgbBytes(hex);
+    const rgb = srgbBytes(hex).map((channel) => channel * inactiveBrightness) as [number, number, number];
     for (let i = 0; i < tri.length / 3; i++) colors.push(rgb[0], rgb[1], rgb[2]);
   }
   const g = new BufferGeometry();
@@ -461,6 +472,75 @@ export function buildSignalOverlay(
 export function signalPlacement(group: Object3D, signalId: string): SignalPlacement | null {
   const byId = (group.userData as Partial<SignalOverlayUserData>).byId;
   return byId?.[signalId] ?? null;
+}
+
+const TRAFFIC_LIGHT_PHASE_COLOR: Record<TrafficLightVisualPhase, number> = {
+  green: 0x34c759,
+  yellow: 0xffcc00,
+  red: 0xff3b30,
+};
+
+const TRAFFIC_LIGHT_PHASE_Y: Record<TrafficLightVisualPhase, number> = {
+  green: -0.28,
+  yellow: 0,
+  red: 0.28,
+};
+
+/**
+ * Draw the active lamp for each physical map head as one point-cloud draw.
+ * Replacing this tiny buffer on a scrub is cheaper and substantially clearer
+ * than rebuilding the static instanced furniture.
+ */
+export function setTrafficLightStates(
+  group: Object3D,
+  states: Readonly<Record<string, TrafficLightVisualPhase>>,
+): number {
+  clearTrafficLightStates(group);
+  const positions: number[] = [];
+  const colors: number[] = [];
+  const kept: Record<string, TrafficLightVisualPhase> = {};
+  for (const id of Object.keys(states).sort()) {
+    const placement = signalPlacement(group, id);
+    const phase = states[id]!;
+    if (!placement || placement.category !== 'traffic_light') continue;
+    positions.push(
+      placement.position[0],
+      placement.position[1] + TRAFFIC_LIGHT_PHASE_Y[phase],
+      placement.position[2] + 0.15,
+    );
+    colors.push(...srgbBytes(TRAFFIC_LIGHT_PHASE_COLOR[phase]));
+    kept[id] = phase;
+  }
+  if (positions.length === 0) return 0;
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
+  geometry.setAttribute('color', new BufferAttribute(new Float32Array(colors), 3));
+  geometry.computeBoundingSphere();
+  const points = new Points(
+    geometry,
+    // Fixed screen-space size keeps the active lamp legible at the incident
+    // camera's typical 30–120 m range; the dim housing still supplies scale.
+    new PointsMaterial({ size: 9, vertexColors: true, toneMapped: false, sizeAttenuation: false }),
+  );
+  points.name = 'traffic-light-live-state';
+  points.renderOrder = 12;
+  points.userData = {
+    layer: 'traffic-light-state',
+    states: kept,
+    count: positions.length / 3,
+  } satisfies TrafficLightStateUserData;
+  group.add(points);
+  return positions.length / 3;
+}
+
+/** Remove playback state while retaining the map's static signal furniture. */
+export function clearTrafficLightStates(group: Object3D): void {
+  const existing = group.getObjectByName('traffic-light-live-state') as Points | undefined;
+  if (!existing) return;
+  existing.removeFromParent();
+  existing.geometry.dispose();
+  const materials = Array.isArray(existing.material) ? existing.material : [existing.material];
+  for (const material of materials) material.dispose();
 }
 
 /**

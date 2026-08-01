@@ -49,13 +49,16 @@ import {
   CoordinateFrame,
   buildLaneOverlay,
   buildSignalOverlay,
+  clearTrafficLightStates,
   fetchXodrHeader,
   loadLanePolygons,
   loadSignals,
+  setTrafficLightStates,
   type CalibrationReport,
   type LaneOverlayUserData,
   type SceneManifestLike,
   type SignalOverlayUserData,
+  type TrafficLightVisualPhase,
 } from '@uniscenarios/xodr-tools';
 
 /** Where a map's overlay sidecars live. */
@@ -106,6 +109,9 @@ export interface MapOverlayHandle {
   /** Show/hide a layer. A visibility flip: nothing is rebuilt or re-sampled. */
   setVisible(layer: MapOverlayLayer, visible: boolean): void;
   isVisible(layer: MapOverlayLayer): boolean;
+  /** Update physical signal heads from the concrete simulation trace. */
+  setSignalStates(states: Readonly<Record<string, TrafficLightVisualPhase>>): number;
+  clearSignalStates(): void;
   /** Detach from the scene and release GPU resources. */
   dispose(): void;
 }
@@ -295,6 +301,12 @@ export async function loadMapOverlays(
     },
     isVisible(layer) {
       return visibility[layer];
+    },
+    setSignalStates(states) {
+      return setTrafficLightStates(signalGroup, states);
+    },
+    clearSignalStates() {
+      clearTrafficLightStates(signalGroup);
     },
     dispose() {
       viewer.scene.remove(group);

@@ -5,10 +5,13 @@ import { MissingHeightError } from '../overlays/height.js';
 import { signalsFromGeoJson } from '../signals.js';
 import {
   buildSignalOverlay,
+  clearTrafficLightStates,
+  setTrafficLightStates,
   signalIdForHit,
   signalPlacement,
   type SignalHeadUserData,
   type SignalOverlayUserData,
+  type TrafficLightStateUserData,
 } from '../overlays/signals.js';
 import { yaleHeaderText, yaleManifest, yaleSignals } from './fixtures.js';
 
@@ -126,6 +129,28 @@ describe('signalsFromGeoJson', () => {
 });
 
 describe('buildSignalOverlay', () => {
+  it('renders and clears one live active-lamp state per physical traffic-light head', async () => {
+    const signals = await load();
+    const group = buildSignalOverlay(signals);
+    const ids = signals.filter((signal) => signal.category === 'traffic_light').slice(0, 3).map((signal) => signal.id);
+    const count = setTrafficLightStates(group, {
+      [ids[0]!]: 'red',
+      [ids[1]!]: 'yellow',
+      [ids[2]!]: 'green',
+      missing: 'red',
+    });
+    expect(count).toBe(3);
+    const points = group.getObjectByName('traffic-light-live-state')!;
+    expect(points).toBeDefined();
+    expect(points.userData as TrafficLightStateUserData).toEqual({
+      layer: 'traffic-light-state',
+      states: { [ids[0]!]: 'red', [ids[1]!]: 'yellow', [ids[2]!]: 'green' },
+      count: 3,
+    });
+    clearTrafficLightStates(group);
+    expect(group.getObjectByName('traffic-light-live-state')).toBeUndefined();
+  });
+
   it('places every feature and reports it in byId', async () => {
     const signals = await load();
     const group = buildSignalOverlay(signals, { heightSampler: () => 12 });

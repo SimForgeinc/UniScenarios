@@ -76,6 +76,9 @@ export interface MinTtcRecord {
 }
 
 export interface RevealToConflict {
+  /** Directional authored relation; unlike `pair`, these fields preserve roles. */
+  readonly observer: string;
+  readonly target: string;
   /** Seconds between line of sight opening and the conflict moment. */
   readonly value: number;
   /** First time the declared occluder ref actually blocked this pair. */
@@ -90,6 +93,9 @@ export interface RevealToConflict {
 }
 
 export interface OccluderIneffective {
+  /** Directional authored relation; unlike `pair`, these fields preserve roles. */
+  readonly observer: string;
+  readonly target: string;
   /** Pair whose criticality was measured while the declared occluders never blocked LOS. */
   readonly pair: [string, string];
   readonly conflictT: number;
@@ -99,6 +105,28 @@ export interface OccluderIneffective {
   readonly occluderId?: string;
   readonly relevantOccluderIds: string[];
   readonly reason: 'never_blocked_before_conflict';
+}
+
+export type DeclaredOcclusionStatus =
+  | 'revealed_before_conflict'
+  | 'blocked_at_conflict'
+  | 'never_blocked_before_conflict'
+  | 'occluder_unobserved'
+  | 'pair_unobserved';
+
+/** One result for every authored observer/target/occluder declaration. */
+export interface DeclaredOcclusionMetric {
+  readonly observer: string;
+  readonly target: string;
+  /** Stable, unordered pair used by the distance/TTC metric tables. */
+  readonly pair: [string, string];
+  readonly occluderId?: string;
+  readonly relevantOccluderIds: string[];
+  readonly status: DeclaredOcclusionStatus;
+  readonly firstBlockedT: number | null;
+  readonly losOpenT: number | null;
+  readonly conflictT: number | null;
+  readonly revealToConflictS: number | null;
 }
 
 export interface InvariantResidual {
@@ -115,6 +143,8 @@ export interface EpisodeMetrics {
   readonly requiredDecelMax: Record<string, number>;
   readonly invariantResiduals?: InvariantResidual[];
   readonly revealToConflict?: RevealToConflict | null;
+  /** Complete directional evidence, one entry per authored occlusion pair. */
+  readonly declaredOcclusion?: DeclaredOcclusionMetric[];
   /** Declared occlusion pairs that were never hidden before their closest criticality sample. */
   readonly occluderIneffective?: OccluderIneffective[];
   readonly collisions: Array<{ t: number; a: string; b: string }>;

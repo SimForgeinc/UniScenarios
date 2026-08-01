@@ -5,7 +5,7 @@
     "description": "C12's ball-then-child cue, wired as two staggered `route` interactions. A ball rolls out of the kerb line `ballLeadS` seconds before the child does, crosses the carriageway and is despawned (`exist: absent`) so it stops competing for the episode's min-TTC; the child then runs after it from behind a short row of parked drop-off cars, and the arrival solver back-solves its start so it reaches the ego lane `arrivalTtc` seconds before the ego. The child is a pedestrian with a child's footprint, which matters twice: it is a smaller target for the line-of-sight test and a shorter one for a future height-aware occlusion test. The school-zone preference is expressed as a low posted limit plus a `school_zone` feature carried cosmetically — the CLI's matcher adapter has no mapping for that feature kind and drops it with a note (campaign defect D4), so the clause degrades everywhere instead of failing anywhere, exactly as intended, but it also buys nothing until the adapter grows the mapping.",
     "createdAt": "2026-08-01T00:00:00.000Z",
     "modifiedAt": "2026-08-01T00:00:00.000Z",
-    "appVersion": "scen/0.0.1",
+    "appVersion": "uniscenarios/0.0.1",
     "archetype": "C12.ball-then-child",
     "tags": [
       "vru",

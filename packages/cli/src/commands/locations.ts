@@ -1,5 +1,5 @@
 /**
- * `scen locations find | get | resolve` — the model's spatial awareness.
+ * `uniscenarios locations find | get | resolve` — the model's spatial awareness.
  *
  * The contract these three share is that a model never sees a road id: it asks
  * in semantics (type, facts, affordances, proximity to a handle), and it gets
@@ -166,7 +166,7 @@ export async function locationsGet(options: LocationsGetOptions): Promise<number
     throw new CliError('unknown_reference', `no location "${options.ref}" on ${options.mapId}`, {
       path: 'ref',
       detail: {
-        hint: 'use `scen locations resolve` for free text, or `scen locations find` to browse',
+        hint: 'use `uniscenarios locations resolve` for free text, or `uniscenarios locations find` to browse',
       },
     });
   }

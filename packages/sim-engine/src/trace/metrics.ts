@@ -14,7 +14,14 @@ import { pairKey, readPair } from '../sim/pairs.js';
 import type { OcclusionPair } from '../schema/input.js';
 import type { ActorRuntime } from '../sim/state.js';
 import { hasLineOfSight, type OccluderShape } from '../sim/visibility.js';
-import type { EpisodeMetrics, MinTtcRecord, OccluderIneffective, PairMinDistance, RevealToConflict } from './trace.js';
+import type {
+  DeclaredOcclusionMetric,
+  EpisodeMetrics,
+  MinTtcRecord,
+  OccluderIneffective,
+  PairMinDistance,
+  RevealToConflict,
+} from './trace.js';
 
 interface PairAccumulator {
   readonly a: string;
@@ -186,38 +193,103 @@ export function computeMetrics(acc: MetricAccumulator, clipSeconds: number): Epi
     }
   }
 
+  const declaredOcclusion: DeclaredOcclusionMetric[] = acc.occlusionMonitors.map((monitor) => {
+    const p = acc.pairs.get(monitor.key);
+    const pair = p ? [p.a, p.b] as [string, string] : [...monitor.pair].sort() as [string, string];
+    const common = {
+      observer: monitor.pair[0],
+      target: monitor.pair[1],
+      pair,
+      ...(monitor.occluderId === undefined ? {} : { occluderId: monitor.occluderId }),
+      relevantOccluderIds: [...monitor.relevantOccluderIds].sort(),
+    };
+    if (!p || !Number.isFinite(p.minDistance)) {
+      return {
+        ...common,
+        status: 'pair_unobserved' as const,
+        firstBlockedT: monitor.firstBlockedT,
+        losOpenT: null,
+        conflictT: null,
+        revealToConflictS: null,
+      };
+    }
+    const conflictT = p.minTtc === Infinity ? p.minDistanceT : p.minTtcT;
+    if (!monitor.sawOccluder) {
+      return {
+        ...common,
+        status: 'occluder_unobserved' as const,
+        firstBlockedT: monitor.firstBlockedT,
+        losOpenT: null,
+        conflictT,
+        revealToConflictS: null,
+      };
+    }
+    const losOpenT = revealOpenTAtConflict(monitor, conflictT);
+    if (losOpenT !== null) {
+      return {
+        ...common,
+        status: 'revealed_before_conflict' as const,
+        firstBlockedT: monitor.firstBlockedT,
+        losOpenT,
+        conflictT,
+        revealToConflictS: conflictT - losOpenT,
+      };
+    }
+    if (monitor.firstBlockedT === null || monitor.firstBlockedT > conflictT) {
+      return {
+        ...common,
+        status: 'never_blocked_before_conflict' as const,
+        firstBlockedT: monitor.firstBlockedT,
+        losOpenT: null,
+        conflictT,
+        revealToConflictS: null,
+      };
+    }
+    return {
+      ...common,
+      status: 'blocked_at_conflict' as const,
+      firstBlockedT: monitor.firstBlockedT,
+      losOpenT: null,
+      conflictT,
+      revealToConflictS: null,
+    };
+  });
+
   let revealToConflict: RevealToConflict | null = null;
   const occluderIneffective: OccluderIneffective[] = [];
   if (minTTC) {
-    const candidates = acc.occlusionMonitors
-      .filter((m) => m.key === pairKey(minTTC.pair[0], minTTC.pair[1]))
-      .map((m) => ({ monitor: m, losOpenT: revealOpenTAtConflict(m, minTTC.t) }))
-      .filter((c): c is { monitor: OcclusionMonitor; losOpenT: number } => c.losOpenT !== null)
-      .sort((a, b) => b.losOpenT - a.losOpenT);
+    const candidates = declaredOcclusion
+      .filter((metric) =>
+        metric.status === 'revealed_before_conflict' &&
+        pairKey(metric.pair[0], metric.pair[1]) === pairKey(minTTC.pair[0], minTTC.pair[1]) &&
+        metric.losOpenT !== null,
+      )
+      .sort((a, b) => (b.losOpenT as number) - (a.losOpenT as number));
     const best = candidates[0];
     if (best) {
       revealToConflict = {
-        value: minTTC.t - best.losOpenT,
-        firstBlockedT: best.monitor.firstBlockedT ?? best.losOpenT,
-        losOpenT: best.losOpenT,
+        observer: best.observer,
+        target: best.target,
+        value: minTTC.t - (best.losOpenT as number),
+        firstBlockedT: best.firstBlockedT ?? (best.losOpenT as number),
+        losOpenT: best.losOpenT as number,
         conflictT: minTTC.t,
         pair: minTTC.pair,
-        ...(best.monitor.occluderId === undefined ? {} : { occluderId: best.monitor.occluderId }),
-        relevantOccluderIds: [...best.monitor.relevantOccluderIds].sort(),
+        ...(best.occluderId === undefined ? {} : { occluderId: best.occluderId }),
+        relevantOccluderIds: best.relevantOccluderIds,
       };
     }
   }
-  for (const monitor of acc.occlusionMonitors) {
-    const p = acc.pairs.get(monitor.key);
-    if (!p || !monitor.sawOccluder || !Number.isFinite(p.minDistance)) continue;
-    const conflictT = p.minTtc === Infinity ? p.minDistanceT : p.minTtcT;
-    if (monitor.firstBlockedT === null || monitor.firstBlockedT > conflictT) {
+  for (const metric of declaredOcclusion) {
+    if (metric.status === 'never_blocked_before_conflict' && metric.conflictT !== null) {
       occluderIneffective.push({
-        pair: monitor.pair,
-        conflictT,
-        ...(monitor.firstBlockedT === null ? {} : { firstBlockedT: monitor.firstBlockedT }),
-        ...(monitor.occluderId === undefined ? {} : { occluderId: monitor.occluderId }),
-        relevantOccluderIds: [...monitor.relevantOccluderIds].sort(),
+        observer: metric.observer,
+        target: metric.target,
+        pair: metric.pair,
+        conflictT: metric.conflictT,
+        ...(metric.firstBlockedT === null ? {} : { firstBlockedT: metric.firstBlockedT }),
+        ...(metric.occluderId === undefined ? {} : { occluderId: metric.occluderId }),
+        relevantOccluderIds: metric.relevantOccluderIds,
         reason: 'never_blocked_before_conflict',
       });
     }
@@ -236,6 +308,7 @@ export function computeMetrics(acc: MetricAccumulator, clipSeconds: number): Epi
     minDistance,
     requiredDecelMax,
     revealToConflict,
+    declaredOcclusion,
     occluderIneffective,
     collisions: [...acc.collisions].sort((a, b) => a.t - b.t || (a.a < b.a ? -1 : 1)),
     triggerNeverFired: [...new Set(acc.triggerNeverFired)].sort(),

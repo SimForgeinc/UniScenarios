@@ -190,6 +190,7 @@ export function App(): JSX.Element {
     viewer,
     bundle: activePlayback,
     sampleHeight,
+    overlays,
   });
 
   // Playback is a viewport mode, not an editor mutation. Keep the autosave

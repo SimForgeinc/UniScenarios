@@ -220,7 +220,7 @@ describe('visible / occluders', () => {
 });
 
 describe('pedestrians', () => {
-  it('walks a polyline crossing and despawns at the far kerb', () => {
+  it('walks a polyline crossing and remains at the far kerb for aftermath', () => {
     const input = scenario(graph, {
       clipSeconds: 14,
       actors: [
@@ -253,6 +253,8 @@ describe('pedestrians', () => {
     expect(track.y[0]!).toBeCloseTo(-20 + 1.4 * 5, 2);
     // The remaining 17 m at 1.4 m/s take 12.1 s, inside the 14 s clip.
     expect(track.y.at(-1)!).toBeCloseTo(4, 1);
-    expect(trace.events.some((e) => e.kind === 'despawn' && e.actorId === 'walker')).toBe(true);
+    expect(track.present.at(-1)).toBe(1);
+    expect(track.speedMps.at(-1)).toBe(0);
+    expect(trace.events.some((e) => e.kind === 'despawn' && e.actorId === 'walker')).toBe(false);
   });
 });

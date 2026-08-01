@@ -99,7 +99,7 @@ export interface ActorRuntime {
   headingRad: number;
 
   present: boolean;
-  /** `true` once the actor left the world for good (route end / clip end). */
+  /** `true` once route motion finished; a pedestrian may remain visibly present. */
   retired: boolean;
 
   longCmd: LongitudinalCommand | null;

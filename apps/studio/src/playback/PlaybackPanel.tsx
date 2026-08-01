@@ -117,6 +117,17 @@ export function PlaybackPanel({
               ? `${state.visibleActorCount}/${state.actorCount} visible · trace drives real actor transforms`
               : 'switching to scenario map…'}
           </div>
+          {state && state.signalCount > 0 ? (
+            <div style={styles.signals} data-testid="playback-signals">
+              <strong>
+                {state.renderedSignalHeadCount}/{state.signalHeadCount} signal head{state.signalHeadCount === 1 ? '' : 's'} rendered
+              </strong>
+              <span>
+                {state.signalPhases.green} green · {state.signalPhases.yellow} yellow · {state.signalPhases.red} red
+              </span>
+              <small>{state.signalTimingSources.join(', ')} timing</small>
+            </div>
+          ) : null}
           <button type="button" style={styles.clear} onClick={onClear}>
             close playback
           </button>
@@ -195,6 +206,17 @@ const styles: Record<string, CSSProperties> = {
   time: { marginLeft: 'auto', color: '#e6e9ef', fontVariantNumeric: 'tabular-nums', fontSize: 11 },
   slider: { width: '100%', margin: '8px 0 0', accentColor: '#2f6df6' },
   hint: { color: '#737d8d', fontSize: 10 },
+  signals: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 1,
+    marginTop: 6,
+    padding: '5px 6px',
+    borderRadius: 5,
+    background: 'rgba(255,255,255,0.045)',
+    color: '#aeb6c3',
+    fontSize: 10,
+  },
   clear: {
     width: '100%',
     marginTop: 8,

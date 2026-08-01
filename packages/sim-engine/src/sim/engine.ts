@@ -67,7 +67,7 @@ import {
 import { makeTriggerRuntime, shouldFire, type ConditionContext, type TriggerRuntime } from './triggers.js';
 import { evaluateCondition } from './triggers.js';
 import { buildOccluders, hasLineOfSight, type OccluderShape } from './visibility.js';
-import type { ActorTrack, SimEvent, SimTrace } from '../trace/trace.js';
+import type { ActorTrack, SignalTrack, SimEvent, SimTrace } from '../trace/trace.js';
 import { computeMetrics, type MetricAccumulator, newMetricAccumulator, observeTick } from '../trace/metrics.js';
 import { checkFeasibility } from '../solve/guards.js';
 import { resolveArrivalTriggers, type ArrivalSolution } from '../solve/arrival.js';
@@ -89,7 +89,7 @@ export interface SimResult {
   readonly arrival: ArrivalSolution[];
 }
 
-/** Actors this far past the end of their route are retired. */
+/** Moving actors this close to the end are clamped to the terminal pose. */
 const ROUTE_END_SLACK_M = 0.01;
 /** Lookahead used for the stop-line search and the crossing-conflict scan. */
 const LOOKAHEAD_M = 80;
@@ -137,6 +137,7 @@ class Simulation {
   private readonly events: SimEvent[] = [];
   private readonly issues: SimIssue[] = [];
   private readonly tracks = new Map<string, ActorTrack>();
+  private readonly signalTracks = new Map<string, SignalTrack>();
   private readonly tArray: number[] = [];
   private readonly metrics: MetricAccumulator;
   private readonly rng: Rng;
@@ -163,6 +164,7 @@ class Simulation {
     this.clipTicks = Math.round(input.clipSeconds / input.dt);
     this.rng = new Rng(input.seed);
     this.signals = new SignalBook(input.signalPrograms, input.warmupSeconds);
+    for (const id of this.signals.ids()) this.signalTracks.set(id, { phase: [] });
     this.occluders = buildOccluders(input.occluders);
 
     const guardMode = opts.guards ?? 'throw';
@@ -534,6 +536,13 @@ class Simulation {
       case 'set': {
         const { key, value } = it.target;
         a.stateKeys.set(key, value);
+        const forcedSignal = /^signal:(.+)\.phase$/.exec(key);
+        if (
+          forcedSignal &&
+          (value === 'green' || value === 'yellow' || value === 'red')
+        ) {
+          this.signals.setOverride(forcedSignal[1]!, value);
+        }
         this.applyStateKey(a, key, value);
         this.events.push({ t, kind: 'state_set', actorId: a.id, key, value });
         break;
@@ -819,6 +828,16 @@ class Simulation {
 
     if (plan.routeS >= a.route.lengthM - ROUTE_END_SLACK_M) {
       plan.routeS = a.route.lengthM;
+      // A pedestrian finishing a crossing still exists in the aftermath. A
+      // route is a motion path, not an implicit despawn instruction; removing
+      // the actor one tick after the conflict makes visual evidence teleport.
+      // Vehicles retain the old retirement behavior until their lane-route
+      // lifecycle is modelled explicitly.
+      if (a.kind === 'pedestrian') {
+        plan.accel = -a.speedMps / this.dt;
+        plan.speed = 0;
+        plan.lateralRate = 0;
+      }
       plan.retire = true;
     }
 
@@ -895,8 +914,10 @@ class Simulation {
 
       if (plan.retire) {
         a.retired = true;
-        a.present = false;
-        this.events.push({ t, kind: 'despawn', actorId: a.id, reason: 'route_end' });
+        if (a.kind !== 'pedestrian') {
+          a.present = false;
+          this.events.push({ t, kind: 'despawn', actorId: a.id, reason: 'route_end' });
+        }
       }
     }
   }
@@ -905,6 +926,10 @@ class Simulation {
 
   private record(t: number, collisions: ReadonlySet<string>): void {
     this.tArray.push(t);
+    for (const id of this.signals.ids()) {
+      const phase = this.signals.phaseAt(id, t);
+      if (phase) this.signalTracks.get(id)!.phase.push(phase);
+    }
     for (const a of this.actors) {
       const track = this.tracks.get(a.id)!;
       const pose = a.route.poseAt(a.routeS);
@@ -914,7 +939,9 @@ class Simulation {
       track.speedMps.push(a.speedMps);
       track.laneRsl.push(pose.rsl);
       track.s.push(a.routeS);
-      track.present.push(a.present && !a.retired ? 1 : 0);
+      // `retired` means motion/interaction has finished. Pedestrians remain
+      // visibly present at their terminal pose until an explicit despawn.
+      track.present.push(a.present ? 1 : 0);
     }
     observeTick(this.metrics, t, this.actors, collisions, this.occludersForTick());
   }
@@ -934,6 +961,8 @@ class Simulation {
     const actorIds = this.actors.map((a) => a.id);
     const actors: Record<string, ActorTrack> = {};
     for (const id of [...actorIds].sort()) actors[id] = this.tracks.get(id)!;
+    const signals: Record<string, SignalTrack> = {};
+    for (const id of this.signals.ids()) signals[id] = this.signalTracks.get(id)!;
     for (const a of this.actors) {
       this.metrics.requiredDecelMax[a.id] = a.requiredDecelMax;
     }
@@ -953,7 +982,7 @@ class Simulation {
         actorIds: [...actorIds].sort(),
         metricSubject: input.metricSubject ?? null,
       },
-      ticks: { t: this.tArray, actors },
+      ticks: { t: this.tArray, actors, signals },
       events: this.events,
       metrics: computeMetrics(this.metrics, input.clipSeconds),
     };

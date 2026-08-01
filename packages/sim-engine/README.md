@@ -39,7 +39,9 @@ SimScenarioInput
                              route: RouteSpec, cruiseSpeedMps? },
                   presentAtStart, tags[] }
   interactions[]{ id, actorId, trigger, <verb>, dynamics?, until? }
-  signalPrograms[]{ id, phases[{phase,durationS}], offsetS, loop, stopLines[{rsl,s}] }
+  signalPrograms[]{ id, phases[{phase,durationS}], offsetS, loop,
+                    stopLines[{rsl,s,connectingLaneRsls[]}],
+                    mapBinding?{junctionId,controllerIds[],headIds[],timingSource} }
   occluders[]   { id, obb{center,lengthM,widthM,headingRad,heightM} }
 ```
 

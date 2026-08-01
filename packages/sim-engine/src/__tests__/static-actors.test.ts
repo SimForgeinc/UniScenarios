@@ -81,6 +81,8 @@ describe('static actors', () => {
     expect(trace.metrics.minTTC?.pair).toEqual(['ego', 'target']);
     expect(trace.metrics.occluderIneffective).toEqual([
       {
+        observer: 'ego',
+        target: 'target',
         pair: ['ego', 'target'],
         conflictT: trace.metrics.minTTC!.t,
         occluderId: 'off-axis-wall',
@@ -122,6 +124,8 @@ describe('static actors', () => {
     const { trace } = runSimulation(input, { graph, guards: 'collect' });
     expect(trace.metrics.occluderIneffective).toEqual([
       {
+        observer: 'ego',
+        target: 'target',
         pair: ['ego', 'target'],
         conflictT: trace.metrics.minTTC!.t,
         occluderId: 'off-axis-wall',

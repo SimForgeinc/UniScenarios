@@ -12,6 +12,7 @@ import {
   parsePlaybackPair,
   readPlaybackFiles,
   samplePlaybackActors,
+  samplePlaybackSignals,
   type PlaybackFile,
 } from '../model';
 
@@ -159,6 +160,62 @@ describe('UniScenarios concrete playback import', () => {
     expect(gzipped.actors).toEqual(plain.actors);
     expect(gzipped.startTime).toBe(0);
     expect(gzipped.endTime).toBe(1);
+  });
+
+  it('imports, validates, and samples export-ready physical signal state', () => {
+    const documentInput = parseSimScenarioInput({
+      ...input(),
+      signalPrograms: [
+        {
+          id: 'signal:1542',
+          phases: [
+            { phase: 'red', durationS: 1 },
+            { phase: 'green', durationS: 1 },
+          ],
+          stopLines: [],
+          mapBinding: {
+            junctionId: '134',
+            controllerIds: ['1562'],
+            headIds: ['1542'],
+            timingSource: 'synthetic-default',
+          },
+        },
+      ],
+    });
+    const baseTrace = trace(documentInput);
+    const signalTrace: SimTrace = {
+      ...baseTrace,
+      ticks: {
+        ...baseTrace.ticks,
+        signals: { 'signal:1542': { phase: ['red', 'green'] } },
+      },
+    };
+    const bundle = parsePlaybackPair(
+      {
+        kind: 'scenario-instance',
+        version: 1,
+        manifest: {
+          instanceId: 'signalized#1',
+          inputHash: contentHash(documentInput),
+          replayKey: { mapId: 'yale-street', engineGraphDigest: 'graph-digest' },
+          actors: [{ id: 'bus' }, { id: 'ego' }],
+        },
+        input: documentInput,
+      },
+      signalTrace,
+      { instanceName: 'signal.instance.json', traceName: 'signal.trace.json' },
+    );
+    expect(bundle.signals).toEqual([
+      {
+        id: 'signal:1542',
+        headIds: ['1542'],
+        timingSource: 'synthetic-default',
+      },
+    ]);
+    expect(samplePlaybackSignals(bundle, 0)).toEqual([
+      expect.objectContaining({ id: 'signal:1542', phase: 'red', headIds: ['1542'] }),
+    ]);
+    expect(samplePlaybackSignals(bundle, 1)[0]?.phase).toBe('green');
   });
 
   it('rejects input-hash, map, and actor identity mismatches with paths', () => {

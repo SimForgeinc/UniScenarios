@@ -1,7 +1,13 @@
 import { Vector3 } from 'three';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { ActorRenderer, type ActorView } from '../editor/actorRenderer';
-import { samplePlaybackActors, type PlaybackBundle, type SampledActor } from './model';
+import {
+  samplePlaybackActors,
+  samplePlaybackSignals,
+  type PlaybackBundle,
+  type SampledActor,
+  type SampledSignal,
+} from './model';
 
 export interface PlaybackState {
   readonly time: number;
@@ -10,6 +16,11 @@ export interface PlaybackState {
   readonly playing: boolean;
   readonly actorCount: number;
   readonly visibleActorCount: number;
+  readonly signalCount: number;
+  readonly signalHeadCount: number;
+  readonly renderedSignalHeadCount: number;
+  readonly signalPhases: Readonly<Record<'green' | 'yellow' | 'red', number>>;
+  readonly signalTimingSources: readonly string[];
   readonly instanceId: string;
   readonly inputHash: string;
 }
@@ -18,6 +29,8 @@ export interface PlaybackControllerOptions {
   viewer: CityViewer;
   bundle: PlaybackBundle;
   sampleHeight: (x: number, z: number) => number | null;
+  setSignalStates?: (states: Readonly<Record<string, 'green' | 'yellow' | 'red'>>) => number;
+  clearSignalStates?: () => void;
 }
 
 /** Drives the real Studio actor renderer from trace time, independent of React render cadence. */
@@ -33,9 +46,11 @@ export class PlaybackController {
   private raf = 0;
   private previousNow = 0;
   private sampled: readonly SampledActor[] = [];
+  private sampledSignals: readonly SampledSignal[] = [];
+  private renderedSignalHeadCount = 0;
   private snapshot: PlaybackState;
 
-  constructor(options: PlaybackControllerOptions) {
+  constructor(private readonly options: PlaybackControllerOptions) {
     this.viewer = options.viewer;
     this.bundle = options.bundle;
     this.sampleHeight = options.sampleHeight;
@@ -54,6 +69,11 @@ export class PlaybackController {
   /** Current scene-frame actor samples, exposed for deterministic verification. */
   get currentActors(): readonly SampledActor[] {
     return this.sampled;
+  }
+
+  /** Current discrete signal states, exposed for deterministic verification/export capture. */
+  get currentSignals(): readonly SampledSignal[] {
+    return this.sampledSignals;
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -100,6 +120,7 @@ export class PlaybackController {
     if (this.raf) cancelAnimationFrame(this.raf);
     this.raf = 0;
     this.renderer.dispose();
+    this.options.clearSignalStates?.();
     this.listeners.clear();
   }
 
@@ -124,6 +145,17 @@ export class PlaybackController {
 
   private syncScene(): void {
     this.sampled = samplePlaybackActors(this.bundle, this.time);
+    this.sampledSignals = samplePlaybackSignals(this.bundle, this.time);
+    const headStates: Record<string, 'green' | 'yellow' | 'red'> = {};
+    for (const signal of this.sampledSignals) {
+      for (const headId of signal.headIds) headStates[headId] = signal.phase;
+    }
+    if (Object.keys(headStates).length > 0) {
+      this.renderedSignalHeadCount = this.options.setSignalStates?.(headStates) ?? 0;
+    } else {
+      this.options.clearSignalStates?.();
+      this.renderedSignalHeadCount = 0;
+    }
     const views: ActorView[] = this.sampled
       .filter((actor) => actor.present)
       .map((actor) => ({
@@ -200,6 +232,12 @@ export class PlaybackController {
   }
 
   private buildState(): PlaybackState {
+    const signalPhases = { green: 0, yellow: 0, red: 0 };
+    let signalHeadCount = 0;
+    for (const signal of this.sampledSignals) {
+      signalPhases[signal.phase] += 1;
+      signalHeadCount += signal.headIds.length;
+    }
     return {
       time: this.time,
       startTime: this.bundle.startTime,
@@ -207,6 +245,11 @@ export class PlaybackController {
       playing: this.playing,
       actorCount: this.bundle.actors.length,
       visibleActorCount: this.sampled.filter((actor) => actor.present).length,
+      signalCount: this.sampledSignals.length,
+      signalHeadCount,
+      renderedSignalHeadCount: this.renderedSignalHeadCount,
+      signalPhases,
+      signalTimingSources: [...new Set(this.sampledSignals.map((signal) => signal.timingSource))].sort(),
       instanceId: this.bundle.instance.manifest.instanceId,
       inputHash: this.bundle.instance.manifest.inputHash,
     };
