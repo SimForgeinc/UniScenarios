@@ -5,6 +5,8 @@ import { gunzipSync } from 'node:zlib';
 
 import {
   buildScenarioManifest,
+  buildScenarioEvidenceGates,
+  buildIncidentRenderPreflight,
   cameraActorClearance,
   cameraForIncident,
   selectIncidentFrames,
@@ -41,6 +43,8 @@ test('strictly validates the corrected concrete Yale instance and trace', async 
   const evidence = validateScenarioPair(instance, trace, traceBytes, { requiredMapId: 'yale-street' });
 
   assert.equal(evidence.inputHash, instance.manifest.inputHash);
+  assert.equal(evidence.topology.matcherIndexDigest, instance.manifest.replayKey.matcherIndexDigest);
+  assert.equal(evidence.topology.engineGraphDigest, instance.manifest.replayKey.engineGraphDigest);
   assert.equal(evidence.traceDigest.length, 64);
   assert.deepEqual(evidence.actorIds, ['bus', 'ego', 'ped']);
   assert.deepEqual(
@@ -71,6 +75,17 @@ test('hard-fails input hash, map, actor-id, and static-track mismatches', async 
   const badMap = clone(trace);
   badMap.header.mapId = 'el-camino-road';
   assert.throws(() => validateScenarioPair(instance, badMap, traceBytes), /map ids differ/);
+
+  const badEngineTopology = clone(trace);
+  badEngineTopology.header.engineGraphDigest = 'wrong-engine-domain';
+  assert.throws(() => validateScenarioPair(instance, badEngineTopology, traceBytes), /engine graph digests differ/);
+
+  const missingMatcherTopology = clone(instance);
+  delete missingMatcherTopology.manifest.replayKey.matcherIndexDigest;
+  assert.throws(
+    () => validateScenarioPair(missingMatcherTopology, trace, traceBytes),
+    /manifest\.replayKey\.matcherIndexDigest is missing/,
+  );
 
   const badActors = clone(trace);
   badActors.header.actorIds = ['bus', 'ego'];
@@ -155,6 +170,8 @@ test('builds a wall-clock-free deterministic manifest with named topology domain
   const second = buildScenarioManifest(clone(input));
   assert.deepEqual(second, first);
   assert.equal(first.generatedAt, null);
+  assert.equal(first.schema, 'uniscenarios.scenario-visual-evidence.v1');
+  assert.equal(first.countsTowardScenarioCoverage, false);
   assert.equal(first.scenarioId, instance.manifest.instanceId);
   assert.equal(first.archetypeId, 'C5.bus-stop-emergence');
   assert.equal(first.siteId, instance.manifest.replayKey.siteId);
@@ -164,4 +181,34 @@ test('builds a wall-clock-free deterministic manifest with named topology domain
     'simulationRoadGraph',
     'studioRenderScene',
   ]);
+});
+
+test('rejects the current Yale checkpoint because its pedestrian teleports out at conflict', async () => {
+  const { instance, trace, traceBytes } = await fixture();
+  const evidence = validateScenarioPair(instance, trace, traceBytes);
+  const preflight = buildIncidentRenderPreflight(trace, evidence);
+  assert.equal(preflight.verdict, 'reject');
+  assert.deepEqual(
+    preflight.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id),
+    ['incident-pair-present-in-aftermath'],
+  );
+  const rendered = JSON.parse(await readFile(new URL(
+    '../../fixtures/evidence/golden-yale-bus-stop/render-manifest.json',
+    import.meta.url,
+  ), 'utf8'));
+  const machine = buildScenarioEvidenceGates({
+    trace,
+    evidence,
+    topologyDomains: rendered.topologyDomains,
+    frameRecords: rendered.frames,
+    videoSequence: rendered.videoSequence,
+    video: rendered.video,
+    diagnostics: [],
+  });
+
+  assert.equal(machine.verdict, 'reject');
+  assert.deepEqual(
+    machine.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id),
+    ['incident-pair-present-in-aftermath'],
+  );
 });

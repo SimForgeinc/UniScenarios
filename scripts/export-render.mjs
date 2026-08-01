@@ -34,15 +34,16 @@ import os from 'node:os';
 import { gunzipSync } from 'node:zlib';
 import {
   assertScenarioEvidenceAccepted,
+  buildIncidentRenderPreflight,
   buildScenarioManifest,
   cameraActorClearance,
   cameraForIncident,
-  selectIncidentFrames,
   selectIncidentVideoFrames,
   sha256Bytes,
   tracePose,
   validateScenarioPair,
 } from './export-render-lib.mjs';
+import { createScenarioReviewTemplate } from './scenario-review-ledger-lib.mjs';
 
 const MAPS = [
   { id: 'yale-street', label: 'Yale Street' },
@@ -324,8 +325,23 @@ async function exportScenario(page) {
   const [{ value: instanceDoc, bytes: instanceBytes }, { value: trace, bytes: traceFileBytes, canonicalBytes }] =
     await Promise.all([readJsonMaybeGzip(instanceFile), readJsonMaybeGzip(traceFile)]);
   const evidence = validateScenarioPair(instanceDoc, trace, canonicalBytes);
+  const preflight = buildIncidentRenderPreflight(trace, evidence);
+  const preflightFile = path.join(outDir, 'preflight.json');
+  await writeFile(preflightFile, `${JSON.stringify({
+    ...preflight,
+    scenarioId: instanceDoc.manifest.instanceId,
+    mapId: evidence.mapId,
+    inputHash: evidence.inputHash,
+    traceDigest: evidence.traceDigest,
+    countsTowardScenarioCoverage: false,
+  }, null, 2)}\n`);
+  if (preflight.verdict !== 'pass') {
+    throw new Error(
+      `scenario render preflight rejected: ${preflight.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id).join(', ')}`,
+    );
+  }
   const topologyDomains = await topologyEvidence(instanceDoc, trace, evidence.mapId);
-  const selectedFrames = selectIncidentFrames(trace);
+  const selectedFrames = preflight.selectedFrames;
   const framesDir = path.join(outDir, 'frames');
   const sourceDir = path.join(outDir, 'source');
   await Promise.all([
@@ -558,6 +574,8 @@ async function exportScenario(page) {
   // Preserve the rejected manifest for diagnosis, but never report a strict
   // scenario export as successful unless every machine gate passes.
   assertScenarioEvidenceAccepted(manifest.machineAssessment);
+  const reviewTemplate = createScenarioReviewTemplate(manifest, 'manifest.json');
+  await writeFile(path.join(outDir, 'review.json'), `${JSON.stringify(reviewTemplate, null, 2)}\n`);
   return manifest;
 }
 
@@ -598,7 +616,14 @@ async function exportMap(page, map) {
       if (!canvas) throw new Error('viewer canvas not found');
       await canvas.screenshot({ path: file });
     }
-    captures.push({ index: i, file: path.relative(outDir, file), sha256: await sha256(file), eye, target });
+    captures.push({
+      index: i,
+      cameraMode: 'orbit',
+      file: path.relative(outDir, file),
+      sha256: await sha256(file),
+      eye,
+      target,
+    });
   }
 
   let video = null;
@@ -634,7 +659,10 @@ async function exportMap(page, map) {
     actors: window.__editor.state.actors.length,
   }));
   const manifest = {
-    schema: 'uniscenarios.render-export.v1',
+    schema: 'uniscenarios.map-render-diagnostic.v1',
+    evidenceClass: 'map-render-diagnostic',
+    countsTowardScenarioCoverage: false,
+    cameraMode: 'orbit',
     generatedAt: new Date().toISOString(),
     map,
     pageUrl,
@@ -686,7 +714,9 @@ if (scenarioMode) {
   }, null, 2));
 } else {
   const rootManifest = {
-    schema: 'uniscenarios.visual-validation.v1',
+    schema: 'uniscenarios.multi-map-render-diagnostic.v1',
+    evidenceClass: 'multi-map-render-diagnostic',
+    countsTowardScenarioCoverage: false,
     generatedAt: new Date().toISOString(),
     command: process.argv,
     machine: { platform: os.platform(), release: os.release(), arch: os.arch(), cpus: os.cpus().length },

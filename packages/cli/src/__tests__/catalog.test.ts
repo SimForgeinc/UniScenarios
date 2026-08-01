@@ -1,5 +1,5 @@
-import { gzipSync } from 'node:zlib';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { gunzipSync } from 'node:zlib';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
@@ -8,32 +8,22 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   CATALOG_SLOTS_PER_MAP,
+  INCIDENT_DOMAINS,
+  INCIDENT_TAXONOMY,
   createScenarioCatalog,
   validateScenarioCatalog,
   type ScenarioCatalogManifest,
 } from '../catalog.js';
-import { KNOWN_MAPS, REPO_ROOT } from '../maps.js';
+import { DEV_ASSETS, KNOWN_MAPS, REPO_ROOT } from '../maps.js';
 
 let tmp: string;
-let devAssets: string;
 let manifestFile: string;
 let catalog: ScenarioCatalogManifest;
 
 beforeAll(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-catalog-'));
-  devAssets = path.join(tmp, 'dev-assets');
   manifestFile = path.join(tmp, 'catalog.json');
-  await Promise.all(KNOWN_MAPS.map(async (mapId, index) => {
-    const derived = path.join(devAssets, mapId, 'derived');
-    await mkdir(derived, { recursive: true });
-    await writeFile(path.join(derived, 'topology-derived.json.gz'), gzipSync(JSON.stringify({
-      mapId,
-      mapAssetId: `${mapId}-fixture`,
-      catalogRevision: String(index + 1).repeat(32),
-      topologyDigest: String(index + 1).repeat(64),
-    })));
-  }));
-  catalog = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets });
+  catalog = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets: DEV_ASSETS });
   await writeFile(manifestFile, `${JSON.stringify(catalog, null, 2)}\n`);
 });
 
@@ -45,68 +35,143 @@ function clone(): ScenarioCatalogManifest {
   return JSON.parse(JSON.stringify(catalog)) as ScenarioCatalogManifest;
 }
 
-describe('UniScenarios deterministic scenario catalog', () => {
-  it('enumerates exactly 100 unique deterministic slots on every supported map', async () => {
-    const again = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets });
+function refreshSlotDigest(slot: Record<string, unknown>): void {
+  // Deliberately not exposed by production code: mutation tests generally want
+  // both the local design digest and catalog digest to fail.
+  delete slot['designDigest'];
+}
+
+describe('UniScenarios authored scenario catalog', () => {
+  it('authors exactly 100 distinct, deterministic, map-grounded designs per supported map', async () => {
+    const again = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets: DEV_ASSETS });
     expect(again).toEqual(catalog);
     expect(catalog.slots).toHaveLength(KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP);
     expect(new Set(catalog.slots.map((slot) => slot.identity)).size).toBe(catalog.slots.length);
     expect(new Set(catalog.slots.map((slot) => slot.seed)).size).toBe(catalog.slots.length);
+    expect(new Set(catalog.slots.map((slot) => `${slot.mapId}\0${slot.scenario.incidentId}\0${slot.site.locationId}\0${slot.variant.id}`)).size).toBe(catalog.slots.length);
 
     for (const mapId of KNOWN_MAPS) {
       const slots = catalog.slots.filter((slot) => slot.mapId === mapId);
       expect(slots).toHaveLength(100);
       expect(slots.map((slot) => slot.ordinal)).toEqual(Array.from({ length: 100 }, (_, i) => i));
-      expect(new Set(slots.map((slot) => slot.template.id)).size).toBe(5);
-      expect(slots.every((slot) => slot.status === 'reserved')).toBe(true);
+      expect(new Set(slots.map((slot) => slot.scenario.incidentId)).size).toBeGreaterThanOrEqual(20);
+      expect(new Set(slots.map((slot) => slot.scenario.domain)).size).toBeGreaterThanOrEqual(7);
+      expect(slots.every((slot) => slot.status === 'authored')).toBe(true);
+      expect(slots.every((slot) => slot.brief.eventSequence.length >= 3)).toBe(true);
+      expect(slots.every((slot) => slot.acceptance.checks.length === 6)).toBe(true);
       expect(slots.every((slot) => slot.evidencePaths.video.startsWith(`evidence/${mapId}/`))).toBe(true);
+
+      const locationBytes = await readFile(path.join(DEV_ASSETS, mapId, 'derived', 'locations.json.gz'));
+      const source = JSON.parse(gunzipSync(locationBytes).toString('utf8')) as { locations: Array<{ id: string }> };
+      const sourceIds = new Set(source.locations.map((location) => location.id));
+      expect(slots.every((slot) => sourceIds.has(slot.site.locationId))).toBe(true);
     }
+
+    expect(catalog.taxonomy.length).toBeGreaterThanOrEqual(30);
+    expect(new Set(catalog.taxonomy.map((entry) => entry.domain))).toEqual(new Set(INCIDENT_DOMAINS));
+    expect(catalog.progress).toEqual({
+      target: 500,
+      planned: 0,
+      authored: 500,
+      generated: 0,
+      simulated: 0,
+      rendered: 0,
+      visuallyAccepted: 0,
+      rejected: 0,
+    });
 
     const report = validateScenarioCatalog(catalog, { manifestFile });
     expect(report.ok).toBe(true);
     expect(report.issues).toEqual([]);
     expect(report.maps).toEqual(Object.fromEntries(KNOWN_MAPS.map((mapId) => [mapId, 100])));
+  }, 120_000);
+
+  it('keeps matcher, engine, and location provenance as distinct digest domains', () => {
+    for (const map of catalog.maps) {
+      expect(map.matcherIndexDigest).toMatch(/^[0-9a-f]{64}$/);
+      expect(map.engineGraphDigest).toMatch(/^[0-9a-f]{64}$/);
+      expect(map.locationCatalogDigest).toMatch(/^[0-9a-f]{64}$/);
+      expect(new Set([map.matcherIndexDigest, map.engineGraphDigest, map.locationCatalogDigest]).size).toBe(3);
+    }
+    for (const slot of catalog.slots) {
+      const map = catalog.maps.find((entry) => entry.mapId === slot.mapId)!;
+      expect(slot.provenance.matcherIndexDigest).toBe(map.matcherIndexDigest);
+      expect(slot.provenance.engineGraphDigest).toBe(map.engineGraphDigest);
+      expect(slot.provenance.locationCatalogDigest).toBe(map.locationCatalogDigest);
+    }
   });
 
-  it('creates and verifies the 500-slot manifest through the real CLI', async () => {
-    const out = path.join(tmp, 'cli', 'catalog.json');
+  it('is a broad incident catalog rather than repeated parameter samples of five templates', () => {
+    expect(INCIDENT_TAXONOMY.length).toBeGreaterThanOrEqual(30);
+    const implemented = catalog.slots.filter((slot) => slot.implementation.state === 'template-backed');
+    const authoredDesigns = catalog.slots.filter((slot) => slot.implementation.state === 'authored-design');
+    expect(authoredDesigns.length).toBeGreaterThan(implemented.length);
+    expect(new Set(catalog.slots.map((slot) => slot.scenario.incidentId)).size).toBeGreaterThanOrEqual(30);
+    expect(catalog.researchSources.every((source) => source.url.startsWith('https://'))).toBe(true);
+  });
+
+  it('creates and verifies the 500-design manifest through the real CLI', async () => {
+    const out = path.join(tmp, 'cli-catalog.json');
     const created = await execa('node', [
       path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'scen.js'),
-      'catalog',
-      'create',
-      '--out',
-      out,
-    ], { env: { SCEN_DEV_ASSETS: devAssets }, reject: false, timeout: 60_000 });
+      'catalog', 'create', '--out', out,
+    ], { reject: false, timeout: 120_000 });
     expect(created.exitCode).toBe(0);
-    expect(JSON.parse(created.stdout)).toMatchObject({ totalSlots: 500, status: { reserved: 500 } });
+    expect(JSON.parse(created.stdout)).toMatchObject({
+      totalSlots: 500,
+      taxonomy: { incidentTypes: INCIDENT_TAXONOMY.length, domains: INCIDENT_DOMAINS.length },
+      progress: { authored: 500, simulated: 0, visuallyAccepted: 0 },
+      status: { authored: 500 },
+    });
 
     const verified = await execa('node', [
       path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'scen.js'),
-      'catalog',
-      'verify',
-      out,
-    ], { reject: false, timeout: 60_000 });
+      'catalog', 'verify', out,
+    ], { reject: false, timeout: 120_000 });
     expect(verified.exitCode).toBe(0);
-    expect(JSON.parse(verified.stdout)).toMatchObject({ ok: true, slots: 500, statuses: { reserved: 500 } });
-  }, 120_000);
+    expect(JSON.parse(verified.stdout)).toMatchObject({
+      ok: true,
+      slots: 500,
+      statuses: { authored: 500 },
+      progress: { authored: 500, rendered: 0, visuallyAccepted: 0 },
+    });
+  }, 180_000);
 
-  it('rejects duplicate identities instead of silently overwriting a slot', () => {
-    const broken = clone() as unknown as { slots: Array<{ identity: string }> };
-    broken.slots[1]!.identity = broken.slots[0]!.identity;
+  it('rejects duplicate identities and duplicate authored designs', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    broken.slots[1] = { ...broken.slots[0], ordinal: 1 };
+    refreshSlotDigest(broken.slots[1]!);
     const report = validateScenarioCatalog(broken, { manifestFile });
     expect(report.ok).toBe(false);
     expect(report.issues.map((entry) => entry.code)).toContain('duplicate_identity');
+    expect(report.issues.map((entry) => entry.code)).toContain('duplicate_design');
   });
 
-  it('rejects missing evidence as soon as status advances past reserved', () => {
+  it('rejects a site whose type or affordances do not fit its incident', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    const target = broken.slots.find((slot) => (slot['scenario'] as { incidentId: string }).incidentId === 'vru.multiple-threat-crosswalk')!;
+    (target['site'] as Record<string, unknown>)['type'] = 'parking_space';
+    (target['site'] as Record<string, unknown>)['affordances'] = [];
+    refreshSlotDigest(target);
+    const report = validateScenarioCatalog(broken, { manifestFile });
+    expect(report.issues.map((entry) => entry.code)).toContain('invalid_site_binding');
+  });
+
+  it('rejects collapsed provenance domains', () => {
     const broken = clone() as unknown as {
-      slots: Array<{ status: string; evidencePaths: { instance: string; trace: string; result: string } }>;
+      maps: Array<Record<string, unknown>>;
+      slots: Array<Record<string, unknown>>;
     };
-    broken.slots[0]!.status = 'simulated';
-    const report = validateScenarioCatalog(broken, {
-      manifestFile,
-      evidenceExists: () => false,
-    });
+    broken.maps[0]!['engineGraphDigest'] = broken.maps[0]!['matcherIndexDigest'];
+    const report = validateScenarioCatalog(broken, { manifestFile });
+    expect(report.issues.some((entry) => entry.code === 'invalid_provenance' && entry.path.startsWith('maps('))).toBe(true);
+  });
+
+  it('rejects missing evidence as soon as status advances past authored', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    broken.slots[0]!['status'] = 'simulated';
+    refreshSlotDigest(broken.slots[0]!);
+    const report = validateScenarioCatalog(broken, { manifestFile, evidenceExists: () => false });
     expect(report.ok).toBe(false);
     const missing = report.issues.filter((entry) => entry.code === 'missing_evidence');
     expect(missing.map((entry) => entry.path)).toEqual([
@@ -116,7 +181,18 @@ describe('UniScenarios deterministic scenario catalog', () => {
     ]);
   });
 
-  it('can enforce a complete evidence bundle even for reserved slots', () => {
+  it('never accepts visual status without six passed gates and a reviewer', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    broken.slots[0]!['status'] = 'visually-accepted';
+    refreshSlotDigest(broken.slots[0]!);
+    const report = validateScenarioCatalog(broken, {
+      manifestFile,
+      evidenceExists: () => true,
+    });
+    expect(report.issues.map((entry) => entry.code)).toContain('invalid_acceptance_manifest');
+  });
+
+  it('can enforce complete evidence bundles without claiming authored designs are accepted', () => {
     const report = validateScenarioCatalog(catalog, {
       manifestFile,
       requireEvidence: true,
@@ -125,16 +201,5 @@ describe('UniScenarios deterministic scenario catalog', () => {
     expect(report.ok).toBe(false);
     expect(report.evidenceChecked).toBe(true);
     expect(report.issues.some((entry) => entry.code === 'missing_evidence' && entry.path.endsWith('.video'))).toBe(true);
-  });
-
-  it('rejects an identity whose seed or map provenance was edited', () => {
-    const broken = clone() as unknown as {
-      slots: Array<{ seed: string; provenance: { topologyDigest: string } }>;
-    };
-    broken.slots[0]!.seed = '0'.repeat(64);
-    broken.slots[1]!.provenance.topologyDigest = 'f'.repeat(64);
-    const report = validateScenarioCatalog(broken, { manifestFile });
-    expect(report.issues.map((entry) => entry.code)).toContain('invalid_seed');
-    expect(report.issues.map((entry) => entry.code)).toContain('invalid_provenance');
   });
 });

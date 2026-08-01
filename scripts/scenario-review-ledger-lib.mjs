@@ -31,7 +31,10 @@ export function classifyVisualArtifact(manifest) {
   if (manifest?.evidenceClass !== 'scenario-instance-incident') {
     reasons.push(`evidenceClass ${manifest?.evidenceClass ?? 'missing'} is not scenario-instance-incident`);
   }
-  if (manifest?.renderer?.cameraMode === 'orbit' || manifest?.cameraMode === 'orbit') {
+  const hasOrbitCapture = manifest?.renderer?.cameraMode === 'orbit'
+    || manifest?.cameraMode === 'orbit'
+    || (manifest?.frames ?? []).some((frame) => frame?.cameraMode === 'orbit');
+  if (hasOrbitCapture) {
     reasons.push('orbit captures are renderer diagnostics, not scenario evidence');
   }
   const purpose = `${manifest?.purpose ?? ''} ${manifest?.kind ?? ''}`.toLowerCase();
@@ -44,7 +47,9 @@ export function classifyVisualArtifact(manifest) {
   if (!exactPhaseFrames(manifest)) {
     reasons.push('exact pre-reveal/reveal/conflict/aftermath frames are missing');
   }
-  if (typeof manifest?.video?.file !== 'string' || typeof manifest?.video?.sha256 !== 'string') {
+  if (typeof manifest?.video?.file !== 'string'
+    || !manifest.video.file.toLowerCase().endsWith('.mp4')
+    || typeof manifest?.video?.sha256 !== 'string') {
     reasons.push('an MP4 artifact and digest are required');
   }
   if (manifest?.machineAssessment?.verdict !== 'pass') {
@@ -124,6 +129,10 @@ export function adjudicateScenarioReview(manifest, review) {
   if (typeof review?.inspection?.reviewer !== 'string' || review.inspection.reviewer.trim().length === 0) {
     reasons.push('reviewer is required');
   }
+  if (typeof review?.inspection?.completedAt !== 'string'
+    || !Number.isFinite(Date.parse(review.inspection.completedAt))) {
+    reasons.push('completedAt must be an ISO timestamp');
+  }
   if (!['accepted', 'rejected'].includes(review?.inspection?.verdict)) {
     reasons.push('review verdict must be accepted or rejected');
   }
@@ -166,8 +175,16 @@ export function upsertScenarioReview(ledger, manifest, review) {
     countsTowardScenarioCoverage: decision.countsTowardScenarioCoverage,
   };
   const entries = base.entries.filter((item) => item.scenarioId !== manifest.scenarioId);
+  if (entry.countsTowardScenarioCoverage && entries.some(
+    (item) => item.countsTowardScenarioCoverage
+      && item.inputHash === entry.inputHash
+      && item.traceDigest === entry.traceDigest,
+  )) {
+    throw new Error('the same instance/trace evidence is already counted under another scenarioId');
+  }
   entries.push(entry);
   entries.sort((left, right) => left.scenarioId.localeCompare(right.scenarioId));
+  const mapIds = [...new Set(entries.map((item) => item.mapId))].sort();
   return {
     schema: SCENARIO_REVIEW_LEDGER_SCHEMA,
     entries,
@@ -175,6 +192,14 @@ export function upsertScenarioReview(ledger, manifest, review) {
       reviewed: entries.length,
       accepted: entries.filter((item) => item.countsTowardScenarioCoverage).length,
       rejected: entries.filter((item) => item.verdict === 'rejected').length,
+      byMap: Object.fromEntries(mapIds.map((mapId) => {
+        const mapEntries = entries.filter((item) => item.mapId === mapId);
+        return [mapId, {
+          reviewed: mapEntries.length,
+          accepted: mapEntries.filter((item) => item.countsTowardScenarioCoverage).length,
+          rejected: mapEntries.filter((item) => item.verdict === 'rejected').length,
+        }];
+      })),
     },
   };
 }

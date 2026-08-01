@@ -152,6 +152,33 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
   const mapIds = [inputMapId, replayMapId, traceMapId, requiredMapId].filter(Boolean);
   if (new Set(mapIds).size > 1) issues.push(`map ids differ: ${mapIds.join(' != ')}`);
 
+  const matcherIndexDigest = requiredString(
+    instanceDoc.manifest?.replayKey?.matcherIndexDigest,
+    'manifest.replayKey.matcherIndexDigest',
+    issues,
+  );
+  const manifestEngineGraphDigest = requiredString(
+    instanceDoc.manifest?.replayKey?.engineGraphDigest,
+    'manifest.replayKey.engineGraphDigest',
+    issues,
+  );
+  const traceEngineGraphDigest = requiredString(
+    trace.header.engineGraphDigest,
+    'trace.header.engineGraphDigest',
+    issues,
+  );
+  const traceTopologyAlias = requiredString(
+    trace.header.topologyDigest,
+    'trace.header.topologyDigest',
+    issues,
+  );
+  if (manifestEngineGraphDigest !== traceEngineGraphDigest) {
+    issues.push(`engine graph digests differ: manifest=${manifestEngineGraphDigest} trace=${traceEngineGraphDigest}`);
+  }
+  if (traceTopologyAlias !== traceEngineGraphDigest) {
+    issues.push(`trace topologyDigest must alias engineGraphDigest: ${traceTopologyAlias} != ${traceEngineGraphDigest}`);
+  }
+
   const actors = Array.isArray(input.actors) ? input.actors : [];
   if (actors.length === 0) issues.push('instance input carries zero actors');
   const inputActorIds = exactSortedIds(actors.map((actor) => actor?.id), 'input actor ids', issues);
@@ -212,6 +239,10 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
   return {
     mapId: inputMapId,
     inputHash,
+    topology: {
+      matcherIndexDigest,
+      engineGraphDigest: traceEngineGraphDigest,
+    },
     traceDigest: sha256Bytes(traceCanonicalBytes),
     actorIds: inputActorIds,
     actorModels: actorModels.sort((left, right) => left.id.localeCompare(right.id)),
@@ -271,6 +302,39 @@ export function selectIncidentVideoFrames(trace, fps = 12) {
     selected.push({ index, targetT: endT, t: times[index] });
   }
   return { fps, startT, endT, frames: selected };
+}
+
+/** Cheap trace-only gate that runs before any browser or GPU rendering. */
+export function buildIncidentRenderPreflight(trace, evidence) {
+  const selectedFrames = selectIncidentFrames(trace);
+  const aftermath = selectedFrames.find((frame) => frame.phase === 'aftermath');
+  const presence = Object.fromEntries(evidence.metricPair.map((id) => [
+    id,
+    aftermath ? trace.ticks.actors[id]?.present?.[aftermath.index] !== 0 : false,
+  ]));
+  const gates = [
+    {
+      id: 'four-distinct-incident-phases',
+      status: new Set(selectedFrames.map((frame) => frame.index)).size === REQUIRED_INCIDENT_PHASES.length ? 'pass' : 'fail',
+      evidence: selectedFrames.map(({ phase, index, t }) => ({ phase, index, t })),
+    },
+    {
+      id: 'incident-pair-present-in-aftermath',
+      status: evidence.metricPair.every((id) => presence[id]) ? 'pass' : 'fail',
+      evidence: {
+        metricPair: evidence.metricPair,
+        aftermathT: aftermath?.t ?? null,
+        presence,
+        rationale: 'An aftermath frame must show the incident participants; despawning at conflict is a visible teleport.',
+      },
+    },
+  ];
+  return {
+    schema: 'uniscenarios.scenario-render-preflight.v1',
+    verdict: gates.every((gate) => gate.status === 'pass') ? 'pass' : 'reject',
+    gates,
+    selectedFrames,
+  };
 }
 
 export function tracePose(trace, actorId, index) {
@@ -412,12 +476,14 @@ export function buildScenarioEvidenceGates({
 }) {
   const gates = [];
   const phases = frameRecords.map((frame) => frame.phase);
+  const distinctTickCount = new Set(frameRecords.map((frame) => frame.index)).size;
   const exactPhases = phases.length === REQUIRED_INCIDENT_PHASES.length
-    && phases.every((phase, index) => phase === REQUIRED_INCIDENT_PHASES[index]);
+    && phases.every((phase, index) => phase === REQUIRED_INCIDENT_PHASES[index])
+    && distinctTickCount === REQUIRED_INCIDENT_PHASES.length;
   gates.push((exactPhases ? pass : fail)('four-distinct-incident-phases', {
     expected: REQUIRED_INCIDENT_PHASES,
     actual: phases,
-    distinctTickCount: new Set(frameRecords.map((frame) => frame.index)).size,
+    distinctTickCount,
   }));
 
   const revealT = trace.metrics?.revealToConflict?.losOpenT;
@@ -488,6 +554,7 @@ export function buildScenarioEvidenceGates({
   }));
 
   const videoValid = typeof video?.file === 'string'
+    && video.file.toLowerCase().endsWith('.mp4')
     && isSha256(video?.sha256)
     && Number.isInteger(video.frameCount)
     && video.frameCount > 0
@@ -610,6 +677,7 @@ export function buildScenarioManifest({
       status: 'pending',
       verdict: null,
       required: true,
+      template: 'review.json',
     },
     integrity: {
       instanceInputHashMatches: true,

@@ -27,8 +27,8 @@ export async function catalogCreate(options: CatalogCreateOptions): Promise<numb
   if (options.pretty) {
     emitLines([
       `UniScenarios catalog ${catalog.catalogDigest}`,
-      `${catalog.slots.length} deterministic slots: ${catalog.contract.slotsPerMap} × ${catalog.contract.supportedMaps.length} maps`,
-      `statuses: reserved=${catalog.slots.length}`,
+      `${catalog.slots.length} deterministic authored designs: ${catalog.contract.slotsPerMap} × ${catalog.contract.supportedMaps.length} maps`,
+      `progress: authored=${catalog.progress.authored}, generated=${catalog.progress.generated}, simulated=${catalog.progress.simulated}, rendered=${catalog.progress.rendered}, visually-accepted=${catalog.progress.visuallyAccepted}`,
       `manifest: ${path.resolve(options.out)}`,
     ]);
   } else {
@@ -68,7 +68,10 @@ export async function catalogVerify(options: CatalogVerifyOptions): Promise<numb
       `digest: ${report.catalogDigest ?? '—'}`,
       `maps: ${Object.entries(report.maps).map(([map, count]) => `${map}=${count}`).join(', ') || '—'}`,
       `statuses: ${Object.entries(report.statuses).map(([status, count]) => `${status}=${count}`).join(', ') || '—'}`,
-      `evidence checked: ${report.evidenceChecked ? 'yes' : 'no (reserved slots only)'}`,
+      `incident breadth: ${Object.entries(report.incidentTypesByMap).map(([map, count]) => `${map}=${count}`).join(', ') || '—'}`,
+      `domain breadth: ${Object.entries(report.domainsByMap).map(([map, count]) => `${map}=${count}`).join(', ') || '—'}`,
+      `progress: authored=${report.progress.authored}, generated=${report.progress.generated}, simulated=${report.progress.simulated}, rendered=${report.progress.rendered}, visually-accepted=${report.progress.visuallyAccepted}`,
+      `evidence checked: ${report.evidenceChecked ? 'yes' : 'no (authored designs have no claimed runtime evidence)'}`,
     ];
     if (report.issues.length > 0) {
       lines.push('', ...report.issues.map((entry) => `${entry.code} at ${entry.path}: ${entry.reason}`));
@@ -94,7 +97,16 @@ function catalogSummary(catalog: ScenarioCatalogManifest, manifest: string): Rec
     totalSlots: catalog.contract.totalSlots,
     maps: perMap,
     templates: catalog.templates,
-    status: { reserved: catalog.slots.length },
+    taxonomy: {
+      incidentTypes: catalog.taxonomy.length,
+      domains: new Set(catalog.taxonomy.map((entry) => entry.domain)).size,
+      incidentTypesByMap: Object.fromEntries(catalog.contract.supportedMaps.map((mapId) => [
+        mapId,
+        new Set(catalog.slots.filter((slot) => slot.mapId === mapId).map((slot) => slot.scenario.incidentId)).size,
+      ])),
+    },
+    progress: catalog.progress,
+    status: { authored: catalog.slots.length },
     manifest,
   };
 }

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
-import { readFile, writeFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
@@ -24,14 +25,40 @@ async function readJson(file) {
   return JSON.parse(await readFile(file, 'utf8'));
 }
 
+async function verifyArtifact(root, artifact, label) {
+  if (typeof artifact?.file !== 'string' || typeof artifact?.sha256 !== 'string') {
+    throw new Error(`${label} is missing file or sha256`);
+  }
+  const file = path.resolve(root, artifact.file);
+  if (file !== root && !file.startsWith(`${root}${path.sep}`)) {
+    throw new Error(`${label} escapes the evidence directory`);
+  }
+  const digest = createHash('sha256').update(await readFile(file)).digest('hex');
+  if (digest !== artifact.sha256) throw new Error(`${label} digest mismatch`);
+}
+
+async function verifyManifestArtifacts(manifestFile, manifest) {
+  const root = path.dirname(path.resolve(manifestFile));
+  await Promise.all([
+    ...(manifest.frames ?? []).map((frame) => verifyArtifact(root, frame.artifact, `frame ${frame.phase}`)),
+    verifyArtifact(root, manifest.video, 'video'),
+    ...Object.entries(manifest.artifacts ?? {}).map(([name, artifact]) => verifyArtifact(root, artifact, `source ${name}`)),
+  ]);
+}
+
 const args = argsOf(process.argv);
 const manifestFile = args.get('manifest');
 if (!manifestFile) throw new Error('--manifest is required');
 const manifest = await readJson(manifestFile);
+await verifyManifestArtifacts(manifestFile, manifest);
 
 if (args.has('template')) {
   const output = args.get('template');
-  const review = createScenarioReviewTemplate(manifest, path.relative(path.dirname(output), manifestFile));
+  const review = createScenarioReviewTemplate(
+    manifest,
+    path.relative(path.dirname(path.resolve(output)), path.resolve(manifestFile)),
+  );
+  await mkdir(path.dirname(path.resolve(output)), { recursive: true });
   await writeFile(output, `${JSON.stringify(review, null, 2)}\n`);
   console.log(JSON.stringify({ template: output, classification: review.classification }, null, 2));
 } else {
@@ -46,6 +73,7 @@ if (args.has('template')) {
     if (error?.code !== 'ENOENT') throw error;
   }
   const updated = upsertScenarioReview(ledger, manifest, review);
+  await mkdir(path.dirname(path.resolve(ledgerFile)), { recursive: true });
   await writeFile(ledgerFile, `${JSON.stringify(updated, null, 2)}\n`);
   console.log(JSON.stringify({ ledger: ledgerFile, summary: updated.summary }, null, 2));
 }
