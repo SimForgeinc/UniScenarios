@@ -49,7 +49,10 @@ export function PerformancePanel({ viewer, overlays = null, actorCount = 0, defa
     if (!viewer) return;
     const detected = viewer.getRendererCapability();
     setCapability(detected);
-    if (detected.software && preference.runtime.renderScene) {
+    // Roads Only is already the lightest software-rendering preset. Preserve a
+    // first-run or saved Roads Only choice instead of "falling back" to the
+    // heavier Ultra Low city stream.
+    if (detected.software && preference.runtime.renderScene && !preference.runtime.roadsOnly) {
       const next = preferenceForPreset('ultra-low-3d');
       setPreference(next);
       saveQualityPreference(next);
