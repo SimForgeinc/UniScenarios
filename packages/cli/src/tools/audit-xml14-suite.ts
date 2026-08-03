@@ -17,10 +17,10 @@ const results = await Promise.all(entries.map((file) => auditXml14Instance(file,
 const counts = summarizeAuditResults(results);
 const expectationMismatches = auditExpectationMismatches(results);
 const report = {
-  schema: 'uniscenarios.openscenario-1.4-suite-audit/v1',
+  schema: 'uniscenarios.openscenario-1.4-suite-audit/v2',
   suite: 'examples/edge-cases/*/scenario.instance.json',
   topologySource: 'production-dev-assets',
-  supportBaseline: 'xml14-curated-suite/v1',
+  supportBaseline: 'xml14-curated-suite/v2',
   officialXsd: path.resolve(xsdPath),
   counts,
   gatePassed: auditGatePassed(counts),

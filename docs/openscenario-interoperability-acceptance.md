@@ -85,14 +85,18 @@ these gates.
 
 `audit-xml14-suite.ts` ran all 12 curated `examples/edge-cases` instances
 against digest-matched production OpenDRIVE/topology pairs and the pinned
-official ASAM 1.4.0 XSD: 9 exported and validated, 3 were rejected with typed
+official ASAM 1.4.0 XSD: 6 exported and validated, 6 were rejected with typed
 fail-closed issues, 0 were asset-blocked, and 0 failed unexpectedly. Each
 instance replay-key graph digest matched its production topology. Two blocked
-instances lacked authoritative physical signal/controller map bindings; the
-third requested a hazard-light set action with no equivalent standard XML 1.4
-action. The blocked count remains part of the report and is not presented as
-semantic support. Missing, invalid, stale, or mismatched production assets are
-reported separately as `asset-blocked` and make the hard gate fail.
+instances lacked authoritative physical signal/controller map bindings, one
+requested a hazard-light set action with no equivalent standard XML 1.4 action,
+and five contain fixed catalog props whose identity and physical geometry the
+current exporter does not emit (two of those overlap the other unsupported
+categories). The baseline pins exact warning-code counts for every supported
+scenario and exact issue-code counts for every blocked scenario. The blocked
+count remains part of the report and is not presented as semantic support.
+Missing, invalid, stale, or mismatched production assets are reported separately
+as `asset-blocked` and make the hard gate fail.
 
 A real independent smoke also ran the digest-verified official esmini 3.6.0
 macOS universal binary at source revision

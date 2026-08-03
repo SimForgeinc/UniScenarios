@@ -81,14 +81,14 @@ describe('production OpenSCENARIO suite assets', () => {
     });
     expect(result).toMatchObject({ verdict: 'asset-blocked', assetCode: 'asset-missing' });
     const results = [
-      { id: 'valid', verdict: 'xsd-validated' },
+      { id: 'valid', verdict: 'xsd-validated', warningCodeCounts: { known_warning: 1 } },
       { id: 'unsupported', verdict: 'unsupported-fail-closed', issueCodeCounts: { known: 1 } },
       result,
     ] as const;
     const baseline = {
-      valid: { verdict: 'xsd-validated' as const },
+      valid: { verdict: 'xsd-validated' as const, warningCodeCounts: { known_warning: 1 } },
       unsupported: { verdict: 'unsupported-fail-closed' as const, issueCodeCounts: { known: 1 } },
-      'fixture#0': { verdict: 'xsd-validated' as const },
+      'fixture#0': { verdict: 'xsd-validated' as const, warningCodeCounts: {} },
     };
     const counts = summarizeAuditResults(results, baseline);
     expect(counts).toEqual({ total: 3, xsdValidated: 1, unsupportedFailClosed: 1, assetBlocked: 1, unexpectedFailures: 0, expectationMismatches: 1 });
@@ -107,7 +107,7 @@ describe('production OpenSCENARIO suite assets', () => {
 
   it('fails support loss, new scenarios, and changed unsupported issue counts', () => {
     const expectations = {
-      supported: { verdict: 'xsd-validated' as const },
+      supported: { verdict: 'xsd-validated' as const, warningCodeCounts: { known_warning: 1 } },
       blocked: { verdict: 'unsupported-fail-closed' as const, issueCodeCounts: { known_issue: 1 } },
     };
     const mismatches = auditExpectationMismatches([
@@ -120,5 +120,17 @@ describe('production OpenSCENARIO suite assets', () => {
       { id: 'new-scenario', message: 'scenario has no explicit support baseline; actual xsd-validated' },
       { id: 'supported', message: 'expected xsd-validated, received unsupported-fail-closed' },
     ]);
+  });
+
+  it('fails when a supported scenario warning code or count drifts', () => {
+    const expectations = {
+      supported: { verdict: 'xsd-validated' as const, warningCodeCounts: { known_warning: 2 } },
+    };
+    expect(auditExpectationMismatches([
+      { id: 'supported', verdict: 'xsd-validated', warningCodeCounts: { known_warning: 1, new_warning: 1 } },
+    ], expectations)).toEqual([{
+      id: 'supported',
+      message: 'expected warning counts {"known_warning":2}, received {"known_warning":1,"new_warning":1}',
+    }]);
   });
 });

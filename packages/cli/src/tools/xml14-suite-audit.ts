@@ -26,22 +26,22 @@ export interface AuditCounts {
 }
 
 export type SuiteExpectation =
-  | { readonly verdict: 'xsd-validated' }
+  | { readonly verdict: 'xsd-validated'; readonly warningCodeCounts: Readonly<Record<string, number>> }
   | { readonly verdict: 'unsupported-fail-closed'; readonly issueCodeCounts: Readonly<Record<string, number>> };
 
 export const XML14_CURATED_SUITE_EXPECTATIONS: Readonly<Record<string, SuiteExpectation>> = Object.freeze({
-  'ec-01-01-construction-chicane-reversing-truck-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { missing_signal_map_binding: 2 } },
-  'ec-02-02-police-roadside-stop-v2#0': { verdict: 'xsd-validated' },
-  'ec-03-03-red-light-ambulance-preemption-v2#0': { verdict: 'xsd-validated' },
-  'ec-04-04-child-emerging-behind-bus-v2#0': { verdict: 'xsd-validated' },
-  'ec-05-05-cyclist-occlusion-conflict-v2#0': { verdict: 'xsd-validated' },
-  'ec-06-06-wrong-way-vehicle-blind-approach-v2#0': { verdict: 'xsd-validated' },
-  'ec-07-07-protected-left-red-runner-v2#0': { verdict: 'xsd-validated' },
-  'ec-08-08-zipper-merge-lane-closure-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { missing_signal_map_binding: 1 } },
+  'ec-01-01-construction-chicane-reversing-truck-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { missing_signal_map_binding: 2, unsupported_prop: 12 } },
+  'ec-02-02-police-roadside-stop-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 4, field_omitted: 1, nonportable_emergency_cue: 1, semantic_intent_flattened: 3 } },
+  'ec-03-03-red-light-ambulance-preemption-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 5, field_omitted: 1, nonportable_emergency_cue: 5, semantic_intent_flattened: 3 } },
+  'ec-04-04-child-emerging-behind-bus-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 5, field_omitted: 2, semantic_intent_flattened: 4, user_defined_animation: 1 } },
+  'ec-05-05-cyclist-occlusion-conflict-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { unsupported_prop: 1 } },
+  'ec-06-06-wrong-way-vehicle-blind-approach-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { unsupported_prop: 19 } },
+  'ec-07-07-protected-left-red-runner-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 4, field_omitted: 2, semantic_intent_flattened: 4 } },
+  'ec-08-08-zipper-merge-lane-closure-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { missing_signal_map_binding: 1, unsupported_prop: 16 } },
   'ec-09-09-stalled-vehicle-beyond-sight-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { unsupported_set_action: 1 } },
-  'ec-10-10-officer-flashing-red-junction-v2#0': { verdict: 'xsd-validated' },
-  'ec-11-11-double-threat-crosswalk-v2#0': { verdict: 'xsd-validated' },
-  'ec-12-12-fire-engine-gridlock-escape-v2#0': { verdict: 'xsd-validated' },
+  'ec-10-10-officer-flashing-red-junction-v2#0': { verdict: 'unsupported-fail-closed', issueCodeCounts: { unsupported_prop: 3 } },
+  'ec-11-11-double-threat-crosswalk-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 4, field_omitted: 2, semantic_intent_flattened: 4 } },
+  'ec-12-12-fire-engine-gridlock-escape-v2#0': { verdict: 'xsd-validated', warningCodeCounts: { catalog_appearance_approximate: 5, field_omitted: 1, nonportable_emergency_cue: 5, semantic_intent_flattened: 3 } },
 });
 
 export class AuditAssetError extends Error {
@@ -68,6 +68,10 @@ export interface ProductionAuditMap {
 }
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
+const codeCounts = (entries: readonly { readonly code: string }[]): Record<string, number> => Object.fromEntries(
+  [...entries.reduce((counts, entry) => counts.set(entry.code, (counts.get(entry.code) ?? 0) + 1), new Map<string, number>())]
+    .sort(([left], [right]) => left.localeCompare(right)),
+);
 
 /** Load the exact checked production XODR/topology pair; never synthesize a graph. */
 export async function loadProductionAuditMap(mapId: string, assetRoot = DEV_ASSETS): Promise<ProductionAuditMap> {
@@ -131,8 +135,9 @@ export async function auditXml14Instance(
       headerDate: '1970-01-01T00:00:00.000Z',
     });
     const validation = await validateOpenScenarioXml14(exported.content, xsdPath);
+    const warningCodeCounts = codeCounts(exported.warnings);
     return validation.valid
-      ? { id, mapId: input.mapId, verdict: 'xsd-validated', warnings: exported.warnings, warningCount: exported.warnings.length, xodrSha256: productionMap.xodrSha256 }
+      ? { id, mapId: input.mapId, verdict: 'xsd-validated', warnings: exported.warnings, warningCodeCounts, warningCount: exported.warnings.length, xodrSha256: productionMap.xodrSha256 }
       : { id, mapId: input.mapId, verdict: 'unexpected-failure', stage: 'official-xsd', diagnostics: validation.diagnostics };
   } catch (error) {
     if (error instanceof AuditAssetError) return { id, ...(mapId ? { mapId } : {}), verdict: 'asset-blocked', assetCode: error.code, message: error.message };
@@ -142,9 +147,7 @@ export async function auditXml14Instance(
       verdict: 'unsupported-fail-closed',
       ...(productionMap ? { xodrSha256: productionMap.xodrSha256 } : {}),
       issueCodes: [...new Set(error.issues.map((issue) => issue.code))].sort(),
-      issueCodeCounts: Object.fromEntries([...new Set(error.issues.map((issue) => issue.code))].sort().map((code) => [
-        code, error.issues.filter((issue) => issue.code === code).length,
-      ])),
+      issueCodeCounts: codeCounts(error.issues),
       issueReasons: [...new Set(error.issues.map((issue) => issue.reason))].sort(),
       issueCount: error.issues.length,
     };
@@ -166,19 +169,20 @@ export function auditExpectationMismatches(
       mismatches.push({ id, message: `expected ${expected.verdict}, received ${actual.verdict}` });
       continue;
     }
-    if (expected.verdict === 'unsupported-fail-closed') {
-      const rawCounts = actual['issueCodeCounts'];
-      const actualCounts: Record<string, number> = rawCounts !== null && typeof rawCounts === 'object' && !Array.isArray(rawCounts)
-        ? Object.fromEntries(Object.entries(rawCounts).filter((entry): entry is [string, number] => typeof entry[1] === 'number'))
-        : {};
-      const ordered = (counts: Readonly<Record<string, number>>): Record<string, number> => Object.fromEntries(
-        Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
-      );
-      const expectedCounts = ordered(expected.issueCodeCounts), receivedCounts = ordered(actualCounts);
-      if (JSON.stringify(receivedCounts) !== JSON.stringify(expectedCounts)) mismatches.push({
-        id, message: `expected issue counts ${JSON.stringify(expectedCounts)}, received ${JSON.stringify(receivedCounts)}`,
-      });
-    }
+    const rawCounts = expected.verdict === 'unsupported-fail-closed'
+      ? actual['issueCodeCounts']
+      : actual['warningCodeCounts'];
+    const actualCounts: Record<string, number> = rawCounts !== null && typeof rawCounts === 'object' && !Array.isArray(rawCounts)
+      ? Object.fromEntries(Object.entries(rawCounts).filter((entry): entry is [string, number] => typeof entry[1] === 'number'))
+      : {};
+    const ordered = (counts: Readonly<Record<string, number>>): Record<string, number> => Object.fromEntries(
+      Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)),
+    );
+    const expectedCounts = ordered(expected.verdict === 'unsupported-fail-closed' ? expected.issueCodeCounts : expected.warningCodeCounts);
+    const receivedCounts = ordered(actualCounts);
+    if (JSON.stringify(receivedCounts) !== JSON.stringify(expectedCounts)) mismatches.push({
+      id, message: `expected ${expected.verdict === 'unsupported-fail-closed' ? 'issue' : 'warning'} counts ${JSON.stringify(expectedCounts)}, received ${JSON.stringify(receivedCounts)}`,
+    });
   }
   return mismatches;
 }

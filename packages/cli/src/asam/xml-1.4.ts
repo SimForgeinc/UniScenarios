@@ -566,6 +566,37 @@ function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 
   const headOwners = new Map<string, number>();
   const controllerOwners = new Map<string, number>();
   const programsById = new Map(input.signalPrograms.map((program) => [program.id, program]));
+  for (const [i, control] of input.roadControls.entries()) {
+    issues.push({
+      code: 'unsupported_road_control',
+      path: `roadControls.${i}`,
+      reason: `road control ${control.id} is not emitted by the XML 1.4 profile; exporting without its stop/yield semantics would change external execution`,
+    });
+  }
+  for (const [i, prop] of input.props.entries()) {
+    issues.push({
+      code: 'unsupported_prop',
+      path: `props.${i}`,
+      reason: prop.collidable
+        ? `prop ${prop.id} has collision geometry that is not emitted by the XML 1.4 profile`
+        : `prop ${prop.id} is not emitted by the XML 1.4 profile; its identity, pose, geometry, and attachment semantics would be lost`,
+    });
+  }
+  const conditions = input.operationalConditions;
+  const hasMaterialOperationalConditions = conditions.weather !== 'clear'
+    || conditions.timeOfDay !== 'day'
+    || conditions.traffic !== 'moderate'
+    || conditions.visibility !== 'unrestricted'
+    || conditions.effects.visibilityRangeM !== 10_000
+    || conditions.effects.frictionScale !== 1
+    || conditions.effects.trafficSpeedFactor !== 1;
+  if (executionMode === 'actions' && hasMaterialOperationalConditions) {
+    issues.push({
+      code: 'unsupported_operational_conditions',
+      path: 'operationalConditions',
+      reason: 'action-mode XML does not emit weather, time-of-day, surface, or ambient-traffic conditions; use trajectory replay for baked motion or remove the authored conditions',
+    });
+  }
   for (const [i, actor] of input.actors.entries()) {
     if (actor.kind === 'static_object' && !actor.static) {
       issues.push({

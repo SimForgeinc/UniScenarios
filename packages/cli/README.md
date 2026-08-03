@@ -180,7 +180,7 @@ site, matcher, solver, draw or seed provenance from that file alone.
 
 The command never silently substitutes a different behavior. Unsupported
 controller rules, dynamics, conditions, deadlines, entity lifecycle, signal
-bindings or action forms produce exit 2 with
+bindings, fixed props, static road controls, or action forms produce exit 2 with
 `{code:"asam_export_unsupported", detail:{issues:[{code,path,reason}]}}`.
 UniScenarios-only metric subjects and occlusion-evaluation pairs are reported as
 warnings; their physical actors and occluders are still exported.

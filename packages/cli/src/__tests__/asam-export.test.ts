@@ -576,6 +576,40 @@ describe('ASAM OpenSCENARIO DSL 2.2.0 export', () => {
 });
 
 describe('honest unsupported-feature failures', () => {
+  it('fails closed for omitted props, road controls, and action-mode ambient semantics', () => {
+    const input = parseSimScenarioInput({
+      ...fixture(),
+      operationalConditions: {
+        weather: 'rain', timeOfDay: 'night', traffic: 'heavy', visibility: 'reduced-contrast',
+        effects: { visibilityRangeM: 100, frictionScale: 0.7, trafficSpeedFactor: 0.8 },
+      },
+      roadControls: [{
+        id: 'stop-control', kind: 'stop', dwellS: 1,
+        stopLines: [{ rsl: '1:0:-1', s: 10, connectingLaneRsls: [] }],
+      }],
+      props: [{
+        id: 'barrier', catalogId: 'construction.jersey_barrier',
+        pose: { x: 20, z: -5, headingRad: 0 }, dims: { l: 4, w: 0.6, h: 0.8 },
+        scale: 1, collidable: true, essentiality: 'required',
+      }],
+    });
+    for (const executionMode of ['actions', 'trajectory-replay'] as const) {
+      try {
+        exportOpenScenarioXml14(input, { graph, executionMode });
+        throw new Error('expected export to fail');
+      } catch (error) {
+        expect(error).toBeInstanceOf(AsamExportError);
+        expect((error as AsamExportError).issues).toEqual(expect.arrayContaining([
+          expect.objectContaining({ code: 'unsupported_road_control', path: 'roadControls.0' }),
+          expect.objectContaining({ code: 'unsupported_prop', path: 'props.0' }),
+          ...(executionMode === 'actions'
+            ? [expect.objectContaining({ code: 'unsupported_operational_conditions', path: 'operationalConditions' })]
+            : []),
+        ]));
+      }
+    }
+  });
+
   it('reports exact paths instead of silently degrading controller semantics', () => {
     const input = fixture();
     const changed = parseSimScenarioInput({
