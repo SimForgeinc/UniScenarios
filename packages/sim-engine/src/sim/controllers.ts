@@ -369,18 +369,10 @@ export function lateralStep(
   let complete = false;
   if (cmd) {
     const elapsed = t + dt - cmd.firedAt;
-    const u = clamp(elapsed / Math.max(cmd.duration, 1e-9), 0, 1);
-    const u2 = u * u;
-    const u3 = u2 * u;
-    const u4 = u3 * u;
-    const u5 = u4 * u;
-    const distance = cmd.to - cmd.from;
-    // Minimum-jerk quintic: exact position, zero velocity and zero
-    // acceleration at both ends. boundedLateralDuration sizes the duration
-    // against the analytic peak rate/acceleration/jerk of this same profile.
-    offset = cmd.from + distance * (10 * u3 - 15 * u4 + 6 * u5);
-    rate = distance * (30 * u2 - 60 * u3 + 30 * u4) / cmd.duration;
-    accel = distance * (60 * u - 180 * u2 + 120 * u3) / (cmd.duration * cmd.duration);
+    const sample = minimumJerkSample(cmd.from, cmd.to, elapsed, cmd.duration);
+    offset = sample.offset;
+    rate = sample.rate;
+    accel = sample.accel;
     complete = elapsed >= cmd.duration - 1e-9;
   } else {
     // No owner: hold the completed lane-relative offset. A new command owns
@@ -396,10 +388,30 @@ export function lateralStep(
   return { offset, rate, accel, complete };
 }
 
-/** Position on the same minimum-jerk profile used by lateralStep. */
+/** Full Frenet reference on the same minimum-jerk profile used by lateralStep. */
+export function minimumJerkSample(
+  from: number,
+  to: number,
+  elapsedS: number,
+  durationS: number,
+): { offset: number; rate: number; accel: number } {
+  const duration = Math.max(durationS, 1e-9);
+  const u = clamp(elapsedS / duration, 0, 1);
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const u4 = u3 * u;
+  const u5 = u4 * u;
+  const distance = to - from;
+  return {
+    offset: from + distance * (10 * u3 - 15 * u4 + 6 * u5),
+    rate: distance * (30 * u2 - 60 * u3 + 30 * u4) / duration,
+    accel: distance * (60 * u - 180 * u2 + 120 * u3) / (duration * duration),
+  };
+}
+
+/** Position-only compatibility helper for pair prediction and tests. */
 export function minimumJerkValue(from: number, to: number, elapsedS: number, durationS: number): number {
-  const u = clamp(elapsedS / Math.max(durationS, 1e-9), 0, 1);
-  return from + (to - from) * (10 * u ** 3 - 15 * u ** 4 + 6 * u ** 5);
+  return minimumJerkSample(from, to, elapsedS, durationS).offset;
 }
 
 /** Heading including the body slip implied by lateral motion. */

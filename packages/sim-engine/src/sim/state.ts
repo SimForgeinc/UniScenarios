@@ -122,7 +122,12 @@ export interface ActorRuntime {
 
   speedMps: number;
   accelMps2: number;
+  /** Measured body offset from the active route. Dynamic backends alone own it. */
   lateralOffsetM: number;
+  /** Authored minimum-jerk reference, independent of the measured body pose. */
+  lateralReferenceOffsetM: number;
+  lateralReferenceRateMps: number;
+  lateralReferenceAccelMps2: number;
   /** Stable lane-relative offset retained after a completed laneOffset action. */
   lateralRestOffsetM?: number;
   lateralRateMps: number;

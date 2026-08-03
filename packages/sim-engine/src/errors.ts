@@ -26,7 +26,8 @@ export type SimIssueCode =
   | 'signal_unknown'
   | 'arrival_unsolvable'
   | 'lane_change_illegal'
-  | 'lateral_duration_clamped';
+  | 'lateral_duration_clamped'
+  | 'lateral_tracking_failed';
 
 export type SimIssueSeverity = 'error' | 'warning';
 

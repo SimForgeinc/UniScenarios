@@ -94,7 +94,7 @@ export type SimEvent =
     }
   | { t: number; kind: 'released'; actorId: string; axis: string; interactionId: string; reason: 'until' | 'complete' | 'window' }
   | { t: number; kind: 'interaction_completed'; actorId: string; interactionId: string; finalLateralOffsetM?: number }
-  | { t: number; kind: 'interaction_aborted'; actorId: string; interactionId: string; reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'clip_end' }
+  | { t: number; kind: 'interaction_aborted'; actorId: string; interactionId: string; reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'tracking_error' | 'clip_end' }
   | { t: number; kind: 'lateral_maneuver_planned'; actorId: string; interactionId: string; requestedDurationS: number; effectiveDurationS: number; displacementM: number }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }

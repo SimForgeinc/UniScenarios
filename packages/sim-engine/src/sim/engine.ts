@@ -54,7 +54,7 @@ import {
   governorCap,
   headingWithSlip,
   lateralStep,
-  minimumJerkValue,
+  minimumJerkSample,
   limitsFor,
   longitudinalAccel,
   desiredGapM,
@@ -209,6 +209,9 @@ function collisionGridCells(bounds: Omit<SpatialBounds, 'id'> | SpatialBounds): 
 }
 /** Future-path bounds are up to ~65 m long; this keeps most roads in a few cells. */
 const CONFLICT_GRID_CELL_M = 40;
+const DYNAMIC_LATERAL_SETTLE_POSITION_M = 0.05;
+const DYNAMIC_LATERAL_SETTLE_RATE_MPS = 0.1;
+const DYNAMIC_LATERAL_SETTLE_HEADING_RAD = 2 * Math.PI / 180;
 
 interface Plan {
   readonly actor: ActorRuntime;
@@ -218,7 +221,16 @@ interface Plan {
   lateralOffset: number;
   lateralRate: number;
   lateralAccel: number;
+  /** Authored Frenet reference; never a measured dynamic body state. */
+  lateralReferenceOffset: number;
+  lateralReferenceRate: number;
+  lateralReferenceAccel: number;
   lateralComplete: boolean;
+  lateralTrackingExpired: null | {
+    positionErrorM: number;
+    rateErrorMps: number;
+    headingErrorRad: number;
+  };
   position: Vec2;
   heading: number;
   requiredDecel: number;
@@ -529,6 +541,9 @@ class Simulation {
       speedMps: spec.static ? 0 : spec.initial.speedMps,
       accelMps2: 0,
       lateralOffsetM: lateral,
+      lateralReferenceOffsetM: lateral,
+      lateralReferenceRateMps: 0,
+      lateralReferenceAccelMps2: 0,
       lateralRestOffsetM: lateral,
       lateralRateMps: 0,
       lateralAccelMps2: 0,
@@ -1128,7 +1143,7 @@ class Simulation {
     interactionId: string,
     actorId: string,
     t: number,
-    reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'clip_end',
+    reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'tracking_error' | 'clip_end',
   ): void {
     const trigger = this.triggerById.get(interactionId);
     if (trigger) trigger.endedAt ??= t;
@@ -1219,6 +1234,10 @@ class Simulation {
         a.route = built.route;
         a.routeS = proj.s;
         a.lateralOffsetM = built.route.lateralOffsetAt(proj.s, a.position);
+        a.lateralReferenceOffsetM = a.lateralOffsetM;
+        a.lateralReferenceRateMps = 0;
+        a.lateralReferenceAccelMps2 = 0;
+        a.lateralRestOffsetM = a.lateralOffsetM;
         a.remainingTurns = it.target.kind === 'follow' ? [...it.target.turns] : [];
         // Re-routing is an explicit new motion path. An actor that reached its
         // previous route end must be allowed to move again (rollback, rebound,
@@ -1679,7 +1698,11 @@ class Simulation {
       lateralOffset: a.lateralOffsetM,
       lateralRate: a.lateralRateMps,
       lateralAccel: a.lateralAccelMps2 ?? 0,
+      lateralReferenceOffset: a.lateralReferenceOffsetM,
+      lateralReferenceRate: a.lateralReferenceRateMps,
+      lateralReferenceAccel: a.lateralReferenceAccelMps2,
       lateralComplete: false,
+      lateralTrackingExpired: null,
       position: a.position,
       heading: a.headingRad,
       requiredDecel: 0,
@@ -1794,11 +1817,11 @@ class Simulation {
     plan.routeS = a.routeS + speed * this.dt;
 
     const lat = lateralStep(a, t, this.dt);
-    plan.lateralOffset = lat.offset;
-    plan.lateralRate = lat.rate;
-    plan.lateralAccel = lat.accel;
+    plan.lateralReferenceOffset = lat.offset;
+    plan.lateralReferenceRate = lat.rate;
+    plan.lateralReferenceAccel = lat.accel;
     plan.lateralComplete = lat.complete;
-    if (a.latCmd?.kind === 'changeLane' && lat.complete && !a.latCmd.done) {
+    if (!this.dynamicActorIds.has(a.id) && a.latCmd?.kind === 'changeLane' && lat.complete && !a.latCmd.done) {
       plan.swap = a.latCmd.pending ?? null;
     }
 
@@ -1828,37 +1851,34 @@ class Simulation {
       // so project the authored transition to the same look-ahead horizon used
       // by pure pursuit. This preserves the timeline's rate/time semantics
       // without teleporting the body onto the kinematic schedule.
-      const previewLateralOffset = a.latCmd
-        ? minimumJerkValue(
+      const previewLateralReference = a.latCmd
+        ? minimumJerkSample(
             a.latCmd.from,
             a.latCmd.to,
             t + this.dt + previewTimeS - a.latCmd.firedAt,
             a.latCmd.duration,
           )
-        : plan.lateralOffset;
-      // Pure pursuit naturally cuts the inside of compact junction curves.
-      // Aim slightly across the desired offset when the physical body has
-      // accumulated cross-track error. This changes only the steering target;
-      // the force-based plant and tyre limits remain authoritative.
-      // During a timeline-owned lane change, the authored lateral transition
-      // already supplies the correct preview target and rate. Recovery is only
-      // for ordinary route following; layering it onto a lane change would
-      // distort the commanded duration and peak lateral velocity.
-      const measuredCrossTrackM = a.latCmd ? 0 : a.lateralOffsetM - plan.lateralOffset;
-      const recoveryLimitM = Math.max(0.5, a.route.widthAt(previewS) / 2 - a.dims.w / 2);
-      const trackingPreviewOffset = a.latCmd
-        ? previewLateralOffset
-        : clamp(
-          previewLateralOffset - measuredCrossTrackM * 3,
-          -recoveryLimitM,
-          recoveryLimitM,
-        );
+        : {
+            offset: plan.lateralReferenceOffset,
+            rate: plan.lateralReferenceRate,
+            accel: plan.lateralReferenceAccel,
+          };
+      // Dynamic-v1 owns the physical body. The choreography layer supplies a
+      // composite route + authored offset reference at now and at the steering
+      // horizon; it never rewrites the measured offset as a planning shortcut.
+      // Unit-error feedback expresses the same future reference in the body's
+      // measured frame. It applies identically with and without an active clip.
+      const measuredTrackingErrorM = a.lateralOffsetM - a.lateralReferenceOffsetM;
+      const trackingPreviewOffset = previewLateralReference.offset - measuredTrackingErrorM;
       const result = this.motionBackend.step(a.id, {
         motionDirection: isReverseMotion(a) ? -1 : 1,
         targetSpeedMps: dynamicTargetSpeed,
         targetAccelerationMps2: dynamicTargetAcceleration,
         previewPoint: a.route.pointWithOffset(previewS, trackingPreviewOffset),
-        previewHeadingRad: headingWithSlip(previewPose.headingRad, plan.lateralRate, Math.max(plan.speed, 0.5)),
+        // The preview point already carries the future spatial offset. Heading
+        // uses the current reference rate so the controller does not apply the
+        // same future lateral transition twice (bearing and body slip).
+        previewHeadingRad: headingWithSlip(previewPose.headingRad, plan.lateralReferenceRate, Math.max(plan.speed, 0.5)),
       }, this.dt, frictionScale);
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
       const projectedOffset = a.route.lateralOffsetAt(projected.s, {
@@ -1910,12 +1930,29 @@ class Simulation {
       plan.position = { x: result.state.x, y: result.state.y };
       plan.heading = result.state.yawRad;
       this.physicsTelemetry.set(a.id, result.telemetry);
-      // The kinematic profile's duration is a target schedule, not permission
-      // to teleport a force-based car onto the adjacent route. Keep tracking
-      // after the schedule ends and hand routes off only once the body reaches
-      // the requested lateral position.
-      if (plan.swap && a.latCmd && Math.abs(plan.lateralOffset - a.latCmd.to) > 0.15) {
-        plan.swap = null;
+      if (lat.complete && a.latCmd) {
+        const referenceHeading = normalizeAngle(
+          headingWithSlip(
+            a.route.poseAt(projected.s).headingRad,
+            plan.lateralReferenceRate,
+            Math.max(plan.speed, 0.5),
+          ) + (isReverseMotion(a) ? Math.PI : 0),
+        );
+        const positionErrorM = plan.lateralOffset - plan.lateralReferenceOffset;
+        const rateErrorMps = plan.lateralRate - plan.lateralReferenceRate;
+        const headingErrorRad = angleDelta(referenceHeading, plan.heading);
+        plan.lateralComplete =
+          Math.abs(positionErrorM) <= DYNAMIC_LATERAL_SETTLE_POSITION_M &&
+          Math.abs(rateErrorMps) <= DYNAMIC_LATERAL_SETTLE_RATE_MPS &&
+          Math.abs(headingErrorRad) <= DYNAMIC_LATERAL_SETTLE_HEADING_RAD;
+        if (plan.lateralComplete && a.latCmd.kind === 'changeLane') {
+          plan.swap = a.latCmd.pending ?? null;
+        } else {
+          const settleDeadlineS = a.latCmd.firedAt + a.latCmd.duration + Math.max(2, a.latCmd.duration);
+          if (t + this.dt >= settleDeadlineS - 1e-9) {
+            plan.lateralTrackingExpired = { positionErrorM, rateErrorMps, headingErrorRad };
+          }
+        }
       }
     }
 
@@ -1941,6 +1978,9 @@ class Simulation {
     }
 
     if (!this.dynamicActorIds.has(a.id)) {
+      plan.lateralOffset = plan.lateralReferenceOffset;
+      plan.lateralRate = plan.lateralReferenceRate;
+      plan.lateralAccel = plan.lateralReferenceAccel;
       const pose: RoutePose = a.route.poseAt(plan.routeS);
       plan.position = a.route.pointWithOffset(plan.routeS, plan.lateralOffset);
       plan.heading = normalizeAngle(
@@ -1968,6 +2008,9 @@ class Simulation {
       a.lateralOffsetM = plan.lateralOffset;
       a.lateralRateMps = plan.lateralRate;
       a.lateralAccelMps2 = plan.lateralAccel;
+      a.lateralReferenceOffsetM = plan.lateralReferenceOffset;
+      a.lateralReferenceRateMps = plan.lateralReferenceRate;
+      a.lateralReferenceAccelMps2 = plan.lateralReferenceAccel;
       a.position = plan.position;
       a.headingRad = plan.heading;
       if (t >= 0) a.requiredDecelMax = Math.max(a.requiredDecelMax, plan.requiredDecel);
@@ -1978,7 +2021,31 @@ class Simulation {
         a.standstillSinceS = null;
       }
 
-      if (plan.swap && a.latCmd) {
+      if (plan.lateralTrackingExpired && a.latCmd) {
+        const cmd = a.latCmd;
+        const error = plan.lateralTrackingExpired;
+        this.abortLateral(cmd.interactionId, a.id, t, 'tracking_error');
+        this.issues.push(issue(
+          'lateral_tracking_failed',
+          `interactions.${cmd.interactionId}`,
+          `dynamic actor ${a.id} did not physically settle onto its authored lateral reference`,
+          {
+            actorId: a.id,
+            interactionId: cmd.interactionId,
+            referenceDurationS: cmd.duration,
+            positionErrorM: error.positionErrorM,
+            rateErrorMps: error.rateErrorMps,
+            headingErrorRad: error.headingErrorRad,
+          },
+          'warning',
+        ));
+        a.latCmd = null;
+        a.lateralReferenceOffsetM = a.lateralRestOffsetM ?? a.lateralOffsetM;
+        a.lateralReferenceRateMps = 0;
+        a.lateralReferenceAccelMps2 = 0;
+      }
+
+      if (!plan.lateralTrackingExpired && plan.swap && a.latCmd) {
         const cmd = a.latCmd;
         const fromRsl = a.route.poseAt(a.routeS).rsl;
         // `pending.s` is the target-route station at the *start* of the
@@ -1994,10 +2061,14 @@ class Simulation {
         // The preflighted separation targets this route's centreline exactly.
         // Completing with a residual projection error makes the authored end
         // pose disagree with OSC even though the profile reached its target.
-        a.lateralOffsetM = 0;
+        a.lateralOffsetM = a.route.lateralOffsetAt(projected.s, completedPosition);
+        a.lateralReferenceOffsetM = 0;
+        a.lateralReferenceRateMps = 0;
+        a.lateralReferenceAccelMps2 = 0;
         a.lateralRestOffsetM = 0;
-        a.lateralRateMps = 0;
-        a.position = a.route.pointWithOffset(a.routeS, 0);
+        if (!this.dynamicActorIds.has(a.id)) a.lateralRateMps = 0;
+        // Preserve the integrated world pose across the route-frame handoff.
+        a.position = completedPosition;
         this.events.push({
           t,
           kind: 'lane_change',
@@ -2007,19 +2078,24 @@ class Simulation {
           legal: true,
         });
         a.latCmd = null;
-        a.lateralAccelMps2 = 0;
+        if (!this.dynamicActorIds.has(a.id)) a.lateralAccelMps2 = 0;
         this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id, finalLateralOffsetM: 0 });
         this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
       }
 
-      if (plan.lateralComplete && a.latCmd?.kind === 'laneOffset') {
+      if (!plan.lateralTrackingExpired && plan.lateralComplete && a.latCmd?.kind === 'laneOffset') {
         const cmd = a.latCmd;
-        a.lateralOffsetM = cmd.to;
+        a.lateralReferenceOffsetM = cmd.to;
+        a.lateralReferenceRateMps = 0;
+        a.lateralReferenceAccelMps2 = 0;
         a.lateralRestOffsetM = cmd.to;
-        a.position = a.route.pointWithOffset(a.routeS, cmd.to);
-        a.lateralRateMps = 0;
+        if (!this.dynamicActorIds.has(a.id)) {
+          a.lateralOffsetM = cmd.to;
+          a.position = a.route.pointWithOffset(a.routeS, cmd.to);
+          a.lateralRateMps = 0;
+        }
         a.latCmd = null;
-        a.lateralAccelMps2 = 0;
+        if (!this.dynamicActorIds.has(a.id)) a.lateralAccelMps2 = 0;
         this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id, finalLateralOffsetM: cmd.to });
         this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
       }
@@ -2155,7 +2231,7 @@ class Simulation {
       if (!actor.latCmd) continue;
       this.abortLateral(actor.latCmd.interactionId, actor.id, this.resolvedInput.clipSeconds, 'clip_end');
       actor.latCmd = null;
-      actor.lateralAccelMps2 = 0;
+      if (!this.dynamicActorIds.has(actor.id)) actor.lateralAccelMps2 = 0;
     }
     this.metrics.triggerNeverFired.sort();
   }

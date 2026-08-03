@@ -165,7 +165,17 @@ describe.skipIf(!HAVE_MAP)('yale-street topology', () => {
     // The ego actually moved along real lane geometry.
     const egoS = a.trace.ticks.actors['ego']!.s;
     expect(egoS.at(-1)!).toBeGreaterThan(egoS[0]! + 50);
-    expect(a.trace.ticks.actors['ego']!.laneRsl[0]).toBe(route.legs[0]!.rsl);
+    expect(a.trace.ticks.actors['ego']!.laneRsl[0]).toBe(route.poseAt(20).rsl);
+    expect(a.trace.events.filter((event) => event.kind === 'road_departure_prevented')).toEqual([]);
+    expect(a.trace.events.filter((event) => event.kind.startsWith('collision'))).toEqual([]);
+    let maxCrossTrackM = 0;
+    const ego = a.trace.ticks.actors.ego!;
+    for (let index = 0; index < ego.x.length; index += 1) {
+      const point = { x: ego.x[index]!, y: ego.y[index]! };
+      const projected = route.projectPoint(point);
+      maxCrossTrackM = Math.max(maxCrossTrackM, Math.abs(route.lateralOffsetAt(projected.s, point)));
+    }
+    expect(maxCrossTrackM).toBeLessThan(1.1);
   });
 });
 
