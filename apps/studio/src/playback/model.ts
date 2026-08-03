@@ -2,6 +2,7 @@ import {
   contentHash,
   CONTROL_INDICATIONS,
   decodeTraceGz,
+  SignalBook,
   safeParseSimScenarioInput,
   traceToSceneFrame,
   TRACE_FORMAT_VERSION,
@@ -747,6 +748,28 @@ export function samplePlaybackSignals(bundle: PlaybackBundle, time: number): Sam
     if (!phase) throw new Error(`validated trace lost signal track ${signal.id}`);
     return { ...signal, phase };
   });
+}
+
+/**
+ * Evaluate physical-head states directly from the immutable program input.
+ * Authoring previews intentionally record only through t=0, so trace sampling
+ * cannot represent a later timeline scrub until Play has built the full trace.
+ * SignalBook is the same evaluator used by simulation and preserves authored
+ * half-open clips plus the compiled map baseline in every gap.
+ */
+export function evaluatePlaybackSignalHeadStates(
+  bundle: PlaybackBundle,
+  time: number,
+): Readonly<Record<string, ControlIndication>> {
+  const input = bundle.instance.input;
+  const book = new SignalBook(input.signalPrograms, input.warmupSeconds, input.roadControls);
+  const headStates: Record<string, ControlIndication> = {};
+  for (const signal of bundle.signals) {
+    const phase = book.phaseAt(signal.id, time);
+    if (!phase) throw new Error(`validated input lost signal program ${signal.id}`);
+    for (const headId of signal.headIds) headStates[headId] = phase;
+  }
+  return headStates;
 }
 
 function lerp(a: number, b: number, alpha: number): number {

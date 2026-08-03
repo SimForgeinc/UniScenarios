@@ -14,7 +14,7 @@ import { EditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from 
 import { ScenarioActionsPanel } from './editor/ScenarioActionsPanel';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
-import { PlaybackLoadError, samplePlaybackActors, samplePlaybackSignals, type PlaybackBundle, type SampledActor } from './playback/model';
+import { PlaybackLoadError, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
 import { galleryCameraChoice } from './playback/controller';
 import {
   physicsForActor,
@@ -44,6 +44,7 @@ import { AmbientTrafficPopover } from './ambient/AmbientTrafficPanel';
 import {
   AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY,
   ambientTrafficProviderFromExtensions,
+  sumoOwnsPhysicalSignalStates,
   type AmbientTrafficProviderId,
 } from './ambient/provider';
 import { useSumoTraffic, type SumoExternalActorView } from './ambient/useSumoTraffic';
@@ -399,11 +400,17 @@ export function App(): JSX.Element {
     return () => { cancelled = true; };
   }, [campaignSource, editorController, map.id]);
   const hasAuthoredMapSignals = (editorController?.doc.data.mapSignalPlans.length ?? 0) > 0;
+  const sumoOwnsSignalStates = sumoOwnsPhysicalSignalStates(
+    ambientTrafficProvider,
+    Boolean(sumoFallbackReason),
+    hasAuthoredMapSignals,
+    playbackBundle !== null,
+  );
   const materializedAmbientProfile = useMemo(
-    () => ambientTrafficProvider === 'sumo' && !sumoFallbackReason && !hasAuthoredMapSignals
+    () => sumoOwnsSignalStates
       ? resolveAmbientTrafficProfile({ version: 1, preset: 'off', seed: ambientTrafficProfile.seed })
       : ambientTrafficProfile,
-    [ambientTrafficProfile, ambientTrafficProvider, hasAuthoredMapSignals, sumoFallbackReason],
+    [ambientTrafficProfile, sumoOwnsSignalStates],
   );
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
@@ -772,7 +779,7 @@ export function App(): JSX.Element {
     // In SUMO mode one authority must govern both vehicle right-of-way and the
     // visible lamps. Prevent authored playback samples from racing SUMO's live
     // controller/link snapshot; fallback restores the native authority.
-    overlays: ambientTrafficProvider === 'sumo' && !sumoFallbackReason ? null : overlays,
+    overlays: sumoOwnsSignalStates ? null : overlays,
     cameraPolicy: defaultPlaybackCamera?.policy,
     cameraView: defaultPlaybackCamera?.view,
     dashCamera: !playbackBundle && cameraPlaybackRequested && selectedAuthoredDashCamera
@@ -846,7 +853,7 @@ export function App(): JSX.Element {
     // An authored controller plan is authoritative. Until the WASM bridge can
     // accept live tlLogic overrides, native ambient traffic owns that world so
     // SUMO cannot render or obey a contradictory independent signal cycle.
-    enabled: ambientTrafficProvider === 'sumo' && !sumoFallbackReason && !hasAuthoredMapSignals && playbackBundle === null,
+    enabled: sumoOwnsSignalStates,
     map,
     profile: ambientTrafficProfile,
     renderer: editorController?.renderer,
@@ -858,22 +865,18 @@ export function App(): JSX.Element {
     onFallback: fallbackToNativeTraffic,
   });
   useEffect(() => {
-    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || hasAuthoredMapSignals || !sumoStatus.signalStates) return;
+    if (!sumoOwnsSignalStates || !sumoStatus.signalStates) return;
     overlays?.setSignalStates(sumoStatus.signalStates);
-  }, [ambientTrafficProvider, hasAuthoredMapSignals, overlays, sumoFallbackReason, sumoStatus.signalStates]);
+  }, [overlays, sumoOwnsSignalStates, sumoStatus.signalStates]);
   useEffect(() => {
-    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || hasAuthoredMapSignals) return;
+    if (!sumoOwnsSignalStates) return;
     return () => overlays?.clearSignalStates();
-  }, [ambientTrafficProvider, hasAuthoredMapSignals, map.id, overlays, sumoFallbackReason]);
+  }, [map.id, overlays, sumoOwnsSignalStates]);
   useEffect(() => {
     if (!overlays || !hasAuthoredMapSignals || studioSession.state.mode !== 'authoring') return;
     const source = ambientPreview ?? authoredPlayback;
     if (!source) return;
-    const headStates: Record<string, import('@uniscenarios/sim-engine').ControlIndication> = {};
-    for (const signal of samplePlaybackSignals(source, studioSession.state.time)) {
-      if (signal.timingSource !== 'authored') continue;
-      for (const headId of signal.headIds) headStates[headId] = signal.phase;
-    }
+    const headStates = evaluatePlaybackSignalHeadStates(source, studioSession.state.time);
     if (Object.keys(headStates).length > 0) {
       overlays.setSignalStates(headStates, studioSession.state.time);
     }

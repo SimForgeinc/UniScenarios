@@ -10,10 +10,12 @@ import {
 import {
   PlaybackLoadError,
   defaultCatalogIdForActorKind,
+  evaluatePlaybackSignalHeadStates,
   parsePlaybackPair,
   readPlaybackFiles,
   samplePlaybackActors,
   samplePlaybackSignals,
+  type PlaybackBundle,
   type PlaybackFile,
 } from '../model';
 
@@ -339,6 +341,50 @@ describe('UniScenarios concrete playback import', () => {
       expect.objectContaining({ id: 'signal:1542', phase: 'red', headIds: ['1542'] }),
     ]);
     expect(samplePlaybackSignals(bundle, 1)[0]?.phase).toBe('green');
+  });
+
+  it('evaluates authored clips and baseline gaps beyond a materialize-only t=0 preview', () => {
+    const documentInput = parseSimScenarioInput({
+      ...input(),
+      clipSeconds: 6,
+      signalPrograms: [
+        {
+          id: 'selected-stage', loop: false,
+          phases: [
+            { phase: 'red', durationS: 1 },
+            { phase: 'green', durationS: 3 },
+            { phase: 'red', durationS: 2 },
+          ],
+          stopLines: [],
+          mapBinding: { junctionId: '590', controllerIds: ['2297'], headIds: ['2230', '2231'], timingSource: 'authored' },
+        },
+        {
+          id: 'conflicting-stage', loop: false,
+          phases: [{ phase: 'red', durationS: 6 }],
+          stopLines: [],
+          mapBinding: { junctionId: '590', controllerIds: ['other'], headIds: ['2240'], timingSource: 'authored' },
+        },
+      ],
+    });
+    const bundle = {
+      instance: { input: documentInput },
+      signals: documentInput.signalPrograms.map((program) => ({
+        id: program.id,
+        headIds: program.mapBinding?.headIds ?? [],
+        timingSource: program.mapBinding?.timingSource ?? 'unbound',
+      })),
+      // The authoring worker's materialize-only trace ends at t=0.
+      trace: { ticks: { t: [0], signals: {
+        'selected-stage': { phase: ['red'] },
+        'conflicting-stage': { phase: ['red'] },
+      } } },
+    } as unknown as PlaybackBundle;
+
+    expect(samplePlaybackSignals(bundle, 2).map((signal) => signal.phase)).toEqual(['red', 'red']);
+    expect(evaluatePlaybackSignalHeadStates(bundle, .999)).toEqual({ '2230': 'red', '2231': 'red', '2240': 'red' });
+    expect(evaluatePlaybackSignalHeadStates(bundle, 1)).toEqual({ '2230': 'green', '2231': 'green', '2240': 'red' });
+    expect(evaluatePlaybackSignalHeadStates(bundle, 3.999)).toEqual({ '2230': 'green', '2231': 'green', '2240': 'red' });
+    expect(evaluatePlaybackSignalHeadStates(bundle, 4)).toEqual({ '2230': 'red', '2231': 'red', '2240': 'red' });
   });
 
   it('rejects input-hash, map, and actor identity mismatches with paths', () => {

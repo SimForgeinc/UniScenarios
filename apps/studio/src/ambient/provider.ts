@@ -8,6 +8,21 @@ export function ambientTrafficProviderFromExtensions(
   return extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY] === 'native' ? 'native' : 'sumo';
 }
 
+/**
+ * SUMO may paint physical signal heads only while it also owns their live
+ * controller cycle. An authored map-signal plan or an imported canonical
+ * playback transfers that ownership to the playback trace, even when SUMO
+ * remains the saved ambient traffic preference.
+ */
+export function sumoOwnsPhysicalSignalStates(
+  provider: AmbientTrafficProviderId,
+  fallbackActive: boolean,
+  hasAuthoredMapSignals: boolean,
+  canonicalPlaybackActive: boolean,
+): boolean {
+  return provider === 'sumo' && !fallbackActive && !hasAuthoredMapSignals && !canonicalPlaybackActive;
+}
+
 export type SumoTrafficPhase = 'disabled' | 'loading' | 'ready' | 'running' | 'fallback';
 
 export interface SumoTrafficStatus {
