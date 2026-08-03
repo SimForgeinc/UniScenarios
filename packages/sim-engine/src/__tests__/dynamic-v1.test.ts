@@ -371,6 +371,7 @@ describe('dynamic-v1 passenger car', () => {
       (backend) => backend.mode === 'dynamic-v1' && backend.reason === 'selected',
     )).toBe(true);
     expect(Object.values(first.ticks.actors).every((track) => track.physics !== undefined)).toBe(true);
+    expect(first.events.filter((event) => event.kind === 'road_departure_prevented')).toEqual([]);
     expect(elapsedMs).toBeLessThan(7_500);
   }, 30_000);
 });

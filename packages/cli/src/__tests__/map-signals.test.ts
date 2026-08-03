@@ -4,7 +4,7 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import type { MatchedSite } from '@uniscenarios/anchor-matcher';
 import { ScenarioTemplateV2Schema } from '@uniscenarios/scenario-model';
-import { runSimulation } from '@uniscenarios/sim-engine';
+import { buildRoute, createAmbientCandidatePool, runSimulation } from '@uniscenarios/sim-engine';
 
 import {
   buildSiteSignalPlan,
@@ -235,6 +235,18 @@ describe.skipIf(!haveMaps)('real map signal materialization', () => {
         yale.graph.geometry(line.rsl) !== null && line.connectingLaneRsls.length > 0,
       ),
     )).toBe(true);
+
+    for (const bundle of [belmont, yale]) {
+      const pool = createAmbientCandidatePool(bundle.graph, {
+        version: 1, preset: 'custom', seed: `road-adherence:${bundle.mapId}`,
+        densityVehiclesPerKm: 20, maxActors: 32, pedestrianShare: 0, cyclistShare: 0,
+      });
+      expect(pool.candidates.length).toBeGreaterThan(0);
+      for (const candidate of pool.candidates) {
+        const route = buildRoute(bundle.graph, { kind: 'lanePath', lanes: [...candidate.routeLaneRsls] });
+        expect(route.ok, `${bundle.mapId}/${candidate.id} uses only directed connected successors`).toBe(true);
+      }
+    }
   }, 60_000);
 
   it('binds Yale physical heads and controller sequences to movement-filtered programs', async () => {

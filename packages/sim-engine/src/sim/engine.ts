@@ -1516,13 +1516,38 @@ class Simulation {
         previewHeadingRad: previewPose.headingRad,
       }, this.dt, frictionScale);
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
-      plan.speed = Math.max(0, result.state.longitudinalVelocityMps);
-      plan.accel = result.state.longitudinalAccelerationMps2;
-      plan.routeS = projected.s;
-      plan.lateralOffset = a.route.lateralOffsetAt(projected.s, {
+      const projectedOffset = a.route.lateralOffsetAt(projected.s, {
         x: result.state.x,
         y: result.state.y,
       });
+      const allowedCenterOffsetM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
+      if (a.tags.includes('ambient') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
+        // Never publish the first off-corridor integration. Hold the last valid
+        // map pose and retire this generated actor; a later population refresh
+        // may replace it from a new connected candidate. Authored off-road and
+        // wrong-way edge cases remain explicit opt-in intent.
+        plan.speed = 0;
+        plan.accel = -a.speedMps / this.dt;
+        plan.routeS = a.routeS;
+        plan.lateralOffset = a.lateralOffsetM;
+        plan.lateralRate = 0;
+        plan.position = a.position;
+        plan.heading = a.headingRad;
+        plan.retire = true;
+        this.events.push({
+          t,
+          kind: 'road_departure_prevented',
+          actorId: a.id,
+          laneRsl: a.route.poseAt(a.routeS).rsl,
+          lateralErrorM: Math.abs(projectedOffset),
+          allowedCenterOffsetM,
+        });
+        return plan;
+      }
+      plan.speed = Math.max(0, result.state.longitudinalVelocityMps);
+      plan.accel = result.state.longitudinalAccelerationMps2;
+      plan.routeS = projected.s;
+      plan.lateralOffset = projectedOffset;
       plan.lateralRate = result.state.lateralVelocityMps;
       plan.position = { x: result.state.x, y: result.state.y };
       plan.heading = result.state.yawRad;
