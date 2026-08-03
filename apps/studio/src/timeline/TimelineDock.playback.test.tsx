@@ -6,6 +6,16 @@ const controller = {
   doc: { data: { choreography: { clipSeconds: 20, interactions: [] }, roles: [] } },
 } as never;
 
+const outcomeController = {
+  doc: { data: {
+    choreography: { clipSeconds: 20, interactions: [{
+      id: 'go-straight', actor: 'car', trigger: { kind: 'at', t: 3 }, until: { kind: 'at', t: 5 },
+      verb: 'route', target: { mode: 'lanePath', lanes: ['road.1'] },
+    }] },
+    roles: [{ id: 'car', label: 'Sedan', actor: { class: 'vehicle', catalogId: 'vehicle.sedan' } }],
+  } },
+} as never;
+
 const session = {
   state: { mode: 'authoring' as const, time: 0, duration: 20, validation: 'unchecked' as const, error: null },
   playPause: vi.fn(),
@@ -18,6 +28,23 @@ describe('author timeline playback controls', () => {
     expect(timelineActionOutcome([], 'a')).toBe('pending');
     expect(timelineActionOutcome([{ interactionId: 'a', time: 2, kind: 'trigger_fired' }], 'a')).toBe('executed');
     expect(timelineActionOutcome([{ interactionId: 'a', time: 5, kind: 'trigger_skipped' }], 'a')).toBe('missed');
+  });
+  it('renders a canonical clip outcome into the authored timeline DOM', () => {
+    const markup = renderToStaticMarkup(<TimelineDock
+      controller={outcomeController}
+      editorState={null}
+      session={{ ...session, state: { ...session.state, mode: 'playing', time: 3 } }}
+      outcomes={[{ interactionId: 'go-straight', actorId: 'car', time: 3, kind: 'trigger_fired' }]}
+    />);
+    expect(markup).toMatch(/data-outcome="executed"[^>]*data-testid="timeline-item-go-straight"/);
+
+    const resetMarkup = renderToStaticMarkup(<TimelineDock
+      controller={outcomeController}
+      editorState={null}
+      session={session}
+      outcomes={[]}
+    />);
+    expect(resetMarkup).toMatch(/data-outcome="pending"[^>]*data-testid="timeline-item-go-straight"/);
   });
   it('keeps normal Play camera-neutral and exposes an actionable empty camera state', () => {
     const markup = renderToStaticMarkup(<TimelineDock controller={controller} editorState={null} session={session} />);

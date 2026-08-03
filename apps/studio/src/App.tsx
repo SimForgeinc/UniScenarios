@@ -27,6 +27,7 @@ import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
+import { buildTimelineOutcomeIndex, timelineOutcomesAt } from './timeline/model';
 import { defaultSpeedKph } from './timeline/actions';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient, type LivePlaybackRun } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
@@ -576,6 +577,21 @@ export function App(): JSX.Element {
     if (cameraRegistry) cameraRegistry.helpers.group.visible = viewSettings.debugGraphics;
   }, [cameraRegistry, viewSettings.debugGraphics]);
   const selectedPlayback = playbackBundle ?? authoredPlayback;
+  const authoredOutcomeTrace = authoredPlayback?.trace;
+  const authoredInteractions = editorController?.doc.data.choreography.interactions;
+  const authoredOutcomeIndex = useMemo(
+    () => buildTimelineOutcomeIndex(
+      authoredOutcomeTrace?.events ?? [],
+      authoredInteractions ?? [],
+    ),
+    [authoredInteractions, authoredOutcomeTrace],
+  );
+  const authoredTimelineOutcomes = useMemo(
+    () => studioSession.state.mode === 'authoring'
+      ? []
+      : timelineOutcomesAt(authoredOutcomeIndex, studioSession.state.time),
+    [authoredOutcomeIndex, studioSession.state.mode, studioSession.state.time],
+  );
   const authoredPhysicsSummary = useMemo(() => physicsSummaryForAuthoredActors((state?.actors ?? []).map((actor) => {
     const role = editorController?.doc.data.roles.find((item) => item.id === actor.id);
     return {
@@ -1012,6 +1028,7 @@ export function App(): JSX.Element {
             controller={editorController}
             editorState={state}
             session={studioSession}
+            outcomes={authoredTimelineOutcomes}
             achievedSpeeds={authoredPlayback ? Object.fromEntries(
               Object.entries(authoredPlayback.trace.ticks.actors).map(([actorId, track]) => [actorId, {
                 times: authoredPlayback.trace.ticks.t,

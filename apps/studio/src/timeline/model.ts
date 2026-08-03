@@ -7,6 +7,57 @@ export interface TimelineActionLane { readonly index: number; readonly items: re
 export interface TimelineActorGroup { readonly actorId: string; readonly label: string; readonly actorClass: ScenarioTemplateV2['roles'][number]['actor']['class']; readonly catalogId?: string; readonly compact: boolean; readonly tracks: Readonly<Record<TimelineTrackKind, readonly TimelineItem[]>>; readonly lanes: readonly TimelineActionLane[]; }
 export interface TraceOutcomeMarker { readonly interactionId?: string; readonly actorId?: string; readonly time: number; readonly kind: string; readonly label?: string; }
 
+export interface TimelineOutcomeEvent {
+  readonly t: number;
+  readonly kind: string;
+  readonly interactionId?: string;
+  readonly actorId?: string;
+}
+
+/**
+ * Trigger evidence indexed once per concrete trace revision.
+ *
+ * Simulation traces also contain collisions, lane changes, signal events, and
+ * ambient-traffic evidence. None of those can decide an authored clip's UI
+ * outcome. Restricting the index to document interaction ids both keeps the
+ * playback hot path small and prevents a native/SUMO ambient provider from
+ * accidentally changing authored action badges.
+ */
+export function buildTimelineOutcomeIndex(
+  events: readonly TimelineOutcomeEvent[],
+  interactions: readonly Pick<Interaction, 'id' | 'actor'>[],
+): readonly TraceOutcomeMarker[] {
+  const actorsByInteraction = new Map(interactions.map((interaction) => [interaction.id, interaction.actor]));
+  return events.flatMap((event): TraceOutcomeMarker[] => {
+    if ((event.kind !== 'trigger_fired' && event.kind !== 'trigger_skipped') || !event.interactionId) return [];
+    const actorId = actorsByInteraction.get(event.interactionId);
+    if (!actorId || !Number.isFinite(event.t)) return [];
+    return [{
+      interactionId: event.interactionId,
+      actorId,
+      time: event.t,
+      kind: event.kind,
+    }];
+  }).sort((left, right) => left.time - right.time
+    || String(left.interactionId).localeCompare(String(right.interactionId)));
+}
+
+/** Project immutable canonical evidence at one playhead position. */
+export function timelineOutcomesAt(
+  index: readonly TraceOutcomeMarker[],
+  time: number,
+): readonly TraceOutcomeMarker[] {
+  const inclusiveTime = Number.isFinite(time) ? Math.max(0, time) + 1e-9 : 0;
+  const visible: TraceOutcomeMarker[] = [];
+  // The index is time-sorted, so ordinary playback only walks its short prefix.
+  // Seeking backwards is deterministic because no outcome state is retained.
+  for (const marker of index) {
+    if (marker.time > inclusiveTime) break;
+    visible.push(marker);
+  }
+  return visible;
+}
+
 export function timelineTrack(_interaction: Interaction): TimelineTrackKind { return 'actions'; }
 export function triggerAnchor(trigger: Trigger, interactions: readonly Interaction[], clipSeconds: number, seen = new Set<string>()): { time: number; unresolved: boolean } {
   if (trigger.kind === 'at') return numeric(trigger.t) === null ? { time: 0, unresolved: true } : { time: clamp(numeric(trigger.t)!, 0, clipSeconds), unresolved: false };
