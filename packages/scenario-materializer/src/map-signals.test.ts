@@ -17,9 +17,9 @@ describe('map-wide ambient physical controls', () => {
       },
     } as any;
     const controlled = topologyWithMapSpeedLimits(topology, catalog);
-    expect(controlled.lanes['17:0:-1'].speedLimitKph).toBeCloseTo(40.2336, 6);
-    expect(controlled.lanes['18:0:-1'].speedLimitKph).toBe(50);
-    expect(topology.lanes['17:0:-1'].speedLimitKph).toBe(64);
+    expect(controlled.lanes['17:0:-1']!.speedLimitKph).toBeCloseTo(40.2336, 6);
+    expect(controlled.lanes['18:0:-1']!.speedLimitKph).toBe(50);
+    expect(topology.lanes['17:0:-1']!.speedLimitKph).toBe(64);
   });
 
   it('binds every OpenDRIVE junction head to its exact approach stop line', () => {
