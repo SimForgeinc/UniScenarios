@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
 import type { MapSignalCatalog } from '@uniscenarios/scenario-materializer';
 import type { MapSignalPlan, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { TimelineDock, submitTimelineSignalClip } from './TimelineDock';
+import { mapSignalPlanBindingIssue, TimelineDock, submitTimelineSignalClip } from './TimelineDock';
 
 const plan: MapSignalPlan = {
   id: 'signals-447', version: 1,
@@ -28,24 +28,25 @@ const catalog: MapSignalCatalog = {
 
 describe('controller-level signal timeline UI', () => {
   it('renders a signal group and an indication-colored, resizable phase clip', () => {
-    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template } } as never} editorState={null} session={session as never} />);
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" />);
     expect(markup).toContain('data-testid="timeline-signal-row-signals-447"');
     expect(markup).toContain('Intersection 447');
     expect(markup).toContain('data-testid="timeline-signal-clip-phase_1"');
     expect(markup).toContain('data-indication="green"');
-    expect(markup).toContain('aria-label="Resize signal phase start"');
-    expect(markup).toContain('aria-label="Resize signal phase end"');
+    expect(markup).toContain('aria-label="Move green signal phase"');
+    expect(markup).toContain('aria-label="Resize green signal phase start"');
+    expect(markup).toContain('aria-label="Resize green signal phase end"');
   });
 
   it('offers explicit controller authoring for a selected physical orb', () => {
-    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" />);
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" />);
     expect(markup).toContain('data-testid="selected-signal-head"');
     expect(markup).toContain('Intersection 447');
     expect(markup).toContain('data-testid="timeline-add-signal-controller"');
   });
 
   it('fails visibly and disables authoring when exact runtime ownership is unresolved', () => {
-    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalResolved={false} />);
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalResolved={false} />);
     expect(markup).toContain('Unbound signal — exact controller ownership is unavailable');
     expect(markup).toContain('disabled="" data-testid="timeline-add-signal-controller"');
   });
@@ -72,5 +73,22 @@ describe('controller-level signal timeline UI', () => {
     });
     expect(result).toEqual({ ok: false, message: expect.stringContaining('overlaps “phase_1”') });
     expect(replaceMapSignalPlan).not.toHaveBeenCalled();
+  });
+
+  it('adds a pending first plan and clip in one document mutation', () => {
+    const addMapSignalPlan = vi.fn();
+    const result = submitTimelineSignalClip({ data: { ...template, mapSignalPlans: [] }, addMapSignalPlan } as never, {
+      planId: plan.id, clipId: 'phase_1', startS: 2, endS: 6,
+      reference: { controllerId: 'ctrl', headId: 'head' }, indication: 'green', pendingPlan: { ...plan, clips: [] },
+    });
+    expect(result.ok).toBe(true);
+    expect(addMapSignalPlan).toHaveBeenCalledTimes(1);
+    expect(addMapSignalPlan).toHaveBeenCalledWith(expect.objectContaining({ clips: [expect.objectContaining({ id: 'phase_1' })] }));
+  });
+
+  it('fails closed on stale map, digest, and physical ownership bindings', () => {
+    expect(mapSignalPlanBindingIssue(plan, 'other-map', 'digest', catalog)).toContain('map changed');
+    expect(mapSignalPlanBindingIssue(plan, 'yale', 'other-digest', catalog)).toContain('topology changed');
+    expect(mapSignalPlanBindingIssue(plan, 'yale', 'digest', { ...catalog, controllers: [] })).toContain('resolved 0 times');
   });
 });

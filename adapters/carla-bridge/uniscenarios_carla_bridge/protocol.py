@@ -68,8 +68,8 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes) -> None:
         signals = frame.get("signals")
         if not isinstance(actors, dict) or set(actors) != known_actors:
             _fail(f"{path}.actors", "must contain the exact actor binding closure")
-        if not isinstance(signals, dict) or not set(signals).issubset(known_signals):
-            _fail(f"{path}.signals", "contains an unbound signal")
+        if not isinstance(signals, dict) or set(signals) != known_signals:
+            _fail(f"{path}.signals", "must contain the exact signal binding closure")
         for actor_id, state in actors.items():
             actor_path = f"{path}.actors.{actor_id}"
             if not isinstance(state, dict) or state.get("lifecycle") not in LIFECYCLE:
@@ -78,8 +78,10 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes) -> None:
             prior = previous_lifecycle.get(actor_id)
             if prior == "destroy" and lifecycle != "destroy":
                 _fail(actor_path, "cannot become active after destroy")
-            if index == 0 and lifecycle == "active":
+            if prior is None and lifecycle != "spawn":
                 _fail(actor_path, "first presence must use spawn")
+            if prior is not None and prior != "destroy" and lifecycle == "spawn":
+                _fail(actor_path, "spawn may occur exactly once")
             if lifecycle in {"spawn", "active"}:
                 for field in ("x", "y", "z", "headingDeg", "speedMps"):
                     _finite(f"{actor_path}.{field}", state.get(field))
@@ -91,6 +93,15 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes) -> None:
     required = job.get("requiredSemantics")
     if not isinstance(required, list) or any(not isinstance(item, str) for item in required):
         _fail("requiredSemantics", "must be an array of semantic identifiers")
+    if len(required) != len(set(required)):
+        _fail("requiredSemantics", "must not contain duplicates")
+    required_set = set(required)
+    derived = {"actor.lifecycle", "actor.trajectory", "custom.map.opendrive"}
+    if known_signals:
+        derived.add("traffic_signal.state")
+    missing = sorted(derived - required_set)
+    if missing:
+        _fail("requiredSemantics", f"missing semantics derived from the control stream: {', '.join(missing)}")
 
 
 def validate_resolved_signal_ids(job: dict[str, Any], resolved_opendrive_ids: list[str]) -> None:
@@ -101,3 +112,13 @@ def validate_resolved_signal_ids(job: dict[str, Any], resolved_opendrive_ids: li
     for source_id, target_id in job["signalBindings"].items():
         if counts.get(target_id, 0) != 1:
             _fail(f"signalBindings.{source_id}", f"OpenDRIVE id {target_id!r} resolved {counts.get(target_id, 0)} times")
+
+
+def validate_resolved_actor_ids(job: dict[str, Any], resolved_actor_binding_ids: list[str]) -> None:
+    """Require each allowlisted actor catalog binding to resolve exactly once."""
+    counts: dict[str, int] = {}
+    for binding_id in resolved_actor_binding_ids:
+        counts[binding_id] = counts.get(binding_id, 0) + 1
+    for source_id, target_id in job["actorBindings"].items():
+        if counts.get(target_id, 0) != 1:
+            _fail(f"actorBindings.{source_id}", f"catalog id {target_id!r} resolved {counts.get(target_id, 0)} times")

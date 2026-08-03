@@ -312,6 +312,10 @@ export function interactionWithTimelineRange(interaction: Interaction, range: Ti
   const start = Number(range.start.toFixed(3)); const end = Number(range.end.toFixed(3));
   return { ...interaction, trigger: { kind: 'at' as const, t: start }, until: { kind: 'at' as const, t: end } } as Interaction;
 }
+/** Only an already absolute eligibility window can be rewritten by timeline gestures. */
+export function isTimelineRangeEditable(interaction: Interaction): boolean {
+  return interaction.trigger.kind === 'at' && (!interaction.until || interaction.until.kind === 'at');
+}
 /** Compatibility helper for non-UI session tests; speed commands now render as actions. */
 export function newSpeedInteraction(actorId: string, time: number, ordinal: number): Interaction { return { id: `speed_${actorId}_${ordinal}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64), actor: actorId, trigger: { kind: 'at', t: Math.max(0, Number(time.toFixed(3))) }, verb: 'speed', target: { mode: 'absolute', valueKph: 30 }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } }; }
 export function triggerLabel(trigger: Trigger): string { if (trigger.kind === 'at') return `at ${formatNumeric(trigger.t)}s`; if (trigger.kind === 'after') return `after ${trigger.of}`; if (trigger.kind === 'when') return `when ${trigger.condition.kind}`; return `arrival ${trigger.of} ↔ ${trigger.syncWith}`; }

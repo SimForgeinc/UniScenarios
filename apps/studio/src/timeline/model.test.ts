@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Interaction, MapSignalPlan, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, triggerAnchor, type TimelineItem } from './model';
+import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, triggerAnchor, type TimelineItem } from './model';
 
 const speed: Interaction = { id: 'speed_ego', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'speed', target: { mode: 'stop' }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } };
 const item = (interaction: Interaction, resource: TimelineItem['resource'], start: number, end: number): TimelineItem => ({ interaction, actorId: interaction.actor, track: 'actions', resource, anchorTime: start, endTime: end, unresolved: false });
@@ -34,6 +34,10 @@ describe('action-only timeline projection', () => {
     expect(resized.trigger).toEqual({ kind: 'at', t: 6 });
     expect(resized.until).toEqual({ kind: 'at', t: 10 });
     expect(resized).toMatchObject({ maneuverDurationS: 3, maneuverStyle: 'assertive' });
+  });
+  it('only permits range gestures for absolute-time eligibility windows', () => {
+    expect(isTimelineRangeEditable(speed)).toBe(true);
+    expect(isTimelineRangeEditable({ ...speed, trigger: { kind: 'after', of: 'prior', event: 'end', delayS: 0 } })).toBe(false);
   });
   it('rejects overlap on longitudinal or lateral resources but allows independent overlap', () => { const existing = item(speed, 'longitudinal', 3, 5); expect(conflictingAction(item({ ...speed, id: 'other' }, 'longitudinal', 4, 6), [existing])?.interaction.id).toBe(speed.id); expect(conflictingAction(item({ ...speed, id: 'horn' }, 'horn', 4, 6), [existing])).toBeUndefined(); });
   it('uses one actions collection and hides incompatible legacy commands', () => { const lane: Interaction = { id: 'left', actor: 'ego', trigger: { kind: 'at', t: 6 }, verb: 'changeLane', target: { mode: 'relative', dk: 1 }, dynamics: { shape: 'linear', constraint: 'time', value: 2 } }; const advanced: Interaction = { id: 'exist', actor: 'ego', trigger: { kind: 'at', t: 0 }, verb: 'exist', target: { state: 'present' } }; const template = { schemaVersion: 2, roles: [{ id: 'ego', label: 'Ego', actor: { class: 'car', static: false }, kind: 'scene_absolute', pose: { position: { x: 0, y: 0, z: 0 }, headingRad: 0 } }], choreography: { clipSeconds: 20, warmupSeconds: 0, interactions: [speed, lane, advanced] }, invariants: [], variants: [] } as unknown as ScenarioTemplateV2; const [group] = buildTimelineGroups(template); expect(Object.keys(group!.tracks)).toEqual(['actions']); expect(group!.tracks.actions.map((entry) => entry.interaction.id)).toEqual(['speed_ego', 'left']); });

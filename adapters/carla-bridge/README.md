@@ -17,6 +17,8 @@ Hard gates:
 - actor catalog bindings and OpenDRIVE signal IDs must resolve exactly and once;
 - the bridge owns the only synchronous tick client and uses the declared fixed
   step;
+- world loading happens before synchronous settings are applied, and every job
+  restores settings, lights, sensors, and actors through backend cleanup;
 - every control-stream index is contiguous and its time equals `index * step`;
 - unknown features, unknown signal states, missing actors/signals, stale map
   bindings, or unsupported lifecycle transitions reject the job;
