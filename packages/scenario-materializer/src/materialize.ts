@@ -2243,10 +2243,9 @@ class Materializer {
       ? this.buildCondition(it.until.condition, scope, `${path}.until.condition`)
       : undefined;
 
-    // Studio clips are strict execution windows, not decoration. Historically
-    // an `until: at(...)` was dropped here, leaving a command active after the
-    // visible clip and allowing spatial actions to happen arbitrarily late.
-    // Preserve exact time bounds in the concrete engine contract.
+    // Studio clip bounds form a half-open trigger eligibility window. A
+    // continuous command that fires inside it completes according to its own
+    // dynamics; the window end never truncates the physical manoeuvre.
     const windowStartS = it.trigger.kind === 'at'
       ? evalNum(it.trigger.t, scope, `${path}.trigger.t`)
       : 0;
@@ -2282,6 +2281,22 @@ class Materializer {
         shape: dynamics.shape,
         constraint: dynamics.constraint,
         value: evalNum(dynamics.value, scope, `${path}.dynamics.value`),
+      };
+    };
+
+    const lateralDyn = (
+      interaction: Extract<V2Interaction, { verb: 'changeLane' | 'laneOffset' }>,
+    ): { shape: string; constraint: string; value: number } => {
+      const legacy = dyn(interaction.dynamics);
+      if (interaction.maneuverDurationS === undefined) return legacy;
+      const style = interaction.maneuverStyle ?? 'normal';
+      return {
+        // Every style remains subject to the engine's physical envelopes.
+        // Cautious eases in/out most strongly; assertive asks the bounded
+        // controller to track a more direct profile.
+        shape: style === 'cautious' ? 'sinusoidal' : style === 'assertive' ? 'linear' : 'cubic',
+        constraint: 'time',
+        value: evalNum(interaction.maneuverDurationS, scope, `${path}.maneuverDurationS`),
       };
     };
 
@@ -2358,14 +2373,14 @@ class Materializer {
         } else {
           target = { mode: 'actorLane', actorId: t.role };
         }
-        return parseInteraction({ ...base, verb: 'changeLane', target, dynamics: dyn(it.dynamics) });
+        return parseInteraction({ ...base, verb: 'changeLane', target, dynamics: lateralDyn(it) });
       }
       case 'laneOffset':
         return parseInteraction({
           ...base,
           verb: 'laneOffset',
           target: { mode: 'fraction', value: evalNum(it.target.tFrac, scope, `${path}.target.tFrac`) },
-          dynamics: dyn(it.dynamics),
+          dynamics: lateralDyn(it),
         });
       case 'route': {
         const t = it.target;

@@ -123,7 +123,11 @@ export interface ActorRuntime {
   speedMps: number;
   accelMps2: number;
   lateralOffsetM: number;
+  /** Stable lane-relative offset retained after a completed laneOffset action. */
+  lateralRestOffsetM?: number;
   lateralRateMps: number;
+  /** Lateral acceleration retained so the fixed-step controller can bound jerk. */
+  lateralAccelMps2?: number;
 
   position: Vec2;
   headingRad: number;

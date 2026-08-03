@@ -38,6 +38,7 @@ import {
   resolvePhysicsConfig,
   isPedestrianLikeKind,
   isRoadActorKind,
+  type Dynamics,
   type Interaction,
   type SimActor,
   type SimScenarioInput,
@@ -215,6 +216,8 @@ interface Plan {
   routeS: number;
   lateralOffset: number;
   lateralRate: number;
+  lateralAccel: number;
+  lateralComplete: boolean;
   position: Vec2;
   heading: number;
   requiredDecel: number;
@@ -273,8 +276,9 @@ class Simulation {
   private readonly attachedPropsByActor = new Map<string, StaticProp[]>();
   private readonly attachedOccluderIds: ReadonlySet<string>;
   private readonly events: SimEvent[] = [];
-  /** Windows already released, so their terminal tick is idempotent. */
+  /** Non-lateral legacy windows already released on their terminal tick. */
   private readonly releasedWindows = new Set<string>();
+  private readonly lateralClampDiagnostics = new Set<string>();
   private readonly issues: SimIssue[] = [];
   private readonly tracks = new Map<string, ActorTrack>();
   private readonly signalTracks = new Map<string, SignalTrack>();
@@ -523,7 +527,9 @@ class Simulation {
       speedMps: spec.static ? 0 : spec.initial.speedMps,
       accelMps2: 0,
       lateralOffsetM: lateral,
+      lateralRestOffsetM: lateral,
       lateralRateMps: 0,
+      lateralAccelMps2: 0,
       position: posePoint,
       headingRad: normalizeAngle(spec.initial.pose.headingRad),
       present: spec.presentAtStart,
@@ -620,9 +626,6 @@ class Simulation {
       this.updateDoorTransitions(t);
       const collisions = this.detectCollisions(t);
       if (t >= 0) {
-        // Close prior commands first so after(end, delay=0) is eligible on the
-        // exact shared endpoint. The second pass below handles a command that
-        // itself first fires on its end tick.
         this.evaluateWindowEnds(t);
         this.evaluateTriggers(t, collisions);
         this.evaluateUntil(t, collisions);
@@ -891,8 +894,12 @@ class Simulation {
         if (!actor || actor.static || actor.crashDisabledAtS != null) continue;
         actor.crashDisabledAtS = contact.t;
         actor.crashDisabledReason = `material-collision:${otherId}`;
+        if (actor.latCmd) {
+          this.abortLateral(actor.latCmd.interactionId, actorId, contact.t, 'collision');
+        }
         actor.longCmd = null;
         actor.latCmd = null;
+        actor.lateralAccelMps2 = 0;
         actor.untilByAxis.clear();
         this.events.push({ t: contact.t, kind: 'crash_disabled', actorId, otherId, reason: 'material-collision' });
       }
@@ -966,6 +973,20 @@ class Simulation {
       if (tr.status !== 'pending') continue;
       const window = tr.interaction.window;
       if (window && t < window.startS - 1e-9) continue;
+      // Clip bounds form a half-open trigger eligibility window. Once fired,
+      // the command's own dynamics—not the clip end—own its completion.
+      if (window && t >= window.endS - 1e-9) {
+        tr.status = 'skipped';
+        this.events.push({
+          t,
+          kind: 'trigger_skipped',
+          interactionId: tr.interaction.id,
+          actorId: tr.interaction.actorId,
+          reason: 'window_elapsed',
+        });
+        this.metrics.triggerNeverFired.push(tr.interaction.id);
+        continue;
+      }
       const verdict = shouldFire(ctx, tr, this.triggerById);
       if (verdict.skip) {
         tr.status = 'skipped';
@@ -986,20 +1007,7 @@ class Simulation {
       const routeReady = tr.interaction.verb !== 'route'
         || !window
         || this.routeCommitReady(tr.interaction);
-      if (!verdict.fire || !routeReady) {
-        if (window && t >= window.endS - 1e-9) {
-          tr.status = 'skipped';
-          this.events.push({
-            t,
-            kind: 'trigger_skipped',
-            interactionId: tr.interaction.id,
-            actorId: tr.interaction.actorId,
-            reason: 'window_elapsed',
-          });
-          this.metrics.triggerNeverFired.push(tr.interaction.id);
-        }
-        continue;
-      }
+      if (!verdict.fire || !routeReady) continue;
       const targetActor = this.byId.get(tr.interaction.actorId);
       // A material crash disables every command capable of moving or
       // respawning the body, but evidence-only state changes (lights, horn,
@@ -1075,20 +1083,22 @@ class Simulation {
     }
   }
 
+  /**
+   * Existing non-lateral commands retain their authored release window.
+   * Lateral clips are different: their end is only the exclusive last instant
+   * at which a manoeuvre may begin, never a request to truncate body motion.
+   */
   private evaluateWindowEnds(t: number): void {
     for (const tr of this.triggers) {
       const window = tr.interaction.window;
       if (tr.status !== 'fired' || !window || t < window.endS - 1e-9 || this.releasedWindows.has(tr.interaction.id)) continue;
+      if (axisOf(tr.interaction) === 'lateral') continue;
       this.releasedWindows.add(tr.interaction.id);
       tr.endedAt ??= t;
       const actor = this.byId.get(tr.interaction.actorId);
       if (!actor) continue;
       const axis = axisOf(tr.interaction);
-      const owner = axis === 'longitudinal'
-        ? actor.longCmd?.interactionId
-        : axis === 'lateral'
-          ? actor.latCmd?.interactionId
-          : undefined;
+      const owner = axis === 'longitudinal' ? actor.longCmd?.interactionId : undefined;
       if (owner === tr.interaction.id) this.releaseAxis(actor, axis, t, tr.interaction.id, 'window');
     }
   }
@@ -1100,11 +1110,25 @@ class Simulation {
     interactionId: string,
     reason: 'until' | 'complete' | 'window',
   ): void {
+    if (axis === 'lateral' && reason === 'until' && a.latCmd?.interactionId === interactionId) {
+      this.abortLateral(interactionId, a.id, t, reason);
+    }
     if (axis === 'longitudinal') a.longCmd = null;
     else if (axis === 'lateral') a.latCmd = null;
     const trigger = this.triggerById.get(interactionId);
     if (trigger) trigger.endedAt ??= t;
     this.events.push({ t, kind: 'released', actorId: a.id, axis, interactionId, reason });
+  }
+
+  private abortLateral(
+    interactionId: string,
+    actorId: string,
+    t: number,
+    reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'clip_end',
+  ): void {
+    const trigger = this.triggerById.get(interactionId);
+    if (trigger) trigger.endedAt ??= t;
+    this.events.push({ t, kind: 'interaction_aborted', interactionId, actorId, reason });
   }
 
   /* ----------------------------------------------------- verb → controller */
@@ -1157,13 +1181,13 @@ class Simulation {
       }
       case 'changeLane': {
         const cmd = this.startLaneChange(a, it, t);
-        if (cmd) a.latCmd = cmd;
+        a.latCmd = cmd;
         break;
       }
       case 'laneOffset': {
         const width = a.route.widthAt(a.routeS);
         const to = it.target.mode === 'meters' ? it.target.value : it.target.value * width;
-        const duration = transitionDuration(it.dynamics, to - a.lateralOffsetM, Math.max(a.speedMps, 0.1));
+        const duration = this.boundedLateralDuration(a, it.id, it.dynamics, to - a.lateralOffsetM);
         const cmd: LateralCommand = {
           kind: 'laneOffset',
           interactionId: it.id,
@@ -1235,6 +1259,9 @@ class Simulation {
     const previous =
       axis === 'longitudinal' ? a.longCmd?.interactionId : axis === 'lateral' ? a.latCmd?.interactionId : undefined;
     if (previous !== undefined && previous !== it.id) {
+      if (axis === 'lateral') {
+        this.abortLateral(previous, a.id, t, 'preempted');
+      }
       this.events.push({
         t,
         kind: 'preemption',
@@ -1433,11 +1460,12 @@ class Simulation {
           'warning',
         ),
       );
+      this.abortLateral(it.id, a.id, t, 'rejected');
       return null;
     }
 
     const to = a.lateralOffsetM + retarget.separationM;
-    const duration = transitionDuration(it.dynamics, retarget.separationM, Math.max(a.speedMps, 0.1));
+    const duration = this.boundedLateralDuration(a, it.id, it.dynamics, retarget.separationM);
     return {
       kind: 'changeLane',
       interactionId: it.id,
@@ -1451,6 +1479,49 @@ class Simulation {
       side,
       done: false,
     };
+  }
+
+  private boundedLateralDuration(
+    actor: ActorRuntime,
+    interactionId: string,
+    dynamics: Dynamics,
+    displacementM: number,
+  ): number {
+    const requestedS = transitionDuration(dynamics, displacementM, Math.max(actor.speedMps, 0.1));
+    const distanceM = Math.abs(displacementM);
+    if (distanceM <= 1e-6) return requestedS;
+    const limits = limitsFor(actor);
+    // Cubic smoothstep bounds. Linear/step inputs use the same conservative
+    // envelope because the fixed-step jerk limiter rounds their discontinuous
+    // endpoints rather than allowing a physical snap.
+    const peaks = dynamics.shape === 'sinusoidal'
+      ? { rate: Math.PI / 2, accel: Math.PI ** 2 / 2, jerk: Math.PI ** 3 / 2 }
+      : { rate: 1.5, accel: 6, jerk: 12 };
+    const requiredS = Math.max(
+      distanceM * peaks.rate / Math.max(limits.lateralRateMax, 1e-6),
+      Math.sqrt(distanceM * peaks.accel / Math.max(limits.lateralAccelMax, 1e-6)),
+      Math.cbrt(distanceM * peaks.jerk / Math.max(limits.lateralJerkMax, 1e-6)),
+    );
+    const effectiveS = Math.max(requestedS, requiredS);
+    if (effectiveS > requestedS + 1e-6 && !this.lateralClampDiagnostics.has(interactionId)) {
+      this.lateralClampDiagnostics.add(interactionId);
+      this.issues.push(issue(
+        'lateral_duration_clamped',
+        `interactions.${interactionId}.dynamics.value`,
+        `requested ${requestedS.toFixed(2)} s lateral manoeuvre is infeasible for ${actor.kind}; clamped to ${effectiveS.toFixed(2)} s`,
+        {
+          actorId: actor.id,
+          requestedDurationS: requestedS,
+          effectiveDurationS: effectiveS,
+          displacementM,
+          lateralRateMaxMps: limits.lateralRateMax,
+          lateralAccelMaxMps2: limits.lateralAccelMax,
+          lateralJerkMaxMps3: limits.lateralJerkMax,
+        },
+        'warning',
+      ));
+    }
+    return effectiveS;
   }
 
   /* ------------------------------------------------------------- stepping */
@@ -1594,6 +1665,8 @@ class Simulation {
       routeS: a.routeS,
       lateralOffset: a.lateralOffsetM,
       lateralRate: a.lateralRateMps,
+      lateralAccel: a.lateralAccelMps2 ?? 0,
+      lateralComplete: false,
       position: a.position,
       heading: a.headingRad,
       requiredDecel: 0,
@@ -1607,6 +1680,7 @@ class Simulation {
       plan.routeS = a.routeS;
       plan.lateralOffset = a.lateralOffsetM;
       plan.lateralRate = 0;
+      plan.lateralAccel = 0;
       plan.position = a.position;
       plan.heading = a.headingRad;
       return plan;
@@ -1635,6 +1709,7 @@ class Simulation {
         plan.routeS = projected.s;
         plan.lateralOffset = a.route.lateralOffsetAt(projected.s, plan.position);
         plan.lateralRate = result.state.lateralVelocityMps;
+        plan.lateralAccel = (result.state.lateralVelocityMps - a.lateralRateMps) / this.dt;
         this.physicsTelemetry.set(a.id, result.telemetry);
       }
       return plan;
@@ -1708,6 +1783,8 @@ class Simulation {
     const lat = lateralStep(a, t, this.dt);
     plan.lateralOffset = lat.offset;
     plan.lateralRate = lat.rate;
+    plan.lateralAccel = lat.accel;
+    plan.lateralComplete = lat.complete;
     if (a.latCmd?.kind === 'changeLane' && lat.complete && !a.latCmd.done) {
       plan.swap = a.latCmd.pending ?? null;
     }
@@ -1798,6 +1875,7 @@ class Simulation {
         plan.routeS = a.routeS;
         plan.lateralOffset = a.lateralOffsetM;
         plan.lateralRate = 0;
+        plan.lateralAccel = 0;
         plan.position = a.position;
         plan.heading = a.headingRad;
         plan.retire = true;
@@ -1816,6 +1894,7 @@ class Simulation {
       plan.routeS = projected.s;
       plan.lateralOffset = projectedOffset;
       plan.lateralRate = result.state.lateralVelocityMps;
+      plan.lateralAccel = (result.state.lateralVelocityMps - a.lateralRateMps) / this.dt;
       plan.position = { x: result.state.x, y: result.state.y };
       plan.heading = result.state.yawRad;
       this.physicsTelemetry.set(a.id, result.telemetry);
@@ -1836,6 +1915,7 @@ class Simulation {
       plan.accel = -a.speedMps / this.dt;
       plan.speed = 0;
       plan.lateralRate = 0;
+      plan.lateralAccel = 0;
       plan.retire = true;
       // The force solver can cross the terminal station within its final
       // synchronized tick. Retiring the actor must snap the rendered body to
@@ -1875,6 +1955,7 @@ class Simulation {
       a.routeS = plan.routeS;
       a.lateralOffsetM = plan.lateralOffset;
       a.lateralRateMps = plan.lateralRate;
+      a.lateralAccelMps2 = plan.lateralAccel;
       a.position = plan.position;
       a.headingRad = plan.heading;
       if (t >= 0) a.requiredDecelMax = Math.max(a.requiredDecelMax, plan.requiredDecel);
@@ -1899,6 +1980,7 @@ class Simulation {
         a.route = plan.swap.route;
         a.routeS = projected.s;
         a.lateralOffsetM = a.route.lateralOffsetAt(projected.s, completedPosition);
+        a.lateralRestOffsetM = 0;
         a.position = a.route.pointWithOffset(a.routeS, a.lateralOffsetM);
         this.events.push({
           t,
@@ -1919,7 +2001,7 @@ class Simulation {
               firedAt: t,
               from: a.lateralOffsetM,
               to: a.lateralOffsetM + next.separationM,
-              duration: transitionDuration(cmd.dynamics, next.separationM, Math.max(a.speedMps, 0.1)),
+              duration: this.boundedLateralDuration(a, cmd.interactionId, cmd.dynamics, next.separationM),
               pending: { route: next.route, s: next.s, separationM: next.separationM, targetRsl: next.targetRsl },
               remaining: cmd.remaining - 1,
               done: false,
@@ -1928,6 +2010,20 @@ class Simulation {
           }
         }
         a.latCmd = null;
+        a.lateralAccelMps2 = 0;
+        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id });
+        this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
+      }
+
+      if (plan.lateralComplete && a.latCmd?.kind === 'laneOffset') {
+        const cmd = a.latCmd;
+        a.lateralOffsetM = cmd.to;
+        a.lateralRestOffsetM = cmd.to;
+        a.position = a.route.pointWithOffset(a.routeS, cmd.to);
+        a.lateralRateMps = 0;
+        a.latCmd = null;
+        a.lateralAccelMps2 = 0;
+        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id });
         this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
       }
 
@@ -2056,6 +2152,12 @@ class Simulation {
           reason: 'clip_ended',
         });
       }
+    }
+    for (const actor of this.actors) {
+      if (!actor.latCmd) continue;
+      this.abortLateral(actor.latCmd.interactionId, actor.id, this.resolvedInput.clipSeconds, 'clip_end');
+      actor.latCmd = null;
+      actor.lateralAccelMps2 = 0;
     }
     this.metrics.triggerNeverFired.sort();
   }

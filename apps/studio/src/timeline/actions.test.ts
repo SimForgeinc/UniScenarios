@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionsForActor, defaultSpeedKph } from './actions';
+import { actionsForActor, defaultSpeedKph, interactionForAction } from './actions';
 
 describe('actor-specific action catalog', () => {
   it('offers vehicle controls without pedestrian commands', () => {
@@ -23,5 +23,16 @@ describe('actor-specific action catalog', () => {
     expect(defaultSpeedKph('pedestrian')).toBe(5);
     expect(defaultSpeedKph('bicycle')).toBe(18);
     expect(defaultSpeedKph('static_object')).toBe(0);
+  });
+
+  it('stores lateral maneuver duration separately from the eligibility window', () => {
+    const definition = actionsForActor('car').find((action) => action.id === 'pull_over')!;
+    const interaction = interactionForAction({ ...definition, durationS: 1 }, 'ego', 2, 1, { durationS: 6, style: 'cautious' });
+    expect(interaction.until).toEqual({ kind: 'at', t: 3 });
+    expect(interaction).toMatchObject({
+      maneuverDurationS: 6,
+      maneuverStyle: 'cautious',
+      dynamics: { constraint: 'time', value: 6 },
+    });
   });
 });

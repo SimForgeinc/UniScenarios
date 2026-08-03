@@ -128,8 +128,11 @@ describe('cut-in composition', () => {
       preemptedInteractionId: 'drift',
     });
     const track = trace.ticks.actors['challenger']!;
-    // -0.25 of a 3.5 m lane = -0.875 m, relative to the lane centreline at -3.5.
-    expect(track.y[track.y.length - 1]!).toBeCloseTo(-3.5 - 0.875, 1);
+    const completed = trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === 'swerve-back');
+    const completedIndex = trace.ticks.t.findIndex((time) => time >= completed!.t - 1e-9);
+    // At completion the actor is -0.25 of a 3.5 m lane from its centre. Later
+    // world Y may change as that retained offset follows curved lane geometry.
+    expect(track.y[completedIndex]!).toBeCloseTo(-3.5 - 0.875, 1);
   });
 
   it('aborts an in-progress true lane change back to its source route', () => {

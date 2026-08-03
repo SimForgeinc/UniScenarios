@@ -37,6 +37,16 @@ import { validateTemplate } from '../validate/index.js';
 import { interaction, ltapTemplate, ltapTemplateInput } from './v2-fixtures.js';
 
 describe('ScenarioTemplate v2', () => {
+  it('round-trips lateral maneuver duration and style independently of clip timing', () => {
+    const parsed = InteractionSchema.parse({
+      id: 'pull-over', actor: 'ego', trigger: { kind: 'at', t: 1 }, until: { kind: 'at', t: 2 },
+      verb: 'laneOffset', target: { tFrac: -0.8, reference: 'lane_center' },
+      dynamics: { shape: 'sinusoidal', constraint: 'time', value: 6 },
+      maneuverDurationS: 6, maneuverStyle: 'cautious',
+    });
+    expect(parsed).toMatchObject({ maneuverDurationS: 6, maneuverStyle: 'cautious' });
+  });
+
   it('accepts portable executable controls and rejects indication/kind mismatches', () => {
     const laneControl = {
       id: 'reversible-west', kind: 'lane_control' as const,

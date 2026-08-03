@@ -140,7 +140,7 @@ describe('after and until', () => {
 describe('strict interaction windows', () => {
   const actor = () => vehicle(graph, { id: 'ego', s: 20, speedMps: 12, cruiseSpeedMps: 12 });
 
-  it('waits for the inclusive start, fires at an exact endpoint, and releases at the end', () => {
+  it('waits for the inclusive start and releases a non-lateral command at the end', () => {
     const input = scenario(graph, {
       clipSeconds: 8,
       actors: [actor()],
@@ -177,7 +177,7 @@ describe('strict interaction windows', () => {
     expect(trace.metrics.triggerNeverFired).toContain('missed');
   });
 
-  it('allows an exact end-point trigger', () => {
+  it('treats the exact end point as outside the half-open eligibility window', () => {
     const input = scenario(graph, {
       clipSeconds: 7, actors: [actor()], interactions: [{
         id: 'endpoint', actorId: 'ego', trigger: { kind: 'at', t: 5 }, window: { startS: 3, endS: 5 },
@@ -185,7 +185,7 @@ describe('strict interaction windows', () => {
       }],
     });
     const { trace } = runSimulation(input, { graph });
-    expect(trace.events).toContainEqual(expect.objectContaining({ kind: 'trigger_fired', interactionId: 'endpoint', t: 5 }));
+    expect(trace.events).toContainEqual(expect.objectContaining({ kind: 'trigger_skipped', interactionId: 'endpoint', t: 5, reason: 'window_elapsed' }));
   });
 
   it('resolves incompatible same-axis actions deterministically by sorted id while independent state keys stack', () => {

@@ -196,6 +196,9 @@ describe('dynamic-v1 class-native actors', () => {
           }),
         ],
         interactions: [{
+          id: 'active-pull-over', actorId: 'car', trigger: { kind: 'at', t: 0 }, verb: 'laneOffset',
+          target: { mode: 'fraction', value: -0.1 }, dynamics: { shape: 'sinusoidal', constraint: 'time', value: 6 },
+        }, {
           id: 'resume-after-impact', actorId: 'car', trigger: { kind: 'at', t: 4 }, verb: 'speed',
           target: { mode: 'absolute', value: 20 }, dynamics: { shape: 'step', constraint: 'time', value: 0.1 },
         }],
@@ -205,6 +208,9 @@ describe('dynamic-v1 class-native actors', () => {
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.events.some((event) => event.kind === 'collision')).toBe(true);
     expect(trace.events.some((event) => event.kind === 'crash_disabled' && event.actorId === 'car')).toBe(true);
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: 'interaction_aborted', interactionId: 'active-pull-over', actorId: 'car', reason: 'collision',
+    }));
     expect(trace.header.physics.crashes?.car).toMatchObject({ reason: 'material-collision', otherId: 'obstacle' });
     expect(trace.events.some((event) => event.kind === 'trigger_skipped' && event.interactionId === 'resume-after-impact' && event.reason === 'actor-crash-disabled')).toBe(true);
     expect(Math.max(...trace.ticks.actors.car!.physics!.collisionImpulseNs)).toBeGreaterThan(0);

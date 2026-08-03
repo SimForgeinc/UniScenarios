@@ -284,6 +284,15 @@ export const DynamicsSchema = z.strictObject({
   value: NumberOrExprSchema,
 });
 
+/** Driver intent used to shape a lateral manoeuvre independently of its clip. */
+export const MANEUVER_STYLES = ['cautious', 'normal', 'assertive'] as const;
+export const ManeuverStyleSchema = z.enum(MANEUVER_STYLES);
+const lateralManeuverFields = {
+  /** Physical target duration; the timeline clip remains only an eligibility window. */
+  maneuverDurationS: NumberOrExprSchema.optional(),
+  maneuverStyle: ManeuverStyleSchema.optional(),
+};
+
 /** What a `speed` interaction aims for. */
 export const SpeedTargetSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('absolute'), valueKph: NumberOrExprSchema }),
@@ -383,6 +392,7 @@ export const ChangeLaneInteractionSchema = z.strictObject({
   verb: z.literal('changeLane'),
   target: LaneTargetSchema,
   dynamics: DynamicsSchema.optional(),
+  ...lateralManeuverFields,
 });
 
 /** Lateral: drift, encroachment, partial blockage, edge-riding. */
@@ -391,6 +401,7 @@ export const LaneOffsetInteractionSchema = z.strictObject({
   verb: z.literal('laneOffset'),
   target: LaneOffsetTargetSchema,
   dynamics: DynamicsSchema.optional(),
+  ...lateralManeuverFields,
 });
 
 /** Topology: turns, paths, crossings, jaywalk polylines. */

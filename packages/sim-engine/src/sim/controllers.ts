@@ -53,6 +53,7 @@ export interface MotionLimits {
   readonly brakeHard: number;
   readonly lateralRateMax: number;
   readonly lateralAccelMax: number;
+  readonly lateralJerkMax: number;
 }
 
 export const VEHICLE_LIMITS: MotionLimits = {
@@ -61,6 +62,7 @@ export const VEHICLE_LIMITS: MotionLimits = {
   brakeHard: 8.0,
   lateralRateMax: 2.5,
   lateralAccelMax: 3.0,
+  lateralJerkMax: 6.0,
 };
 
 export const PEDESTRIAN_LIMITS: MotionLimits = {
@@ -69,6 +71,7 @@ export const PEDESTRIAN_LIMITS: MotionLimits = {
   brakeHard: 3.0,
   lateralRateMax: 1.0,
   lateralAccelMax: 2.0,
+  lateralJerkMax: 4.0,
 };
 
 /** Per-class envelopes. Generic `vehicle` keeps the original limits so legacy
@@ -82,6 +85,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 6,
     lateralRateMax: 1.25,
     lateralAccelMax: 1.5,
+    lateralJerkMax: 2.5,
   },
   bus: {
     accelMax: 1.2,
@@ -89,6 +93,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 5.5,
     lateralRateMax: 1.1,
     lateralAccelMax: 1.3,
+    lateralJerkMax: 2.2,
   },
   van: {
     accelMax: 2.4,
@@ -96,6 +101,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 7,
     lateralRateMax: 2,
     lateralAccelMax: 2.4,
+    lateralJerkMax: 5,
   },
   motorcycle: {
     accelMax: 4,
@@ -103,6 +109,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 9,
     lateralRateMax: 3,
     lateralAccelMax: 4,
+    lateralJerkMax: 8,
   },
   bicycle: {
     accelMax: 1.1,
@@ -110,6 +117,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 3.5,
     lateralRateMax: 1.2,
     lateralAccelMax: 2,
+    lateralJerkMax: 4,
   },
   pedestrian: PEDESTRIAN_LIMITS,
   scooter: {
@@ -118,6 +126,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 4,
     lateralRateMax: 1.5,
     lateralAccelMax: 2.5,
+    lateralJerkMax: 5,
   },
   animal: {
     accelMax: 2,
@@ -125,6 +134,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 4,
     lateralRateMax: 1.5,
     lateralAccelMax: 3,
+    lateralJerkMax: 6,
   },
   static_object: {
     accelMax: 0,
@@ -132,6 +142,7 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     brakeHard: 0,
     lateralRateMax: 0,
     lateralAccelMax: 0,
+    lateralJerkMax: 0,
   },
 };
 
@@ -346,10 +357,10 @@ export function lateralStep(
   a: ActorRuntime,
   t: number,
   dt: number,
-): { offset: number; rate: number; complete: boolean } {
+): { offset: number; rate: number; accel: number; complete: boolean } {
   const lim = limitsFor(a);
   const cmd = a.latCmd;
-  const target = cmd ? cmd.to : 0;
+  const target = cmd ? cmd.to : (a.lateralRestOffsetM ?? 0);
   let desired: number;
   let complete = false;
   if (cmd) {
@@ -362,10 +373,31 @@ export function lateralStep(
   }
   const maxStep = lim.lateralRateMax * dt;
   const delta = clamp(desired - a.lateralOffsetM, -maxStep, maxStep);
-  const rawRate = delta / dt;
-  const maxRateChange = lim.lateralAccelMax * dt;
-  const rate = clamp(rawRate, a.lateralRateMps - maxRateChange, a.lateralRateMps + maxRateChange);
-  return { offset: a.lateralOffsetM + rate * dt, rate, complete };
+  // Once the authored profile reaches its target, switch to a critically
+  // damped terminal controller. Dividing the remaining error by one tick
+  // creates a bang-bang limit cycle under jerk bounds and can leave an actor
+  // visibly offset forever.
+  const rawRate = complete
+    ? clamp((target - a.lateralOffsetM) * 2, -lim.lateralRateMax, lim.lateralRateMax)
+    : delta / dt;
+  const requestedAccel = clamp(
+    (rawRate - a.lateralRateMps) / dt,
+    -lim.lateralAccelMax,
+    lim.lateralAccelMax,
+  );
+  const maxAccelChange = lim.lateralJerkMax * dt;
+  const accel = clamp(
+    requestedAccel,
+    (a.lateralAccelMps2 ?? 0) - maxAccelChange,
+    (a.lateralAccelMps2 ?? 0) + maxAccelChange,
+  );
+  const rate = clamp(a.lateralRateMps + accel * dt, -lim.lateralRateMax, lim.lateralRateMax);
+  const offset = a.lateralOffsetM + rate * dt;
+  // A duration is a target schedule, not permission to snap. If physical
+  // rate/acceleration limits leave the body behind, completion waits until the
+  // requested offset is actually reached.
+  complete = complete && Math.abs(offset - target) <= 0.005 && Math.abs(rate) <= 0.02;
+  return { offset, rate, accel, complete };
 }
 
 /** Heading including the body slip implied by lateral motion. */

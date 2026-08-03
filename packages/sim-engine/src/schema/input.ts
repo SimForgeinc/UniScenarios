@@ -433,9 +433,9 @@ export const interactionSchema = z.intersection(
     actorId: idSchema,
     trigger: triggerSchema,
     /**
-     * Inclusive editor eligibility window. The trigger is not evaluated before
-     * `startS`; if it has not fired on the `endS` tick it is permanently
-     * skipped. A command that does fire is released no later than `endS`.
+     * Half-open editor eligibility window `[startS, endS)`. The trigger is not
+     * evaluated before `startS`; at `endS` an unfired interaction is skipped.
+     * Once fired, the command's own dynamics determine completion.
      */
     window: z.object({ startS: finite, endS: finite }).refine(
       (value) => value.startS <= value.endS,
