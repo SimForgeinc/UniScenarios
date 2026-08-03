@@ -71,8 +71,8 @@ import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { simulationClassFor, type ActorRecord } from './editor/document';
 import {
+  routesForAuthoringPreview,
   routesFromSimulation,
-  routesFromTemplate,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
 
@@ -399,11 +399,16 @@ export function App(): JSX.Element {
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
-    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
-    const routes = concrete
-      ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
-      : routesFromTemplate(editorController.doc.data, editorController.laneIndex);
+    const concretePlayback = playbackBundle ?? authoredPlayback;
+    const routes = concretePlayback
+      ? routesFromSimulation(concretePlayback.instance.input, editorController.laneIndex, concretePlayback.trace, authoredColors)
+      : routesForAuthoringPreview(
+          editorController.doc.data,
+          editorController.laneIndex,
+          ambientPreview?.instance.input,
+          ambientPreview?.trace,
+        );
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
     renderer.group.visible = viewSettings.routes.visible

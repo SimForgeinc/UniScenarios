@@ -164,6 +164,24 @@ export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneInde
   }).sort((a, b) => a.actorId.localeCompare(b.actorId));
 }
 
+/**
+ * Compose the authoring view without waiting for background materialization.
+ * Authored routes always come from the live document; the warmed simulation is
+ * used only for its persistent ambient population.
+ */
+export function routesForAuthoringPreview(
+  template: ScenarioTemplateV2,
+  index: LaneIndex,
+  ambientInput?: Pick<SimScenarioInput, 'actors' | 'interactions'>,
+  ambientTrace?: SceneTrace,
+): VehicleRouteOverlay[] {
+  const authored = routesFromTemplate(template, index);
+  const ambient = ambientInput
+    ? routesFromSimulation(ambientInput, index, ambientTrace).filter((route) => route.ambient)
+    : [];
+  return [...authored, ...ambient].sort((a, b) => a.actorId.localeCompare(b.actorId));
+}
+
 function pushSegment(target: number[], a: RoutePoint, b: RoutePoint, y: number): void {
   target.push(a.x, y, a.z, b.x, y, b.z);
 }
