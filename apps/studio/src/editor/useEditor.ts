@@ -3,7 +3,7 @@
  *
  * One hook per mounted map. It owns the async part of arming the editor — the
  * lane index (a fetch plus a bin, independent of the viewer) and the scenario
- * document (a `localStorage` read) — and tears both down when the map changes,
+ * document — and tears both down when the map changes,
  * so nothing from the previous map can write into the next one's scenario.
  *
  * State reaches components through `useSyncExternalStore`, which is exactly the
@@ -29,6 +29,8 @@ export interface UseEditorOptions {
   sampleHeight: ((x: number, z: number) => number | null) | null;
   /** Element containing the canvas; input is bound here (capture phase). */
   hostRef: RefObject<HTMLElement | null>;
+  /** Start this map mount from a clean draft rather than its resumable autosave. */
+  startBlank?: boolean;
 }
 
 export interface UseEditorResult {
@@ -58,6 +60,7 @@ export function useEditor({
   map,
   sampleHeight,
   hostRef,
+  startBlank = false,
 }: UseEditorOptions): UseEditorResult {
   const [controller, setController] = useState<EditorController | null>(null);
   const [documentSession, setDocumentSession] = useState<{
@@ -74,7 +77,11 @@ export function useEditor({
     let disposed = false;
     let liveDoc: EditorDocument | null = null;
     setError(null);
-    void EditorDocument.open(map).then((document) => {
+    // A full Studio load is a new authoring context. Persisted Gallery
+    // scenarios remain available through their explicit Open/Reopen actions;
+    // they are never selected implicitly by mounting the editor.
+    const opening = startBlank ? EditorDocument.openBlank(map) : EditorDocument.open(map);
+    void opening.then((document) => {
       if (disposed) {
         document.dispose();
         return;
@@ -92,7 +99,7 @@ export function useEditor({
       // Only a map change/unmount parks and disposes the undo-bearing document.
       void liveDoc?.flush().finally(() => liveDoc?.dispose());
     };
-  }, [map]);
+  }, [map, startBlank]);
 
   const document = documentSession?.mapId === map.id ? documentSession.document : null;
 
