@@ -14,8 +14,13 @@ import math
 import re
 from typing import Any
 
-SCHEMA = "uniscenarios.carla-job/v2"
+SCHEMA = "uniscenarios.carla-job/v3"
+# Must match packages/cli/src/asam/xml-1.4-validation.ts.  A receipt naming an
+# arbitrary schema digest is not evidence that the official ASAM schema ran.
+OFFICIAL_OPENSCENARIO_140_XSD_SHA256 = "949fe2bcebd1f3fdb941a2cc56641482737ab48e3c5b0eed0ee5294b2355c0e9"
 SHA256 = re.compile(r"^[a-f0-9]{64}$")
+IMAGE_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
+REVISION = re.compile(r"^[a-f0-9]{40}$")
 SIGNAL_STATES = {"red", "yellow", "green", "off"}
 LIFECYCLE = {"absent", "spawn", "active", "destroy"}
 EXECUTION_MODES = {"authoritative-trace", "native-dynamics"}
@@ -74,6 +79,7 @@ def payload_for_digest(job: dict[str, Any]) -> dict[str, Any]:
         "actorBindings": job.get("actorBindings"),
         "signalBindings": job.get("signalBindings"),
         "requiredSemantics": job.get("requiredSemantics"),
+        "runtimeContract": job.get("runtimeContract"),
         "frames": job.get("frames"),
     }
 
@@ -99,6 +105,17 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
     mode = job.get("executionMode")
     if mode not in EXECUTION_MODES:
         _fail("executionMode", "must be authoritative-trace or native-dynamics")
+
+    runtime = job.get("runtimeContract")
+    if not isinstance(runtime, dict):
+        _fail("runtimeContract", "must pin the CARLA worker and bridge builds")
+    if not isinstance(runtime.get("workerImageDigest"), str) or not IMAGE_DIGEST.fullmatch(runtime["workerImageDigest"]):
+        _fail("runtimeContract.workerImageDigest", "must be a sha256 container image digest")
+    if not isinstance(runtime.get("bridgeRevision"), str) or not REVISION.fullmatch(runtime["bridgeRevision"]):
+        _fail("runtimeContract.bridgeRevision", "must be a full lowercase Git revision")
+    for field in ("carlaServerVersion", "carlaClientVersion", "engineVersion"):
+        if not isinstance(runtime.get(field), str) or not runtime[field]:
+            _fail(f"runtimeContract.{field}", "must be an exact non-empty build identity")
 
     map_spec = job.get("map")
     if not isinstance(map_spec, dict):
@@ -132,7 +149,12 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
     receipt = osc.get("xsdValidation")
     if not isinstance(receipt, dict) or receipt.get("standardVersion") != "1.4.0" or receipt.get("valid") is not True:
         _fail("openScenario.xsdValidation", "an official OpenSCENARIO 1.4.0 passing receipt is required")
-    _require_sha("openScenario.xsdValidation.schemaSha256", receipt.get("schemaSha256"))
+    receipt_xsd = _require_sha("openScenario.xsdValidation.xsdSha256", receipt.get("xsdSha256"))
+    if receipt_xsd != OFFICIAL_OPENSCENARIO_140_XSD_SHA256:
+        _fail("openScenario.xsdValidation.xsdSha256", "does not identify the pinned official ASAM OpenSCENARIO 1.4.0 XSD")
+    receipt_xml = _require_sha("openScenario.xsdValidation.xmlSha256", receipt.get("xmlSha256"))
+    if receipt_xml != actual_osc:
+        _fail("openScenario.xsdValidation.xmlSha256", "validation receipt is not bound to the submitted XML bytes")
 
     step = _finite("fixedTimestepS", job.get("fixedTimestepS"))
     if step <= 0 or step > 0.05:
@@ -203,6 +225,16 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
                     _finite(f"{actor_path}.{field}", state.get(field))
                 if float(state["speedMps"]) < 0:
                     _fail(f"{actor_path}.speedMps", "must be non-negative")
+                on_road = state.get("onRoad")
+                if not isinstance(on_road, bool):
+                    _fail(f"{actor_path}.onRoad", "must explicitly declare authoritative road occupancy")
+                if on_road:
+                    if not isinstance(state.get("roadId"), str) or not state["roadId"]:
+                        _fail(f"{actor_path}.roadId", "must be a non-empty exact OpenDRIVE road id when on-road")
+                    if not isinstance(state.get("laneId"), int) or isinstance(state["laneId"], bool) or state["laneId"] == 0:
+                        _fail(f"{actor_path}.laneId", "must be a non-zero OpenDRIVE lane id when on-road")
+                elif state.get("roadId") is not None or state.get("laneId") is not None:
+                    _fail(actor_path, "off-road occupancy must use null roadId and laneId")
             previous_lifecycle[actor_id] = lifecycle
         for signal_id, state in signals.items():
             if state not in SIGNAL_STATES:
@@ -226,9 +258,9 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
                     _fail(f"{path}.controls.{actor_id}.speedMps", "must be non-negative")
         elif controls is not None:
             _fail(f"{path}.controls", "authoritative-trace does not accept native controls")
-        collisions = frame.get("collisions", [])
+        collisions = frame.get("collisions")
         if not isinstance(collisions, list):
-            _fail(f"{path}.collisions", "must be an array")
+            _fail(f"{path}.collisions", "must be an explicit array, including when empty")
         for collision_index, pair in enumerate(collisions):
             if not isinstance(pair, list) or len(pair) != 2 or any(actor_id not in known_actors for actor_id in pair) or pair[0] == pair[1]:
                 _fail(f"{path}.collisions.{collision_index}", "must name two distinct bound actors")
@@ -243,7 +275,7 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
         _fail("requiredSemantics", f"omits payload-derived semantics: {', '.join(missing_derived)}")
     unrepresented = sorted(set(required) - REPRESENTED_SEMANTICS)
     if unrepresented:
-        _fail("requiredSemantics", f"not represented by the v2 frame/control schema: {', '.join(unrepresented)}")
+        _fail("requiredSemantics", f"not represented by the v3 frame/control schema: {', '.join(unrepresented)}")
     expected_payload = _require_sha("payloadSha256", job.get("payloadSha256"))
     actual_payload = canonical_sha256(payload_for_digest(job))
     if expected_payload != actual_payload:
@@ -256,20 +288,28 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
         _require_sha("esminiReference.resultSha256", esmini.get("resultSha256"))
 
 
-def validate_resolved_signal_ids(job: dict[str, Any], resolved_opendrive_ids: list[str]) -> None:
-    counts: dict[str, int] = {}
-    for signal_id in resolved_opendrive_ids:
-        counts[signal_id] = counts.get(signal_id, 0) + 1
+def validate_resolved_signal_bindings(job: dict[str, Any], resolved: Any) -> None:
+    """Verify source head, OpenDRIVE identity, and unique CARLA actor identity."""
+    if not isinstance(resolved, dict) or set(resolved) != set(job["signalBindings"]):
+        _fail("signalBindings", "resolved CARLA inventory does not equal the exact submitted physical-head binding closure")
+    carla_ids: list[int] = []
     for source_id, target_id in job["signalBindings"].items():
-        if counts.get(target_id, 0) != 1:
-            _fail(f"signalBindings.{source_id}", f"OpenDRIVE id {target_id!r} resolved {counts.get(target_id, 0)} times")
+        binding = resolved[source_id]
+        if not isinstance(binding, dict) or binding.get("opendriveId") != target_id:
+            _fail(f"signalBindings.{source_id}", "resolved the wrong OpenDRIVE physical-head identity")
+        carla_id = binding.get("carlaActorId")
+        if not isinstance(carla_id, int) or isinstance(carla_id, bool) or carla_id < 0:
+            _fail(f"signalBindings.{source_id}.carlaActorId", "must be a non-negative CARLA actor id")
+        carla_ids.append(carla_id)
+    if len(carla_ids) != len(set(carla_ids)):
+        _fail("signalBindings", "multiple physical heads resolved to the same CARLA actor")
 
 
-def validate_resolved_actor_ids(job: dict[str, Any], resolved_actor_ids: list[str]) -> None:
-    """Require every stable actor id to resolve exactly once to its allowlisted asset."""
-    counts: dict[str, int] = {}
-    for actor_id in resolved_actor_ids:
-        counts[actor_id] = counts.get(actor_id, 0) + 1
-    for actor_id in job["actorBindings"]:
-        if counts.get(actor_id, 0) != 1:
-            _fail(f"actorBindings.{actor_id}", f"stable actor id resolved {counts.get(actor_id, 0)} times")
+def validate_resolved_actor_bindings(job: dict[str, Any], resolved: Any) -> None:
+    """Verify every stable actor resolves to the exact allowlisted runtime asset."""
+    if not isinstance(resolved, dict) or set(resolved) != set(job["actorBindings"]):
+        _fail("actorBindings", "resolved CARLA inventory does not equal the exact submitted stable-actor binding closure")
+    for actor_id, expected in job["actorBindings"].items():
+        binding = resolved[actor_id]
+        if not isinstance(binding, dict) or binding.get("blueprintId") != expected["blueprintId"] or binding.get("kind") != expected["kind"]:
+            _fail(f"actorBindings.{actor_id}", "resolved runtime asset does not match the exact allowlisted blueprint and kind")

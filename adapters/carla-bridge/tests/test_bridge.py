@@ -10,7 +10,7 @@ from uniscenarios_carla_bridge import (
     ContractError,
     assess_scenario_runner_1_0,
     canonical_sha256,
-    execute_job,
+    execute_job as _execute_job,
     payload_for_digest,
 )
 
@@ -18,12 +18,20 @@ from uniscenarios_carla_bridge import (
 XODR = b"<OpenDRIVE/>"
 OSC = b'<OpenSCENARIO><FileHeader revMajor="1" revMinor="4"/></OpenSCENARIO>'
 CATALOG = b'{"passenger-car":{"blueprintId":"vehicle.tesla.model3","kind":"vehicle"}}'
+OFFICIAL_XSD_SHA256 = "949fe2bcebd1f3fdb941a2cc56641482737ab48e3c5b0eed0ee5294b2355c0e9"
 
 
 def job(mode="authoritative-trace"):
     value = {
-        "schema": "uniscenarios.carla-job/v2",
+        "schema": "uniscenarios.carla-job/v3",
         "executionMode": mode,
+        "runtimeContract": {
+            "workerImageDigest": "sha256:" + "9" * 64,
+            "bridgeRevision": "a" * 40,
+            "carlaServerVersion": "0.10.0-dev",
+            "carlaClientVersion": "0.10.0-dev",
+            "engineVersion": "UE5.5",
+        },
         "map": {
             "name": "Town10HD_Opt",
             "xodrSha256": hashlib.sha256(XODR).hexdigest(),
@@ -31,7 +39,12 @@ def job(mode="authoritative-trace"):
         },
         "openScenario": {
             "sha256": hashlib.sha256(OSC).hexdigest(),
-            "xsdValidation": {"standardVersion": "1.4.0", "schemaSha256": "2" * 64, "valid": True},
+            "xsdValidation": {
+                "standardVersion": "1.4.0",
+                "xsdSha256": OFFICIAL_XSD_SHA256,
+                "xmlSha256": hashlib.sha256(OSC).hexdigest(),
+                "valid": True,
+            },
         },
         "fixedTimestepS": 0.02,
         "assetCatalogSha256": hashlib.sha256(CATALOG).hexdigest(),
@@ -39,8 +52,8 @@ def job(mode="authoritative-trace"):
         "signalBindings": {"head-a": "odr-signal-42"},
         "requiredSemantics": ["actor.lifecycle", "actor.trajectory", "collision.observe", "custom.map.opendrive", "traffic_signal.state"],
         "frames": [
-            {"index": 0, "t": 0, "actors": {"ego": {"lifecycle": "spawn", "x": 1, "y": 2, "z": 0, "headingDeg": 90, "speedMps": 3}}, "signals": {"head-a": "red"}},
-            {"index": 1, "t": 0.02, "actors": {"ego": {"lifecycle": "active", "x": 1.06, "y": 2, "z": 0, "headingDeg": 90, "speedMps": 3}}, "signals": {"head-a": "green"}},
+            {"index": 0, "t": 0, "actors": {"ego": {"lifecycle": "spawn", "x": 1, "y": 2, "z": 0, "headingDeg": 90, "speedMps": 3, "roadId": "42", "laneId": -1, "onRoad": True}}, "signals": {"head-a": "red"}, "collisions": []},
+            {"index": 1, "t": 0.02, "actors": {"ego": {"lifecycle": "active", "x": 1.06, "y": 2, "z": 0, "headingDeg": 90, "speedMps": 3, "roadId": "42", "laneId": -1, "onRoad": True}}, "signals": {"head-a": "green"}, "collisions": []},
         ],
     }
     if mode == "native-dynamics":
@@ -51,18 +64,76 @@ def job(mode="authoritative-trace"):
     return value
 
 
+def evidence(value=None):
+    value = value or job()
+    frames = copy.deepcopy(value["frames"])
+    for index, frame in enumerate(frames):
+        frame.pop("controls", None)
+        frame["carlaFrame"] = index + 1
+        frame["elapsedSeconds"] = (index + 1) * value["fixedTimestepS"]
+        for actor in frame["actors"].values():
+            actor.update({"carlaActorId": 1001, "blueprintId": "vehicle.tesla.model3", "kind": "vehicle"})
+            actor["alive"] = actor["lifecycle"] in {"spawn", "active"}
+            if actor["lifecycle"] in {"spawn", "active"}:
+                actor["teleported"] = False
+        frame["signals"] = {
+            signal_id: {"carlaActorId": 2001, "opendriveId": "odr-signal-42", "state": state, "alive": True}
+            for signal_id, state in frame["signals"].items()
+        }
+    return {
+        "frames": frames,
+        "collisions": [],
+        "provenance": {
+            "backend": "carla",
+            "carlaServerVersion": "0.10.0-dev",
+            "carlaClientVersion": "0.10.0-dev",
+            "engineVersion": "UE5.5",
+            "bridgeRevision": "a" * 40,
+            "workerImageDigest": value["runtimeContract"]["workerImageDigest"],
+            "jobSchema": value["schema"],
+            "executionMode": value["executionMode"],
+            "mapName": value["map"]["name"],
+            "xodrSha256": value["map"]["xodrSha256"],
+            "controlDigest": value["map"]["controlDigest"],
+            "assetCatalogSha256": value["assetCatalogSha256"],
+            "openScenarioSha256": value["openScenario"]["sha256"],
+            "xsdSha256": OFFICIAL_XSD_SHA256,
+            "validationXmlSha256": hashlib.sha256(OSC).hexdigest(),
+            "validator": "test-pinned-validator",
+            "payloadSha256": value["payloadSha256"],
+            "fixedTimestepS": value["fixedTimestepS"],
+            "synchronousMode": True,
+        },
+    }
+
+
+class FakeValidator:
+    def validate(self, xml_bytes):
+        return {
+            "validator": "test-pinned-validator",
+            "standardVersion": "1.4.0",
+            "xsdSha256": OFFICIAL_XSD_SHA256,
+            "xmlSha256": hashlib.sha256(xml_bytes).hexdigest(),
+            "valid": True,
+        }
+
+
+def execute_job(value, xodr_bytes, osc_bytes, catalog_bytes, backend, validator=None):
+    return _execute_job(value, xodr_bytes, osc_bytes, catalog_bytes, backend, validator or FakeValidator())
+
+
 class FakeBackend:
-    def __init__(self): self.calls = []
+    def __init__(self, job_value=None): self.calls = []; self.job_value = job_value or job()
     def configure_synchronous(self, step): self.calls.append(("sync", step))
     def load_map(self, name, data): self.calls.append(("map", name, data))
     def resolve_bindings(self, actors, signals): self.calls.append(("actors", sorted(actors), sorted(signals)))
-    def resolved_actor_ids(self): return ["ego"]
-    def resolved_signal_opendrive_ids(self): return ["odr-signal-42"]
+    def resolved_actor_bindings(self): return {"ego": {"blueprintId": "vehicle.tesla.model3", "kind": "vehicle"}}
+    def resolved_signal_bindings(self): return {"head-a": {"opendriveId": "odr-signal-42", "carlaActorId": 2001}}
     def freeze_traffic_lights(self): self.calls.append(("freeze",))
     def apply_authoritative_frame(self, frame, signals): self.calls.append(("trace", frame["index"]))
     def apply_native_frame(self, frame, signals): self.calls.append(("native", frame["index"]))
     def tick(self): return len([call for call in self.calls if call[0] in {"trace", "native"}])
-    def collect_result(self): return {"frames": [{}, {}], "collisions": [], "provenance": {"backend": "fake"}}
+    def collect_result(self): return evidence(self.job_value)
     def cleanup(self): self.calls.append(("cleanup",))
 
 
@@ -74,8 +145,9 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual([call[0] for call in backend.calls], ["map", "sync", "actors", "freeze", "trace", "trace", "cleanup"])
 
     def test_native_mode_dispatches_controls(self):
-        backend = FakeBackend()
-        result = execute_job(job("native-dynamics"), XODR, OSC, CATALOG, backend)
+        native_job = job("native-dynamics")
+        backend = FakeBackend(native_job)
+        result = execute_job(native_job, XODR, OSC, CATALOG, backend)
         self.assertEqual(result["executionMode"], "native-dynamics")
         self.assertEqual([call[0] for call in backend.calls][-3:-1], ["native", "native"])
 
@@ -89,8 +161,8 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "stale control payload"):
             execute_job(stale, XODR, OSC, CATALOG, FakeBackend())
         backend = FakeBackend()
-        backend.resolved_signal_opendrive_ids = lambda: ["odr-signal-42", "odr-signal-42"]
-        with self.assertRaisesRegex(ContractError, "resolved 2 times"):
+        backend.resolved_signal_bindings = lambda: {"head-a": {"opendriveId": "wrong", "carlaActorId": 2001}}
+        with self.assertRaisesRegex(ContractError, "wrong OpenDRIVE physical-head"):
             execute_job(job(), XODR, OSC, CATALOG, backend)
 
     def test_rejects_unknown_semantics_and_missing_native_controls(self):
@@ -107,15 +179,19 @@ class BridgeTests(unittest.TestCase):
 
     def test_requires_exact_actor_resolution_and_strict_ticks(self):
         backend = FakeBackend()
-        backend.resolved_actor_ids = lambda: []
-        with self.assertRaisesRegex(ContractError, "resolved 0 times"):
+        backend.resolved_actor_bindings = lambda: {}
+        with self.assertRaisesRegex(ContractError, "exact submitted stable-actor"):
             execute_job(job(), XODR, OSC, CATALOG, backend)
         self.assertEqual(backend.calls[-1], ("cleanup",))
         backend = FakeBackend()
         backend.tick = lambda: 1
-        with self.assertRaisesRegex(ContractError, "strictly increasing"):
+        with self.assertRaisesRegex(ContractError, "contiguous increasing"):
             execute_job(job(), XODR, OSC, CATALOG, backend)
         self.assertEqual(backend.calls[-1], ("cleanup",))
+        backend = FakeBackend()
+        backend.resolved_actor_bindings = lambda: {"ego": {"blueprintId": "vehicle.wrong", "kind": "vehicle"}}
+        with self.assertRaisesRegex(ContractError, "exact allowlisted blueprint"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
 
     def test_rejects_unrepresented_semantics_and_missing_evidence(self):
         unrepresented = job()
@@ -124,7 +200,7 @@ class BridgeTests(unittest.TestCase):
         with self.assertRaisesRegex(ContractError, "not represented"):
             execute_job(unrepresented, XODR, OSC, CATALOG, FakeBackend())
         backend = FakeBackend()
-        backend.collect_result = lambda: {"frames": [{}, {}], "collisions": []}
+        backend.collect_result = lambda: {"frames": evidence()["frames"], "collisions": []}
         with self.assertRaisesRegex(ContractError, "provenance"):
             execute_job(job(), XODR, OSC, CATALOG, backend)
         self.assertEqual(backend.calls[-1], ("cleanup",))
@@ -134,6 +210,106 @@ class BridgeTests(unittest.TestCase):
         invalid["openScenario"]["xsdValidation"]["valid"] = False
         with self.assertRaisesRegex(ContractError, "passing receipt"):
             execute_job(invalid, XODR, OSC, CATALOG, FakeBackend())
+        forged = job()
+        forged["openScenario"]["xsdValidation"]["xsdSha256"] = "2" * 64
+        with self.assertRaisesRegex(ContractError, "pinned official ASAM"):
+            execute_job(forged, XODR, OSC, CATALOG, FakeBackend())
+        wrong_xml = job()
+        wrong_xml["openScenario"]["xsdValidation"]["xmlSha256"] = "3" * 64
+        with self.assertRaisesRegex(ContractError, "not bound to the submitted XML"):
+            execute_job(wrong_xml, XODR, OSC, CATALOG, FakeBackend())
+
+    def test_rejects_empty_frames_and_missing_actor_or_signal_readback(self):
+        backend = FakeBackend()
+        backend.collect_result = lambda: {**evidence(), "frames": []}
+        with self.assertRaisesRegex(ContractError, "empty or missing"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        missing_actor = evidence()
+        del missing_actor["frames"][0]["actors"]["ego"]
+        backend.collect_result = lambda: missing_actor
+        with self.assertRaisesRegex(ContractError, "actor binding closure"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        missing_signal = evidence()
+        del missing_signal["frames"][1]["signals"]["head-a"]
+        backend.collect_result = lambda: missing_signal
+        with self.assertRaisesRegex(ContractError, "physical-head readback closure"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+
+    def test_rejects_timestamp_drift_and_threshold_violations(self):
+        backend = FakeBackend()
+        drift = evidence()
+        drift["frames"][1]["t"] = 0.021
+        backend.collect_result = lambda: drift
+        with self.assertRaisesRegex(ContractError, "fixed-step authoritative timestamp"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        snapshot_drift = evidence()
+        snapshot_drift["frames"][1]["elapsedSeconds"] = 0.061
+        backend.collect_result = lambda: snapshot_drift
+        with self.assertRaisesRegex(ContractError, "snapshot time must advance"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        for field, delta, message in (("x", 0.251, "position divergence"), ("headingDeg", 2.01, "divergence"), ("speedMps", 0.251, "divergence")):
+            with self.subTest(field=field):
+                backend = FakeBackend()
+                divergent = evidence()
+                divergent["frames"][1]["actors"]["ego"][field] += delta
+                backend.collect_result = lambda divergent=divergent: divergent
+                with self.assertRaisesRegex(ContractError, message):
+                    execute_job(job(), XODR, OSC, CATALOG, backend)
+
+    def test_valid_fixture_reports_actual_comparison_for_both_modes(self):
+        for mode in ("authoritative-trace", "native-dynamics"):
+            with self.subTest(mode=mode):
+                value = job(mode)
+                result = execute_job(value, XODR, OSC, CATALOG, FakeBackend(value))
+                self.assertTrue(result["comparison"]["accepted"])
+                self.assertEqual(result["comparison"]["samples"], 2)
+                self.assertEqual(result["comparison"]["maxError"]["positionM"], 0)
+
+    def test_rejects_unbound_provenance_and_occupancy_readback(self):
+        backend = FakeBackend()
+        unbound = evidence()
+        unbound["provenance"]["payloadSha256"] = "f" * 64
+        backend.collect_result = lambda: unbound
+        with self.assertRaisesRegex(ContractError, "not bound to the submitted job"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        wrong_lane = evidence()
+        wrong_lane["frames"][1]["actors"]["ego"]["laneId"] = -2
+        backend.collect_result = lambda: wrong_lane
+        with self.assertRaisesRegex(ContractError, "authoritative road/lane occupancy"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        swapped = evidence()
+        swapped["frames"][1]["actors"]["ego"]["carlaActorId"] = 9999
+        backend.collect_result = lambda: swapped
+        with self.assertRaisesRegex(ContractError, "changed after the actor was spawned"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+        backend = FakeBackend()
+        swapped_signal = evidence()
+        swapped_signal["frames"][1]["signals"]["head-a"]["carlaActorId"] = 9999
+        backend.collect_result = lambda: swapped_signal
+        with self.assertRaisesRegex(ContractError, "physical-head runtime identity"):
+            execute_job(job(), XODR, OSC, CATALOG, backend)
+
+    def test_worker_revalidation_must_agree_with_hash_closed_receipt(self):
+        class DisagreeingValidator:
+            def validate(self, xml_bytes):
+                result = FakeValidator().validate(xml_bytes)
+                result["xmlSha256"] = "f" * 64
+                return result
+
+        with self.assertRaisesRegex(ContractError, "disagrees with submitted receipt"):
+            execute_job(job(), XODR, OSC, CATALOG, FakeBackend(), DisagreeingValidator())
+
+        class RejectingValidator:
+            def validate(self, xml_bytes):
+                raise ContractError("worker XSD rejected XML")
+
+        with self.assertRaisesRegex(ContractError, "worker XSD rejected"):
+            execute_job(job(), XODR, OSC, CATALOG, FakeBackend(), RejectingValidator())
 
     def test_cleanup_runs_when_backend_fails(self):
         backend = FakeBackend()
