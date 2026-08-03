@@ -141,9 +141,12 @@ export function authoringGraphPrunePlan(
 ): AuthoringGraphPrunePlan {
   const deleting = new Set(deletingRoleIds);
   const remainingRoles = new Set(template.roles.map((role) => role.id).filter((id) => !deleting.has(id)));
+  const authoredInteractionIds = new Set(template.choreography.interactions.map((interaction) => interaction.id));
   const removedInteractions = new Set<string>();
   for (const interaction of template.choreography.interactions) {
     if ((interaction.actor !== '@world' && !remainingRoles.has(interaction.actor))
+      || (interaction.trigger.kind === 'after' && !authoredInteractionIds.has(interaction.trigger.of))
+      || (interaction.until?.kind === 'after' && !authoredInteractionIds.has(interaction.until.of))
       || triggerReferencesMissingRole(interaction.trigger, remainingRoles)
       || (interaction.until && triggerReferencesMissingRole(interaction.until, remainingRoles))
       || targetReferencesMissingRole(interaction.target, remainingRoles)) {
@@ -169,7 +172,7 @@ export function authoringGraphPrunePlan(
       || (occludes && (!remainingRoles.has(occludes.observer) || !remainingRoles.has(occludes.target)));
   }).map((prop) => prop.id);
   const invariantIds = template.invariants.filter((invariant) => invariant.kind === 'event_order'
-    ? invariant.events.some((id) => removedInteractions.has(id))
+    ? invariant.events.some((id) => !authoredInteractionIds.has(id) || removedInteractions.has(id))
     : invariantReferencesMissingRole(invariant as unknown as Record<string, unknown>, remainingRoles)).map((invariant) => invariant.id);
   const removedProps = new Set(propIds);
   const removedInvariants = new Set(invariantIds);
@@ -187,6 +190,33 @@ export function authoringGraphPrunePlan(
     variantIds,
     clearMetricSubject: template.metricSubject !== undefined && !remainingRoles.has(template.metricSubject),
   };
+}
+
+/** Canonical, non-mutating cleanup used for stale autosaves and explicit saves. */
+export function normalizeAuthoringGraph(template: ScenarioTemplateV2): {
+  readonly template: ScenarioTemplateV2;
+  readonly plan: AuthoringGraphPrunePlan;
+} {
+  const plan = authoringGraphPrunePlan(template);
+  const changed = plan.interactionIds.length > 0 || plan.propIds.length > 0
+    || plan.invariantIds.length > 0 || plan.variantIds.length > 0 || plan.clearMetricSubject;
+  if (!changed) return { template, plan };
+  const interactions = new Set(plan.interactionIds);
+  const props = new Set(plan.propIds);
+  const invariants = new Set(plan.invariantIds);
+  const variants = new Set(plan.variantIds);
+  const normalized: ScenarioTemplateV2 = {
+    ...template,
+    choreography: {
+      ...template.choreography,
+      interactions: template.choreography.interactions.filter((item) => !interactions.has(item.id)),
+    },
+    props: template.props.filter((item) => !props.has(item.id)),
+    invariants: template.invariants.filter((item) => !invariants.has(item.id)),
+    variants: template.variants.filter((item) => !variants.has(item.id)),
+  };
+  if (plan.clearMetricSubject) delete normalized.metricSubject;
+  return { template: normalized, plan };
 }
 
 function triggerReferencesInteraction(trigger: Interaction['trigger'], removed: ReadonlySet<string>): boolean {
@@ -334,6 +364,17 @@ export class EditorDocument {
     try {
       const data = await store.read(autosaveName(map.id));
       doc = TemplateDocument.fromJSON(data, { historyLimit: HISTORY_LIMIT });
+      const normalized = normalizeAuthoringGraph(doc.data);
+      if (normalized.template !== doc.data) {
+        doc = TemplateDocument.fromJSON(normalized.template, { historyLimit: HISTORY_LIMIT });
+        try {
+          await store.write(autosaveName(map.id), doc.data);
+        } catch (writeError) {
+          // Keep the repaired in-memory document usable even when persistence
+          // is temporarily unavailable; normal autosave will retry later.
+          console.warn(`[editor] repaired stale references for ${map.id}, but could not persist them yet`, writeError);
+        }
+      }
     } catch (err) {
       if (!(err instanceof ScenarioNotFoundError)) {
         // A corrupt or outdated autosave must not lock the user out of the map.
@@ -542,17 +583,18 @@ export class EditorDocument {
     });
   }
 
-  /** Delete actors as one gesture. */
+  /** Delete actors and every now-orphaned authored reference as one gesture. */
   remove(ids: readonly string[]): void {
-    if (ids.length === 0) return;
+    const deleting = ids.filter((id) => this.#doc.role(id) !== undefined);
+    if (deleting.length === 0) return;
     this.#transaction(() => {
-      for (const id of ids) {
-        if (!this.#doc.role(id)) continue;
-        for (const interaction of [...this.#doc.data.choreography.interactions]) {
-          if (interaction.actor === id) this.#doc.removeInteraction(interaction.id);
-        }
-        this.#doc.removeRole(id);
-      }
+      const plan = authoringGraphPrunePlan(this.#doc.data, deleting);
+      for (const id of plan.variantIds) this.#doc.removeVariant(id);
+      for (const id of plan.invariantIds) this.#doc.removeInvariant(id);
+      for (const id of plan.propIds) this.#doc.removeProp(id);
+      for (const id of plan.interactionIds) this.#doc.removeInteraction(id);
+      if (plan.clearMetricSubject) this.#doc.setMetricSubject(null);
+      for (const id of deleting) this.#doc.removeRole(id);
     });
   }
 
@@ -571,7 +613,11 @@ export class EditorDocument {
    * preserved by the named-scenario store; history must not cross documents.
    */
   importTemplate(value: unknown, options: { saveName?: string } = {}): void {
-    const next = TemplateDocument.fromJSON(value, { historyLimit: HISTORY_LIMIT });
+    const parsed = TemplateDocument.fromJSON(value, { historyLimit: HISTORY_LIMIT });
+    const normalized = normalizeAuthoringGraph(parsed.data);
+    const next = normalized.template === parsed.data
+      ? parsed
+      : TemplateDocument.fromJSON(normalized.template, { historyLimit: HISTORY_LIMIT });
     this.#unsubscribe();
     this.#doc = next;
     this.#opCount = 0;
