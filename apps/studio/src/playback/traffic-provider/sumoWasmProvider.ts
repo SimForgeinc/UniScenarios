@@ -11,7 +11,10 @@ import type {
 interface PendingRequest {
   readonly resolve: (value: SumoWorkerResponse) => void;
   readonly reject: (reason: Error) => void;
+  readonly timeout: ReturnType<typeof setTimeout>;
 }
+
+const SUMO_WORKER_TIMEOUT_MS = 30_000;
 /** Lazy, opt-in provider. Constructing it does not download SUMO. */
 export class SumoWasmTrafficProvider implements TrafficProvider {
   private worker: Worker | undefined;
@@ -28,9 +31,10 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
   async initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization> {
     const network = payload.network.slice(0);
     const routes = payload.routes.slice(0);
+    const wasmBinary = payload.wasmBinary?.slice(0);
     const response = await this.send(
-      { kind: 'init', id: this.nextId++, moduleUrl: this.moduleUrl, payload: { ...payload, network, routes } },
-      [network, routes],
+      { kind: 'init', id: this.nextId++, moduleUrl: this.moduleUrl, payload: { ...payload, network, routes, wasmBinary } },
+      wasmBinary ? [network, routes, wasmBinary] : [network, routes],
     );
     if (response.kind !== 'ready') throw new Error(`Unexpected SUMO response: ${response.kind}`);
     return { initMilliseconds: response.initMilliseconds, heapBytes: response.heapBytes };
@@ -55,7 +59,10 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
       .finally(() => {
         worker.terminate();
         if (this.worker === worker) this.worker = undefined;
-        for (const pending of this.pending.values()) pending.reject(new Error('SUMO worker closed'));
+        for (const pending of this.pending.values()) {
+          clearTimeout(pending.timeout);
+          pending.reject(new Error('SUMO worker closed'));
+        }
         this.pending.clear();
       });
     return this.closePromise;
@@ -69,7 +76,11 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
 
   private sendTo(worker: Worker, message: SumoWorkerRequest, transfer: Transferable[] = []): Promise<SumoWorkerResponse> {
     return new Promise((resolve, reject) => {
-      this.pending.set(message.id, { resolve, reject });
+      const timeout = setTimeout(() => {
+        const error = new Error(`SUMO worker ${message.kind} exceeded ${SUMO_WORKER_TIMEOUT_MS / 1_000} seconds`);
+        this.failWorker(worker, error);
+      }, SUMO_WORKER_TIMEOUT_MS);
+      this.pending.set(message.id, { resolve, reject, timeout });
       worker.postMessage(message, transfer);
     });
   }
@@ -81,15 +92,27 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
       const pending = this.pending.get(event.data.id);
       if (!pending) return;
       this.pending.delete(event.data.id);
+      clearTimeout(pending.timeout);
       if (event.data.kind === 'error') pending.reject(new Error(event.data.message));
       else pending.resolve(event.data);
     };
     worker.onerror = (event) => {
-      const error = new Error(event.message || 'SUMO worker failed');
-      for (const pending of this.pending.values()) pending.reject(error);
-      this.pending.clear();
+      this.failWorker(worker, new Error(event.message || 'SUMO worker failed'));
+    };
+    worker.onmessageerror = () => {
+      this.failWorker(worker, new Error('SUMO worker returned an unreadable message'));
     };
     this.worker = worker;
     return worker;
+  }
+
+  private failWorker(worker: Worker, error: Error): void {
+    worker.terminate();
+    if (this.worker === worker) this.worker = undefined;
+    for (const pending of this.pending.values()) {
+      clearTimeout(pending.timeout);
+      pending.reject(error);
+    }
+    this.pending.clear();
   }
 }

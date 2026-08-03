@@ -76,7 +76,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       lastExternalActors: [],
     };
     run.current = active;
-    setStatus({ phase: 'loading', actorCount: 0 });
+    setStatus({ phase: 'loading', actorCount: 0, reason: 'loading runtime and map assets' });
     void loadSumoAssets(options.map, options.profile, fetch, options.focus).then(async ({
       payload,
       runtime,
@@ -86,6 +86,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       occupancyRoads,
     }) => {
       if (cancelled) return;
+      setStatus({ phase: 'loading', actorCount: 0, reason: 'starting browser traffic engine' });
       const initialized = await provider.initialize(payload);
       if (cancelled) return;
       const initialGate = evaluateSumoPerformance({
@@ -98,6 +99,14 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       if (!initialGate.useSumo) throw new Error(`capability gate: ${initialGate.reason}`);
       // Warm the staggered departures before publishing the authoring preview.
       // This keeps the city populated before Play without a visible spawn burst.
+      setStatus({
+        phase: 'loading',
+        actorCount: 0,
+        reason: 'warming initial traffic',
+        initMilliseconds: initialized.initMilliseconds,
+        heapBytes: initialized.heapBytes,
+        wasmBytes: runtime.wasmBytes,
+      });
       const initialExternalActors = externalTrafficActors(externals.current, occupancyRoads);
       const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: initialExternalActors });
       if (cancelled) return;

@@ -21,6 +21,13 @@
       input[type='number']::-webkit-inner-spin-button,
       input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
       input[type='number'] { -moz-appearance: textfield; }
+      @keyframes world-loading-spin { to { transform: rotate(360deg); } }
+      @keyframes world-loading-pulse { 50% { filter: brightness(1.28); } }
+      .world-loading-spinner { animation: world-loading-spin .8s linear infinite; }
+      .world-loading-progress { animation: world-loading-pulse 1.4s ease-in-out infinite; }
+      @media (prefers-reduced-motion: reduce) {
+        .world-loading-spinner, .world-loading-progress { animation: none; }
+      }
     </style>
   </head>
   <body>

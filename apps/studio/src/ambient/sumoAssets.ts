@@ -20,6 +20,7 @@ import {
 } from '../playback/traffic-provider/signalState';
 
 export const SUMO_RUNTIME_MODULE_URL = '/dev-assets/sumo-runtime/sumo.mjs';
+export const SUMO_RUNTIME_WASM_URL = '/dev-assets/sumo-runtime/sumo.wasm';
 export const SUMO_RUNTIME_MANIFEST_URL = '/dev-assets/sumo-runtime/runtime-manifest.json';
 
 export type SumoMapManifest = SumoNetworkManifest;
@@ -50,16 +51,19 @@ export async function loadSumoAssets(
   fetcher: typeof fetch = fetch,
   focus: SumoDemandFocus | null = null,
 ): Promise<LoadedSumoAssets> {
-  const [mapResponse, runtimeResponse] = await Promise.all([
+  const [mapResponse, runtimeResponse, wasmResponse] = await Promise.all([
     fetcher(map.sumoManifest),
     fetcher(SUMO_RUNTIME_MANIFEST_URL),
+    fetcher(SUMO_RUNTIME_WASM_URL),
   ]);
   if (!mapResponse.ok) throw new Error(`SUMO is unavailable for ${map.label} (map sidecar ${mapResponse.status})`);
   if (!runtimeResponse.ok) throw new Error(`SUMO runtime is unavailable (${runtimeResponse.status})`);
+  if (!wasmResponse.ok) throw new Error(`SUMO runtime binary is unavailable (${wasmResponse.status})`);
   const manifest = await mapResponse.json() as SumoMapManifest;
   const runtime = await runtimeResponse.json() as SumoRuntimeManifest;
   validateSumoNetworkManifest(manifest, map.id);
   validateSumoRuntimeManifest(runtime);
+  const wasmBinary = validateSumoRuntimeBinary(await wasmResponse.arrayBuffer(), runtime);
   const manifestUrl = new URL(map.sumoManifest, globalThis.location?.href ?? 'http://localhost/');
   const networkResponse = await fetcher(new URL(manifest.networkFile, manifestUrl).toString());
   if (!networkResponse.ok) throw new Error(`SUMO network is unavailable for ${map.label} (${networkResponse.status})`);
@@ -88,6 +92,7 @@ export async function loadSumoAssets(
     payload: {
       network,
       routes: new TextEncoder().encode(routeDocument).buffer,
+      wasmBinary,
       seed: sumoNumericSeed(profile.seed),
       stepSeconds: 0.05,
       worldFromNetwork: manifest.worldFromNetwork,
@@ -106,6 +111,13 @@ export async function loadSumoAssets(
     adjustedSignalControllers: synchronized.adjustedControllers,
     occupancyRoads: buildSumoRoadOccupancyIndex(networkXml, manifest.worldFromNetwork),
   };
+}
+
+export function validateSumoRuntimeBinary(binary: ArrayBuffer, runtime: Pick<SumoRuntimeManifest, 'wasmBytes'>): ArrayBuffer {
+  if (binary.byteLength !== runtime.wasmBytes) {
+    throw new Error(`SUMO runtime binary is incomplete (${binary.byteLength}/${runtime.wasmBytes} bytes)`);
+  }
+  return binary;
 }
 
 const SUMO_REPLENISHMENT_PERIOD_SECONDS = 40;

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse } from './protocol';
 import { externalActorToNetwork, transformPackedStatesToWorld } from './coordinateTransform';
+import { compileSumoRuntime, type InstantiateWasm } from './sumoRuntimeInstantiation';
 
 interface SumoModule {
   HEAPU8: Uint8Array;
@@ -33,7 +34,12 @@ interface SumoModule {
   lengthBytesUTF8(value: string): number;
 }
 
-type SumoFactory = (options?: { noInitialRun?: boolean; printErr?: (message: string) => void }) => Promise<SumoModule>;
+type SumoFactory = (options?: {
+  noInitialRun?: boolean;
+  locateFile?: (file: string) => string;
+  instantiateWasm?: InstantiateWasm;
+  printErr?: (message: string) => void;
+}) => Promise<SumoModule>;
 
 let module: SumoModule | undefined;
 let worldFromNetwork: NetworkWorldTransform | undefined;
@@ -54,9 +60,20 @@ scope.onmessage = (event: MessageEvent<SumoWorkerRequest>): void => {
 async function handle(message: SumoWorkerRequest): Promise<void> {
   if (message.kind === 'init') {
     const started = performance.now();
-    const imported = await import(/* @vite-ignore */ message.moduleUrl) as { default: SumoFactory };
+    const moduleUrl = new URL(message.moduleUrl, scope.location.href).href;
+    const imported = await import(/* @vite-ignore */ moduleUrl) as { default: SumoFactory };
+    const instantiateWasm = await compileSumoRuntime(message.payload.wasmBinary);
     module = await imported.default({
       noInitialRun: true,
+      // Emscripten otherwise downloads and streaming-compiles the binary from
+      // inside this module worker. That path can remain pending indefinitely in
+      // Chromium-family embedded browsers while the page is also streaming map
+      // tiles. The page has already fetched and length-validated these bytes.
+      instantiateWasm,
+      // Do not leave the Emscripten runtime to infer the binary URL from the
+      // worker bundle. In development that bundle is Vite-transformed, while
+      // the packaged runtime lives under /dev-assets.
+      locateFile: (file) => new URL(file, moduleUrl).href,
       // The lean browser build intentionally omits localized message catalogs.
       // SUMO reports that packaging choice on stderr even though it is harmless.
       printErr: (message) => {

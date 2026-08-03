@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
-import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets, localizeSumoRouteCandidates } from './sumoAssets';
+import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets, localizeSumoRouteCandidates, validateSumoRuntimeBinary } from './sumoAssets';
 
 describe('SUMO browser assets', () => {
   it('builds a deterministic bounded population and proxy route', () => {
@@ -48,6 +48,13 @@ describe('SUMO browser assets', () => {
       stepMilliseconds: 2,
     }, () => 3);
     expect(actor).toMatchObject({ id: 'sumo:00001234', x: 10, y: 3, z: 20, headingRad: 0 });
+  });
+
+  it('rejects a partial runtime download before starting the worker', () => {
+    expect(() => validateSumoRuntimeBinary(new ArrayBuffer(7), { wasmBytes: 8 }))
+      .toThrow('SUMO runtime binary is incomplete (7/8 bytes)');
+    const binary = new ArrayBuffer(8);
+    expect(validateSumoRuntimeBinary(binary, { wasmBytes: 8 })).toBe(binary);
   });
 
   it('fails closed when the selected map has no packaged SUMO sidecar', async () => {

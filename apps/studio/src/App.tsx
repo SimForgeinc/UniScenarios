@@ -96,6 +96,7 @@ import {
 } from './editor/routeOverlay';
 import { StudioSignalSelectionModel } from './signalSelection';
 import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializer';
+import { WorldLoadingOverlay } from './WorldLoadingOverlay';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(): CityViewerOptions {
@@ -1232,6 +1233,12 @@ export function App(): JSX.Element {
         onReady={onReady}
         style={styles.canvas}
       />
+      {!mapWorkspaceOpen ? <WorldLoadingOverlay
+        viewer={viewer}
+        mapLabel={map.label}
+        editorReady={state !== null}
+        error={editorError}
+      /> : null}
       {!mapWorkspaceOpen ? <EditorToolRail
         controller={editorController}
         state={state}

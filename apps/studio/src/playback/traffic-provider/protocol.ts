@@ -3,6 +3,12 @@ export type TrafficActorKind = 'vehicle' | 'pedestrian' | 'bicycle' | 'obstacle'
 export interface TrafficNetworkPayload {
   readonly network: ArrayBuffer;
   readonly routes: ArrayBuffer;
+  /**
+   * Packaged SUMO binary, fetched on the page before the worker starts.
+   * Supplying the bytes avoids browser-specific stalls in Emscripten's
+   * worker-side instantiateStreaming(fetch(...)) path.
+   */
+  readonly wasmBinary?: ArrayBuffer;
   readonly seed: number;
   readonly stepSeconds: number;
   /** world = rotate(network * scale) + translation */
