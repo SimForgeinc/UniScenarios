@@ -32,6 +32,21 @@ import type { ActorRuntime } from './state.js';
 import type { SignalBook } from './signals.js';
 import { phaseForbidsEntry } from './signals.js';
 
+const LEGACY_DRIVER = {
+  naturalistic: false,
+  desiredSpeedFactor: 1,
+  timeHeadwayS: 1,
+  minimumGapM: 2,
+  accelScale: 1,
+  comfortBrakeScale: 1,
+  reactionTimeS: 0,
+  startDelayS: 0,
+} as const;
+
+function driverFor(a: ActorRuntime): NonNullable<ActorRuntime['driver']> {
+  return a.driver ?? LEGACY_DRIVER;
+}
+
 export interface MotionLimits {
   readonly accelMax: number;
   readonly brakeComfort: number;
@@ -144,7 +159,7 @@ export function gapScaleFor(aggression: number): number {
 /** Desired free-flow speed for an actor at its current position. */
 export function cruiseSpeed(a: ActorRuntime, laneSpeedLimitMps: number): number {
   if (a.cruiseOverrideMps !== null) return a.cruiseOverrideMps;
-  return laneSpeedLimitMps * a.rules.speedFactor;
+  return laneSpeedLimitMps * a.rules.speedFactor * driverFor(a).desiredSpeedFactor;
 }
 
 /** Acceleration that converges on `vTarget` with a first-order lag. */
@@ -255,9 +270,27 @@ export function governorCap(
   let reason: HazardResult['reason'] = 'none';
 
   if (a.rules.collisionAvoidance && leader) {
-    const headwayS = 1.5 - a.rules.aggression; // 1.0 s at the neutral setting
-    const desired = Math.max(a.speedMps * headwayS, GAP_MIN_M);
-    const accel = gapAccel(a, leader.gapM, leader.speedMps, desired, lim);
+    const driver = driverFor(a);
+    // Compact IDM-style following. It preserves a real jam gap, expands with
+    // speed and closing rate, and naturally propagates queues without overlap.
+    const closing = a.speedMps - leader.speedMps;
+    const desired = driver.minimumGapM
+      + a.speedMps * driver.timeHeadwayS
+      + Math.max(0, (a.speedMps * closing) / (2 * Math.sqrt(
+        Math.max(0.1, lim.accelMax * driver.accelScale * lim.brakeComfort * driver.comfortBrakeScale),
+      )));
+    const freeSpeed = Math.max(a.cruiseSpeedMps, 0.1);
+    const accel = driver.naturalistic
+      ? lim.accelMax * driver.accelScale * (
+          1 - Math.pow(a.speedMps / freeSpeed, 4) - Math.pow(desired / Math.max(leader.gapM, 0.2), 2)
+        )
+      : gapAccel(
+          a,
+          leader.gapM,
+          leader.speedMps,
+          Math.max(a.speedMps * (1.5 - a.rules.aggression), GAP_MIN_M),
+          lim,
+        );
     const req = requiredDecelFor(a.speedMps - leader.speedMps, leader.gapM);
     required = Math.max(required, req);
     if (accel < cap) {
@@ -270,8 +303,13 @@ export function governorCap(
     // Brake to a stop at the line: a = -v² / 2d, with a 0.5 m standoff. Inside
     // the standoff the term saturates so the actor comes to a *clean* stop
     // rather than creeping asymptotically toward the line.
-    const d = stopLineDistM - 0.5;
-    const accel = d <= 0.05 ? -lim.brakeHard : -(a.speedMps * a.speedMps) / (2 * d);
+    // Reserve the driver's perception distance before solving the braking
+    // envelope. This starts braking earlier while retaining a clean 0.5 m
+    // stand-off and the fixed-step deterministic integration.
+    const d = stopLineDistM - 0.5 - a.speedMps * driverFor(a).reactionTimeS;
+    const accel = d <= 0.05 || (stopLineDistM <= 5 && a.speedMps < 1.5)
+      ? -lim.brakeHard
+      : -(a.speedMps * a.speedMps) / (2 * d);
     required = Math.max(required, -accel);
     const capped = Math.max(accel, -lim.brakeHard);
     if (capped < cap) {
@@ -344,14 +382,11 @@ export function findLeader(
   corridorHalfWidthM = 1.6,
 ): { gapM: number; speedMps: number; id: string } | null {
   let best: { gapM: number; speedMps: number; id: string } | null = null;
-  const authoredObserver = !a.tags.includes('ambient');
   for (const b of others) {
     if (b.id === a.id || !b.present || b.retired) continue;
-    // Generated background traffic may react to authored choreography, but it
-    // must never become the reason an authored actor brakes or misses a timed
-    // trigger. If an ambient leader would be physically caught, the generator's
-    // full-clip collision screen removes that ambient actor before playback.
-    if (authoredObserver && b.tags.includes('ambient')) continue;
+    // Ambient and authored default-route actors share one traffic model. An
+    // explicit authored command may own the target speed, but collision
+    // avoidance still observes every physical leader in the scene.
     const gap = alongRouteGapM(a, b);
     if (gap === null || gap <= 0) continue;
     const lateral = lateralSeparationM(a, b);
@@ -375,6 +410,7 @@ export function distanceToStopLine(
   t: number,
   lookaheadM: number,
   leader: { gapM: number; speedMps: number } | null = null,
+  canReleaseStop: ((controlId: string, coordinationId: string, actorId: string, t: number) => boolean) | null = null,
 ): number | null {
   if (!a.rules.obeySignals || signals.isEmpty || a.route.isFreeform) return null;
   let best: number | null = null;
@@ -397,14 +433,29 @@ export function distanceToStopLine(
       if (d < -0.5 || d > lookaheadM) continue;
       if (line.kind === 'stop') {
         const states = a.roadControlStates;
-        const state = states.get(line.controlId) ?? { stoppedSinceS: null, released: false };
+        const state = states.get(line.controlId) ?? {
+          stoppedSinceS: null, released: false, arrivedAtS: null, releasedAtS: null,
+          proceedAfterS: null, wasBlocked: false,
+        };
         if (state.released) continue;
-        if (a.speedMps <= 0.05 && d <= 0.75) {
-          if (state.stoppedSinceS === null) state.stoppedSinceS = t;
+        // dynamic-v1 can settle a few metres upstream under its bounded brake
+        // actuator; that is still a complete, compliant stop, not a reason to
+        // wait forever for sub-centimetre path convergence.
+        if (a.speedMps <= 0.05 && d <= 5) {
+          if (state.stoppedSinceS === null) {
+            state.stoppedSinceS = t;
+            state.arrivedAtS = t;
+          }
           if (t - state.stoppedSinceS >= line.dwellS) {
-            state.released = true;
-            states.set(line.controlId, state);
-            continue;
+            if (state.proceedAfterS === null && (canReleaseStop?.(line.controlId, line.coordinationId, a.id, t) ?? true)) {
+              state.proceedAfterS = t + driverFor(a).startDelayS;
+            }
+            if (state.proceedAfterS !== null && t >= state.proceedAfterS) {
+              state.released = true;
+              state.releasedAtS = t;
+              states.set(line.controlId, state);
+              continue;
+            }
           }
         } else if (a.speedMps > 0.05) {
           // Dwell must be continuous; rolling stops reset the clock.
@@ -413,7 +464,10 @@ export function distanceToStopLine(
         states.set(line.controlId, state);
       } else {
         const phase = line.signalId === null ? null : signals.phaseAt(line.signalId, t);
-        const state = a.roadControlStates.get(line.controlId) ?? { stoppedSinceS: null, released: false };
+        const state = a.roadControlStates.get(line.controlId) ?? {
+          stoppedSinceS: null, released: false, arrivedAtS: null, releasedAtS: null,
+          proceedAfterS: null, wasBlocked: false,
+        };
         if (state.released) continue;
 
         // A yellow is a real dilemma-zone decision, not a request for an
@@ -439,7 +493,22 @@ export function distanceToStopLine(
           && leader.speedMps < 1.5
           && leader.gapM > d
           && leader.gapM < d + (connectingLeg?.lengthM ?? 12) + 8;
-        if (!blockedExit && (phase === null || !phaseForbidsEntry(phase))) continue;
+        const forbidden = blockedExit || (phase !== null && phaseForbidsEntry(phase));
+        if (forbidden) {
+          state.wasBlocked = true;
+          state.proceedAfterS = null;
+          a.roadControlStates.set(line.controlId, state);
+        } else if (state.wasBlocked) {
+          if (state.proceedAfterS === null) state.proceedAfterS = t + driverFor(a).startDelayS;
+          a.roadControlStates.set(line.controlId, state);
+          if (t >= state.proceedAfterS) {
+            state.released = true;
+            state.releasedAtS = t;
+            continue;
+          }
+        } else {
+          continue;
+        }
       }
       if (best === null || d < best) best = Math.max(d, 0);
     }

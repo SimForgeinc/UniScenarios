@@ -1,8 +1,27 @@
 import { describe, expect, it } from 'vitest';
 
-import { buildMapControlPlan, parseMapSignalCatalog } from './map-signals.js';
+import { buildMapControlPlan, parseMapSignalCatalog, topologyWithMapSpeedLimits } from './map-signals.js';
 
 describe('map-wide ambient physical controls', () => {
+  it('makes a physical speed-limit sign authoritative before graph compilation', () => {
+    const catalog = parseMapSignalCatalog('', {
+      features: [{ properties: {
+        id: 'speed-25', road_id: '17', s: 10, signal_category: 'speed_limit_sign',
+        speed_limit_mph: 25,
+      } }],
+    });
+    const topology = {
+      lanes: {
+        '17:0:-1': { roadId: 17, speedLimitKph: 64 },
+        '18:0:-1': { roadId: 18, speedLimitKph: 50 },
+      },
+    } as any;
+    const controlled = topologyWithMapSpeedLimits(topology, catalog);
+    expect(controlled.lanes['17:0:-1'].speedLimitKph).toBeCloseTo(40.2336, 6);
+    expect(controlled.lanes['18:0:-1'].speedLimitKph).toBe(50);
+    expect(topology.lanes['17:0:-1'].speedLimitKph).toBe(64);
+  });
+
   it('binds every OpenDRIVE junction head to its exact approach stop line', () => {
     const signalCatalog = parseMapSignalCatalog(
       `

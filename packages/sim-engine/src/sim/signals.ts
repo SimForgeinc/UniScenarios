@@ -28,6 +28,8 @@ export interface SignalState {
 
 export interface StopLineBinding {
   readonly controlId: string;
+  /** Shared junction arbitration key for static all-way-stop approaches. */
+  readonly coordinationId: string;
   readonly kind: 'signal' | 'stop';
   readonly signalId: string | null;
   readonly dwellS: number;
@@ -61,6 +63,7 @@ export class SignalBook {
       for (const sl of [...p.stopLines].sort((a, b) => (a.rsl < b.rsl ? -1 : a.rsl > b.rsl ? 1 : a.s - b.s))) {
         const binding: StopLineBinding = {
           controlId: p.id,
+          coordinationId: p.id,
           kind: 'signal',
           signalId: p.id,
           dwellS: 0,
@@ -78,6 +81,7 @@ export class SignalBook {
       for (const sl of [...control.stopLines].sort((a, b) => (a.rsl < b.rsl ? -1 : a.rsl > b.rsl ? 1 : a.s - b.s))) {
         const binding: StopLineBinding = {
           controlId: control.id,
+          coordinationId: control.mapBinding?.junctionId ?? control.id,
           kind: 'stop',
           signalId: null,
           dwellS: control.dwellS,

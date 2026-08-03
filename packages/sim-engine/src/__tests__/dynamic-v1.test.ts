@@ -238,30 +238,48 @@ describe('dynamic-v1 passenger car', () => {
 
   it('tracks a constant-radius path and develops yaw rate after a steering step', () => {
     const radiusM = 30;
-    const value = new DynamicV1Backend();
-    value.register({
-      actorId: 'car',
-      state: { x: radiusM, y: 0, yawRad: Math.PI / 2, longitudinalVelocityMps: 10 },
-    });
-    let maxYawRate = 0;
-    const result = advance(value, 8, (previous) => {
-      const state = previous?.state ?? value.state('car')!;
-      const theta = Math.atan2(state.y, state.x);
-      const previewTheta = theta + 0.22;
-      maxYawRate = Math.max(maxYawRate, Math.abs(state.yawRateRadps));
-      return {
-        targetSpeedMps: 10,
-        targetAccelerationMps2: 0,
-        previewPoint: {
-          x: radiusM * Math.cos(previewTheta),
-          y: radiusM * Math.sin(previewTheta),
-        },
-        previewHeadingRad: previewTheta + Math.PI / 2,
-      };
-    });
-    expect(maxYawRate).toBeGreaterThan(0.15);
-    expect(Math.abs(Math.hypot(result.state.x, result.state.y) - radiusM)).toBeLessThan(4);
-    expect(Math.abs(result.state.steerRad)).toBeGreaterThan(0.03);
+    const runTurn = () => {
+      const value = new DynamicV1Backend();
+      value.register({
+        actorId: 'car',
+        state: { x: radiusM, y: 0, yawRad: Math.PI / 2, longitudinalVelocityMps: 10 },
+      });
+      let maxYawRate = 0;
+      let maxSteerStep = 0;
+      let maxHeadingStep = 0;
+      let maxLateralAccel = 0;
+      let prior = value.state('car')!;
+      const result = advance(value, 8, (previous) => {
+        const state = previous?.state ?? prior;
+        maxYawRate = Math.max(maxYawRate, Math.abs(state.yawRateRadps));
+        maxSteerStep = Math.max(maxSteerStep, Math.abs(state.steerRad - prior.steerRad));
+        const headingDelta = Math.atan2(Math.sin(state.yawRad - prior.yawRad), Math.cos(state.yawRad - prior.yawRad));
+        maxHeadingStep = Math.max(maxHeadingStep, Math.abs(headingDelta));
+        maxLateralAccel = Math.max(maxLateralAccel, Math.abs(state.longitudinalVelocityMps * state.yawRateRadps));
+        prior = state;
+        const theta = Math.atan2(state.y, state.x);
+        const previewTheta = theta + 0.22;
+        return {
+          targetSpeedMps: 10,
+          targetAccelerationMps2: 0,
+          previewPoint: {
+            x: radiusM * Math.cos(previewTheta),
+            y: radiusM * Math.sin(previewTheta),
+          },
+          previewHeadingRad: previewTheta + Math.PI / 2,
+        };
+      });
+      return { result, maxYawRate, maxSteerStep, maxHeadingStep, maxLateralAccel };
+    };
+    const first = runTurn();
+    const second = runTurn();
+    expect(second).toEqual(first);
+    expect(first.maxYawRate).toBeGreaterThan(0.15);
+    expect(Math.abs(Math.hypot(first.result.state.x, first.result.state.y) - radiusM)).toBeLessThan(4);
+    expect(Math.abs(first.result.state.steerRad)).toBeGreaterThan(0.03);
+    expect(first.maxSteerStep).toBeLessThanOrEqual(GENERIC_PASSENGER_CAR_PROFILE.steerRateRadPerS * 0.05 + 1e-9);
+    expect(first.maxHeadingStep).toBeLessThan(0.1);
+    expect(first.maxLateralAccel).toBeLessThan(9.81);
   });
 
   it('saturates combined tyre force and responds to surface friction', () => {
@@ -353,6 +371,7 @@ describe('dynamic-v1 passenger car', () => {
       (backend) => backend.mode === 'dynamic-v1' && backend.reason === 'selected',
     )).toBe(true);
     expect(Object.values(first.ticks.actors).every((track) => track.physics !== undefined)).toBe(true);
+    expect(first.events.filter((event) => event.kind === 'road_departure_prevented')).toEqual([]);
     expect(elapsedMs).toBeLessThan(7_500);
   }, 30_000);
 });

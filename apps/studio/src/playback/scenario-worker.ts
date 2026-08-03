@@ -3,7 +3,7 @@
 import { matchAnchorReport, normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
 import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
-import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
+import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
 import {
   buildLaneGraph,
   contentHash,
@@ -418,7 +418,8 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
       fetchText(map.xodr),
       fetchJson(map.signals),
     ]);
-    const topologyIndex = topology as TopologyIndex;
+    const signalCatalog = parseMapSignalCatalog(xodr, signals);
+    const topologyIndex = topologyWithMapSpeedLimits(topology as TopologyIndex, signalCatalog);
     const index = normalizeDerivedMapIndex(derived, {
       mapId: map.id,
       topology: topologyIndex as never,
@@ -432,7 +433,7 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
       topology: topologyIndex,
       index,
       graph,
-      signalCatalog: parseMapSignalCatalog(xodr, signals),
+      signalCatalog,
     };
     const controls = buildMapControlPlan(bundle);
     // Start exactly once and reuse the result for validation/export. This does

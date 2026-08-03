@@ -93,6 +93,14 @@ export type SimEvent =
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
   | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }
+  | {
+      t: number;
+      kind: 'road_departure_prevented';
+      actorId: string;
+      laneRsl: string | null;
+      lateralErrorM: number;
+      allowedCenterOffsetM: number;
+    }
   | { t: number; kind: 'spawn'; actorId: string }
   | { t: number; kind: 'despawn'; actorId: string; reason: 'route_end' | 'interaction' | 'clip_end' }
   | { t: number; kind: 'state_set'; actorId: string; key: string; value: boolean | number | string };
