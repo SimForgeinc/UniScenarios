@@ -63,8 +63,10 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     const active: SumoTrafficRun = {
       provider,
       sequence: 0,
-      simulationTime: 0,
-      lastRequestedTime: 0,
+      // The provider may be created while the author is scrubbed away from t=0.
+      // Establish the proxy baseline at that same editor instant; a later
+      // rewind is classified explicitly and rebuilds from the new instant.
+      lastRequestedTime: options.time,
       stepping: Promise.resolve(),
       stepSamples: [],
       missedDeadlines: 0,
@@ -97,7 +99,6 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       // This keeps the city populated before Play without a visible spawn burst.
       const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current, occupancyRoads) });
       if (cancelled) return;
-      active.simulationTime = first.simulationSeconds;
       active.signalTopology = signalTopology;
       active.adjustedSignalControllers = adjustedSignalControllers;
       active.occupancyRoads = occupancyRoads;
@@ -142,19 +143,24 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     if (!active || !active.occupancyRoads || options.mode !== 'playing') return;
     const occupancyRoads = active.occupancyRoads;
     const delta = options.time - active.lastRequestedTime;
-    if (!(delta >= .04)) return;
+    const timing = classifySumoTimelineStep(delta);
+    if (timing === 'wait') return;
     active.lastRequestedTime = options.time;
-    if (delta > 5 || options.time + .001 < active.simulationTime) {
+    if (timing === 'reset') {
       setResetOrdinal((value) => value + 1);
       return;
     }
+    // Capture the pose at the same editor instant as `delta`. Reading the
+    // mutable ref inside the queued promise pairs a future pose with an older
+    // step interval whenever the worker is briefly backlogged, which makes
+    // TraCI report physically impossible implied speeds.
+    const request = {
+      sequence: active.sequence++,
+      deltaSeconds: Math.max(.001, delta),
+      externalActors: externalTrafficActors(externals.current, occupancyRoads),
+    } as const;
     active.stepping = active.stepping.then(async () => {
-      const result = await active.provider.step({
-        sequence: active.sequence++,
-        deltaSeconds: Math.max(.001, delta),
-        externalActors: externalTrafficActors(externals.current, occupancyRoads),
-      });
-      active.simulationTime = result.simulationSeconds;
+      const result = await active.provider.step(request);
       active.stepSamples.push(result.stepMilliseconds);
       if (active.stepSamples.length > 120) active.stepSamples.shift();
       const p95 = percentile(active.stepSamples, .95);
@@ -188,10 +194,14 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
   return status;
 }
 
+export function classifySumoTimelineStep(deltaSeconds: number): 'wait' | 'step' | 'reset' {
+  if (deltaSeconds < -.001 || deltaSeconds > 5) return 'reset';
+  return deltaSeconds >= .04 ? 'step' : 'wait';
+}
+
 interface SumoTrafficRun {
   readonly provider: SumoWasmTrafficProvider;
   sequence: number;
-  simulationTime: number;
   lastRequestedTime: number;
   stepping: Promise<void>;
   readonly stepSamples: number[];

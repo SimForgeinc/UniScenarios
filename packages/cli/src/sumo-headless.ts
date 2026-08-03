@@ -71,6 +71,8 @@ export interface HeadlessSumoResult {
     readonly heapBytes: number;
     readonly initMilliseconds: number;
     readonly stepMilliseconds: { readonly p50: number; readonly p95: number; readonly p99: number; readonly max: number; readonly total: number };
+    /** Exact SUMO stderr diagnostics retained for headless acceptance checks. */
+    readonly warnings: readonly string[];
   };
   readonly requestedActors: number;
   readonly peakActors: number;
@@ -136,10 +138,14 @@ export async function runHeadlessSumo(options: {
   const occupancyRoads = buildSumoRoadOccupancyIndex(new TextDecoder().decode(network), manifest.worldFromNetwork);
   const importedAt = performance.now();
   const imported = await import(pathToFileURL(moduleFile).href) as { default: SumoFactory };
+  const warnings: string[] = [];
   const sumo = await imported.default({
     noInitialRun: true,
     locateFile: (file) => file.endsWith('.wasm') ? wasmFile : path.join(runtimeDir, file),
-    printErr: () => undefined,
+    printErr: (message) => {
+      const normalized = message.trim();
+      if (normalized) warnings.push(normalized);
+    },
   });
   const factoryMilliseconds = performance.now() - importedAt;
   const netPointer = copyBytes(sumo, network);
@@ -217,6 +223,7 @@ export async function runHeadlessSumo(options: {
       heapBytes: sumo.HEAPU8.buffer.byteLength,
       initMilliseconds: round(initMilliseconds),
       stepMilliseconds: summarizeTimes(stepMilliseconds),
+      warnings: [...new Set(warnings)],
     },
     requestedActors: options.actorCount,
     peakActors,

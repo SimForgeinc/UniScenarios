@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { externalTrafficActors, trafficMetrics } from './useSumoTraffic';
+import { classifySumoTimelineStep, externalTrafficActors, trafficMetrics } from './useSumoTraffic';
 
 function packed(actors: readonly { id: number; x: number; z: number; speed: number; acceleration: number }[]): ArrayBuffer {
   const result = new ArrayBuffer(actors.length * 32);
@@ -17,11 +17,24 @@ function packed(actors: readonly { id: number; x: number; z: number; speed: numb
 
 describe('SUMO live product metrics', () => {
   it('keeps authored proxies in provider-neutral scene x/z coordinates', () => {
-    expect(externalTrafficActors([{
+    const source = {
       id: 'actor', kind: 'car', x: 552.19, z: -1582.44, headingRad: 0,
       speedMps: 5, lengthM: 4.5, widthM: 1.8, static: false,
-    }], { segments: [{ ax: 540, az: -1582.44, bx: 560, bz: -1582.44, halfWidthM: 1.8 }] })[0])
+    } as const;
+    const snapshot = externalTrafficActors([source], { segments: [{ ax: 540, az: -1582.44, bx: 560, bz: -1582.44, halfWidthM: 1.8 }] });
+    expect(snapshot[0])
       .toMatchObject({ id: 'external:actor', kind: 'vehicle', x: 552.19, z: -1582.44 });
+    // A queued request owns this exact pose even after the live render source
+    // advances several frames.
+    (source as { x: number }).x = 900;
+    expect(snapshot[0]!.x).toBe(552.19);
+  });
+
+  it('uses editor time for rewind/reset decisions instead of SUMO warmup time', () => {
+    expect(classifySumoTimelineStep(.05)).toBe('step');
+    expect(classifySumoTimelineStep(.02)).toBe('wait');
+    expect(classifySumoTimelineStep(-.01)).toBe('reset');
+    expect(classifySumoTimelineStep(5.01)).toBe('reset');
   });
 
   it('counts local queues, emergency braking, and completed flow vehicles deterministically', () => {
