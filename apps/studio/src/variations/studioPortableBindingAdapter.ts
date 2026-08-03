@@ -1,4 +1,4 @@
-import { normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
+import { normalizeDerivedMapIndex, type DerivedMapIndex } from '@uniscenarios/anchor-matcher';
 import {
   liftMapBoundTemplate,
   type PortableLiftOptions,
@@ -17,6 +17,7 @@ export const SIGNAL_APPROACH_EXTENSION = 'studio.variation.signalApproaches';
 /** Browser adapter for the materializer-owned reverse-materialization seam. */
 export class StudioPortableBindingAdapter implements PortableBindingAdapter {
   readonly contractVersion = STUDIO_PORTABLE_BINDING_CONTRACT;
+  private readonly indexCache = new Map<string, Promise<DerivedMapIndex>>();
 
   async bind(template: ScenarioTemplateV2, sourceMap: VariationMapSource): Promise<PortableBindingResult> {
     if (template.roles.length > 0 && template.roles.every((role) => role.kind !== 'scene_absolute')) {
@@ -38,16 +39,7 @@ export class StudioPortableBindingAdapter implements PortableBindingAdapter {
         }],
       };
     }
-    const [topology, derived, locations] = await Promise.all([
-      fetchJson(sourceMap.topology),
-      fetchJson(sourceMap.derivedTopology),
-      fetchJson(sourceMap.locations),
-    ]);
-    const index = normalizeDerivedMapIndex(derived, {
-      mapId: sourceMap.id,
-      topology: topology as TopologyIndex as never,
-      locations,
-    });
+    const index = await this.loadIndex(sourceMap);
     const signalApproaches = signalApproachesFrom(template);
     const options: PortableLiftOptions = {
       origin: 'auto',
@@ -63,6 +55,17 @@ export class StudioPortableBindingAdapter implements PortableBindingAdapter {
       binding: { template: lifted.template, sourceSite: lifted.sourceSite },
       issues: lifted.issues,
     };
+  }
+
+  private loadIndex(sourceMap: VariationMapSource): Promise<DerivedMapIndex> {
+    const key = `${sourceMap.id}:${sourceMap.topology}:${sourceMap.derivedTopology}:${sourceMap.locations}`;
+    let pending = this.indexCache.get(key);
+    if (!pending) {
+      pending = Promise.all([fetchJson(sourceMap.topology), fetchJson(sourceMap.derivedTopology), fetchJson(sourceMap.locations)])
+        .then(([topology, derived, locations]) => normalizeDerivedMapIndex(derived, { mapId: sourceMap.id, topology: topology as TopologyIndex as never, locations }));
+      this.indexCache.set(key, pending);
+    }
+    return pending;
   }
 }
 

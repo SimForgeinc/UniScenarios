@@ -66,6 +66,89 @@ export interface VariationCandidateResult {
   trace?: SimTrace;
   preview?: VariationPreview;
   error?: string;
+  stage?: VariationCandidateStage;
+  lineage?: VariationLineageManifest;
+}
+
+export type VariationCandidateStage = 'enumerated' | 'materializing' | 'simulating' | 'gating' | 'verified' | 'failed';
+
+export type VariationReviewState = 'shortlisted' | 'rejected' | 'promoted';
+
+export interface VariationLineageManifest {
+  kind: 'variation-lineage';
+  version: 1;
+  sourceRevision: string;
+  sourcePatternId: string;
+  sourceMapId: string;
+  targetMapId: string;
+  siteId: string;
+  permutationKey: string;
+  nativeVerificationToken: string;
+  generatedAt: string;
+}
+
+export interface VariationRequirement {
+  kind: 'actor' | 'road' | 'junction' | 'signal' | 'runway' | 'route';
+  label: string;
+  detail: string;
+}
+
+export type EligibilityReasonCode =
+  | 'EXACT_STRUCTURAL_MATCH'
+  | 'DEGRADED_STRUCTURAL_MATCH'
+  | 'REQUIRED_CLAUSE_FAILED'
+  | 'CAPABILITY_MISSING'
+  | 'INTERNAL_LANE_AMBIGUOUS'
+  | 'TERMINAL_LANE_NO_CONNECTED_APPROACH'
+  | 'SOURCE_BINDING_INVALID';
+
+export interface EligibilityReasonGroup {
+  code: EligibilityReasonCode;
+  count: number;
+  message: string;
+  repair?: string;
+}
+
+/** Simulation-free current-map compatibility report. */
+export interface EligibilityReport {
+  kind: 'variation-eligibility';
+  version: 1;
+  mapId: string;
+  sourceRevision: string;
+  computedInMs: number;
+  actorCount: number;
+  actors: Array<{ id: string; label: string; type: string; required: boolean }>;
+  referenceActorId: string | null;
+  requirements: VariationRequirement[];
+  locations: { exact: number; degraded: number; rejected: number; compatible: number };
+  reasons: EligibilityReasonGroup[];
+  axisCombinations: number;
+  drawsPerLocation: number;
+  potentialCandidates: number;
+  formula: string;
+  structuralOnly: true;
+  patternId?: string;
+  resumeToken?: string;
+  candidates: VariationCandidate[];
+  issues: VariationIssue[];
+}
+
+export interface VariationFunnelCounts {
+  enumerated: number;
+  materialized: number;
+  simulated: number;
+  gated: number;
+  deduplicated: number;
+  ranked: number;
+  verified: number;
+  failed: number;
+}
+
+export interface VariationProgress {
+  jobId: string;
+  sourceRevision: string;
+  counts: VariationFunnelCounts;
+  candidate?: VariationCandidateResult;
 }
 
 export interface VariationSearchPayload {
@@ -83,7 +166,7 @@ export interface VariationDecision {
   sourcePatternId: string;
   mapId: string;
   siteId: string;
-  decision: 'accepted' | 'rejected';
+  decision: VariationReviewState | 'accepted';
   decidedAt: string;
   resumeToken: string;
   reason?: string;
@@ -100,4 +183,11 @@ export interface AcceptedVariationProject {
   template: ScenarioTemplateV2;
   instance: VariationCandidateResult['instance'];
   acceptance: VariationAcceptanceReport;
+  lineage?: VariationLineageManifest;
+}
+
+export interface CarlaConformanceEligibility {
+  eligible: boolean;
+  code: 'CARLA_ELIGIBLE' | 'CARLA_REVIEW_REQUIRED' | 'CARLA_NATIVE_VERIFICATION_REQUIRED' | 'CARLA_EVIDENCE_STALE';
+  message: string;
 }

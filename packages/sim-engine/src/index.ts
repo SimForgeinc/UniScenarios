@@ -213,6 +213,8 @@ export type {
 } from './trace/trace.js';
 export { encodeTraceGz, decodeTraceGz, serializeTrace, traceDigest } from './trace/gzip.js';
 export { computeMetrics, criticalityWindow } from './trace/metrics.js';
+export { MONITORED_PAIR_POLICY_VERSION, selectMetricPair } from './trace/monitored-pairs.js';
+export type { MetricPairSelection, MonitoredPairPolicy } from './trace/monitored-pairs.js';
 export {
   evaluateTrace,
   evaluateMetrics,

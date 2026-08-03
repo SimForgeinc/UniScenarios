@@ -25,6 +25,7 @@ import type {
   PairMinDistance,
   RevealToConflict,
 } from './trace.js';
+import { MONITORED_PAIR_POLICY_VERSION, selectMetricPair } from './monitored-pairs.js';
 
 interface PairAccumulator {
   readonly a: string;
@@ -159,18 +160,23 @@ export function observeTick(
 ): void {
   acc.ticks++;
   const live = actors.filter((a) => a.present && !a.retired);
+  const explicitPairs = new Set(acc.occlusionMonitors.map((monitor) => monitor.key));
   for (let i = 0; i < live.length; i++) {
     for (let j = i + 1; j < live.length; j++) {
       const a = live[i]!;
       const b = live[j]!;
       const bothStatic = a.static && b.static;
       const key = pairKey(a.id, b.id);
-      const monitored = acc.occlusionMonitors.some((monitor) => monitor.key === key);
-      const scored = acc.metricSubject === null || a.id === acc.metricSubject || b.id === acc.metricSubject;
       const staticActor = a.static ? a : b.static ? b : null;
       const movingActor = a.static ? b : b.static ? a : null;
       const staticShapes = staticActor ? staticCollisionShapes.get(staticActor.id) : undefined;
       const hasArticulatedShape = [...(staticShapes?.keys() ?? [])].some((name) => name.startsWith('door:'));
+      const selection = selectMetricPair({
+        version: MONITORED_PAIR_POLICY_VERSION,
+        metricSubject: acc.metricSubject,
+        explicitPairs,
+      }, a.id, b.id, hasArticulatedShape);
+      const { monitored, scored } = selection;
       if (!scored && !monitored && !hasArticulatedShape) continue;
       const staticPaths = staticActor && movingActor
         ? [...(staticShapes?.values() ?? [])]

@@ -19,10 +19,17 @@ describe('variation project persistence', () => {
     expect(new VariationProjectStore().decision('map:site:direct')).toMatchObject({ decision: 'rejected', resumeToken: 'resume' });
   });
 
+  it('persists shortlist and promotion review states', () => {
+    const store = new VariationProjectStore();
+    store.recordDecision({ key: 'short', sourcePatternId: 'pattern', mapId: 'map', siteId: 'site', decision: 'shortlisted', decidedAt: '2026-01-01T00:00:00Z', resumeToken: 'resume' });
+    store.recordDecision({ key: 'promoted', sourcePatternId: 'pattern', mapId: 'map', siteId: 'site-2', decision: 'promoted', decidedAt: '2026-01-01T00:00:00Z', resumeToken: 'resume' });
+    expect(new VariationProjectStore().decision('short')?.decision).toBe('shortlisted');
+    expect(new VariationProjectStore().decision('promoted')?.decision).toBe('promoted');
+  });
+
   it('saves and reopens an accepted project without losing its concrete instance', () => {
     const project = { key: 'map:site:direct', name: 'variation-project', mapId: 'map', siteId: 'site', sourcePatternId: 'pattern', createdAt: '2026-01-01T00:00:00Z', template: { scenarioVersion: 2 }, instance: { kind: 'scenario-instance', version: 1, input: { mapId: 'map' } }, acceptance: { status: 'accepted' } } as any;
     new VariationProjectStore().saveProject(project);
     expect(new VariationProjectStore().projects()[0]).toMatchObject({ name: 'variation-project', instance: { input: { mapId: 'map' } }, acceptance: { status: 'accepted' } });
   });
 });
-

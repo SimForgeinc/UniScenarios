@@ -41,6 +41,8 @@ export type PortableLiftIssueCode =
   | 'reference_lane_anchor_missing'
   | 'reference_lane_missing'
   | 'source_frame_unbuildable'
+  | 'internal_lane_ambiguous'
+  | 'terminal_lane_unconnected'
   | 'role_lane_anchor_missing'
   | 'role_lane_missing'
   | 'role_projection_too_far'
@@ -119,10 +121,21 @@ function findFrame(
   reference: Extract<RoleBinding, { kind: 'scene_absolute' }>,
   index: DerivedMapIndex,
   origin: PortableLiftOptions['origin'],
+  issues: PortableLiftIssue[],
 ): AnchorFrame | null {
-  const rsl = rslOf(reference);
-  if (!rsl) return null;
-  const turn = routeTurn(template, reference.id);
+  const sourceRsl = rslOf(reference);
+  if (!sourceRsl) return null;
+  const resolved = resolveFrameApproach(sourceRsl, index);
+  if (resolved.status === 'ambiguous') {
+    issues.push({ code: 'internal_lane_ambiguous', severity: 'error', path: `roles.${reference.id}.laneRef`, message: `lane ${sourceRsl} reaches multiple structural approaches: ${resolved.candidates.join(', ')}`, dependency: 'move the reference actor onto an unambiguous approach lane or author an explicit turn', retryable: true });
+    return null;
+  }
+  if (resolved.status === 'unconnected') {
+    issues.push({ code: 'terminal_lane_unconnected', severity: 'error', path: `roles.${reference.id}.laneRef`, message: `lane ${sourceRsl} has no deterministically connected corridor or junction approach`, dependency: 'extend topology connectivity or re-snap the actor to a connected driving lane', retryable: true });
+    return null;
+  }
+  const rsl = resolved.rsl;
+  const turn = routeTurn(template, reference.id) ?? resolved.turn;
   const featureId = 'transferOrigin';
   if (origin !== 'corridor') {
     const directGates = index.gates.filter((gate) => gate.approachLaneRsl === rsl);
@@ -139,7 +152,7 @@ function findFrame(
         anchorFeatureId: featureId,
         ...(turn ? { egoTurn: turn } : {}),
       });
-      const containing = frames.find((frame) => frame.referencePath.some((span) => span.laneRsl === rsl));
+      const containing = frames.find((frame) => frame.referencePath.some((span) => span.laneRsl === sourceRsl));
       if (containing) return containing;
       if (frames[0]) return frames[0];
     }
@@ -149,6 +162,40 @@ function findFrame(
   return segmentId
     ? buildCorridorFrame(index, segmentId, { anchorFeatureId: featureId, runwayDownstreamM: 240 })
     : null;
+}
+
+type FrameApproachResolution =
+  | { status: 'resolved'; rsl: string; turn?: 'left' | 'right' | 'straight' | 'uturn' }
+  | { status: 'ambiguous'; candidates: string[] }
+  | { status: 'unconnected' };
+
+/** Deterministic connectivity walk; it never crosses to a disconnected road or guesses between branches. */
+function resolveFrameApproach(sourceRsl: string, index: DerivedMapIndex): FrameApproachResolution {
+  if (index.factIndex.segmentIdsByLane[sourceRsl] || index.gates.some((gate) => gate.approachLaneRsl === sourceRsl)) return { status: 'resolved', rsl: sourceRsl };
+  const internal = index.gates.filter((gate) => gate.connectingLaneRsl === sourceRsl || gate.exitLaneRsls.includes(sourceRsl));
+  const internalChoices = [...new Map(internal.map((gate) => [`${gate.approachLaneRsl}:${gate.turnRelation}`, gate])).values()]
+    .sort((a, b) => a.approachLaneRsl.localeCompare(b.approachLaneRsl) || a.turnRelation.localeCompare(b.turnRelation));
+  if (internalChoices.length === 1) return { status: 'resolved', rsl: internalChoices[0]!.approachLaneRsl, turn: internalChoices[0]!.turnRelation };
+  if (internalChoices.length > 1) return { status: 'ambiguous', candidates: internalChoices.map((gate) => `${gate.approachLaneRsl} (${gate.turnRelation})`) };
+  let frontier = [sourceRsl];
+  const seen = new Set(frontier);
+  for (let depth = 0; depth < 12 && frontier.length; depth++) {
+    const next = new Set<string>();
+    const matches = new Set<string>();
+    for (const rsl of frontier.sort()) {
+      const lane = index.lanes[rsl];
+      if (!lane) continue;
+      for (const neighbor of [...lane.predecessors, ...lane.successors].sort()) {
+        if (seen.has(neighbor)) continue;
+        seen.add(neighbor); next.add(neighbor);
+        if (index.factIndex.segmentIdsByLane[neighbor] || index.gates.some((gate) => gate.approachLaneRsl === neighbor)) matches.add(neighbor);
+      }
+    }
+    if (matches.size === 1) return { status: 'resolved', rsl: [...matches][0]! };
+    if (matches.size > 1) return { status: 'ambiguous', candidates: [...matches].sort() };
+    frontier = [...next];
+  }
+  return { status: 'unconnected' };
 }
 
 interface Projection {
@@ -442,9 +489,9 @@ export function liftMapBoundTemplate(
     issues.push({ code: 'reference_lane_missing', severity: 'error', path: `roles.${reference.id}.laneRef`, message: `lane ${referenceRsl} is absent from the current topology`, dependency: 'reload the matching map topology or re-snap the actor', retryable: true });
     return { ok: false, issues };
   }
-  const frame = findFrame(template, reference, index, options.origin ?? 'auto');
+  const frame = findFrame(template, reference, index, options.origin ?? 'auto', issues);
   if (!frame) {
-    issues.push({ code: 'source_frame_unbuildable', severity: 'error', path: 'anchor', message: 'no connected corridor or junction frame could be built from the reference approach', dependency: 'derive connected segments/gates for the reference lane or choose another reference actor', retryable: true });
+    if (!issues.some((issue) => issue.code === 'internal_lane_ambiguous' || issue.code === 'terminal_lane_unconnected')) issues.push({ code: 'source_frame_unbuildable', severity: 'error', path: 'anchor', message: 'no connected corridor or junction frame could be built from the reference approach', dependency: 'derive connected segments/gates for the reference lane or choose another reference actor', retryable: true });
     return { ok: false, issues };
   }
 
