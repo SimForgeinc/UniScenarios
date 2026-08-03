@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { buildLaneGraph, parseSimScenarioInput, type TopologyIndex } from '@uniscenarios/sim-engine';
+import { buildLaneGraph, parseSimScenarioInput, runSimulation, type TopologyIndex } from '@uniscenarios/sim-engine';
 import { execa } from 'execa';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
@@ -26,6 +26,48 @@ const graph = buildLaneGraph({
   gates: [],
   junctions: {},
 } satisfies TopologyIndex);
+
+const laneGraph = buildLaneGraph({
+  schemaVersion: 1,
+  mapName: 'lane-export-fixture',
+  source: { xodrSha256: 'lane-fixture' },
+  lanes: Object.fromEntries([
+    ['1:0:-1', 0, null, '1:0:-2'],
+    ['1:0:-2', -3.5, '1:0:-1', null],
+  ].map(([rsl, y, left, right]) => [rsl, {
+    rsl, roadId: 1, section: 0, laneId: rsl === '1:0:-1' ? -1 : -2,
+    laneType: 'driving', isJunction: false, junctionId: null,
+    predecessors: [], successors: [], speedLimitKph: 50, representativeWidthM: 3.5,
+    widthSamples: [{ s: 0, widthM: 3.5 }, { s: 500, widthM: 3.5 }],
+    adjacentLanes: {
+      left: { side: 'left', laneRsl: left, sameDirection: left !== null, permissionIds: left ? [`${rsl}:left`] : [] },
+      right: { side: 'right', laneRsl: right, sameDirection: right !== null, permissionIds: right ? [`${rsl}:right`] : [] },
+    },
+    laneChangePermissions: [
+      ...(left ? [{ id: `${rsl}:left`, side: 'left', startS: 0, endS: 500, allowed: true, marking: 'broken', source: 'fixture' }] : []),
+      ...(right ? [{ id: `${rsl}:right`, side: 'right', startS: 0, endS: 500, allowed: true, marking: 'broken', source: 'fixture' }] : []),
+    ],
+    polyline: [{ x: 0, y }, { x: 500, y }],
+  }])),
+  gates: [],
+  junctions: {},
+} as TopologyIndex);
+
+function mappedLaneChangeFixture(count = 1, durationS = 1) {
+  return parseSimScenarioInput({
+    mapId: 'lane-export-fixture', clipSeconds: 12, warmupSeconds: 0, dt: 0.02,
+    physics: { mode: 'kinematic-v1' }, metricSubject: 'ego',
+    actors: [{
+      id: 'ego', kind: 'vehicle', dims: { l: 4.5, w: 1.9, h: 1.5 },
+      initial: { laneRef: { rsl: '1:0:-2', s: 10, tFrac: 0 }, pose: { x: 10, z: 3.5, headingRad: 0 }, speedMps: 5 },
+      behavior: { route: { kind: 'lanePath', lanes: ['1:0:-2'] }, cruiseSpeedMps: 5 },
+    }],
+    interactions: [{
+      id: 'mapped-change', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'changeLane',
+      target: { mode: 'left', count }, dynamics: { shape: 'sinusoidal', constraint: 'time', value: durationS },
+    }],
+  });
+}
 
 function fixture() {
   return parseSimScenarioInput({
@@ -222,6 +264,25 @@ function standardActionsXmlFixture() {
 }
 
 describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
+  it('exports the runtime-clamped effective lane-change duration', () => {
+    const input = mappedLaneChangeFixture(1, 1);
+    const simulation = runSimulation(input, { graph: laneGraph, guards: 'collect' });
+    const planned = simulation.trace.events.find((event) => event.kind === 'lateral_maneuver_planned')!;
+    expect(planned.effectiveDurationS).toBeGreaterThan(1);
+    const result = exportOpenScenarioXml14(input, { graph: laneGraph, executionMode: 'actions' });
+    const exported = /LaneChangeActionDynamics dynamicsShape="cubic" dynamicsDimension="time" value="([^"]+)"/.exec(result.content);
+    expect(Number(exported?.[1])).toBeCloseTo(planned.effectiveDurationS, 9);
+  });
+
+  it('fails closed when a requested multi-lane target has no final neighbour', () => {
+    expect(() => exportOpenScenarioXml14(mappedLaneChangeFixture(2, 6), { graph: laneGraph, executionMode: 'actions' })).toThrow(AsamExportError);
+    try {
+      exportOpenScenarioXml14(mappedLaneChangeFixture(2, 6), { graph: laneGraph, executionMode: 'actions' });
+    } catch (error) {
+      expect((error as AsamExportError).issues).toContainEqual(expect.objectContaining({ code: 'lane_change_target_unreachable' }));
+    }
+  });
+
   it('emits deterministic concrete entities, routes, dependency triggers, and stop time', () => {
     const result = exportOpenScenarioXml14(fixture(), { graph, roadFile: 'fixture.xodr' });
     expect(result.standard).toBe('ASAM OpenSCENARIO XML 1.4.0');

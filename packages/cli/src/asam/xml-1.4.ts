@@ -10,6 +10,7 @@ import {
   type Pose,
   type Route,
   type SimActor,
+  type SimEvent,
   type SimScenarioInput,
   type SimTrace,
   type SignalProgram,
@@ -227,14 +228,18 @@ function speedAction(interaction: Extract<Interaction, { verb: 'speed' }>, actor
 function laneChangeAction(
   interaction: Extract<Interaction, { verb: 'changeLane' }>,
   actorName: string,
+  effectiveDurationS?: number,
 ): string | AsamExportIssue {
+  const dynamics = effectiveDurationS === undefined
+    ? interaction.dynamics
+    : { ...interaction.dynamics, shape: 'cubic' as const, constraint: 'time' as const, value: effectiveDurationS };
   if (interaction.target.mode !== 'left' && interaction.target.mode !== 'right') {
     if (interaction.target.mode === 'actorLane') {
       return [
         '<PrivateAction>',
         '  <LateralAction>',
         '    <LaneChangeAction>',
-        `      <LaneChangeActionDynamics dynamicsShape="${interaction.dynamics.shape}" dynamicsDimension="${interaction.dynamics.constraint}" value="${finite(interaction.dynamics.value)}"/>`,
+        `      <LaneChangeActionDynamics dynamicsShape="${dynamics.shape}" dynamicsDimension="${dynamics.constraint}" value="${finite(dynamics.value)}"/>`,
         '      <LaneChangeTarget>',
         `        <RelativeTargetLane entityRef="${xml(identifier('actor', interaction.target.actorId))}" value="0"/>`,
         '      </LaneChangeTarget>',
@@ -254,7 +259,7 @@ function laneChangeAction(
     '<PrivateAction>',
     '  <LateralAction>',
     '    <LaneChangeAction>',
-    `      <LaneChangeActionDynamics dynamicsShape="${interaction.dynamics.shape}" dynamicsDimension="${interaction.dynamics.constraint}" value="${finite(interaction.dynamics.value)}"/>`,
+    `      <LaneChangeActionDynamics dynamicsShape="${dynamics.shape}" dynamicsDimension="${dynamics.constraint}" value="${finite(dynamics.value)}"/>`,
     '      <LaneChangeTarget>',
     `        <RelativeTargetLane entityRef="${xml(actorName)}" value="${value}"/>`,
     '      </LaneChangeTarget>',
@@ -389,13 +394,14 @@ function interactionActions(
   resolved: ResolvedAsamScenario,
   interaction: Interaction,
   options: AsamExportOptions,
+  effectiveLateralDurations: ReadonlyMap<string, number> = new Map(),
 ): string[] | AsamExportIssue {
   const actorName = resolved.actorNames.get(interaction.actorId)!;
   switch (interaction.verb) {
     case 'speed':
       return [speedAction(interaction, actorName)];
     case 'changeLane': {
-      const action = laneChangeAction(interaction, actorName);
+      const action = laneChangeAction(interaction, actorName, effectiveLateralDurations.get(interaction.id));
       return typeof action === 'string' ? [action] : action;
     }
     case 'route': {
@@ -735,6 +741,42 @@ function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 
   if (issues.length > 0) throw new AsamExportError(issues);
 }
 
+/**
+ * Resolve the runtime's authoritative lateral duration before emitting an OSC
+ * action. This also makes missing multi-lane neighbours fail closed instead of
+ * exporting a count the engine could not execute. Freeform actors retain the
+ * legacy action path because they have no map-lane topology to preflight.
+ */
+function preflightLateralActionDurations(input: SimScenarioInput, options: AsamExportOptions): ReadonlyMap<string, number> {
+  const candidates = input.interactions.filter((interaction): interaction is Interaction & { verb: 'changeLane' } => {
+    if (interaction.verb !== 'changeLane') return false;
+    const actor = input.actors.find((item) => item.id === interaction.actorId);
+    return actor?.behavior.route.kind !== 'polyline';
+  });
+  if (candidates.length === 0) return new Map();
+  const simulation = runSimulation(input, { graph: options.graph, guards: 'collect' });
+  const issues: AsamExportIssue[] = [];
+  const durations = new Map<string, number>();
+  for (const interaction of candidates) {
+    const aborted = simulation.trace.events.find((event): event is Extract<SimEvent, { kind: 'interaction_aborted' }> => event.kind === 'interaction_aborted' && event.interactionId === interaction.id);
+    const planned = simulation.trace.events.find((event): event is Extract<SimEvent, { kind: 'lateral_maneuver_planned' }> => event.kind === 'lateral_maneuver_planned' && event.interactionId === interaction.id);
+    const completed = simulation.trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === interaction.id);
+    if (aborted || !planned || !completed) {
+      issues.push({
+        code: aborted?.reason === 'rejected' ? 'lane_change_target_unreachable' : 'lateral_action_not_conformance_proven',
+        path: `interactions.${interaction.id}`,
+        reason: aborted
+          ? `runtime aborts this lane change (${aborted.reason}); OSC action export would diverge`
+          : 'runtime did not plan and complete this lane change in the authoritative replay',
+      });
+      continue;
+    }
+    durations.set(interaction.id, planned.effectiveDurationS);
+  }
+  if (issues.length > 0) throw new AsamExportError(issues);
+  return durations;
+}
+
 function signalConditions(condition: Condition): Extract<Condition, { kind: 'signal' }>[] {
   if (condition.kind === 'signal') return [condition];
   if (condition.kind === 'and' || condition.kind === 'or') return condition.of.flatMap(signalConditions);
@@ -846,6 +888,9 @@ export function exportOpenScenarioXml14(
   );
   if (executionMode === 'actions') assertDefaultControllerRules(input, false);
   validateXmlProfile(input, executionMode);
+  const effectiveLateralDurations = executionMode === 'actions'
+    ? preflightLateralActionDurations(input, options)
+    : new Map<string, number>();
   let replayTrace: SimTrace | null = null;
   if (executionMode === 'trajectory-replay') {
     try {
@@ -883,7 +928,7 @@ export function exportOpenScenarioXml14(
 
   if (executionMode === 'actions') {
     for (const { interaction, name } of resolved.interactions) {
-      const actions = interactionActions(resolved, interaction, options);
+      const actions = interactionActions(resolved, interaction, options, effectiveLateralDurations);
       const trigger = startTrigger(resolved, interaction);
       if (!Array.isArray(actions)) issues.push(actions);
       if (typeof trigger !== 'string') issues.push(trigger);

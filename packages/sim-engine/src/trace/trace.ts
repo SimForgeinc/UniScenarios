@@ -47,6 +47,8 @@ export interface ActorTrack {
   readonly y: number[];
   readonly headingRad: number[];
   readonly speedMps: number[];
+  /** Lane-relative lateral state, retained for maneuver/OSC conformance. */
+  readonly lateralOffsetM: number[];
   /** `-1` for authored rear-first motion, `1` for forward motion. */
   readonly motionDirection?: Array<-1 | 1>;
   readonly laneRsl: Array<string | null>;
@@ -90,8 +92,9 @@ export type SimEvent =
       preemptedInteractionId: string;
     }
   | { t: number; kind: 'released'; actorId: string; axis: string; interactionId: string; reason: 'until' | 'complete' | 'window' }
-  | { t: number; kind: 'interaction_completed'; actorId: string; interactionId: string }
+  | { t: number; kind: 'interaction_completed'; actorId: string; interactionId: string; finalLateralOffsetM?: number }
   | { t: number; kind: 'interaction_aborted'; actorId: string; interactionId: string; reason: 'collision' | 'preempted' | 'until' | 'rejected' | 'clip_end' }
+  | { t: number; kind: 'lateral_maneuver_planned'; actorId: string; interactionId: string; requestedDurationS: number; effectiveDurationS: number; displacementM: number }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
   | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }
@@ -369,6 +372,7 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
       y: tr.y.map((v) => quantize(v, TRACE_PRECISION.position)),
       headingRad: tr.headingRad.map((v) => quantize(v, TRACE_PRECISION.heading)),
       speedMps: tr.speedMps.map((v) => quantize(v, TRACE_PRECISION.speed)),
+      lateralOffsetM: tr.lateralOffsetM.map((v) => quantize(v, TRACE_PRECISION.position)),
       ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: tr.s.map((v) => quantize(v, TRACE_PRECISION.s)),
@@ -429,6 +433,7 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
       z,
       headingRad: [...tr.headingRad],
       speedMps: [...tr.speedMps],
+      lateralOffsetM: [...tr.lateralOffsetM],
       ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: [...tr.s],

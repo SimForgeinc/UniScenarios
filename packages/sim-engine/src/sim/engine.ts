@@ -54,6 +54,7 @@ import {
   governorCap,
   headingWithSlip,
   lateralStep,
+  minimumJerkValue,
   limitsFor,
   longitudinalAccel,
   desiredGapM,
@@ -421,6 +422,7 @@ class Simulation {
         y: [],
         headingRad: [],
         speedMps: [],
+        lateralOffsetM: [],
         motionDirection: [],
         laneRsl: [],
         s: [],
@@ -1115,6 +1117,8 @@ class Simulation {
     }
     if (axis === 'longitudinal') a.longCmd = null;
     else if (axis === 'lateral') a.latCmd = null;
+    const untilOwner = a.untilByAxis.get(axis);
+    if (untilOwner?.interactionId === interactionId) a.untilByAxis.delete(axis);
     const trigger = this.triggerById.get(interactionId);
     if (trigger) trigger.endedAt ??= t;
     this.events.push({ t, kind: 'released', actorId: a.id, axis, interactionId, reason });
@@ -1187,7 +1191,8 @@ class Simulation {
       case 'laneOffset': {
         const width = a.route.widthAt(a.routeS);
         const to = it.target.mode === 'meters' ? it.target.value : it.target.value * width;
-        const duration = this.boundedLateralDuration(a, it.id, it.dynamics, to - a.lateralOffsetM);
+        const planned = this.boundedLateralDuration(a, it.id, it.dynamics, to - a.lateralOffsetM);
+        this.events.push({ t, kind: 'lateral_maneuver_planned', actorId: a.id, interactionId: it.id, requestedDurationS: planned.requestedS, effectiveDurationS: planned.effectiveS, displacementM: to - a.lateralOffsetM });
         const cmd: LateralCommand = {
           kind: 'laneOffset',
           interactionId: it.id,
@@ -1195,7 +1200,7 @@ class Simulation {
           dynamics: it.dynamics,
           from: a.lateralOffsetM,
           to,
-          duration,
+          duration: planned.effectiveS,
           remaining: 0,
           done: false,
         };
@@ -1379,14 +1384,23 @@ class Simulation {
 
     if (target.mode === 'left' || target.mode === 'right') {
       side = target.mode;
-      // Legality hook: illegal changes are rejected rather than silently taken,
-      // so a generated scenario cannot hide a lane-marking violation.
-      const r = retargetToNeighbour(this.graph, a.route, a.routeS, side, {
-        legalOnly: true,
-        remainingTurns: a.remainingTurns,
-      });
-      if (r) retarget = { route: r.route, s: r.s, separationM: r.separationM, targetRsl: r.targetRsl };
-      else legal = false;
+      // Resolve the complete lane-count atomically before motion begins. OSC
+      // represents count=N as one target and duration, so executing one lane
+      // and then silently completing when lane N is missing is non-conformant.
+      let cursorRoute = a.route;
+      let cursorS = a.routeS;
+      let separationM = 0;
+      for (let lane = 0; lane < target.count; lane += 1) {
+        const next = retargetToNeighbour(this.graph, cursorRoute, cursorS, side, {
+          legalOnly: true,
+          remainingTurns: a.remainingTurns,
+        });
+        if (!next) { legal = false; retarget = null; break; }
+        separationM += next.separationM;
+        cursorRoute = next.route;
+        cursorS = next.s;
+        retarget = { route: next.route, s: next.s, separationM, targetRsl: next.targetRsl };
+      }
     } else if (target.mode === 'lane') {
       const currentRsl = a.route.poseAt(a.routeS).rsl;
       // A second true changeLane may abort an in-progress incursion by naming
@@ -1465,7 +1479,8 @@ class Simulation {
     }
 
     const to = a.lateralOffsetM + retarget.separationM;
-    const duration = this.boundedLateralDuration(a, it.id, it.dynamics, retarget.separationM);
+    const planned = this.boundedLateralDuration(a, it.id, it.dynamics, retarget.separationM);
+    this.events.push({ t, kind: 'lateral_maneuver_planned', actorId: a.id, interactionId: it.id, requestedDurationS: planned.requestedS, effectiveDurationS: planned.effectiveS, displacementM: retarget.separationM });
     return {
       kind: 'changeLane',
       interactionId: it.id,
@@ -1473,9 +1488,9 @@ class Simulation {
       dynamics: it.dynamics,
       from: a.lateralOffsetM,
       to,
-      duration,
+      duration: planned.effectiveS,
       pending: retarget,
-      remaining: target.mode === 'left' || target.mode === 'right' ? target.count - 1 : 0,
+      remaining: 0,
       side,
       done: false,
     };
@@ -1486,17 +1501,15 @@ class Simulation {
     interactionId: string,
     dynamics: Dynamics,
     displacementM: number,
-  ): number {
-    const requestedS = transitionDuration(dynamics, displacementM, Math.max(actor.speedMps, 0.1));
+  ): { requestedS: number; effectiveS: number } {
     const distanceM = Math.abs(displacementM);
-    if (distanceM <= 1e-6) return requestedS;
+    const requestedS = dynamics.constraint === 'rate' && distanceM > 1e-9
+      ? distanceM * 1.875 / dynamics.value
+      : transitionDuration(dynamics, displacementM, Math.max(actor.speedMps, 0.1));
+    if (distanceM <= 1e-6) return { requestedS, effectiveS: requestedS };
     const limits = limitsFor(actor);
-    // Cubic smoothstep bounds. Linear/step inputs use the same conservative
-    // envelope because the fixed-step jerk limiter rounds their discontinuous
-    // endpoints rather than allowing a physical snap.
-    const peaks = dynamics.shape === 'sinusoidal'
-      ? { rate: Math.PI / 2, accel: Math.PI ** 2 / 2, jerk: Math.PI ** 3 / 2 }
-      : { rate: 1.5, accel: 6, jerk: 12 };
+    // Analytic peaks of the minimum-jerk quintic used by lateralStep.
+    const peaks = { rate: 1.875, accel: 5.773_502_692, jerk: 60 };
     const requiredS = Math.max(
       distanceM * peaks.rate / Math.max(limits.lateralRateMax, 1e-6),
       Math.sqrt(distanceM * peaks.accel / Math.max(limits.lateralAccelMax, 1e-6)),
@@ -1521,7 +1534,7 @@ class Simulation {
         'warning',
       ));
     }
-    return effectiveS;
+    return { requestedS, effectiveS };
   }
 
   /* ------------------------------------------------------------- stepping */
@@ -1816,8 +1829,7 @@ class Simulation {
       // by pure pursuit. This preserves the timeline's rate/time semantics
       // without teleporting the body onto the kinematic schedule.
       const previewLateralOffset = a.latCmd
-        ? transitionValue(
-            a.latCmd.dynamics,
+        ? minimumJerkValue(
             a.latCmd.from,
             a.latCmd.to,
             t + this.dt + previewTimeS - a.latCmd.firedAt,
@@ -1893,8 +1905,8 @@ class Simulation {
       plan.accel = result.state.longitudinalAccelerationMps2 * (isReverseMotion(a) ? -1 : 1);
       plan.routeS = projected.s;
       plan.lateralOffset = projectedOffset;
-      plan.lateralRate = result.state.lateralVelocityMps;
-      plan.lateralAccel = (result.state.lateralVelocityMps - a.lateralRateMps) / this.dt;
+      plan.lateralRate = (projectedOffset - a.lateralOffsetM) / this.dt;
+      plan.lateralAccel = (plan.lateralRate - a.lateralRateMps) / this.dt;
       plan.position = { x: result.state.x, y: result.state.y };
       plan.heading = result.state.yawRad;
       this.physicsTelemetry.set(a.id, result.telemetry);
@@ -1979,9 +1991,13 @@ class Simulation {
         const projected = plan.swap.route.projectPoint(completedPosition);
         a.route = plan.swap.route;
         a.routeS = projected.s;
-        a.lateralOffsetM = a.route.lateralOffsetAt(projected.s, completedPosition);
+        // The preflighted separation targets this route's centreline exactly.
+        // Completing with a residual projection error makes the authored end
+        // pose disagree with OSC even though the profile reached its target.
+        a.lateralOffsetM = 0;
         a.lateralRestOffsetM = 0;
-        a.position = a.route.pointWithOffset(a.routeS, a.lateralOffsetM);
+        a.lateralRateMps = 0;
+        a.position = a.route.pointWithOffset(a.routeS, 0);
         this.events.push({
           t,
           kind: 'lane_change',
@@ -1990,28 +2006,9 @@ class Simulation {
           toRsl: plan.swap.targetRsl,
           legal: true,
         });
-        if (cmd.remaining > 0 && cmd.side) {
-          const next = retargetToNeighbour(this.graph, a.route, a.routeS, cmd.side, {
-            legalOnly: true,
-            remainingTurns: a.remainingTurns,
-          });
-          if (next) {
-            a.latCmd = {
-              ...cmd,
-              firedAt: t,
-              from: a.lateralOffsetM,
-              to: a.lateralOffsetM + next.separationM,
-              duration: this.boundedLateralDuration(a, cmd.interactionId, cmd.dynamics, next.separationM),
-              pending: { route: next.route, s: next.s, separationM: next.separationM, targetRsl: next.targetRsl },
-              remaining: cmd.remaining - 1,
-              done: false,
-            };
-            continue;
-          }
-        }
         a.latCmd = null;
         a.lateralAccelMps2 = 0;
-        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id });
+        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id, finalLateralOffsetM: 0 });
         this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
       }
 
@@ -2023,7 +2020,7 @@ class Simulation {
         a.lateralRateMps = 0;
         a.latCmd = null;
         a.lateralAccelMps2 = 0;
-        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id });
+        this.events.push({ t, kind: 'interaction_completed', interactionId: cmd.interactionId, actorId: a.id, finalLateralOffsetM: cmd.to });
         this.releaseAxis(a, 'lateral', t, cmd.interactionId, 'complete');
       }
 
@@ -2103,6 +2100,7 @@ class Simulation {
       track.y.push(a.position.y);
       track.headingRad.push(a.headingRad);
       track.speedMps.push(a.speedMps);
+      track.lateralOffsetM.push(a.lateralOffsetM);
       track.motionDirection!.push(isReverseMotion(a) ? -1 : 1);
       track.laneRsl.push(pose.rsl);
       track.s.push(a.routeS);

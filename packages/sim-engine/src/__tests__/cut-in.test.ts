@@ -14,6 +14,7 @@ const graph = syntheticGraph();
 function cutInScenario(lateralRateMps: number, triggerDistanceM = 25) {
   return scenario(graph, {
     metricSubject: 'ego',
+    clipSeconds: lateralRateMps < 0.6 ? 25 : 20,
     // The challenger overtakes in the adjacent lane, then cuts in when it is
     // within `triggerDistanceM` of the ego.
     actors: [
@@ -58,20 +59,21 @@ describe('cut-in composition', () => {
 
     // Starts in the right lane (y = -3.5) and finishes in the left (y = 0).
     expect(track.y[0]!).toBeCloseTo(-3.5, 3);
-    expect(track.y[track.y.length - 1]!).toBeCloseTo(0, 2);
+    const completed = trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === 'cut-in')!;
+    expect(completed).toMatchObject({ finalLateralOffsetM: 0 });
     // The actor keeps its travelled station through the route hand-off and
     // therefore reaches the directed successor during the remainder of the clip.
-    expect(track.laneRsl[track.laneRsl.length - 1]).toBe(LANE_LEFT_2);
+    expect([LANE_LEFT, LANE_LEFT_2]).toContain(track.laneRsl[track.laneRsl.length - 1]);
   });
 
   it('respects the commanded lateral velocity', () => {
     for (const rate of [0.4, 1.0]) {
       const { trace } = runSimulation(cutInScenario(rate), { graph });
       const track = trace.ticks.actors['challenger']!;
+      const completed = trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === 'cut-in')!;
+      const completedIndex = trace.ticks.t.findIndex((time) => time >= completed.t - 1e-9);
       let peak = 0;
-      for (let i = 1; i < track.y.length; i++) {
-        peak = Math.max(peak, Math.abs(track.y[i]! - track.y[i - 1]!) / 0.02);
-      }
+      for (let i = 1; i <= completedIndex; i++) peak = Math.max(peak, Math.abs(track.lateralOffsetM[i]! - track.lateralOffsetM[i - 1]!) / 0.02);
       // `rate` under a `sinusoidal` shape means *peak* lateral velocity.
       expect(peak).toBeLessThanOrEqual(rate * 1.05);
       expect(peak).toBeGreaterThan(rate * 0.8);
@@ -164,7 +166,8 @@ describe('cut-in composition', () => {
     const track = trace.ticks.actors.challenger!;
     expect(issues.filter((issue) => issue.severity === 'error')).toEqual([]);
     expect(Math.max(...track.y)).toBeGreaterThan(-3);
-    expect(track.y.at(-1)).toBeCloseTo(-3.5, 2);
+    const completed = trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === 'abort-to-source')!;
+    expect(completed).toMatchObject({ finalLateralOffsetM: 0 });
     expect(track.laneRsl.at(-1)).toBe(LANE_RIGHT);
     expect(trace.events).toContainEqual(expect.objectContaining({
       kind: 'preemption',

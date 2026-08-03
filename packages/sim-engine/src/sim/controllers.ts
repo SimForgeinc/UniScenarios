@@ -62,7 +62,9 @@ export const VEHICLE_LIMITS: MotionLimits = {
   brakeHard: 8.0,
   lateralRateMax: 2.5,
   lateralAccelMax: 3.0,
-  lateralJerkMax: 6.0,
+  // A 3.5 m quintic lane change in 3 s peaks at 7.78 m/s³. Keep the common
+  // passenger-car preset feasible while still bounding the profile.
+  lateralJerkMax: 8.0,
 };
 
 export const PEDESTRIAN_LIMITS: MotionLimits = {
@@ -361,43 +363,43 @@ export function lateralStep(
   const lim = limitsFor(a);
   const cmd = a.latCmd;
   const target = cmd ? cmd.to : (a.lateralRestOffsetM ?? 0);
-  let desired: number;
+  let offset: number;
+  let rate: number;
+  let accel: number;
   let complete = false;
   if (cmd) {
     const elapsed = t + dt - cmd.firedAt;
-    desired = transitionValue(cmd.dynamics, cmd.from, cmd.to, elapsed, cmd.duration);
-    complete = elapsed >= cmd.duration;
+    const u = clamp(elapsed / Math.max(cmd.duration, 1e-9), 0, 1);
+    const u2 = u * u;
+    const u3 = u2 * u;
+    const u4 = u3 * u;
+    const u5 = u4 * u;
+    const distance = cmd.to - cmd.from;
+    // Minimum-jerk quintic: exact position, zero velocity and zero
+    // acceleration at both ends. boundedLateralDuration sizes the duration
+    // against the analytic peak rate/acceleration/jerk of this same profile.
+    offset = cmd.from + distance * (10 * u3 - 15 * u4 + 6 * u5);
+    rate = distance * (30 * u2 - 60 * u3 + 30 * u4) / cmd.duration;
+    accel = distance * (60 * u - 180 * u2 + 120 * u3) / (cmd.duration * cmd.duration);
+    complete = elapsed >= cmd.duration - 1e-9;
   } else {
-    // No owner: relax any residual offset back to the centreline in ~1 s.
-    desired = a.lateralOffsetM + (target - a.lateralOffsetM) * clamp(dt / 1.0, 0, 1);
+    // No owner: hold the completed lane-relative offset. A new command owns
+    // any subsequent recentering explicitly.
+    offset = target;
+    rate = 0;
+    accel = 0;
   }
-  const maxStep = lim.lateralRateMax * dt;
-  const delta = clamp(desired - a.lateralOffsetM, -maxStep, maxStep);
-  // Once the authored profile reaches its target, switch to a critically
-  // damped terminal controller. Dividing the remaining error by one tick
-  // creates a bang-bang limit cycle under jerk bounds and can leave an actor
-  // visibly offset forever.
-  const rawRate = complete
-    ? clamp((target - a.lateralOffsetM) * 2, -lim.lateralRateMax, lim.lateralRateMax)
-    : delta / dt;
-  const requestedAccel = clamp(
-    (rawRate - a.lateralRateMps) / dt,
-    -lim.lateralAccelMax,
-    lim.lateralAccelMax,
-  );
-  const maxAccelChange = lim.lateralJerkMax * dt;
-  const accel = clamp(
-    requestedAccel,
-    (a.lateralAccelMps2 ?? 0) - maxAccelChange,
-    (a.lateralAccelMps2 ?? 0) + maxAccelChange,
-  );
-  const rate = clamp(a.lateralRateMps + accel * dt, -lim.lateralRateMax, lim.lateralRateMax);
-  const offset = a.lateralOffsetM + rate * dt;
-  // A duration is a target schedule, not permission to snap. If physical
-  // rate/acceleration limits leave the body behind, completion waits until the
-  // requested offset is actually reached.
-  complete = complete && Math.abs(offset - target) <= 0.005 && Math.abs(rate) <= 0.02;
+  // These clamps should be inactive because the duration was analytically
+  // bounded. Retain them as floating-point safety rails.
+  rate = clamp(rate, -lim.lateralRateMax, lim.lateralRateMax);
+  accel = clamp(accel, -lim.lateralAccelMax, lim.lateralAccelMax);
   return { offset, rate, accel, complete };
+}
+
+/** Position on the same minimum-jerk profile used by lateralStep. */
+export function minimumJerkValue(from: number, to: number, elapsedS: number, durationS: number): number {
+  const u = clamp(elapsedS / Math.max(durationS, 1e-9), 0, 1);
+  return from + (to - from) * (10 * u ** 3 - 15 * u ** 4 + 6 * u ** 5);
 }
 
 /** Heading including the body slip implied by lateral motion. */
