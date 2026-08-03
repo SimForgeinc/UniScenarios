@@ -5,6 +5,7 @@ import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'imm
 import { ScenarioMigrationError, ScenarioOperationError, ScenarioValidationError } from './errors.js';
 import { parseTemplate, serializeTemplate, deepFreeze } from './serialize.js';
 import type { Interaction } from './schema/v2/interactions.js';
+import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
 import type { RoleBinding } from './schema/v2/roles.js';
 import type { ActorSensor } from './schema/v2/sensors.js';
 import type { LogicalAnchorInput } from './schema/v2/anchor.js';
@@ -145,6 +146,9 @@ export class TemplateDocument {
   interaction(id: string): Interaction | undefined {
     return this.#state.choreography.interactions.find((interaction) => interaction.id === id);
   }
+  mapSignalPlan(id: string): MapSignalPlan | undefined {
+    return this.#state.mapSignalPlans.find((plan) => plan.id === id);
+  }
   validate(map?: MapContext): ValidationReport { return validateTemplate(this.#state, map); }
 
   apply(op: TemplateOp): boolean {
@@ -232,6 +236,14 @@ export class TemplateDocument {
     return this.apply({ type: 'replaceInteraction', id, interaction });
   }
   removeInteraction(id: string): boolean { return this.apply({ type: 'removeInteraction', id }); }
+  addMapSignalPlan(plan: MapSignalPlan, index?: number): string {
+    this.apply(index === undefined ? { type: 'addMapSignalPlan', plan } : { type: 'addMapSignalPlan', plan, index });
+    return plan.id;
+  }
+  replaceMapSignalPlan(id: string, plan: MapSignalPlan): boolean {
+    return this.apply({ type: 'replaceMapSignalPlan', id, plan });
+  }
+  removeMapSignalPlan(id: string): boolean { return this.apply({ type: 'removeMapSignalPlan', id }); }
   removeProp(id: string): boolean { return this.apply({ type: 'removeProp', id }); }
   removeInvariant(id: string): boolean { return this.apply({ type: 'removeInvariant', id }); }
   removeVariant(id: string): boolean { return this.apply({ type: 'removeVariant', id }); }

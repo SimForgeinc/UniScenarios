@@ -642,9 +642,13 @@ function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 
   for (const [i, program] of input.signalPrograms.entries()) {
     if (executionMode === 'actions' && !program.loop) {
       issues.push({
-        code: 'unsupported_finite_signal_program',
+        code: program.mapBinding?.timingSource === 'authored'
+          ? 'unsupported_authored_signal_timeline'
+          : 'unsupported_finite_signal_program',
         path: `signalPrograms.${i}.loop`,
-        reason: 'XML TrafficSignalController cycles; a finite non-looping program needs explicit storyboard state',
+        reason: program.mapBinding?.timingSource === 'authored'
+          ? 'bounded authored controller clips require trajectory-replay signal-state actions; action-mode TrafficSignalController cycles cannot preserve their [start,end) ownership'
+          : 'XML TrafficSignalController cycles; a finite non-looping program needs explicit storyboard state',
       });
     }
     if (!program.mapBinding) {

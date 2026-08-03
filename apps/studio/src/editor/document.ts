@@ -24,6 +24,7 @@ import {
   type LaneRef,
   type RoleBinding,
   type Interaction,
+  type MapSignalPlan,
   type ActorSensor,
   type ScenarioTemplateV2,
   type TemplateFileStore,
@@ -660,6 +661,21 @@ export class EditorDocument {
   /** Delete one semantic timeline interaction. Validation surfaces dangling references. */
   removeInteraction(id: string): void {
     this.#transaction(() => { this.#doc.removeInteraction(id); });
+  }
+
+  /** Add one physical-junction signal plan as an undoable/autosaved gesture. */
+  addMapSignalPlan(plan: MapSignalPlan): void {
+    this.#transaction(() => { this.#doc.addMapSignalPlan(plan); });
+  }
+
+  /** Replace one signal plan while retaining its stable identity. */
+  replaceMapSignalPlan(id: string, plan: MapSignalPlan): void {
+    this.#transaction(() => { this.#doc.replaceMapSignalPlan(id, plan); });
+  }
+
+  /** Delete one authored physical-junction signal plan. */
+  removeMapSignalPlan(id: string): void {
+    this.#transaction(() => { this.#doc.removeMapSignalPlan(id); });
   }
 
   /** Add one validated actor-attached sensor as an undoable/autosaved gesture. */

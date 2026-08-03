@@ -2,6 +2,7 @@ export * from './errors.js';
 export * from './adapt.js';
 export * from './map-signals.js';
 export * from './signal-control.js';
+export * from './map-signal-plan-compiler.js';
 export * from './materialize.js';
 export * from './map-bound.js';
 export * from './params.js';

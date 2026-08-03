@@ -8,6 +8,7 @@ export * from './sensors.js';
 export * from './roles.js';
 export * from './props.js';
 export * from './traffic-controls.js';
+export * from './map-signal-plans.js';
 export * from './set-keys.js';
 export * from './interactions.js';
 export * from './invariants.js';

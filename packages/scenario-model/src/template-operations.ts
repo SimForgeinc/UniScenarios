@@ -2,6 +2,7 @@
 
 import { ScenarioOperationError } from './errors.js';
 import type { Interaction } from './schema/v2/interactions.js';
+import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
 import type { RoleBinding } from './schema/v2/roles.js';
 import type { ScenarioTemplateV2, TemplateMeta } from './schema/v2/template.js';
 import type { MapRef } from './schema/v1.js';
@@ -24,6 +25,9 @@ export type TemplateOp =
   | { type: 'addInteraction'; interaction: Interaction; index?: number }
   | { type: 'replaceInteraction'; id: string; interaction: Interaction }
   | { type: 'removeInteraction'; id: string }
+  | { type: 'addMapSignalPlan'; plan: MapSignalPlan; index?: number }
+  | { type: 'replaceMapSignalPlan'; id: string; plan: MapSignalPlan }
+  | { type: 'removeMapSignalPlan'; id: string }
   | { type: 'removeProp'; id: string }
   | { type: 'removeInvariant'; id: string }
   | { type: 'removeVariant'; id: string }
@@ -42,6 +46,9 @@ export function describeTemplateOp(op: TemplateOp): string {
     case 'addInteraction': return 'Add interaction';
     case 'replaceInteraction': return 'Edit interaction';
     case 'removeInteraction': return 'Delete interaction';
+    case 'addMapSignalPlan': return 'Add traffic signal plan';
+    case 'replaceMapSignalPlan': return 'Edit traffic signal plan';
+    case 'removeMapSignalPlan': return 'Delete traffic signal plan';
     case 'removeProp': return 'Delete prop';
     case 'removeInvariant': return 'Delete rule';
     case 'removeVariant': return 'Delete variant';
@@ -122,6 +129,24 @@ export function applyTemplateOp(draft: ScenarioTemplateV2, op: TemplateOp): void
         indexOf(draft.choreography.interactions, op.id, 'interaction'),
         1,
       );
+      return;
+    case 'addMapSignalPlan': {
+      if (draft.mapSignalPlans.some((plan) => plan.id === op.plan.id)) {
+        throw new ScenarioOperationError(`map signal plan id "${op.plan.id}" already exists`);
+      }
+      draft.mapSignalPlans.splice(insertionIndex(op.index, draft.mapSignalPlans.length), 0, op.plan);
+      return;
+    }
+    case 'replaceMapSignalPlan': {
+      const at = indexOf(draft.mapSignalPlans, op.id, 'map signal plan');
+      if (op.plan.id !== op.id && draft.mapSignalPlans.some((plan) => plan.id === op.plan.id)) {
+        throw new ScenarioOperationError(`map signal plan id "${op.plan.id}" already exists`);
+      }
+      draft.mapSignalPlans[at] = op.plan;
+      return;
+    }
+    case 'removeMapSignalPlan':
+      draft.mapSignalPlans.splice(indexOf(draft.mapSignalPlans, op.id, 'map signal plan'), 1);
       return;
     case 'removeProp':
       draft.props.splice(indexOf(draft.props, op.id, 'prop'), 1);

@@ -570,6 +570,33 @@ describe('honest unsupported-feature failures', () => {
     }
   });
 
+  it('exports bounded authored controller clips exactly in trajectory replay and fails closed in action mode', () => {
+    const base = extendedXmlFixture();
+    const input = parseSimScenarioInput({
+      ...base,
+      signalPrograms: base.signalPrograms.map((program) => ({
+        ...program,
+        phases: [{ phase: 'green' as const, durationS: 3 }, { phase: 'red' as const, durationS: 9.000001 }],
+        offsetS: 0,
+        loop: false,
+        mapBinding: { ...program.mapBinding!, timingSource: 'authored' as const },
+      })),
+    });
+    const replay = exportOpenScenarioXml14(input, { graph, executionMode: 'trajectory-replay' });
+    expect(replay.content).toContain('<TrafficSignalStateAction name="odr-signal-11" state="green"/>');
+    expect(replay.content).toContain('<TrafficSignalStateAction name="odr-signal-11" state="red"/>');
+    try {
+      exportOpenScenarioXml14(input, { graph, executionMode: 'actions' });
+      throw new Error('expected export to fail');
+    } catch (error) {
+      expect(error).toBeInstanceOf(AsamExportError);
+      expect((error as AsamExportError).issues).toContainEqual(expect.objectContaining({
+        code: 'unsupported_authored_signal_timeline',
+        path: 'signalPrograms.0.loop',
+      }));
+    }
+  });
+
   it('rejects a flat signal binding that cannot assign heads to multiple controllers', () => {
     const base = extendedXmlFixture();
     const input = parseSimScenarioInput({

@@ -3,7 +3,7 @@
 import { matchAnchorReport, normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
 import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
-import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
+import { adaptTemplate, buildMapControlPlan, compileMapSignalPlans, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan, type MapSignalCatalog } from '@uniscenarios/scenario-materializer';
 import {
   buildLaneGraph,
   contentHash,
@@ -79,6 +79,12 @@ export interface ScenarioWorkerStartRequest {
   readonly input: SimScenarioInput;
 }
 export interface ScenarioWorkerCancelRequest { readonly kind: 'cancel'; readonly id?: number }
+export interface ScenarioWorkerInspectSignalsRequest {
+  readonly kind: 'inspect-signals';
+  readonly id: number;
+  readonly revision: string;
+  readonly map: ScenarioWorkerMap;
+}
 export interface ScenarioWorkerTransportRequest {
   readonly kind: 'transport';
   readonly id: number;
@@ -86,7 +92,7 @@ export interface ScenarioWorkerTransportRequest {
   /** Authoritative display playhead, including seeks. */
   readonly time?: number;
 }
-export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest;
+export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest | ScenarioWorkerInspectSignalsRequest;
 
 export interface AmbientRobustnessSummary {
   readonly version: 1;
@@ -117,6 +123,7 @@ export interface AmbientRobustnessSummary {
 }
 
 export type ScenarioWorkerResponse =
+  | { id: number; revision: string; ok: true; kind: 'signal-catalog'; signalCatalog: MapSignalCatalog; controlDigest: string }
   | { id: number; revision: string; ok: true; kind: 'prepare'; runtimeKey: string; cache: 'cold' | 'warm'; timing?: { totalMs: number; compileCache: 'hit' | 'miss' }; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; ambientCandidatePool: AmbientCandidatePool; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
   | { id: number; revision: string; ok: true; kind: 'robustness'; report: AmbientRobustnessSummary }
   | { id: number; revision: string; ok: true; kind: 'ready' | 'progress' | 'complete'; trace: SimTrace; recordedUntil: number }
@@ -179,6 +186,20 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
     void runLive(request, token).catch((reason: unknown) => postFailure(request.id, request.revision, reason));
     return;
   }
+  if (request.kind === 'inspect-signals') {
+    void getMapRuntime(request.map).then(
+      (runtime) => scope.postMessage({
+        id: request.id,
+        revision: request.revision,
+        ok: true,
+        kind: 'signal-catalog',
+        signalCatalog: runtime.bundle.signalCatalog,
+        controlDigest: runtime.identity.controlDigest,
+      } satisfies ScenarioWorkerResponse),
+      (reason: unknown) => postFailure(request.id, request.revision, reason),
+    );
+    return;
+  }
   void prepare(request).then(
     (response) => scope.postMessage(response),
     (reason: unknown) => postFailure(request.id, request.revision ?? String(request.id), reason),
@@ -236,7 +257,14 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
   // rows yet, but its ambient SimActors use the same routes, controls, physics,
   // collision handling and trace format as every later authored scenario.
   if (request.template.roles.length === 0 && !request.baseInstance) {
-    const base = withMapControls(withEditablePhysicsDefault(createEmptyAmbientInput(request.map.id)), mapControls);
+    const base = withMapControls(
+      withEditablePhysicsDefault({
+        ...createEmptyAmbientInput(request.map.id),
+        clipSeconds: request.template.choreography.clipSeconds,
+        warmupSeconds: request.template.choreography.warmupSeconds,
+      }),
+      controlsForTemplate(runtime, request.template),
+    );
     const populated = applyRequestedAmbientPopulation(base, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
@@ -659,6 +687,36 @@ function withMapControls(input: SimScenarioInput, controls: MapControlPlan): Sim
       ...input.roadControls,
       ...controls.roadControls.filter((control) => !roadControlIds.has(control.id)),
     ],
+  };
+}
+
+/** A signal-only authored scene still compiles through the same controller
+ * contract even though it has no actor/site for the ordinary materializer. */
+function controlsForTemplate(runtime: MapRuntime, template: ScenarioTemplateV2): MapControlPlan {
+  if (template.mapSignalPlans.length === 0) return runtime.controls;
+  const directWorldHandles = template.choreography.interactions.flatMap((interaction) => {
+    if (interaction.actor !== '@world' || interaction.verb !== 'set') return [];
+    const match = /^signal:(.+)\.phase$/.exec(interaction.target.key);
+    if (!match) return [];
+    const handle = match[1]!;
+    const program = runtime.controls.signalPrograms.find((candidate) =>
+      candidate.id === handle || candidate.mapBinding?.headIds.includes(handle));
+    return program ? [program.id] : [];
+  });
+  return {
+    ...runtime.controls,
+    signalPrograms: compileMapSignalPlans(runtime.controls.signalPrograms, template.mapSignalPlans, {
+      mapId: runtime.bundle.mapId,
+      controlDigest: runtime.identity.controlDigest,
+      clipSeconds: template.choreography.clipSeconds,
+      warmupSeconds: template.choreography.warmupSeconds,
+      signalCatalog: runtime.bundle.signalCatalog,
+      topology: runtime.topology,
+      conflictPairsByJunction: Object.fromEntries(
+        Object.entries(runtime.bundle.index.junctionDescriptors).map(([id, descriptor]) => [id, descriptor.conflictPairs]),
+      ),
+      worldSignalSetIds: directWorldHandles,
+    }),
   };
 }
 

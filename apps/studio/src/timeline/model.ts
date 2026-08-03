@@ -1,10 +1,24 @@
-import type { Interaction, ScenarioTemplateV2, Trigger } from '@uniscenarios/scenario-model';
+import type { Interaction, MapSignalPlan, MapSignalPlanClip, ScenarioTemplateV2, Trigger } from '@uniscenarios/scenario-model';
 import { actionResource, isActionCompatible, type ActionResource } from './actions';
 
 export type TimelineTrackKind = 'actions';
 export interface TimelineItem { readonly interaction: Interaction; readonly actorId: string; readonly track: TimelineTrackKind; readonly resource: ActionResource; readonly anchorTime: number; readonly endTime: number; readonly unresolved: boolean; }
 export interface TimelineActionLane { readonly index: number; readonly items: readonly TimelineItem[]; }
 export interface TimelineActorGroup { readonly actorId: string; readonly label: string; readonly actorClass: ScenarioTemplateV2['roles'][number]['actor']['class']; readonly catalogId?: string; readonly compact: boolean; readonly tracks: Readonly<Record<TimelineTrackKind, readonly TimelineItem[]>>; readonly lanes: readonly TimelineActionLane[]; }
+export interface TimelineMapSignalClip {
+  readonly planId: string;
+  readonly junctionId: string;
+  readonly clip: MapSignalPlanClip;
+  readonly anchorTime: number;
+  readonly endTime: number;
+}
+export interface TimelineMapSignalGroup {
+  readonly plan: MapSignalPlan;
+  readonly planId: string;
+  readonly junctionId: string;
+  readonly label: string;
+  readonly clips: readonly TimelineMapSignalClip[];
+}
 export interface TraceOutcomeMarker { readonly interactionId?: string; readonly actorId?: string; readonly time: number; readonly kind: string; readonly label?: string; }
 
 export interface TimelineOutcomeEvent {
@@ -157,6 +171,75 @@ export function buildTimelineGroups(template: ScenarioTemplateV2): TimelineActor
     }).sort((a, b) => a.anchorTime - b.anchorTime);
     return { actorId: role.id, label: role.label ?? role.actor.catalogId ?? role.id, actorClass: role.actor.class, ...(role.actor.catalogId ? { catalogId: role.actor.catalogId } : {}), compact: role.actor.class === 'static_object', tracks: { actions: items }, lanes: packActionLanes(items) };
   });
+}
+
+/** Project map-bound controller programs without turning physical lamp heads into actors. */
+export function buildMapSignalTimelineGroups(template: ScenarioTemplateV2): TimelineMapSignalGroup[] {
+  return (template.mapSignalPlans ?? []).map((plan) => ({
+    plan,
+    planId: plan.id,
+    junctionId: plan.binding.junctionId,
+    label: `Intersection ${plan.binding.junctionId}`,
+    clips: [...plan.clips]
+      .sort((left, right) => left.startS - right.startS || left.endS - right.endS || left.id.localeCompare(right.id))
+      .map((clip) => ({ planId: plan.id, junctionId: plan.binding.junctionId, clip, anchorTime: clip.startS, endTime: clip.endS })),
+  }));
+}
+
+export type MapSignalClipEditResult =
+  | { readonly ok: true; readonly plan: MapSignalPlan }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Replace one half-open controller clip and keep the plan in canonical time order.
+ * Adjacent clips are legal; positive overlap is not, because one controller must
+ * own one atomic phase at every instant.
+ */
+export function editMapSignalPlanClip(
+  plan: MapSignalPlan,
+  clip: MapSignalPlanClip,
+  durationS: number,
+): MapSignalClipEditResult {
+  if (!Number.isFinite(clip.startS) || !Number.isFinite(clip.endS)
+    || clip.startS < 0 || clip.endS > durationS || clip.endS - clip.startS < .1) {
+    return { ok: false, message: `Signal clips must be at least 0.1 seconds and stay inside 0–${durationS} seconds.` };
+  }
+  const conflict = plan.clips.find((item) => item.id !== clip.id
+    && clip.startS < item.endS && item.startS < clip.endS);
+  if (conflict) {
+    return { ok: false, message: `This signal clip overlaps “${conflict.id}”. A controller can have only one authored phase at a time.` };
+  }
+  const clips = [...plan.clips.filter((item) => item.id !== clip.id), clip]
+    .sort((left, right) => left.startS - right.startS || left.id.localeCompare(right.id));
+  return { ok: true, plan: { ...plan, clips } };
+}
+
+export function moveMapSignalPlanClip(
+  plan: MapSignalPlan,
+  clipId: string,
+  startS: number,
+  durationS: number,
+): MapSignalClipEditResult {
+  const clip = plan.clips.find((item) => item.id === clipId);
+  if (!clip) return { ok: false, message: `Signal clip “${clipId}” no longer exists.` };
+  const width = clip.endS - clip.startS;
+  const start = clamp(Number(startS.toFixed(3)), 0, Math.max(0, durationS - width));
+  return editMapSignalPlanClip(plan, { ...clip, startS: start, endS: Number((start + width).toFixed(3)) }, durationS);
+}
+
+export function resizeMapSignalPlanClip(
+  plan: MapSignalPlan,
+  clipId: string,
+  edge: 'start' | 'end',
+  timeS: number,
+  durationS: number,
+): MapSignalClipEditResult {
+  const clip = plan.clips.find((item) => item.id === clipId);
+  if (!clip) return { ok: false, message: `Signal clip “${clipId}” no longer exists.` };
+  const time = Number(clamp(timeS, 0, durationS).toFixed(3));
+  return editMapSignalPlanClip(plan, edge === 'start'
+    ? { ...clip, startS: Math.min(time, clip.endS - .1) }
+    : { ...clip, endS: Math.max(time, clip.startS + .1) }, durationS);
 }
 
 /** Greedy interval packing creates only the parallel rows the actor actually needs. */

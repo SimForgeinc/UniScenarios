@@ -14,7 +14,7 @@ import { EditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from 
 import { ScenarioActionsPanel } from './editor/ScenarioActionsPanel';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
-import { PlaybackLoadError, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
+import { PlaybackLoadError, samplePlaybackActors, samplePlaybackSignals, type PlaybackBundle, type SampledActor } from './playback/model';
 import { galleryCameraChoice } from './playback/controller';
 import {
   physicsForActor,
@@ -189,6 +189,8 @@ export function App(): JSX.Element {
   const [openScenarioOpen, setOpenScenarioOpen] = useState(false);
   const [mapWorkspaceOpen, setMapWorkspaceOpen] = useState(false);
   const [openScenarioState, setOpenScenarioState] = useState<OpenScenarioWorkspaceState>({ status: 'empty', reason: 'Place at least one actor before generating an interchange artifact.' });
+  const [signalAuthoringCatalog, setSignalAuthoringCatalog] = useState<Awaited<ReturnType<ScenarioWorkerClient['inspectSignals']>> | null>(null);
+  const [selectedSignalHeadId, setSelectedSignalHeadId] = useState<string | null>(null);
   const [viewSettings, setViewSettings] = useState<StudioViewSettings>(() => loadStudioViewSettings());
   const viewSettingsRef = useRef(viewSettings);
   viewSettingsRef.current = viewSettings;
@@ -207,6 +209,18 @@ export function App(): JSX.Element {
   pendingMapId.current = mapId;
 
   const viewer = session && session.mapId === mapId ? session.viewer : null;
+
+  useEffect(() => {
+    let cancelled = false;
+    setSignalAuthoringCatalog(null);
+    setSelectedSignalHeadId(null);
+    void runtimeWorker.current!.inspectSignals(map).then((catalog) => {
+      if (!cancelled) setSignalAuthoringCatalog(catalog);
+    }).catch((reason: unknown) => {
+      if (!cancelled) console.warn('[signals] authoring catalog unavailable', reason);
+    });
+    return () => { cancelled = true; };
+  }, [map]);
 
 
   const onReady = useCallback((next: CityViewer) => {
@@ -367,11 +381,12 @@ export function App(): JSX.Element {
     }).catch((reason: unknown) => console.warn('[campaign] verified evidence recovery failed', reason));
     return () => { cancelled = true; };
   }, [campaignSource, editorController, map.id]);
+  const hasAuthoredMapSignals = (editorController?.doc.data.mapSignalPlans.length ?? 0) > 0;
   const materializedAmbientProfile = useMemo(
-    () => ambientTrafficProvider === 'sumo' && !sumoFallbackReason
+    () => ambientTrafficProvider === 'sumo' && !sumoFallbackReason && !hasAuthoredMapSignals
       ? resolveAmbientTrafficProfile({ version: 1, preset: 'off', seed: ambientTrafficProfile.seed })
       : ambientTrafficProfile,
-    [ambientTrafficProfile, ambientTrafficProvider, sumoFallbackReason],
+    [ambientTrafficProfile, ambientTrafficProvider, hasAuthoredMapSignals, sumoFallbackReason],
   );
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
@@ -764,7 +779,10 @@ export function App(): JSX.Element {
     return target ? { x: target[0], z: target[2] } : null;
   }, [state?.actors, viewer]);
   const sumoStatus = useSumoTraffic({
-    enabled: ambientTrafficProvider === 'sumo' && !sumoFallbackReason && playbackBundle === null,
+    // An authored controller plan is authoritative. Until the WASM bridge can
+    // accept live tlLogic overrides, native ambient traffic owns that world so
+    // SUMO cannot render or obey a contradictory independent signal cycle.
+    enabled: ambientTrafficProvider === 'sumo' && !sumoFallbackReason && !hasAuthoredMapSignals && playbackBundle === null,
     map,
     profile: ambientTrafficProfile,
     renderer: editorController?.renderer,
@@ -776,13 +794,27 @@ export function App(): JSX.Element {
     onFallback: fallbackToNativeTraffic,
   });
   useEffect(() => {
-    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || !sumoStatus.signalStates) return;
+    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || hasAuthoredMapSignals || !sumoStatus.signalStates) return;
     overlays?.setSignalStates(sumoStatus.signalStates);
-  }, [ambientTrafficProvider, overlays, sumoFallbackReason, sumoStatus.signalStates]);
+  }, [ambientTrafficProvider, hasAuthoredMapSignals, overlays, sumoFallbackReason, sumoStatus.signalStates]);
   useEffect(() => {
-    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason) return;
+    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || hasAuthoredMapSignals) return;
     return () => overlays?.clearSignalStates();
-  }, [ambientTrafficProvider, map.id, overlays, sumoFallbackReason]);
+  }, [ambientTrafficProvider, hasAuthoredMapSignals, map.id, overlays, sumoFallbackReason]);
+  useEffect(() => {
+    if (!overlays || !hasAuthoredMapSignals || studioSession.state.mode !== 'authoring') return;
+    const source = ambientPreview ?? authoredPlayback;
+    if (!source) return;
+    const headStates: Record<string, import('@uniscenarios/sim-engine').ControlIndication> = {};
+    for (const signal of samplePlaybackSignals(source, studioSession.state.time)) {
+      if (signal.timingSource !== 'authored') continue;
+      for (const headId of signal.headIds) headStates[headId] = signal.phase;
+    }
+    if (Object.keys(headStates).length > 0) {
+      overlays.setSignalStates(headStates, studioSession.state.time);
+    }
+    return () => overlays.clearSignalStates();
+  }, [ambientPreview, authoredPlayback, hasAuthoredMapSignals, overlays, studioSession.state.mode, studioSession.state.time]);
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
   // Keep t=0 visible through the preparing frame. The playback renderer takes
   // ownership only after the exact same bundle has been installed.
@@ -1093,6 +1125,9 @@ export function App(): JSX.Element {
             onActorDelete={(actorId) => {
               if (actorDetailsId === actorId) setActorDetailsId(null);
             }}
+            signalCatalog={signalAuthoringCatalog?.signalCatalog ?? null}
+            signalControlDigest={signalAuthoringCatalog?.controlDigest ?? null}
+            selectedSignalHeadId={selectedSignalHeadId}
           />
         </div>
       ) : null}

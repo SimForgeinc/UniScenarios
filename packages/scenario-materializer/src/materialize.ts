@@ -103,11 +103,13 @@ import type { MapBundle } from './types.js';
 import { paramsVersion, resolveParams, templateId, type ParamDraw } from './params.js';
 import { propBehavior, propDims } from './prop-dims.js';
 import {
+  buildMapControlPlan,
   buildSiteSignalPlan,
   buildSiteRoadControls,
   resolveSiteSignalProgram,
   type SiteSignalPlan,
 } from './map-signals.js';
+import { compileMapSignalPlans, MapSignalPlanCompileError } from './map-signal-plan-compiler.js';
 
 const KPH_TO_MPS = 1 / 3.6;
 
@@ -1197,6 +1199,7 @@ class Materializer {
   private readonly foldedTriggerStart = new Map<string, number>();
   private readonly initialInteractionOutcomes: InitialInteractionOutcome[] = [];
   private signalPlan: SiteSignalPlan | null = null;
+  private compiledMapSignalPrograms: readonly SignalProgram[] | null = null;
   private roadControls: RoadControl[] = [];
   private readonly authoredControlPrograms: SignalProgram[] = [];
   private refRoute: Route | null = null;
@@ -2164,6 +2167,63 @@ class Materializer {
     }
   }
 
+  /** Resolve legacy world signal setters before a map plan takes ownership. */
+  private worldSignalSetIds(programs: readonly SignalProgram[]): string[] {
+    const ids = new Set<string>();
+    for (const interaction of this.template.choreography.interactions) {
+      if (interaction.actor !== '@world' || interaction.verb !== 'set') continue;
+      const semantic = /^signal:feature:([A-Za-z][A-Za-z0-9_-]{0,63}):(ego|opposing|left|right)\.phase$/.exec(interaction.target.key);
+      if (semantic) {
+        const id = resolveSiteSignalProgram(this.bundle, this.site, this.signalPlan!, {
+          featureId: semantic[1]!, approach: semantic[2]!,
+        });
+        if (id) ids.add(id);
+        continue;
+      }
+      const direct = /^signal:(.+)\.phase$/.exec(interaction.target.key);
+      if (!direct) continue;
+      const handle = direct[1]!;
+      const program = programs.find((candidate) =>
+        candidate.id === handle || candidate.mapBinding?.headIds.includes(handle),
+      );
+      if (program) ids.add(program.id);
+    }
+    return [...ids].sort();
+  }
+
+  private compileAuthoredMapSignals(): void {
+    if (this.template.mapSignalPlans.length === 0) return;
+    const controls = buildMapControlPlan(this.bundle);
+    try {
+      this.compiledMapSignalPrograms = compileMapSignalPlans(
+        controls.signalPrograms,
+        this.template.mapSignalPlans,
+        {
+          mapId: this.bundle.mapId,
+          controlDigest: contentHash(controls),
+          clipSeconds: this.template.choreography.clipSeconds,
+          warmupSeconds: this.template.choreography.warmupSeconds,
+          signalCatalog: this.bundle.signalCatalog,
+          topology: this.bundle.topology,
+          conflictPairsByJunction: Object.fromEntries(
+            Object.entries(this.bundle.index.junctionDescriptors).map(([id, descriptor]) => [id, descriptor.conflictPairs]),
+          ),
+          worldSignalSetIds: this.worldSignalSetIds(controls.signalPrograms),
+        },
+      );
+      this.notes.push({
+        path: 'mapSignalPlans',
+        reason: `${this.template.mapSignalPlans.length} physical junction signal plan(s) compiled into complete warm-up and clip-bounded programs`,
+        impact: 'informational',
+      });
+    } catch (error) {
+      if (error instanceof MapSignalPlanCompileError) {
+        throw new CliError(error.code, error.message, { path: error.path, exitCode: 2 });
+      }
+      throw error;
+    }
+  }
+
   private buildInteraction(it: V2Interaction): SimInteraction | null {
     const path = `choreography.interactions.${it.id}`;
     if (it.actor !== '@world' && !this.actors.some((a) => a.id === it.actor)) {
@@ -2934,6 +2994,7 @@ class Materializer {
     assertMaterializableRuleControls(this.template);
     this.buildReferenceRoute();
     this.buildTrafficControls();
+    this.compileAuthoredMapSignals();
     this.buildActors();
     this.assertTerminatingLaneMergeClosure();
     this.foldInitialRules();
@@ -2948,7 +3009,7 @@ class Materializer {
         });
       }
     }
-    if (this.signalPlan.programs.length > 0) {
+    if (this.signalPlan.programs.length > 0 && !this.compiledMapSignalPrograms) {
       const physicalHeadCount = new Set(
         this.signalPlan.programs.flatMap((program) => program.mapBinding?.headIds ?? []),
       ).size;
@@ -2984,7 +3045,7 @@ class Materializer {
         : {}),
       actors: this.actors,
       interactions: this.interactions,
-      signalPrograms: [...this.signalPlan.programs, ...this.authoredControlPrograms],
+      signalPrograms: [...(this.compiledMapSignalPrograms ?? this.signalPlan.programs), ...this.authoredControlPrograms],
       roadControls: this.roadControls,
       props: this.props,
       occluders: this.occluders,

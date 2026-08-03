@@ -1,10 +1,12 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
+import type { MapSignalCatalog } from '@uniscenarios/scenario-materializer';
 import { contentHash, type AmbientCandidatePool, type AmbientTrafficProfile, type EvaluateFilters, type IntentRubricInput } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
 import { parsePlaybackPair, type PlaybackBundle } from './model';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
-import { RevisionGate } from './mapRuntime';
+import type { ScenarioWorkerInspectSignalsRequest } from './scenario-worker';
+import { mapAssetDigest, RevisionGate } from './mapRuntime';
 
 export interface LivePlaybackCounters {
   readonly startupMs: number | null;
@@ -18,6 +20,11 @@ export interface LivePlaybackRun {
   recordedUntil(): number;
   setPlaying(playing: boolean, time?: number): void;
   counters(): LivePlaybackCounters;
+}
+
+export interface SignalAuthoringCatalog {
+  readonly signalCatalog: MapSignalCatalog;
+  readonly controlDigest: string;
 }
 
 interface PendingRequest {
@@ -37,6 +44,46 @@ export class ScenarioWorkerClient {
   private activeLive: number | null = null;
   private runtimeByInput = new Map<string, string>();
   private ambientCandidatePool: AmbientCandidatePool | undefined;
+
+  /** Read the cached map-control catalog without compiling an authored scene. */
+  inspectSignals(map: MapEntry, timeoutMs = 30_000): Promise<SignalAuthoringCatalog> {
+    const id = ++this.sequence;
+    const revision = contentHash({ kind: 'inspect-signals', map: mapAssetDigest(map) });
+    const worker = this.ensureWorker();
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        if (!this.pending.has(id)) return;
+        this.pending.delete(id);
+        reject(new Error(`Traffic-signal catalog loading exceeded ${timeoutMs} ms.`));
+      }, timeoutMs);
+      this.pending.set(id, { revision, reject, timeout, onMessage: (message) => {
+        if (message.revision !== revision) return;
+        clearTimeout(timeout);
+        this.pending.delete(id);
+        if (!message.ok) {
+          reject(new Error(message.error));
+          return;
+        }
+        if (message.kind !== 'signal-catalog') {
+          reject(new Error('Simulation worker returned an unexpected response to a signal-catalog request'));
+          return;
+        }
+        resolve(deepFreeze({ signalCatalog: message.signalCatalog, controlDigest: message.controlDigest }));
+      }});
+      worker.postMessage({
+        kind: 'inspect-signals', id, revision,
+        map: {
+          id: map.id,
+          manifest: map.manifest,
+          topology: map.topology,
+          derivedTopology: map.derivedTopology,
+          locations: map.locations,
+          xodr: map.xodr,
+          signals: map.signals,
+        },
+      } satisfies ScenarioWorkerInspectSignalsRequest);
+    });
+  }
 
   prepare(
     template: ScenarioTemplateV2,
