@@ -367,6 +367,8 @@ export class ActorRenderer {
   private readonly selection: LineSegments;
   private drawCalls = 0;
   private disposed = false;
+  private readonly layers = new Map<string, readonly ActorView[]>();
+  private readonly hiddenLayers = new Set<string>();
 
   constructor() {
     this.group.name = 'actors';
@@ -415,6 +417,34 @@ export class ActorRenderer {
 
   /** Rebuild every instance matrix from `actors`. */
   sync(actors: readonly ActorView[]): void {
+    this.syncLayer('editor', actors);
+  }
+
+  /**
+   * Update one logical actor source without replacing the renderer. Editor,
+   * ambient preview and trace playback can therefore share GPU allocations.
+   */
+  syncLayer(layer: string, actors: readonly ActorView[]): void {
+    this.layers.set(layer, actors);
+    this.syncLayers();
+  }
+
+  clearLayer(layer: string): void {
+    if (!this.layers.delete(layer)) return;
+    this.hiddenLayers.delete(layer);
+    this.syncLayers();
+  }
+
+  setLayerVisible(layer: string, visible: boolean): void {
+    const changed = visible ? this.hiddenLayers.delete(layer) : !this.hiddenLayers.has(layer);
+    if (!visible) this.hiddenLayers.add(layer);
+    if (changed) this.syncLayers();
+  }
+
+  private syncLayers(): void {
+    const actors = [...this.layers]
+      .filter(([name]) => !this.hiddenLayers.has(name))
+      .flatMap(([, values]) => [...values]);
     const byIdentity = new Map<string, { identity: ActorRenderIdentity; actors: ActorView[] }>();
     for (const actor of actors) {
       const identity = renderIdentity(actor);
@@ -510,6 +540,8 @@ export class ActorRenderer {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
+    this.layers.clear();
+    this.hiddenLayers.clear();
     for (const batch of this.batches.values()) {
       batch.mesh.dispose();
       this.group.remove(batch.mesh);
