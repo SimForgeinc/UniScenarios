@@ -7,7 +7,7 @@ import {
 import type { MotionIntent, MotionStepResult } from '../sim/motion-backend.js';
 import { runSimulation } from '../sim/engine.js';
 import type { SimScenarioInput } from '../schema/input.js';
-import { LANE_LEFT, poseOnLane, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
+import { LANE_LEFT, LANE_RIGHT, poseOnLane, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
 
 const STRAIGHT: MotionIntent = {
   targetSpeedMps: 20,
@@ -63,7 +63,11 @@ describe('dynamic-v1 passenger car', () => {
   it('records explicit kinematic fallbacks for unsupported dynamic actors', () => {
     const graph = syntheticGraph();
     const car = vehicle(graph, { id: 'car', rsl: LANE_LEFT, s: 20, speedMps: 8 });
-    const bus = { ...vehicle(graph, { id: 'bus', rsl: LANE_LEFT, s: 80, speedMps: 6 }), kind: 'bus' as const };
+    const bus = {
+      ...vehicle(graph, { id: 'bus', rsl: LANE_LEFT, s: 80, speedMps: 6 }),
+      kind: 'bus' as const,
+      tags: ['ambient'],
+    };
     const input = scenario(graph, { actors: [car, bus], physics: { mode: 'dynamic-v1' } });
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.header.physics.actorBackends).toEqual({
@@ -74,7 +78,22 @@ describe('dynamic-v1 passenger car', () => {
     expect(trace.ticks.actors.car!.physics).toBeDefined();
   });
 
-  it('keeps generated ambient cars kinematic under a dynamic authored scenario', () => {
+  it('runs ambient-only supported vehicles through dynamic-v1', () => {
+    const graph = syntheticGraph();
+    const ambient = {
+      ...vehicle(graph, { id: 'ambient-car', rsl: LANE_LEFT, s: 100, speedMps: 8 }),
+      tags: ['ambient'],
+    };
+    const input = scenario(graph, { actors: [ambient], physics: { mode: 'dynamic-v1' } });
+    const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
+    expect(trace.header.physics.mode).toBe('dynamic-v1');
+    expect(trace.header.physics.actorBackends).toEqual({
+      'ambient-car': { mode: 'dynamic-v1', reason: 'selected' },
+    });
+    expect(trace.ticks.actors['ambient-car']!.physics).toBeDefined();
+  });
+
+  it('gives authored and ambient supported vehicles identical dynamic treatment', () => {
     const graph = syntheticGraph();
     const authored = vehicle(graph, { id: 'authored', rsl: LANE_LEFT, s: 20, speedMps: 8 });
     const ambient = {
@@ -84,11 +103,25 @@ describe('dynamic-v1 passenger car', () => {
     const input = scenario(graph, { actors: [authored, ambient], physics: { mode: 'dynamic-v1' } });
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.header.physics.actorBackends).toEqual({
-      'ambient-car': { mode: 'kinematic-v1', reason: 'ambient-background' },
+      'ambient-car': { mode: 'dynamic-v1', reason: 'selected' },
       authored: { mode: 'dynamic-v1', reason: 'selected' },
     });
-    expect(trace.ticks.actors['ambient-car']!.physics).toBeUndefined();
+    expect(trace.ticks.actors['ambient-car']!.physics).toBeDefined();
     expect(trace.ticks.actors.authored!.physics).toBeDefined();
+  });
+
+  it('does not let ambient provenance change a supported vehicle trace', () => {
+    const graph = syntheticGraph();
+    const actor = vehicle(graph, { id: 'car', rsl: LANE_LEFT, s: 20, speedMps: 8, cruiseSpeedMps: 12 });
+    const authored = scenario(graph, { actors: [actor], physics: { mode: 'dynamic-v1' } });
+    const ambient = scenario(graph, {
+      actors: [{ ...actor, tags: ['ambient'] }],
+      physics: { mode: 'dynamic-v1' },
+    });
+    const authoredTrace = runSimulation(authored, { graph, guards: 'collect' }).trace;
+    const ambientTrace = runSimulation(ambient, { graph, guards: 'collect' }).trace;
+    expect(ambientTrace.ticks).toEqual(authoredTrace.ticks);
+    expect(ambientTrace.header.physics.actorBackends).toEqual(authoredTrace.header.physics.actorBackends);
   });
 
   it('runs only when selected and records solver telemetry/provenance', () => {
@@ -289,4 +322,37 @@ describe('dynamic-v1 passenger car', () => {
     // Contract workload: 10 actors × 20 simulated seconds = 40k integrations.
     expect(elapsedMs).toBeLessThan(1_000);
   });
+
+  it('keeps a deterministic City-sized ambient population inside the interactive budget', () => {
+    const graph = syntheticGraph();
+    const actors = Array.from({ length: 32 }, (_, index) => ({
+      ...vehicle(graph, {
+        id: `ambient-${String(index).padStart(2, '0')}`,
+        rsl: index % 2 === 0 ? LANE_LEFT : LANE_RIGHT,
+        s: 20 + Math.floor(index / 2) * 18,
+        speedMps: 8,
+        cruiseSpeedMps: 10,
+      }),
+      tags: ['ambient', 'ambient:v1'],
+    }));
+    const input = scenario(graph, {
+      actors,
+      clipSeconds: 20,
+      warmupSeconds: 0,
+      dt: 0.05,
+      physics: { mode: 'dynamic-v1' },
+    });
+    runSimulation(input, { graph, guards: 'collect' });
+    const started = performance.now();
+    const first = runSimulation(input, { graph, guards: 'collect' }).trace;
+    const elapsedMs = performance.now() - started;
+    const second = runSimulation(input, { graph, guards: 'collect' }).trace;
+    expect(second.ticks).toEqual(first.ticks);
+    expect(Object.values(first.header.physics.actorBackends ?? {})).toHaveLength(32);
+    expect(Object.values(first.header.physics.actorBackends ?? {}).every(
+      (backend) => backend.mode === 'dynamic-v1' && backend.reason === 'selected',
+    )).toBe(true);
+    expect(Object.values(first.ticks.actors).every((track) => track.physics !== undefined)).toBe(true);
+    expect(elapsedMs).toBeLessThan(7_500);
+  }, 30_000);
 });

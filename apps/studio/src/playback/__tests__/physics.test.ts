@@ -24,4 +24,18 @@ describe('Studio physics migration', () => {
     expect(activePhysicsModeForTrace({ header: {} } as never)).toBe('kinematic-v1');
     expect(activePhysicsModeForTrace(null)).toBe('dynamic-v1');
   });
+
+  it('shows Dynamic for an ambient-only trace with a supported vehicle backend', () => {
+    const trace = {
+      header: {
+        physics: {
+          mode: 'dynamic-v1',
+          actorBackends: {
+            'ambient:v1:car': { mode: 'dynamic-v1', reason: 'selected' },
+          },
+        },
+      },
+    } as never;
+    expect(activePhysicsModeForTrace(trace)).toBe('dynamic-v1');
+  });
 });

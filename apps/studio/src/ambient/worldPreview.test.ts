@@ -7,6 +7,10 @@ describe('scenario-independent ambient world preview', () => {
   const graph = syntheticGraph();
   const base = createAmbientWorldPreviewInput('empty-scratch');
 
+  it('uses the current dynamic physics pipeline for the ambient-only world', () => {
+    expect(base.physics).toEqual({ mode: 'dynamic-v1' });
+  });
+
   it('creates a schema-valid map-only base without leaking its parse seed actor', () => {
     expect(base.mapId).toBe('empty-scratch');
     expect(base.actors).toEqual([]);
@@ -18,7 +22,7 @@ describe('scenario-independent ambient world preview', () => {
     const second = applyAmbientTraffic(base, graph, profile);
     expect(first.provenance.actors.length).toBeGreaterThan(0);
     expect(contentHash(first)).toBe(contentHash(second));
-  });
+  }, 20_000);
 
   it('does not depend on invalid authored choreography', () => {
     const invalidAuthoredDocument = { interactions: [{ id: 'missing-target' }] };

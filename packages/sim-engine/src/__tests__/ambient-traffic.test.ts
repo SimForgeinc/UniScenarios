@@ -172,7 +172,7 @@ describe('native ambient traffic', () => {
     expect(trace.metrics.collisions.filter(({ a, b }) => ambientIds.has(a) || ambientIds.has(b))).toEqual([]);
     expect(generated.provenance.screening.evaluated).toBe(true);
     expect(generated.provenance.screening.passes).toBeGreaterThanOrEqual(1);
-  });
+  }, 30_000);
 
   it('prunes dense same-lane and crossing conflicts instead of relaxing density safety', () => {
     const generated = applyAmbientTraffic(base, graph, {

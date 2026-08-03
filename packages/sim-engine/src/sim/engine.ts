@@ -384,13 +384,8 @@ class Simulation {
     return this.dynamicFallbackReason(a) === null;
   }
 
-  private dynamicFallbackReason(a: ActorRuntime): 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | 'ambient-background' | null {
+  private dynamicFallbackReason(a: ActorRuntime): 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | null {
     if (a.static) return 'static-actor';
-    // Dense background populations stay on the deterministic kinematic path.
-    // Dynamic-v1 is reserved for authored/camera-near subjects; applying its
-    // 5 ms solver to every generated car makes authoring preview preparation
-    // scale with background density and can stall the UI for minutes.
-    if (a.tags.includes('ambient')) return 'ambient-background';
     if (isReverseMotion(a)) return 'reverse-motion';
     if (a.kind !== 'vehicle' && a.kind !== 'car') return 'unsupported-actor-kind';
     return null;
@@ -1428,6 +1423,15 @@ class Simulation {
       plan.speed = 0;
       plan.lateralRate = 0;
       plan.retire = true;
+      // The force solver can cross the terminal station within its final
+      // synchronized tick. Retiring the actor must snap the rendered body to
+      // the route endpoint just as the kinematic backend does, rather than
+      // freezing a small dynamic overshoot forever.
+      const terminalPose = a.route.poseAt(plan.routeS);
+      plan.position = a.route.pointWithOffset(plan.routeS, plan.lateralOffset);
+      plan.heading = normalizeAngle(
+        headingWithSlip(terminalPose.headingRad, 0, 0) + (isReverseMotion(a) ? Math.PI : 0),
+      );
     }
 
     if (!this.dynamicActorIds.has(a.id)) {
