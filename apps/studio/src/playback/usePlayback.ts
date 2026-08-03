@@ -5,6 +5,7 @@ import type { PlaybackBundle } from './model';
 import type { MapOverlayHandle } from '../mapOverlays';
 import type { CameraPolicy } from '../cameras/model';
 import type { DashCameraSensor } from '@uniscenarios/scenario-model';
+import type { ActorRenderer } from '../editor/actorRenderer';
 
 export interface UsePlaybackOptions {
   viewer: CityViewer | null;
@@ -15,6 +16,8 @@ export interface UsePlaybackOptions {
   cameraView?: CameraView | null;
   dashCamera?: { actorId: string; sensor: DashCameraSensor } | null;
   restoreCameraOnDispose?: boolean;
+  renderer?: ActorRenderer | null;
+  externalClock?: boolean;
 }
 
 declare global {
@@ -33,6 +36,8 @@ export function usePlayback({
   cameraView,
   dashCamera,
   restoreCameraOnDispose,
+  renderer,
+  externalClock,
 }: UsePlaybackOptions): { controller: PlaybackController | null; state: PlaybackState | null; error: string | null } {
   const [controller, setController] = useState<PlaybackController | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -51,6 +56,8 @@ export function usePlayback({
         ...(cameraView ? { cameraView } : {}),
         ...(dashCamera ? { dashCamera } : {}),
         ...(restoreCameraOnDispose ? { restoreCameraOnDispose: true } : {}),
+        ...(renderer ? { renderer } : {}),
+        ...(externalClock ? { externalClock: true } : {}),
       });
       setError(null);
     } catch (reason) {
@@ -65,7 +72,7 @@ export function usePlayback({
       next.dispose();
       setController(null);
     };
-  }, [viewer, bundle, sampleHeight, overlays, cameraPolicy, cameraView, dashCamera, restoreCameraOnDispose]);
+  }, [viewer, bundle, sampleHeight, overlays, cameraPolicy, cameraView, dashCamera, restoreCameraOnDispose, renderer, externalClock]);
 
   const state = useSyncExternalStore(
     controller ? controller.subscribe : noopSubscribe,

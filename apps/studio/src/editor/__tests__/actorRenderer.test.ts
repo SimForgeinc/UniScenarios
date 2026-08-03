@@ -144,6 +144,32 @@ describe('ActorRenderer semantic transforms', () => {
       });
     }
   });
+
+  it('keeps one renderer while switching editor, ambient, and playback layers', () => {
+    const originalDocument = globalThis.document;
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: { createElement: () => ({ width: 0, height: 0, getContext: () => null }) },
+    });
+    try {
+      const renderer = new ActorRenderer();
+      renderer.sync([{ ...sedan, id: 'authored' }]);
+      renderer.syncLayer('ambient-preview', [{ ...sedan, id: 'ambient', x: 20 }]);
+      expect(renderer.pickables().some((mesh) => (mesh.userData.actorIds as string[] | undefined)?.includes('ambient'))).toBe(true);
+      renderer.setLayerVisible('editor', false);
+      renderer.setLayerVisible('ambient-preview', false);
+      renderer.syncLayer('playback', [{ ...sedan, id: 'authored', x: 30 }, { ...sedan, id: 'ambient', x: 40 }]);
+      const actorIds = renderer.pickables().flatMap((mesh) => (mesh.userData.actorIds as string[] | undefined) ?? []);
+      expect(new Set(actorIds)).toEqual(new Set(['authored', 'ambient']));
+      renderer.clearLayer('playback');
+      renderer.setLayerVisible('editor', true);
+      renderer.setLayerVisible('ambient-preview', true);
+      expect(renderer.pickables().some((mesh) => (mesh.userData.actorIds as string[] | undefined)?.includes('authored'))).toBe(true);
+      renderer.dispose();
+    } finally {
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+    }
+  });
 });
 
 function assertSamePoint(a: Vector3, b: Vector3): void {

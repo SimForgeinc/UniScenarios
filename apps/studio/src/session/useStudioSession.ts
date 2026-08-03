@@ -3,12 +3,15 @@ import type { EditorController } from '../editor/controller';
 import { initialSession, reduceSession, canMutate, shouldPreparePlayback, type StudioSessionState } from './model';
 import { handleTransportKey } from './keyboard';
 import { PreparationGate } from './preparationGate';
+import { StudioTransport, type StudioTransportCounters } from './StudioTransport';
 
 export interface StudioSessionApi {
   readonly state: StudioSessionState;
   readonly playPause: () => void;
   readonly stop: () => void;
   readonly seek: (time: number) => void;
+  readonly setFrameDriver?: (driver: ((time: number) => void) | null) => void;
+  readonly transportCounters?: () => StudioTransportCounters;
 }
 
 export interface StudioSessionOptions {
@@ -28,7 +31,8 @@ export function useStudioSession(
   options: StudioSessionOptions = {},
 ): StudioSessionApi {
   const [state, dispatch] = useReducer(reduceSession, duration, initialSession);
-  const frame = useRef(0);
+  const transport = useRef(new StudioTransport());
+  const frameDriver = useRef<(time: number) => void>(() => undefined);
   const preparation = useRef(new PreparationGate());
   const optionsRef = useRef(options);
   optionsRef.current = options;
@@ -38,17 +42,11 @@ export function useStudioSession(
     return () => controller?.setAuthoringEnabled(true);
   }, [controller, state.mode]);
 
+  transport.current.configure((time) => frameDriver.current(time), (time) => dispatch({ type: 'clock', time }));
   useEffect(() => {
-    if (state.mode !== 'playing') return;
-    const wallStart = performance.now();
-    const traceStart = state.time;
-    const tick = (now: number): void => {
-      dispatch({ type: 'clock', time: traceStart + Math.max(0, (now - wallStart) / 1000) });
-      frame.current = requestAnimationFrame(tick);
-    };
-    frame.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame.current);
-  }, [state.mode]);
+    if (state.mode === 'playing') transport.current.play(state.time, state.duration);
+    else transport.current.pause();
+  }, [state.duration, state.mode]);
 
   useEffect(() => {
     if (state.mode === 'authoring' && state.duration !== duration) {
@@ -94,6 +92,7 @@ export function useStudioSession(
   }, []);
 
   useEffect(() => () => {
+    transport.current.dispose();
     preparation.current.cancel();
     optionsRef.current.cancel?.();
   }, [controller]);
@@ -113,7 +112,11 @@ export function useStudioSession(
     stop,
     seek: useCallback((time: number) => {
       const limit = optionsRef.current.seekLimit?.() ?? duration;
-      dispatch({ type: 'seek', time: Math.min(time, limit) });
+      const bounded = Math.min(time, limit);
+      transport.current.seek(bounded);
+      dispatch({ type: 'seek', time: bounded });
     }, [duration]),
+    setFrameDriver: useCallback((driver: ((time: number) => void) | null) => { frameDriver.current = driver ?? (() => undefined); }, []),
+    transportCounters: useCallback(() => transport.current.counters, []),
   };
 }

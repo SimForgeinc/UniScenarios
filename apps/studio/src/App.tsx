@@ -71,8 +71,8 @@ import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { simulationClassFor, type ActorRecord } from './editor/document';
 import {
+  routesForAuthoringPreview,
   routesFromSimulation,
-  routesFromTemplate,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
 
@@ -399,11 +399,16 @@ export function App(): JSX.Element {
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
-    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
-    const routes = concrete
-      ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
-      : routesFromTemplate(editorController.doc.data, editorController.laneIndex);
+    const concretePlayback = playbackBundle ?? authoredPlayback;
+    const routes = concretePlayback
+      ? routesFromSimulation(concretePlayback.instance.input, editorController.laneIndex, concretePlayback.trace, authoredColors)
+      : routesForAuthoringPreview(
+          editorController.doc.data,
+          editorController.laneIndex,
+          ambientPreview?.instance.input,
+          ambientPreview?.trace,
+        );
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
     renderer.group.visible = viewSettings.routes.visible
@@ -614,6 +619,8 @@ export function App(): JSX.Element {
       ? { actorId: selectedAuthoredDashCamera.actorId, sensor: selectedAuthoredDashCamera.sensor }
       : null,
     restoreCameraOnDispose: true,
+    renderer: editorController?.renderer,
+    externalClock: !playbackBundle,
   });
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
   // Keep t=0 visible through the preparing frame. The playback renderer takes
@@ -624,23 +631,33 @@ export function App(): JSX.Element {
     sampleHeight,
     playbackBundle === null && authoredPlayback === null && !mapWorkspaceOpen,
     editorActorIds,
+    editorController?.renderer,
   );
 
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
-    livePlayback.current?.setPlaying(studioSession.state.mode === 'playing');
-    playbackController.seek(studioSession.state.time);
-    if (studioSession.state.mode === 'playing') playbackController.play();
+    studioSession.setFrameDriver?.((time) => playbackController.renderAt(time));
+    playbackController.renderAt(studioSession.state.time);
+    return () => studioSession.setFrameDriver?.(null);
+  }, [authoredPlayback, playbackController, studioSession.setFrameDriver]);
+
+  useEffect(() => {
+    if (!authoredPlayback || !playbackController) return;
+    const playing = studioSession.state.mode === 'playing';
+    livePlayback.current?.setPlaying(playing);
+    if (playing) playbackController.play();
     else playbackController.pause();
-  }, [authoredPlayback, playbackController, studioSession.state.mode, studioSession.state.time]);
+  }, [authoredPlayback, playbackController, studioSession.state.mode]);
 
   // Playback is a viewport mode, not an editor mutation. Keep the autosave
   // document intact but hide its actors until the imported evidence is closed.
   useEffect(() => {
     if (!editorController) return;
-    editorController.renderer.group.visible = selectedPlayback === null;
+    const selection = editorController.state.selection;
+    editorController.renderer.setLayerVisible('editor', selectedPlayback === null);
     return () => {
-      editorController.renderer.group.visible = true;
+      editorController.renderer.setLayerVisible('editor', true);
+      editorController.setSelection(selection);
     };
   }, [editorController, selectedPlayback]);
 

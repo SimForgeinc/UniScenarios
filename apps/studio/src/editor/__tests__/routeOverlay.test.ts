@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import type { LineBasicMaterial, LineSegments } from 'three';
 import { parseSimScenarioInput } from '@uniscenarios/sim-engine';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { dashedSegments, resolvedRoutePoints, routeColor, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { dashedSegments, resolvedRoutePoints, routeColor, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -55,6 +56,22 @@ describe('vehicle route overlays', () => {
     const routes = routesFromSimulation(input(), index());
     expect(routes.some((route) => route.actorId === 'walker' || route.actorId === 'parked')).toBe(false);
     expect(routes.find((route) => route.actorId === 'ambient-1')?.ambient).toBe(true);
+  });
+
+  it('uses the current authored timeline route while retaining warmed ambient routes', () => {
+    const template = {
+      roles: [{ id: 'ego', actor: { class: 'car', static: false } }],
+      choreography: {
+        interactions: [{
+          id: 'route-ego', actor: 'ego', verb: 'route', trigger: { kind: 'at', t: 0 },
+          target: { mode: 'lanePath', lanes: ['3:0:1'] },
+        }],
+      },
+    } as unknown as ScenarioTemplateV2;
+    const routes = routesForAuthoringPreview(template, index(), input());
+    expect(routes.map((route) => route.actorId)).toEqual(['ambient-1', 'ego']);
+    expect(routes.find((route) => route.actorId === 'ego')!.planned[0]).toEqual({ x: 30, z: 0 });
+    expect(routes.find((route) => route.actorId === 'ego')!.planned.at(-1)).toEqual({ x: 20, z: 0 });
   });
 
   it('creates world-length dashes and stable actor colors', () => {

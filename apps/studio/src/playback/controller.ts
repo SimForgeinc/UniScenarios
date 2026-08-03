@@ -17,6 +17,7 @@ import {
   type SampledSignal,
 } from './model';
 import type { CameraPolicy } from '../cameras/model';
+import { StudioTransport } from '../session/StudioTransport';
 
 export interface PlaybackState {
   readonly time: number;
@@ -52,6 +53,10 @@ export interface PlaybackControllerOptions {
   dashCamera?: { actorId: string; sensor: DashCameraSensor };
   /** Restore the editor/gallery view when this read-only replay is closed. */
   restoreCameraOnDispose?: boolean;
+  /** Reuse the editor's persistent actor renderer and its GPU allocations. */
+  renderer?: ActorRenderer;
+  /** StudioTransport owns animation; this controller only samples/render frames. */
+  externalClock?: boolean;
 }
 
 export interface DashCameraFrame {
@@ -334,7 +339,7 @@ export function samplePlaybackDoors(
 
 /** Drives the real Studio actor renderer from trace time, independent of React render cadence. */
 export class PlaybackController {
-  readonly renderer = new ActorRenderer();
+  readonly renderer: ActorRenderer;
   readonly bundle: PlaybackBundle;
 
   private readonly viewer: CityViewer;
@@ -342,9 +347,7 @@ export class PlaybackController {
   private readonly listeners = new Set<() => void>();
   private time: number;
   private playing = false;
-  private raf = 0;
-  private playbackWallStart = 0;
-  private playbackTraceStart = 0;
+  private readonly transport = new StudioTransport();
   private sampled: readonly SampledActor[] = [];
   private sampledSignals: readonly SampledSignal[] = [];
   private renderedSignalHeadCount = 0;
@@ -363,6 +366,7 @@ export class PlaybackController {
     this.viewer = options.viewer;
     this.bundle = options.bundle;
     this.sampleHeight = options.sampleHeight;
+    this.renderer = options.renderer ?? new ActorRenderer();
     this.cameraPolicy = options.cameraPolicy ?? 'free';
     this.galleryCameraChoice = galleryCameraChoice(this.bundle);
     this.cameraSelectionId = this.cameraPolicy === 'ego-chase'
@@ -381,8 +385,21 @@ export class PlaybackController {
       ? { near: this.viewer.camera.near, far: this.viewer.camera.far, aspect: this.viewer.camera.aspect }
       : null;
     this.time = this.bundle.startTime;
-    this.renderer.group.name = 'playback-actors';
-    this.viewer.scene.add(this.renderer.group);
+    this.transport.configure(
+      (time) => this.renderAt(time),
+      (time) => {
+        this.time = time;
+        if (time >= this.bundle.endTime) this.playing = false;
+        this.publish();
+      },
+    );
+    if (!options.renderer) {
+      this.renderer.group.name = 'playback-actors';
+      this.viewer.scene.add(this.renderer.group);
+    } else {
+      this.renderer.setLayerVisible('editor', false);
+      this.renderer.setLayerVisible('ambient-preview', false);
+    }
     if (this.cameraPolicy === 'dash-camera') this.viewer.setCameraPoseConstraintsEnabled(false);
     this.syncScene();
     if (this.cameraPolicy === 'all-actors') {
@@ -424,17 +441,15 @@ export class PlaybackController {
     if (this.playing) return;
     if (this.time >= this.bundle.endTime) this.time = this.bundle.startTime;
     this.playing = true;
-    this.playbackWallStart = performance.now();
-    this.playbackTraceStart = this.time;
     this.publish();
-    this.raf = requestAnimationFrame(this.tick);
+    if (this.options.externalClock) return;
+    this.transport.play(this.time, this.bundle.endTime);
   }
 
   pause(): void {
     if (!this.playing) return;
     this.playing = false;
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
+    this.transport.pause();
     this.publish();
   }
 
@@ -464,6 +479,7 @@ export class PlaybackController {
 
   seek(time: number): void {
     this.time = Math.max(this.bundle.startTime, Math.min(this.bundle.endTime, time));
+    if (this.playing && !this.options.externalClock) this.transport.seek(this.time);
     this.syncScene();
     // A scrub is an explicit request to inspect this moment. Reframe the real
     // present actors rather than leaving them as sub-pixel dots in the map-wide
@@ -475,11 +491,25 @@ export class PlaybackController {
     this.publish();
   }
 
+  /** Render an externally-owned transport frame without starting another RAF. */
+  renderAt(time: number): void {
+    this.time = Math.max(this.bundle.startTime, Math.min(this.bundle.endTime, time));
+    this.syncScene();
+    if (this.cameraPolicy === 'auto-incident') this.frameActors();
+    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
+    else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
+  }
+
   dispose(): void {
     this.playing = false;
-    if (this.raf) cancelAnimationFrame(this.raf);
-    this.raf = 0;
-    this.renderer.dispose();
+    this.transport.dispose();
+    if (this.options.renderer) {
+      this.renderer.clearLayer('playback');
+      this.renderer.setLayerVisible('editor', true);
+      this.renderer.setLayerVisible('ambient-preview', true);
+    } else {
+      this.renderer.dispose();
+    }
     this.options.clearSignalStates?.();
     if (this.cameraPolicy === 'dash-camera') this.viewer.setCameraPoseConstraintsEnabled(true);
     if (this.previousCameraView) {
@@ -497,34 +527,6 @@ export class PlaybackController {
     }
     this.listeners.clear();
   }
-
-  private tick = (now: number): void => {
-    if (!this.playing) return;
-    // Trace time is anchored to the monotonic wall clock, not accumulated from
-    // rendered frames. A software renderer may deliver RAF only a few times per
-    // second; in that case we intentionally drop visual frames while preserving
-    // exact trace sampling and real-time completion.
-    this.time = realtimePlaybackTime(
-      this.playbackTraceStart,
-      this.playbackWallStart,
-      now,
-      this.bundle.endTime,
-    );
-    this.syncScene();
-    // Follow the incident while playing. Actor transforms still come solely
-    // from the trace; this only keeps those actors visibly inspectable.
-    if (this.cameraPolicy === 'auto-incident') this.frameActors();
-    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
-    else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
-    if (this.time >= this.bundle.endTime) {
-      this.playing = false;
-      this.raf = 0;
-      this.publish();
-      return;
-    }
-    this.publish();
-    this.raf = requestAnimationFrame(this.tick);
-  };
 
   private syncScene(): void {
     this.sampled = samplePlaybackActors(this.bundle, this.time);
@@ -593,7 +595,7 @@ export class PlaybackController {
         headingRad,
       }];
     });
-    this.renderer.sync([...views, ...propViews]);
+    this.renderer.syncLayer(this.options.renderer ? 'playback' : 'editor', [...views, ...propViews]);
     this.renderer.setSelection([]);
   }
 
