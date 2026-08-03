@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { Color, type LineBasicMaterial, type LineSegments, type Points, type PointsMaterial } from 'three';
-import { parseSimScenarioInput } from '@uniscenarios/sim-engine';
+import { parseSimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
 import { dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
@@ -56,6 +56,22 @@ describe('vehicle route overlays', () => {
     const routes = routesFromSimulation(input(), index());
     expect(routes.some((route) => route.actorId === 'walker' || route.actorId === 'parked')).toBe(false);
     expect(routes.find((route) => route.actorId === 'ambient-1')?.ambient).toBe(true);
+  });
+
+  it('keeps the authored plan separate from observed simulation geometry', () => {
+    const trace = {
+      ticks: {
+        t: [0, 1],
+        actors: {
+          ego: { x: [1, 2], z: [7, 8], present: [1, 1] },
+        },
+      },
+      events: [],
+    } as unknown as SceneTrace;
+    const route = routesFromSimulation(input(), index(), trace).find((item) => item.actorId === 'ego')!;
+    expect(route.planned[0]).toEqual({ x: 0, z: 0 });
+    expect(route.actual).toEqual([{ x: 1, z: 7 }, { x: 2, z: 8 }]);
+    expect(route.actual).not.toEqual(route.planned);
   });
 
   it('uses the current authored timeline route while retaining warmed ambient routes', () => {

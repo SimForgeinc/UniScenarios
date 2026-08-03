@@ -8,7 +8,17 @@ import {
   Points,
   PointsMaterial,
 } from 'three';
-import { buildRoute, contentHash, type RouteSpec, type SimActor, type SimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
+import {
+  buildRoute,
+  contentHash,
+  retargetToLane,
+  retargetToNeighbour,
+  type Route,
+  type RouteSpec,
+  type SimActor,
+  type SimScenarioInput,
+  type SceneTrace,
+} from '@uniscenarios/sim-engine';
 import type { Interaction, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { LaneIndex } from './laneIndex';
 
@@ -214,18 +224,263 @@ function authoredActionMarkers(roleId: string, interactions: readonly Interactio
   });
 }
 
+function scenePoint(point: { readonly x: number; readonly y: number }): RoutePoint {
+  const x = Object.is(point.x, -0) ? 0 : point.x;
+  const rawZ = -point.y;
+  return { x, z: Object.is(rawZ, -0) ? 0 : rawZ };
+}
+
+function appendRouteSection(
+  points: RoutePoint[],
+  route: Route,
+  fromS: number,
+  toS: number,
+  lateralM: number,
+): void {
+  const start = Math.max(0, Math.min(route.lengthM, fromS));
+  const end = Math.max(start, Math.min(route.lengthM, toS));
+  const add = (s: number) => {
+    const point = scenePoint(route.pointWithOffset(s, lateralM));
+    const previous = points.at(-1);
+    if (!previous || Math.hypot(previous.x - point.x, previous.z - point.z) > 1e-4) points.push(point);
+  };
+  add(start);
+  for (let s = start + 2; s < end; s += 2) add(s);
+  add(end);
+}
+
+function minimumJerkProgress(progress: number): number {
+  const u = Math.max(0, Math.min(1, progress));
+  return 10 * u ** 3 - 15 * u ** 4 + 6 * u ** 5;
+}
+
+function numeric(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+/** Resolve deterministic trigger times where authoring has enough information.
+ * Conditional/arrival triggers deliberately remain unresolved: inventing a
+ * firing point would draw a route that playback may never execute. */
+function authoredTriggerTimes(interactions: readonly Interaction[]): ReadonlyMap<string, number> {
+  const byId = new Map(interactions.map((interaction) => [interaction.id, interaction]));
+  const memo = new Map<string, number>();
+  const visiting = new Set<string>();
+  const resolve = (interaction: Interaction): number | null => {
+    const cached = memo.get(interaction.id);
+    if (cached !== undefined) return cached;
+    if (visiting.has(interaction.id)) return null;
+    visiting.add(interaction.id);
+    let result: number | null = null;
+    if (interaction.trigger.kind === 'at') result = numeric(interaction.trigger.t, 0);
+    else if (interaction.trigger.kind === 'after') {
+      const dependency = byId.get(interaction.trigger.of);
+      const dependencyTime = dependency ? resolve(dependency) : null;
+      if (dependencyTime !== null) result = dependencyTime + numeric(interaction.trigger.delayS, 0);
+    }
+    visiting.delete(interaction.id);
+    if (result !== null) memo.set(interaction.id, result);
+    return result;
+  };
+  for (const interaction of interactions) resolve(interaction);
+  return memo;
+}
+
+interface ProjectedRoute {
+  readonly points: readonly RoutePoint[];
+  readonly rejectedInteractionIds: ReadonlySet<string>;
+}
+
+/**
+ * Project map-bound authoring actions with the simulator's own route builders
+ * and legal-neighbour retargeting. This is intentionally synchronous and only
+ * touches one actor's lane graph; timeline dragging therefore does not wait for
+ * materialization, simulation, or ambient-traffic regeneration.
+ */
+function projectAuthoredRoute(
+  role: ScenarioTemplateV2['roles'][number],
+  roles: readonly ScenarioTemplateV2['roles'][number][],
+  interactions: readonly Interaction[],
+  index: LaneIndex,
+  lanes: readonly string[],
+  clipSeconds: number,
+): ProjectedRoute {
+  const graphDigest = index.stats.xodrSha256 ?? `${index.stats.mapName}:${index.stats.lanes}:${index.stats.segments}`;
+  const actorInteractions = interactions.filter((interaction) => interaction.actor === role.id);
+  const cacheKey = `${graphDigest}:projection:${contentHash({
+    lanes,
+    laneRef: role.kind === 'scene_absolute' ? role.laneRef : undefined,
+    initialSpeedKph: role.initialSpeedKph,
+    clipSeconds,
+    interactions: actorInteractions,
+  })}`;
+  const cached = routeGeometryCache.get(cacheKey);
+  if (cached) return { points: cached, rejectedInteractionIds: new Set() };
+  const built = buildRoute(index.graph, { kind: 'lanePath', lanes: [...lanes] });
+  if (!built.ok || built.route.lengthM <= 0) return { points: [], rejectedInteractionIds: new Set() };
+  let route = built.route;
+  let routeS = role.kind === 'scene_absolute' && role.laneRef
+    ? route.sOfLaneStorage(`${role.laneRef.roadId}:${role.laneRef.section}:${role.laneRef.laneId}`, role.laneRef.s) ?? 0
+    : 0;
+  let lateralM = 0;
+  let time = 0;
+  let travelledM = 0;
+  let frameK = role.kind === 'lane_offset' ? role.k : 0;
+  let speedMps = Math.max(0, numeric(role.initialSpeedKph, 30) / 3.6);
+  const points: RoutePoint[] = [];
+  const rejected = new Set<string>();
+  const triggerTimes = authoredTriggerTimes(interactions);
+  const ordered = interactions
+    .filter((interaction) => interaction.actor === role.id && triggerTimes.has(interaction.id))
+    .map((interaction, ordinal) => ({ interaction, ordinal, time: triggerTimes.get(interaction.id)! }))
+    .filter(({ time: triggerTime }) => triggerTime >= 0 && triggerTime <= clipSeconds)
+    .sort((a, b) => a.time - b.time || a.ordinal - b.ordinal || a.interaction.id.localeCompare(b.interaction.id));
+
+  appendRouteSection(points, route, routeS, routeS, lateralM);
+  for (const { interaction, time: triggerTime } of ordered) {
+    const distance = Math.max(0, triggerTime - time) * speedMps;
+    travelledM += distance;
+    const nextS = Math.min(route.lengthM, routeS + distance);
+    appendRouteSection(points, route, routeS, nextS, lateralM);
+    routeS = nextS;
+    time = triggerTime;
+
+    if (interaction.verb === 'speed') {
+      if (interaction.target.mode === 'absolute') speedMps = Math.max(0, numeric(interaction.target.valueKph, speedMps * 3.6) / 3.6);
+      else if (interaction.target.mode === 'delta') speedMps = Math.max(0, speedMps + numeric(interaction.target.deltaKph, 0) / 3.6);
+      else if (interaction.target.mode === 'factor') speedMps = Math.max(0, speedMps * numeric(interaction.target.factor, 1));
+      else if (interaction.target.mode === 'stop') speedMps = 0;
+      continue;
+    }
+
+    if (interaction.verb === 'route' && interaction.target.mode === 'lanePath') {
+      const target = buildRoute(index.graph, { kind: 'lanePath', lanes: [...interaction.target.lanes] });
+      if (!target.ok) { rejected.add(interaction.id); continue; }
+      const here = route.pointWithOffset(routeS, lateralM);
+      const sourceStart = route.poseAt(0).rsl;
+      const targetStart = target.route.poseAt(0).rsl;
+      // A lanePath authored as a turn choice describes the complete legal
+      // branch from the shared approach. Keep that approach in the preview
+      // instead of drawing a diagonal from the trigger-time body position.
+      if (sourceStart && sourceStart === targetStart) {
+        points.length = 0;
+        route = target.route;
+        routeS = Math.min(route.lengthM, travelledM);
+        lateralM = 0;
+        appendRouteSection(points, route, 0, routeS, 0);
+        continue;
+      }
+      route = target.route;
+      routeS = route.projectPoint(here).s;
+      lateralM = route.lateralOffsetAt(routeS, here);
+      continue;
+    }
+
+    if (interaction.verb === 'laneOffset') {
+      const duration = Math.max(.1, numeric(interaction.maneuverDurationS, numeric(interaction.dynamics?.value, 1)));
+      const targetOffset = numeric(interaction.target.tFrac, 0) * route.widthAt(routeS);
+      const travel = Math.max(.2, speedMps * duration);
+      const samples = Math.max(4, Math.ceil(travel / 1.5));
+      for (let i = 1; i <= samples; i++) {
+        const progress = i / samples;
+        const atS = Math.min(route.lengthM, routeS + travel * progress);
+        const offset = lateralM + (targetOffset - lateralM) * minimumJerkProgress(progress);
+        const point = scenePoint(route.pointWithOffset(atS, offset));
+        const previous = points.at(-1);
+        if (!previous || Math.hypot(previous.x - point.x, previous.z - point.z) > 1e-4) points.push(point);
+      }
+      routeS = Math.min(route.lengthM, routeS + travel);
+      travelledM += travel;
+      lateralM = targetOffset;
+      time += duration;
+      continue;
+    }
+
+    if (interaction.verb !== 'changeLane') continue;
+    let retarget: ReturnType<typeof retargetToNeighbour> | ReturnType<typeof retargetToLane> = null;
+    if (interaction.target.mode === 'relative' && interaction.target.dk !== 0) {
+      let cursorRoute = route;
+      let cursorS = routeS;
+      let separationM = 0;
+      const side = interaction.target.dk > 0 ? 'left' : 'right';
+      for (let count = 0; count < Math.abs(interaction.target.dk); count++) {
+        const next = retargetToNeighbour(index.graph, cursorRoute, cursorS, side, { legalOnly: true });
+        if (!next) { retarget = null; break; }
+        cursorRoute = next.route;
+        cursorS = next.s;
+        separationM += next.separationM;
+        retarget = { ...next, route: cursorRoute, s: cursorS, separationM };
+      }
+    } else if (interaction.target.mode === 'absolute') {
+      // Absolute k is site-frame-relative. For map-bound Studio actors, infer
+      // the target by walking from the current lane the requested signed count.
+      const delta = interaction.target.k - frameK;
+      if (delta !== 0) {
+        let cursorRoute = route;
+        let cursorS = routeS;
+        let separationM = 0;
+        const side = delta > 0 ? 'left' : 'right';
+        for (let count = 0; count < Math.abs(delta); count++) {
+          const next = retargetToNeighbour(index.graph, cursorRoute, cursorS, side, { legalOnly: true });
+          if (!next) { retarget = null; break; }
+          cursorRoute = next.route;
+          cursorS = next.s;
+          separationM += next.separationM;
+          retarget = { ...next, route: cursorRoute, s: cursorS, separationM };
+        }
+      }
+    } else if (interaction.target.mode === 'toRole') {
+      const targetRoleId = interaction.target.role;
+      const targetRole = roles.find((candidate) => candidate.id === targetRoleId);
+      if (targetRole?.kind === 'scene_absolute' && targetRole.laneRef) {
+        retarget = retargetToLane(index.graph, route, routeS, `${targetRole.laneRef.roadId}:${targetRole.laneRef.section}:${targetRole.laneRef.laneId}`);
+      }
+    }
+    if (!retarget) { rejected.add(interaction.id); continue; }
+
+    const duration = Math.max(.1, numeric(interaction.maneuverDurationS, numeric(interaction.dynamics?.value, 1)));
+    const travel = Math.max(.2, speedMps * duration);
+    const samples = Math.max(4, Math.ceil(travel / 1.5));
+    for (let i = 1; i <= samples; i++) {
+      const progress = i / samples;
+      const sourceS = Math.min(route.lengthM, routeS + travel * progress);
+      const offset = lateralM + retarget.separationM * minimumJerkProgress(progress);
+      const point = scenePoint(route.pointWithOffset(sourceS, offset));
+      const previous = points.at(-1);
+      if (!previous || Math.hypot(previous.x - point.x, previous.z - point.z) > 1e-4) points.push(point);
+    }
+    const completed = route.pointWithOffset(Math.min(route.lengthM, routeS + travel), lateralM + retarget.separationM);
+    route = retarget.route;
+    routeS = route.projectPoint(completed).s;
+    lateralM = route.lateralOffsetAt(routeS, completed);
+    travelledM += travel;
+    if (interaction.target.mode === 'relative') frameK += interaction.target.dk;
+    else if (interaction.target.mode === 'absolute') frameK = interaction.target.k;
+    time += duration;
+  }
+  appendRouteSection(points, route, routeS, route.lengthM, lateralM);
+  const stable = Object.freeze(points);
+  routeGeometryCache.set(cacheKey, stable);
+  if (routeGeometryCache.size > ROUTE_CACHE_LIMIT) routeGeometryCache.delete(routeGeometryCache.keys().next().value!);
+  return { points: stable, rejectedInteractionIds: rejected };
+}
+
 /** Synchronous optimistic projection from the current editor document. */
 export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneIndex): VehicleRouteOverlay[] {
-  const reroutes = new Map<string, Extract<Interaction, { verb: 'route' }>>();
-  for (const interaction of template.choreography.interactions) {
-    if (interaction.verb === 'route' && interaction.target.mode === 'lanePath') reroutes.set(interaction.actor, interaction);
-  }
   return template.roles.flatMap((role) => {
     if (role.actor.static || role.actor.class === 'pedestrian' || role.actor.class === 'static_object') return [];
-    const reroute = reroutes.get(role.id);
-    const lanes = reroute?.target.mode === 'lanePath' ? reroute.target.lanes : role.kind === 'scene_absolute' ? role.initialRoute?.lanes : undefined;
+    const roleInteractions = template.choreography.interactions.filter((interaction) => interaction.actor === role.id);
+    const initialReroute = roleInteractions.find((interaction): interaction is Extract<Interaction, { verb: 'route' }> =>
+      interaction.verb === 'route' && interaction.target.mode === 'lanePath');
+    const lanes = role.kind === 'scene_absolute' && role.initialRoute?.lanes
+      ? role.initialRoute.lanes
+      : initialReroute?.target.mode === 'lanePath' ? initialReroute.target.lanes : undefined;
     if (!lanes?.length) return [];
-    const planned = resolvedRoutePoints({ kind: 'lanePath', lanes }, index,
+    const geometryInteractions = roleInteractions.filter((interaction) =>
+      interaction.verb === 'changeLane' || interaction.verb === 'laneOffset' || interaction.verb === 'route');
+    const projected = geometryInteractions.length
+      ? projectAuthoredRoute(role, template.roles, template.choreography.interactions, index, lanes, template.choreography.clipSeconds)
+      : null;
+    const planned = projected?.points ?? resolvedRoutePoints({ kind: 'lanePath', lanes }, index,
       role.kind === 'scene_absolute' && role.laneRef
         ? { laneRsl: `${role.laneRef.roadId}:${role.laneRef.section}:${role.laneRef.laneId}`, storageS: role.laneRef.s }
         : undefined);
