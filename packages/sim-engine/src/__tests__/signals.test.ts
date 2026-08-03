@@ -7,7 +7,9 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { parseSimScenarioInput } from '../schema/input.js';
 import { runSimulation } from '../sim/engine.js';
+import { SignalBook, phaseForbidsEntry } from '../sim/signals.js';
 import { LANE_LEFT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
 
 const graph = syntheticGraph();
@@ -37,6 +39,153 @@ function signalScenario(obeySignals: boolean) {
 }
 
 describe('signal compliance', () => {
+  it('requires flattened physical ids to close over controller-stage membership', () => {
+    const base = signalScenario(true);
+    const binding = {
+      junctionId: 'j1',
+      controllerIds: ['stage-a', 'stage-b'],
+      headIds: ['h1'],
+      controllerHeadGroups: [
+        { controllerId: 'stage-a', headIds: ['h1'] },
+        { controllerId: 'stage-b', headIds: ['h1'] },
+      ],
+      timingSource: 'synthetic-default' as const,
+    };
+    expect(() => parseSimScenarioInput({
+      ...base,
+      signalPrograms: [{ ...base.signalPrograms[0]!, mapBinding: binding }],
+    })).not.toThrow();
+    expect(() => parseSimScenarioInput({
+      ...base,
+      signalPrograms: [{
+        ...base.signalPrograms[0]!,
+        mapBinding: { ...binding, controllerIds: ['stage-a'] },
+      }],
+    })).toThrow(/controllerIds must equal controllerHeadGroups/);
+    expect(() => parseSimScenarioInput({
+      ...base,
+      signalPrograms: [{
+        ...base.signalPrograms[0]!,
+        mapBinding: { ...binding, headIds: ['h1', 'invented'] },
+      }],
+    })).toThrow(/headIds must equal controllerHeadGroups/);
+  });
+
+  it('carries program timing and runtime override provenance', () => {
+    const book = new SignalBook([
+      {
+        id: 'map-head',
+        phases: [
+          { phase: 'green', durationS: 10 },
+          { phase: 'yellow', durationS: 3 },
+          { phase: 'red', durationS: 10 },
+        ],
+        offsetS: 0,
+        loop: true,
+        stopLines: [],
+        mapBinding: {
+          junctionId: 'j1',
+          controllerIds: ['c1'],
+          headIds: ['h1'],
+          timingSource: 'synthetic-default',
+        },
+      },
+    ], 0);
+    expect(book.stateAt('map-head', 0)).toEqual({
+      phase: 'green',
+      source: 'program',
+      timingSource: 'synthetic-default',
+    });
+    book.setOverride('map-head', 'red');
+    expect(book.stateAt('map-head', 0)).toEqual({
+      phase: 'red',
+      source: 'override',
+      timingSource: 'synthetic-default',
+    });
+  });
+
+  it('permits green and treats yellow/red as stop-line controls', () => {
+    expect(phaseForbidsEntry('green')).toBe(false);
+    expect(phaseForbidsEntry('yellow')).toBe(true);
+    expect(phaseForbidsEntry('red')).toBe(true);
+    expect(phaseForbidsEntry('green_arrow')).toBe(false);
+    expect(phaseForbidsEntry('proceed')).toBe(false);
+    expect(phaseForbidsEntry('flashing_yellow')).toBe(false);
+    expect(phaseForbidsEntry('off')).toBe(false);
+    expect(phaseForbidsEntry('red_x')).toBe(true);
+    expect(phaseForbidsEntry('stop')).toBe(true);
+  });
+
+  it('executes and traces a deterministic 20 s human-director stop/release program', () => {
+    const input = scenario(graph, {
+      actors: [vehicle(graph, { id: 'ego', rsl: LANE_LEFT, s: 20, speedMps: 12, cruiseSpeedMps: 12 })],
+      signalPrograms: [{
+        id: 'director-west',
+        phases: [{ phase: 'stop', durationS: 120 }],
+        loop: false,
+        stopLines: [{ rsl: LANE_LEFT, s: 100 }],
+      }],
+      interactions: [{
+        id: 'director-release', actorId: 'ego',
+        trigger: { kind: 'at', t: 10 }, verb: 'set',
+        target: { key: 'control:director-west.indication', value: 'proceed' },
+      }],
+    });
+    const first = runSimulation(input, { graph }).trace;
+    const second = runSimulation(input, { graph }).trace;
+    const track = first.ticks.actors['ego']!;
+    const beforeRelease = first.ticks.t.findIndex((t) => t >= 9.9);
+    expect(track.speedMps[beforeRelease]).toBeLessThan(0.1);
+    expect(track.x.at(-1)).toBeGreaterThan(120);
+    expect(first.ticks.signals?.['director-west']?.phase[beforeRelease]).toBe('stop');
+    expect(first.ticks.signals?.['director-west']?.phase.at(-1)).toBe('proceed');
+    expect(first.events).toContainEqual(expect.objectContaining({ kind: 'state_set', key: 'control:director-west.indication', value: 'proceed' }));
+    expect(second.ticks.signals).toEqual(first.ticks.signals);
+    expect(second.events).toEqual(first.events);
+  });
+
+  it('treats a dark failed normal signal as uncontrolled', () => {
+    const base = signalScenario(true);
+    const input = parseSimScenarioInput({
+      ...base,
+      signalPrograms: [{ ...base.signalPrograms[0]!, phases: [{ phase: 'off', durationS: 120 }] }],
+    });
+    const { trace } = runSimulation(input, { graph });
+    expect(trace.ticks.actors['ego']!.x.at(-1)).toBeGreaterThan(STOP_LINE_S);
+    expect(trace.ticks.signals?.['sig-main']?.phase.at(-1)).toBe('off');
+  });
+
+  it('stops, dwells continuously, and releases once at a static stop control', () => {
+    const input = scenario(graph, {
+      actors: [
+        vehicle(graph, {
+          id: 'ego',
+          rsl: LANE_LEFT,
+          s: 20,
+          speedMps: 12,
+          cruiseSpeedMps: 12,
+          rules: { obeySignals: true },
+        }),
+      ],
+      roadControls: [{
+        id: 'stop-main',
+        kind: 'stop',
+        dwellS: 1,
+        stopLines: [{ rsl: LANE_LEFT, s: STOP_LINE_S }],
+      }],
+    });
+    const { trace } = runSimulation(input, { graph });
+    const track = trace.ticks.actors['ego']!;
+    const stoppedTimes = trace.ticks.t.filter(
+      (_, index) =>
+        track.speedMps[index]! < 0.05 &&
+        track.x[index]! > STOP_LINE_S - 3 &&
+        track.x[index]! < STOP_LINE_S,
+    );
+    expect(stoppedTimes.at(-1)! - stoppedTimes[0]!).toBeGreaterThanOrEqual(0.98);
+    expect(track.x.at(-1)).toBeGreaterThan(STOP_LINE_S + 5);
+  });
+
   it('stops at the line on red', () => {
     const { trace } = runSimulation(signalScenario(true), { graph });
     const track = trace.ticks.actors['ego']!;

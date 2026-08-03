@@ -1,5 +1,8 @@
 import {
   buildRoute,
+  DYNAMIC_V1_DEFAULT_SUBSTEP_S,
+  runSimulation,
+  resolvePhysicsConfig,
   toSceneXZ,
   type Condition,
   type Interaction,
@@ -7,9 +10,20 @@ import {
   type Route,
   type SimActor,
   type SimScenarioInput,
+  type SimTrace,
+  type SignalProgram,
 } from '@uniscenarios/sim-engine';
 
-import { assertDefaultControllerRules, finite, identifier, mapRule, resolveScenario, xml } from './common.js';
+import {
+  analyzeAsamCapabilities,
+  assertDefaultControllerRules,
+  finite,
+  identifier,
+  mapRule,
+  mergeAsamWarnings,
+  resolveScenario,
+  xml,
+} from './common.js';
 import {
   AsamExportError,
   type AsamExportIssue,
@@ -35,6 +49,55 @@ function routeXml(name: string, points: readonly Pose[]): string {
   ].join('\n');
 }
 
+function traceWorldPosition(x: number, y: number, headingRad: number): string {
+  return `<WorldPosition x="${finite(x)}" y="${finite(y)}" z="0" h="${finite(headingRad)}" p="0" r="0"/>`;
+}
+
+function trajectoryXml(actorId: string, trace: SimTrace, warmupSeconds: number): string {
+  const track = trace.ticks.actors[actorId]!;
+  const vertices = trace.ticks.t.map((t, index) => {
+    const direction = track.motionDirection?.[index] ?? 1;
+    return [
+      `<Vertex time="${finite(t + warmupSeconds)}">`,
+      `  <Position>${traceWorldPosition(track.x[index]!, track.y[index]!, track.headingRad[index]!)}</Position>`,
+      `  <Motion speed_longitudinal="${finite(track.speedMps[index]! * direction)}"/>`,
+      '</Vertex>',
+    ].join('\n');
+  });
+  return [
+    `<Trajectory name="${xml(identifier('trajectory', actorId))}" closed="false">`,
+    '  <Shape><Polyline>',
+    ...vertices.map((vertex) => lines(vertex, 4)),
+    '    <Interpolation/>',
+    '  </Polyline></Shape>',
+    '</Trajectory>',
+  ].join('\n');
+}
+
+function followTrajectoryAction(actorId: string, trace: SimTrace, warmupSeconds: number): string {
+  return [
+    '<PrivateAction>',
+    '  <RoutingAction>',
+    '    <FollowTrajectoryAction>',
+    '      <TimeReference><Timing domainAbsoluteRelative="absolute" scale="1" offset="0"/></TimeReference>',
+    '      <TrajectoryFollowingMode followingMode="position"/>',
+    '      <TrajectoryRef>',
+    lines(trajectoryXml(actorId, trace, warmupSeconds), 8),
+    '      </TrajectoryRef>',
+    '    </FollowTrajectoryAction>',
+    '  </RoutingAction>',
+    '</PrivateAction>',
+  ].join('\n');
+}
+
+function trafficSignalStateAction(headId: string, state: SignalProgram['phases'][number]['phase']): string {
+  return `<GlobalAction><InfrastructureAction><TrafficSignalAction><TrafficSignalStateAction name="${xml(headId)}" state="${state}"/></TrafficSignalAction></InfrastructureAction></GlobalAction>`;
+}
+
+function primaryPhysicalSignalController(program: SignalProgram): string {
+  return program.mapBinding!.controllerHeadGroups![0]!.controllerId;
+}
+
 function routePoints(route: Route, sampleM: number): Pose[] {
   const count = Math.max(2, Math.ceil(route.lengthM / sampleM) + 1);
   const points: Pose[] = [];
@@ -58,12 +121,13 @@ function boundingBox(actor: SimActor): string {
 function actorEntity(actor: SimActor, name: string): string {
   const properties = [
     `<Property name="uniscenarios.actorId" value="${xml(actor.id)}"/>`,
+    `<Property name="uniscenarios.actorKind" value="${xml(actor.kind)}"/>`,
     ...actor.tags.map((tag) => `<Property name="uniscenarios.tag" value="${xml(tag)}"/>`),
   ];
-  if (actor.kind === 'pedestrian') {
+  if (actor.kind === 'pedestrian' || actor.kind === 'animal') {
     return [
       `<ScenarioObject name="${xml(name)}">`,
-      '  <Pedestrian name="uniscenarios_pedestrian" mass="80" pedestrianCategory="pedestrian">',
+      `  <Pedestrian name="uniscenarios_${actor.kind}" mass="${actor.kind === 'animal' ? '40' : '80'}" pedestrianCategory="${actor.kind}">`,
       lines(boundingBox(actor), 4),
       '    <Properties>',
       ...properties.map((property) => `      ${property}`),
@@ -72,12 +136,34 @@ function actorEntity(actor: SimActor, name: string): string {
       '</ScenarioObject>',
     ].join('\n');
   }
+  if (actor.kind === 'static_object') {
+    return [
+      `<ScenarioObject name="${xml(name)}">`,
+      '  <MiscObject mass="1" name="uniscenarios_static_object" miscObjectCategory="obstacle">',
+      lines(boundingBox(actor), 4),
+      '    <Properties>',
+      ...properties.map((property) => `      ${property}`),
+      '    </Properties>',
+      '  </MiscObject>',
+      '</ScenarioObject>',
+    ].join('\n');
+  }
+  const vehicleCategory = {
+    vehicle: 'other',
+    car: 'car',
+    truck: 'heavyTruck',
+    bus: 'bus',
+    van: 'van',
+    motorcycle: 'motorcycle',
+    bicycle: 'bicycle',
+    scooter: 'standupScooter',
+  }[actor.kind];
   const wheel = Math.min(0.8, Math.max(0.3, actor.dims.h * 0.45));
   const track = Math.max(0.5, actor.dims.w * 0.84);
   const axleX = Math.max(0.5, actor.dims.l * 0.58);
   return [
     `<ScenarioObject name="${xml(name)}">`,
-    '  <Vehicle name="uniscenarios_vehicle" vehicleCategory="car">',
+    `  <Vehicle name="uniscenarios_${actor.kind}" vehicleCategory="${vehicleCategory}">`,
     lines(boundingBox(actor), 4),
     '    <Performance maxSpeed="100" maxAcceleration="12" maxDeceleration="12"/>',
     '    <Axles>',
@@ -142,6 +228,20 @@ function laneChangeAction(
   actorName: string,
 ): string | AsamExportIssue {
   if (interaction.target.mode !== 'left' && interaction.target.mode !== 'right') {
+    if (interaction.target.mode === 'actorLane') {
+      return [
+        '<PrivateAction>',
+        '  <LateralAction>',
+        '    <LaneChangeAction>',
+        `      <LaneChangeActionDynamics dynamicsShape="${interaction.dynamics.shape}" dynamicsDimension="${interaction.dynamics.constraint}" value="${finite(interaction.dynamics.value)}"/>`,
+        '      <LaneChangeTarget>',
+        `        <RelativeTargetLane entityRef="${xml(identifier('actor', interaction.target.actorId))}" value="0"/>`,
+        '      </LaneChangeTarget>',
+        '    </LaneChangeAction>',
+        '  </LateralAction>',
+        '</PrivateAction>',
+      ].join('\n');
+    }
     return {
       code: 'unsupported_lane_target',
       path: `interactions.${interaction.id}.target`,
@@ -161,6 +261,127 @@ function laneChangeAction(
     '  </LateralAction>',
     '</PrivateAction>',
   ].join('\n');
+}
+
+function vehicleLightAction(
+  vehicleLightType: 'indicatorLeft' | 'indicatorRight' | 'warningLights' | 'reversingLights' | 'brakeLights',
+  mode: 'on' | 'off' | 'flashing',
+): string {
+  const flashing = mode === 'flashing' ? ' flashingOnDuration="0.5" flashingOffDuration="0.5"' : '';
+  return [
+    '<PrivateAction>',
+    '  <AppearanceAction>',
+    '    <LightStateAction transitionTime="0">',
+    `      <LightType><VehicleLight vehicleLightType="${vehicleLightType}"/></LightType>`,
+    `      <LightState mode="${mode}"${flashing}/>`,
+    '    </LightStateAction>',
+    '  </AppearanceAction>',
+    '</PrivateAction>',
+  ].join('\n');
+}
+
+function doorAnimationAction(
+  component: 'doorFrontLeft' | 'doorFrontRight' | 'trunk',
+  value: string,
+): string | null {
+  const state = value === 'opening' || value === 'open' ? 1
+    : value === 'closing' || value === 'closed' ? 0
+      : null;
+  if (state === null) return null;
+  const duration = value === 'opening' || value === 'closing' ? 1 : 0;
+  return [
+    '<PrivateAction>',
+    '  <AppearanceAction>',
+    `    <AnimationAction loop="false" animationDuration="${duration}">`,
+    `      <AnimationType><ComponentAnimation><VehicleComponent vehicleComponentType="${component}"/></ComponentAnimation></AnimationType>`,
+    `      <AnimationState state="${state}"/>`,
+    '    </AnimationAction>',
+    '  </AppearanceAction>',
+    '</PrivateAction>',
+  ].join('\n');
+}
+
+function userDefinedAnimationAction(key: string, value: boolean | number | string): string {
+  const type = `uniscenarios:${key}:${String(value)}`;
+  return [
+    '<PrivateAction>',
+    '  <AppearanceAction>',
+    '    <AnimationAction loop="false" animationDuration="0">',
+    `      <AnimationType><UserDefinedAnimation userDefinedAnimationType="${xml(type)}"/></AnimationType>`,
+    '    </AnimationAction>',
+    '  </AppearanceAction>',
+    '</PrivateAction>',
+  ].join('\n');
+}
+
+function setAppearanceActions(
+  resolved: ResolvedAsamScenario,
+  interaction: Extract<Interaction, { verb: 'set' }>,
+): string[] | AsamExportIssue {
+  const actor = resolved.input.actors.find((candidate) => candidate.id === interaction.actorId)!;
+  const { key, value } = interaction.target;
+  if (key.startsWith('lights.') || key.startsWith('doors.')) {
+    if (actor.kind === 'pedestrian' || actor.kind === 'animal' || actor.kind === 'static_object') {
+      return {
+        code: 'unsupported_appearance_actor',
+        path: `interactions.${interaction.id}.target.key`,
+        reason: `${key} requires an XML Vehicle entity, but ${actor.id} is ${actor.kind}`,
+      };
+    }
+  }
+  if (key.startsWith('doors.') && !['car', 'truck', 'bus', 'van'].includes(actor.kind)) {
+    return {
+      code: 'unsupported_appearance_actor',
+      path: `interactions.${interaction.id}.target.key`,
+      reason: `${key} requires a door-capable vehicle class, but ${actor.id} is ${actor.kind}`,
+    };
+  }
+  if (key === 'lights.reverse' && ['bicycle', 'scooter', 'motorcycle'].includes(actor.kind)) {
+    return {
+      code: 'unsupported_appearance_actor',
+      path: `interactions.${interaction.id}.target.key`,
+      reason: `${key} is not defined for the ${actor.kind} semantic class`,
+    };
+  }
+  if (key === 'lights.indicator') {
+    if (value === 'left') {
+      return [vehicleLightAction('indicatorLeft', 'flashing'), vehicleLightAction('indicatorRight', 'off')];
+    }
+    if (value === 'right') {
+      return [vehicleLightAction('indicatorLeft', 'off'), vehicleLightAction('indicatorRight', 'flashing')];
+    }
+    if (value === 'hazard') return [vehicleLightAction('warningLights', 'flashing')];
+    if (value === 'off' || value === 'none' || value === false) {
+      return [
+        vehicleLightAction('indicatorLeft', 'off'),
+        vehicleLightAction('indicatorRight', 'off'),
+        vehicleLightAction('warningLights', 'off'),
+      ];
+    }
+  }
+  if (key === 'lights.reverse' && typeof value === 'boolean') {
+    return [vehicleLightAction('reversingLights', value ? 'on' : 'off')];
+  }
+  if (key === 'lights.brake' && typeof value === 'boolean') {
+    return [vehicleLightAction('brakeLights', value ? 'on' : 'off')];
+  }
+  const doorComponent = key === 'doors.left' ? 'doorFrontLeft'
+    : key === 'doors.right' ? 'doorFrontRight'
+      : key === 'doors.rear' ? 'trunk'
+        : null;
+  if (doorComponent && typeof value === 'string') {
+    const action = doorAnimationAction(doorComponent, value);
+    if (action) return [action];
+  }
+  if (key.startsWith('pose.')) return [userDefinedAnimationAction(key, value)];
+  if (key === 'lights.emergency' || key === 'audio.horn') {
+    return [userDefinedAnimationAction(key, value)];
+  }
+  return {
+    code: 'unsupported_set_action',
+    path: `interactions.${interaction.id}.target.key`,
+    reason: `${key} has no standard XML 1.4 action with equivalent semantics`,
+  };
 }
 
 function interactionActions(
@@ -199,15 +420,7 @@ function interactionActions(
       return [`<GlobalAction><EntityAction entityRef="${xml(actorName)}">${body}</EntityAction></GlobalAction>`];
     }
     case 'set': {
-      const match = /^signal:(.+)\.phase$/.exec(interaction.target.key);
-      if (match && typeof interaction.target.value === 'string') {
-        return [`<GlobalAction><InfrastructureAction><TrafficSignalAction><TrafficSignalControllerAction trafficSignalControllerRef="${xml(match[1]!)}" phase="${xml(interaction.target.value)}"/></TrafficSignalAction></InfrastructureAction></GlobalAction>`];
-      }
-      return {
-        code: 'unsupported_set_action',
-        path: `interactions.${interaction.id}.target.key`,
-        reason: `${interaction.target.key} has no standard XML 1.4 action with equivalent semantics`,
-      };
+      return setAppearanceActions(resolved, interaction);
     }
     case 'gap':
       return {
@@ -216,6 +429,18 @@ function interactionActions(
         reason: 'XML LongitudinalDistanceAction cannot preserve UniScenarios transition shape and dimension',
       };
     case 'laneOffset':
+      if (interaction.target.mode === 'meters' && interaction.dynamics.shape === 'step') {
+        return [[
+          '<PrivateAction>',
+          '  <LateralAction>',
+          '    <LaneOffsetAction continuous="false">',
+          '      <LaneOffsetActionDynamics dynamicsShape="step"/>',
+          `      <LaneOffsetTarget><AbsoluteTargetLaneOffset value="${finite(interaction.target.value)}"/></LaneOffsetTarget>`,
+          '    </LaneOffsetAction>',
+          '  </LateralAction>',
+          '</PrivateAction>',
+        ].join('\n')];
+      }
       return {
         code: 'unsupported_lane_offset_dynamics',
         path: `interactions.${interaction.id}`,
@@ -249,7 +474,12 @@ function leafCondition(resolved: ResolvedAsamScenario, condition: Condition): Le
     case 'standstill':
       return { triggeringActor: actor(condition.actorId), xml: `<StandStillCondition duration="${finite(condition.durationS)}"/>` };
     case 'signal':
-      return { xml: `<TrafficSignalControllerCondition trafficSignalControllerRef="${xml(condition.signalId)}" phase="${condition.phase}"/>` };
+      {
+        const program = resolved.input.signalPrograms.find((candidate) => candidate.id === condition.signalId)!;
+      return {
+        xml: `<TrafficSignalControllerCondition trafficSignalControllerRef="${xml(primaryPhysicalSignalController(program))}" phase="${xml(condition.phase)}"/>`,
+      };
+      }
     case 'collision':
       if (!condition.a || !condition.b) {
         return { code: 'unsupported_collision_scope', path: 'condition', reason: 'XML export requires both collision participants' };
@@ -297,7 +527,7 @@ function whenGroups(
     output.push(`<ConditionGroup>${leaves.join('')}</ConditionGroup>`);
   }
   if (interaction.trigger.ifNever === 'fire') {
-    output.push(`<ConditionGroup><Condition name="${xml(`${interaction.id}_latest`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(interaction.trigger.byLatest)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup>`);
+    output.push(`<ConditionGroup><Condition name="${xml(`${interaction.id}_latest`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(resolved.input.warmupSeconds + Math.max(0, interaction.trigger.byLatest))}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup>`);
   } else {
     return {
       code: 'unsupported_when_deadline',
@@ -311,7 +541,7 @@ function whenGroups(
 function startTrigger(resolved: ResolvedAsamScenario, interaction: Interaction): string | AsamExportIssue {
   const trigger = interaction.trigger;
   if (trigger.kind === 'at') {
-    return `<StartTrigger><ConditionGroup><Condition name="${xml(`${interaction.id}_start`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(Math.max(0, trigger.t))}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>`;
+    return `<StartTrigger><ConditionGroup><Condition name="${xml(`${interaction.id}_start`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(resolved.input.warmupSeconds + Math.max(0, trigger.t))}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>`;
   }
   if (trigger.kind === 'after') {
     const parent = resolved.interactionNames.get(trigger.interactionId)!;
@@ -324,72 +554,479 @@ function startTrigger(resolved: ResolvedAsamScenario, interaction: Interaction):
   return { code: 'unsupported_arrival_trigger', path: `interactions.${interaction.id}.trigger`, reason: 'arrival triggers must be resolved while materializing the concrete instance' };
 }
 
-function validateXmlProfile(input: SimScenarioInput): void {
+function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 'trajectory-replay'): void {
   const issues: AsamExportIssue[] = [];
+  const headOwners = new Map<string, number>();
+  const controllerOwners = new Map<string, number>();
+  const programsById = new Map(input.signalPrograms.map((program) => [program.id, program]));
+  for (const [i, actor] of input.actors.entries()) {
+    if (actor.kind === 'static_object' && !actor.static) {
+      issues.push({
+        code: 'unsupported_moving_misc_object',
+        path: `actors.${i}.kind`,
+        reason: 'the XML profile exports static_object as MiscObject and does not substitute vehicle motion semantics',
+      });
+    }
+    if (actor.static && actor.initial.speedMps > 1e-9) {
+      issues.push({
+        code: 'invalid_static_actor_speed',
+        path: `actors.${i}.initial.speedMps`,
+        reason: 'a static actor cannot preserve a non-zero initial speed',
+      });
+    }
+    if (executionMode === 'actions' && actor.tags.includes('motion:reverse')) {
+      issues.push({
+        code: 'unsupported_reverse_motion',
+        path: `actors.${i}.tags`,
+        reason: 'XML controller actions do not preserve signed reverse travel; use trajectory-replay',
+      });
+    }
+  }
   for (const [i, interaction] of input.interactions.entries()) {
-    if (interaction.until) {
+    const actor = input.actors.find((candidate) => candidate.id === interaction.actorId);
+    if (executionMode === 'actions' && actor?.static && interaction.verb !== 'exist' && interaction.verb !== 'set') {
+      issues.push({
+        code: 'unsupported_static_actor_action',
+        path: `interactions.${i}`,
+        reason: `${interaction.verb} cannot be applied to an XML MiscObject without substituting movable-object semantics`,
+      });
+    }
+    if (executionMode === 'trajectory-replay' && interaction.verb === 'set') {
+      const replayableAppearance = interaction.target.key.startsWith('pose.') || [
+        'lights.indicator',
+        'lights.reverse',
+        'lights.brake',
+        'doors.left',
+        'doors.right',
+        'doors.rear',
+        'lights.emergency',
+        'audio.horn',
+      ].includes(interaction.target.key);
+      const embodiedByReplay = interaction.target.key.startsWith('rules.') ||
+        interaction.target.key.startsWith('signal:');
+      if (!replayableAppearance && !embodiedByReplay) {
+        issues.push({
+          code: 'unsupported_set_action',
+          path: `interactions.${interaction.id}.target.key`,
+          reason: `${interaction.target.key} has no standard XML 1.4 action with equivalent semantics`,
+        });
+      }
+    }
+    if (executionMode === 'actions' && interaction.until) {
       issues.push({
         code: 'unsupported_until',
         path: `interactions.${i}.until`,
         reason: 'XML Event does not provide an equivalent generic stop condition for this action profile',
       });
     }
+    if (executionMode === 'actions' && interaction.trigger.kind === 'when') {
+      for (const signal of signalConditions(interaction.trigger.condition)) {
+        const program = programsById.get(signal.signalId);
+        if (!program) {
+          issues.push({
+            code: 'unknown_signal_program',
+            path: `interactions.${i}.trigger.condition`,
+            reason: `signal condition references unknown program ${signal.signalId}`,
+          });
+        } else if (!program.phases.some((phase) => phase.phase === signal.phase)) {
+          issues.push({
+            code: 'unknown_signal_phase',
+            path: `interactions.${i}.trigger.condition`,
+            reason: `${signal.phase} is not a phase of signal program ${signal.signalId}`,
+          });
+        }
+      }
+    }
   }
   for (const [i, program] of input.signalPrograms.entries()) {
-    if (!program.loop) {
+    if (executionMode === 'actions' && !program.loop) {
       issues.push({
         code: 'unsupported_finite_signal_program',
         path: `signalPrograms.${i}.loop`,
         reason: 'XML TrafficSignalController cycles; a finite non-looping program needs explicit storyboard state',
       });
     }
-    const phases = new Set<string>();
-    for (const [phaseIndex, phase] of program.phases.entries()) {
-      if (phases.has(phase.phase)) {
-        issues.push({
-          code: 'duplicate_signal_phase_name',
-          path: `signalPrograms.${i}.phases.${phaseIndex}.phase`,
-          reason: `XML controller phase references require unique names; ${phase.phase} occurs more than once`,
-        });
+    if (!program.mapBinding) {
+      issues.push({
+        code: 'missing_signal_map_binding',
+        path: `signalPrograms.${i}.mapBinding`,
+        reason: 'XML TrafficSignalController.name must reference a concrete road-network controller',
+      });
+    } else if (!program.mapBinding.controllerHeadGroups || program.mapBinding.controllerHeadGroups.length === 0) {
+      issues.push({
+        code: 'missing_signal_controller_head_groups',
+        path: `signalPrograms.${i}.mapBinding.controllerHeadGroups`,
+        reason: 'flattened controller/head ids do not preserve authoritative OpenDRIVE controller-stage membership',
+      });
+    } else {
+      if (executionMode === 'actions') {
+        const programGroupHeadOwners = new Map<string, number>();
+        for (const [groupIndex, group] of program.mapBinding.controllerHeadGroups.entries()) {
+          const owner = controllerOwners.get(group.controllerId);
+          if (owner !== undefined) {
+            issues.push({
+              code: 'duplicate_signal_controller_binding',
+              path: `signalPrograms.${i}.mapBinding.controllerHeadGroups.${groupIndex}.controllerId`,
+              reason: `${group.controllerId} is already defined by signalPrograms.${owner}; action-mode phase ownership is ambiguous`,
+            });
+          } else {
+            controllerOwners.set(group.controllerId, i);
+          }
+          for (const [headIndex, headId] of group.headIds.entries()) {
+            const groupOwner = programGroupHeadOwners.get(headId);
+            if (groupOwner !== undefined) {
+              issues.push({
+                code: 'duplicate_signal_group_membership',
+                path: `signalPrograms.${i}.mapBinding.controllerHeadGroups.${groupIndex}.headIds.${headIndex}`,
+                reason: `${headId} is already assigned to controller group ${program.mapBinding.controllerHeadGroups[groupOwner]!.controllerId}; ASAM requires each dynamic signal to belong to exactly one signal group`,
+              });
+            } else {
+              programGroupHeadOwners.set(headId, groupIndex);
+            }
+          }
+        }
       }
-      phases.add(phase.phase);
+      for (const [headIndex, headId] of program.mapBinding.headIds.entries()) {
+        const owner = headOwners.get(headId);
+        if (owner !== undefined) {
+          issues.push({
+            code: 'duplicate_signal_head_binding',
+            path: `signalPrograms.${i}.mapBinding.headIds.${headIndex}`,
+            reason: `${headId} is already controlled by signalPrograms.${owner}`,
+          });
+        } else {
+          headOwners.set(headId, i);
+        }
+      }
+    }
+    if (executionMode === 'actions') {
+      const phases = new Set<string>();
+      for (const [phaseIndex, phase] of program.phases.entries()) {
+        if (phases.has(phase.phase)) {
+          issues.push({
+            code: 'duplicate_signal_phase_name',
+            path: `signalPrograms.${i}.phases.${phaseIndex}.phase`,
+            reason: `XML controller phase references require unique names; ${phase.phase} occurs more than once`,
+          });
+        }
+        phases.add(phase.phase);
+      }
+    }
+    const offset = normalizedSignalOffset(program);
+    const splitPhase = xmlSignalPhases(program)[0]!.semantic;
+    if (executionMode === 'actions' && offset > 1e-9 && !isPhaseBoundary(program, offset) && input.interactions.some((interaction) =>
+      interaction.trigger.kind === 'when' && conditionReferencesSignalPhase(
+        interaction.trigger.condition,
+        program.id,
+        splitPhase,
+      ))) {
+      issues.push({
+        code: 'unsupported_offset_signal_condition',
+        path: `signalPrograms.${i}.offsetS`,
+        reason: 'an intra-phase offset splits one semantic phase across the controller cycle boundary, so a single XML phase-name condition cannot preserve it',
+      });
     }
   }
   if (issues.length > 0) throw new AsamExportError(issues);
+}
+
+function signalConditions(condition: Condition): Extract<Condition, { kind: 'signal' }>[] {
+  if (condition.kind === 'signal') return [condition];
+  if (condition.kind === 'and' || condition.kind === 'or') return condition.of.flatMap(signalConditions);
+  if (condition.kind === 'not') return signalConditions(condition.of);
+  return [];
+}
+
+function conditionReferencesSignalPhase(
+  condition: Condition,
+  signalId: string,
+  phase: SignalProgram['phases'][number]['phase'],
+): boolean {
+  if (condition.kind === 'signal') return condition.signalId === signalId && condition.phase === phase;
+  if (condition.kind === 'and' || condition.kind === 'or') {
+    return condition.of.some((leaf) => conditionReferencesSignalPhase(leaf, signalId, phase));
+  }
+  return condition.kind === 'not' && conditionReferencesSignalPhase(condition.of, signalId, phase);
+}
+
+function normalizedSignalOffset(program: SignalProgram): number {
+  const cycle = program.phases.reduce((sum, phase) => sum + phase.durationS, 0);
+  return ((program.offsetS % cycle) + cycle) % cycle;
+}
+
+function isPhaseBoundary(program: SignalProgram, offset: number): boolean {
+  let elapsed = 0;
+  for (const phase of program.phases) {
+    if (Math.abs(offset - elapsed) <= 1e-9) return true;
+    elapsed += phase.durationS;
+  }
+  return false;
+}
+
+interface XmlSignalPhase {
+  readonly durationS: number;
+  readonly name: string;
+  readonly semantic: SignalProgram['phases'][number]['phase'];
+}
+
+/** Rotate/split a cycle so ASAM t=0 matches engine t=-warmupSeconds. */
+function xmlSignalPhases(program: SignalProgram): XmlSignalPhase[] {
+  const offset = normalizedSignalOffset(program);
+  let phaseStart = 0;
+  let activeIndex = 0;
+  for (const [index, phase] of program.phases.entries()) {
+    if (offset < phaseStart + phase.durationS - 1e-9) {
+      activeIndex = index;
+      break;
+    }
+    phaseStart += phase.durationS;
+  }
+  const intoPhase = offset - phaseStart;
+  const active = program.phases[activeIndex]!;
+  if (Math.abs(intoPhase) <= 1e-9) {
+    return program.phases.map((_, index) => {
+      const source = program.phases[(activeIndex + index) % program.phases.length]!;
+      return { name: source.phase, semantic: source.phase, durationS: source.durationS };
+    });
+  }
+  const result: XmlSignalPhase[] = [{
+    name: active.phase,
+    semantic: active.phase,
+    durationS: active.durationS - intoPhase,
+  }];
+  for (let index = activeIndex + 1; index < activeIndex + program.phases.length; index += 1) {
+    const source = program.phases[index % program.phases.length]!;
+    if (index % program.phases.length === activeIndex) break;
+    result.push({ name: source.phase, semantic: source.phase, durationS: source.durationS });
+  }
+  result.push({
+    name: `${active.phase}__cycle_wrap`,
+    semantic: active.phase,
+    durationS: intoPhase,
+  });
+  return result;
+}
+
+function signalSemantics(
+  phase: SignalProgram['phases'][number]['phase'],
+): 'attention_stop' | 'caution' | 'fallback' | 'go' | 'stop' {
+  switch (phase) {
+    case 'green':
+    case 'green_arrow':
+    case 'proceed':
+      return 'go';
+    case 'yellow':
+    case 'yellow_arrow':
+      return 'attention_stop';
+    case 'flashing_yellow':
+      return 'caution';
+    case 'off':
+      return 'fallback';
+    case 'red':
+    case 'flashing_red':
+    case 'red_x':
+    case 'stop':
+      return 'stop';
+  }
 }
 
 export function exportOpenScenarioXml14(
   input: SimScenarioInput,
   options: AsamExportOptions,
 ): AsamExportResult {
-  assertDefaultControllerRules(input, false);
-  validateXmlProfile(input);
+  const executionMode = options.executionMode ?? 'actions';
+  const capabilities = analyzeAsamCapabilities(
+    input,
+    executionMode === 'trajectory-replay' ? 'xml-1.4-trajectory-replay' : 'xml-1.4-actions',
+  );
+  if (executionMode === 'actions') assertDefaultControllerRules(input, false);
+  validateXmlProfile(input, executionMode);
+  let replayTrace: SimTrace | null = null;
+  if (executionMode === 'trajectory-replay') {
+    try {
+      const simulation = runSimulation(input, {
+        graph: options.graph,
+        // Export is a faithful replay operation, not a tier-2 acceptance run.
+        // The normal simulation/validation pipeline owns feasibility gates;
+        // runtime/arrival errors are still rejected below.
+        guards: 'skip',
+        includeWarmupTrace: true,
+      });
+      const errors = simulation.issues.filter((issue) => issue.severity === 'error');
+      if (errors.length > 0) {
+        throw new AsamExportError(errors.map((issue, index) => ({
+          code: 'trajectory_replay_simulation_error',
+          path: issue.path ?? `simulation.issues.${index}`,
+          reason: issue.reason,
+        })));
+      }
+      replayTrace = simulation.trace;
+    } catch (error) {
+      if (error instanceof AsamExportError) throw error;
+      throw new AsamExportError([{
+        code: 'trajectory_replay_failed',
+        path: 'input',
+        reason: error instanceof Error ? error.message : String(error),
+      }]);
+    }
+  }
   const resolved = resolveScenario(input, options, false);
   const issues: AsamExportIssue[] = [];
   const actorEvents = new Map<string, string[]>();
+  const replaySignalInit: string[] = [];
   for (const actor of resolved.actors) actorEvents.set(actor.actor.id, []);
 
-  for (const { interaction, name } of resolved.interactions) {
-    const actions = interactionActions(resolved, interaction, options);
-    const trigger = startTrigger(resolved, interaction);
-    if (!Array.isArray(actions)) issues.push(actions);
-    if (typeof trigger !== 'string') issues.push(trigger);
-    if (!Array.isArray(actions) || typeof trigger !== 'string') continue;
-    actorEvents.get(interaction.actorId)!.push([
-      `<Event name="${xml(name)}" priority="overwrite" maximumExecutionCount="1">`,
-      ...actions.map((action, i) => lines(`<Action name="${xml(`${name}_action_${i}`)}">${action}</Action>`, 2)),
-      lines(trigger, 2),
-      '</Event>',
-    ].join('\n'));
+  if (executionMode === 'actions') {
+    for (const { interaction, name } of resolved.interactions) {
+      const actions = interactionActions(resolved, interaction, options);
+      const trigger = startTrigger(resolved, interaction);
+      if (!Array.isArray(actions)) issues.push(actions);
+      if (typeof trigger !== 'string') issues.push(trigger);
+      if (!Array.isArray(actions) || typeof trigger !== 'string') continue;
+      actorEvents.get(interaction.actorId)!.push([
+        `<Event name="${xml(name)}" priority="overwrite" maximumExecutionCount="1">`,
+        ...actions.map((action, i) => lines(`<Action name="${xml(`${name}_action_${i}`)}">${action}</Action>`, 2)),
+        lines(trigger, 2),
+        '</Event>',
+      ].join('\n'));
+    }
+  } else {
+    const trace = replayTrace!;
+    for (const { interaction, name } of resolved.interactions) {
+      if (
+        interaction.verb !== 'set' ||
+        interaction.target.key.startsWith('rules.') ||
+        interaction.target.key.startsWith('signal:')
+      ) continue;
+      const fired = trace.events.find((event) =>
+        event.kind === 'trigger_fired' && event.interactionId === interaction.id);
+      if (!fired) continue;
+      const actions = setAppearanceActions(resolved, interaction);
+      if (!Array.isArray(actions)) {
+        issues.push(actions);
+        continue;
+      }
+      const trigger = `<StartTrigger><ConditionGroup><Condition name="${xml(`${interaction.id}_replay`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(input.warmupSeconds + fired.t)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>`;
+      actorEvents.get(interaction.actorId)!.push([
+        `<Event name="${xml(name)}" priority="overwrite" maximumExecutionCount="1">`,
+        ...actions.map((action, i) => lines(`<Action name="${xml(`${name}_action_${i}`)}">${action}</Action>`, 2)),
+        lines(trigger, 2),
+        '</Event>',
+      ].join('\n'));
+    }
+    for (const actor of input.actors) {
+      const track = trace.ticks.actors[actor.id]!;
+      if (track.present[0] === 0 && track.present.some((present) => present === 1)) {
+        issues.push({
+          code: 'unsupported_trajectory_spawn',
+          path: `actors.${actor.id}.presentAtStart`,
+          reason: 'trajectory replay cannot atomically add an absent entity and start its timed trajectory',
+        });
+      }
+      for (let index = 1; index < track.present.length; index += 1) {
+        if (track.present[index - 1] !== 1 || track.present[index] !== 0) continue;
+        const name = identifier('event', `${actor.id}_trajectory_despawn_${index}`);
+        const action = `<GlobalAction><EntityAction entityRef="${xml(identifier('actor', actor.id))}"><DeleteEntityAction/></EntityAction></GlobalAction>`;
+        const at = input.warmupSeconds + trace.ticks.t[index]!;
+        const trigger = `<StartTrigger><ConditionGroup><Condition name="${xml(`${name}_start`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(at)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>`;
+        actorEvents.get(actor.id)!.push([
+          `<Event name="${xml(name)}" priority="overwrite" maximumExecutionCount="1">`,
+          lines(`<Action name="${xml(`${name}_action`)}">${action}</Action>`, 2),
+          lines(trigger, 2),
+          '</Event>',
+        ].join('\n'));
+        break;
+      }
+    }
+    const headTracks = new Map<string, readonly SignalProgram['phases'][number]['phase'][]>();
+    for (const [programIndex, program] of input.signalPrograms.entries()) {
+      // Portable authored controls have no physical OpenDRIVE head id. Their
+      // behavioral effect is already baked into actor trajectories; only map
+      // heads can be emitted as OpenSCENARIO TrafficSignalState actions.
+      if (!program.mapBinding) continue;
+      const phaseTrack = trace.ticks.signals?.[program.id]?.phase;
+      if (!phaseTrack || phaseTrack.length !== trace.ticks.t.length) {
+        issues.push({
+          code: 'missing_signal_replay_track',
+          path: `signalPrograms.${programIndex}`,
+          reason: `simulation did not produce a complete phase track for ${program.id}`,
+        });
+        continue;
+      }
+      for (const [headIndex, headId] of program.mapBinding!.headIds.entries()) {
+        const existing = headTracks.get(headId);
+        if (existing && existing.some((phase, index) => phase !== phaseTrack[index])) {
+          issues.push({
+            code: 'conflicting_signal_head_replay',
+            path: `signalPrograms.${programIndex}.mapBinding.headIds.${headIndex}`,
+            reason: `${headId} is assigned incompatible phase timelines by multiple signal programs`,
+          });
+          continue;
+        }
+        headTracks.set(headId, phaseTrack);
+      }
+    }
+    const changes = new Map<number, string[]>();
+    for (const [headId, phaseTrack] of [...headTracks.entries()].sort(([a], [b]) => a.localeCompare(b))) {
+      replaySignalInit.push(trafficSignalStateAction(headId, phaseTrack[0]!));
+      for (let index = 1; index < phaseTrack.length; index += 1) {
+        if (phaseTrack[index] === phaseTrack[index - 1]) continue;
+        const action = trafficSignalStateAction(headId, phaseTrack[index]!);
+        const atIndex = changes.get(index);
+        if (atIndex) atIndex.push(action);
+        else changes.set(index, [action]);
+      }
+    }
+    const signalEventActor = input.actors[0]?.id;
+    if (changes.size > 0 && !signalEventActor) {
+      issues.push({
+        code: 'signal_replay_without_actor',
+        path: 'actors',
+        reason: 'scheduled XML signal-state actions require a storyboard maneuver group',
+      });
+    } else if (signalEventActor) {
+      for (const [index, actions] of [...changes.entries()].sort(([a], [b]) => a - b)) {
+        const name = identifier('event', `signal_replay_${index}`);
+        const at = input.warmupSeconds + trace.ticks.t[index]!;
+        const trigger = `<StartTrigger><ConditionGroup><Condition name="${xml(`${name}_start`)}" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(at)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>`;
+        actorEvents.get(signalEventActor)!.push([
+          `<Event name="${xml(name)}" priority="overwrite" maximumExecutionCount="1">`,
+          ...actions.map((action, actionIndex) => lines(`<Action name="${xml(`${name}_action_${actionIndex}`)}">${action}</Action>`, 2)),
+          lines(trigger, 2),
+          '</Event>',
+        ].join('\n'));
+      }
+    }
   }
   if (issues.length > 0) throw new AsamExportError(issues);
 
-  const initGlobal = input.signalPrograms.map((program) => {
-    const phase = program.phases[0]!.phase;
-    return `<GlobalAction><InfrastructureAction><TrafficSignalAction><TrafficSignalControllerAction trafficSignalControllerRef="${xml(program.id)}" phase="${phase}"/></TrafficSignalAction></InfrastructureAction></GlobalAction>`;
-  });
   const initPrivate = resolved.actors.flatMap(({ actor, name, routeName, points }) => {
+    if (executionMode === 'trajectory-replay') {
+      const trace = replayTrace!;
+      const track = trace.ticks.actors[actor.id]!;
+      if (track.present[0] !== 1) return [];
+      const actions = [
+        '<PrivateAction><TeleportAction><Position>',
+        lines(traceWorldPosition(track.x[0]!, track.y[0]!, track.headingRad[0]!), 4),
+        '</Position></TeleportAction></PrivateAction>',
+      ];
+      if (!actor.static) actions.push(followTrajectoryAction(actor.id, trace, input.warmupSeconds));
+      return [[
+        `<Private entityRef="${xml(name)}">`,
+        ...actions.map((action) => lines(action, 2)),
+        '</Private>',
+      ].join('\n')];
+    }
     if (!actor.presentAtStart) return [];
+    if (actor.static) {
+      return [[
+        `<Private entityRef="${xml(name)}">`,
+        '  <PrivateAction><TeleportAction><Position>',
+        lines(worldPosition(actor.initial.pose), 6),
+        '  </Position></TeleportAction></PrivateAction>',
+        '</Private>',
+      ].join('\n')];
+    }
     return [[
       `<Private entityRef="${xml(name)}">`,
       '  <PrivateAction><TeleportAction><Position>',
@@ -409,11 +1046,17 @@ export function exportOpenScenarioXml14(
     const name = identifier('occluder', o.id);
     return `<Private entityRef="${xml(name)}"><PrivateAction><TeleportAction><Position>${worldPosition({ x: o.obb.center.x, z: o.obb.center.z, headingRad: o.obb.headingRad })}</Position></TeleportAction></PrivateAction></Private>`;
   });
-  const controllers = input.signalPrograms.map((program) => [
-    `<TrafficSignalController name="${xml(program.id)}" reference="${xml(program.id)}" delay="${finite(program.offsetS)}">`,
-    ...program.phases.map((phase) => `  <Phase name="${phase.phase}" duration="${finite(phase.durationS)}" semantics="${phase.phase === 'green' ? 'go' : phase.phase === 'yellow' ? 'caution' : 'stop'}"><TrafficSignalGroupState state="${phase.phase}"/></Phase>`),
-    '</TrafficSignalController>',
-  ].join('\n'));
+  const controllers = executionMode === 'trajectory-replay' ? [] : input.signalPrograms.flatMap((program) =>
+    program.mapBinding!.controllerHeadGroups!.map((group) => [
+      `<TrafficSignalController name="${xml(group.controllerId)}">`,
+      ...xmlSignalPhases(program).map((phase) => [
+        `  <Phase name="${xml(phase.name)}" duration="${finite(phase.durationS)}" semantics="${signalSemantics(phase.semantic)}">`,
+        ...group.headIds.map((headId) => `    <TrafficSignalState trafficSignalId="${xml(headId)}" state="${phase.semantic}"/>`),
+        '  </Phase>',
+      ].join('\n')),
+      '</TrafficSignalController>',
+    ].join('\n')),
+  );
 
   const maneuverGroups = resolved.actors.flatMap(({ actor, name }) => {
     const events = actorEvents.get(actor.id)!;
@@ -429,10 +1072,48 @@ export function exportOpenScenarioXml14(
   });
 
   const date = options.headerDate ?? '1970-01-01T00:00:00.000Z';
+  const physics = resolvePhysicsConfig(input);
+  const headerProperties = [
+    `<Property name="uniscenarios.executionMode" value="${executionMode}"/>`,
+    `<Property name="uniscenarios.export.profile" value="${capabilities.report.profile}"/>`,
+    `<Property name="uniscenarios.export.intent" value="${capabilities.report.intent}"/>`,
+    `<Property name="uniscenarios.input.schemaVersion" value="${input.schemaVersion}"/>`,
+    `<Property name="uniscenarios.input.seed" value="${xml(String(input.seed))}"/>`,
+    `<Property name="uniscenarios.physics.mode" value="${physics.mode}"/>`,
+    `<Property name="uniscenarios.physics.substepS" value="${finite(physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt))}"/>`,
+    ...(replayTrace ? [
+      `<Property name="uniscenarios.trajectoryReplay.inputHash" value="${xml(replayTrace.header.inputHash)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.engineVersion" value="${xml(replayTrace.header.engineVersion)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.dt" value="${finite(replayTrace.header.dt)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.mode" value="${xml(replayTrace.header.physics.mode)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.substepS" value="${finite(replayTrace.header.physics.substepS)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.mode" value="${xml(replayTrace.header.physics.mode)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.solver" value="${xml(replayTrace.header.physics.solver)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.solverVersion" value="${xml(replayTrace.header.physics.solverVersion)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.vehicleProfileDigest" value="${xml(replayTrace.header.physics.vehicleProfileDigest ?? 'none')}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="${xml(Object.entries(replayTrace.header.physics.actorBackends ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}`).join(','))}"/>`,
+    ] : []),
+    ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
+      ([key, value]) => `<Property name="uniscenarios.provenance.${xml(key)}" value="${xml(String(value))}"/>`,
+    ),
+    ...input.signalPrograms.flatMap((program) => [
+      `<Property name="uniscenarios.signal.${xml(program.id)}.timingSource" value="${xml(program.mapBinding!.timingSource)}"/>`,
+      `<Property name="uniscenarios.signal.${xml(program.id)}.junctionId" value="${xml(program.mapBinding!.junctionId)}"/>`,
+      `<Property name="uniscenarios.signal.${xml(program.id)}.controllerIds" value="${xml(program.mapBinding!.controllerIds.join(','))}"/>`,
+      `<Property name="uniscenarios.signal.${xml(program.id)}.headIds" value="${xml(program.mapBinding!.headIds.join(','))}"/>`,
+      `<Property name="uniscenarios.signal.${xml(program.id)}.controllerHeadGroups" value="${xml(program.mapBinding!.controllerHeadGroups!.map((group) => `${group.controllerId}:${group.headIds.join('+')}`).join(';'))}"/>`,
+    ]),
+  ];
   const content = [
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<OpenSCENARIO>',
-    `  <FileHeader revMajor="1" revMinor="4" date="${xml(date)}" description="${xml(options.description ?? 'Concrete UniScenarios scenario instance')}" author="${xml(options.author ?? 'UniScenarios')}"/>`,
+    `  <FileHeader revMajor="1" revMinor="4" date="${xml(date)}" description="${xml(options.description ?? 'Concrete UniScenarios scenario instance')}" author="${xml(options.author ?? 'UniScenarios')}">`,
+    ...(headerProperties.length > 0 ? [
+      '    <Properties>',
+      ...headerProperties.map((property) => `      ${property}`),
+      '    </Properties>',
+    ] : []),
+    '  </FileHeader>',
     '  <ParameterDeclarations/>',
     '  <CatalogLocations/>',
     '  <RoadNetwork>',
@@ -445,7 +1126,7 @@ export function exportOpenScenarioXml14(
     '  </Entities>',
     '  <Storyboard>',
     '    <Init><Actions>',
-    ...initGlobal.map((action) => lines(action, 6)),
+    ...replaySignalInit.map((action) => lines(action, 6)),
     ...initPrivate.map((action) => lines(action, 6)),
     ...initOccluders.map((action) => lines(action, 6)),
     '    </Actions></Init>',
@@ -457,7 +1138,7 @@ export function exportOpenScenarioXml14(
       '      </Act>',
       '    </Story>',
     ] : []),
-    `    <StopTrigger><ConditionGroup><Condition name="scenario_end" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(input.clipSeconds)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StopTrigger>`,
+    `    <StopTrigger><ConditionGroup><Condition name="scenario_end" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="${finite(input.warmupSeconds + input.clipSeconds)}" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StopTrigger>`,
     '  </Storyboard>',
     '</OpenSCENARIO>',
     '',
@@ -469,6 +1150,18 @@ export function exportOpenScenarioXml14(
     extension: '.xosc',
     mediaType: 'application/xml',
     content,
-    warnings: resolved.warnings,
+    profile: capabilities.report.profile,
+    intent: capabilities.report.intent,
+    capabilityReport: capabilities.report,
+    warnings: mergeAsamWarnings(resolved.warnings, capabilities.warnings, [
+      ...input.interactions.flatMap((interaction) =>
+        interaction.verb === 'set' && interaction.target.key.startsWith('pose.')
+          ? [{
+              code: 'user_defined_animation',
+              path: `interactions.${interaction.id}.target.key`,
+              reason: `${interaction.target.key} is preserved with XML UserDefinedAnimation and requires a simulator-specific animation implementation`,
+            }]
+          : []),
+    ]),
   };
 }

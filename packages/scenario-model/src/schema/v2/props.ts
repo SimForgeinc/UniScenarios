@@ -42,6 +42,19 @@ export const PropRepeatSchema = z.strictObject({
   tFracStep: TFracOrExprSchema.default(0),
 });
 
+/**
+ * Rigidly attach a prop to an actor-local frame. Longitudinal is forward,
+ * lateral is left, and height is above the carrier's ground-contact point.
+ * The prop inherits the carrier's route pose for the complete episode.
+ */
+export const PropAttachmentSchema = z.strictObject({
+  role: RoleRefSchema,
+  longitudinalM: z.number().finite().min(-20).max(20).default(0),
+  lateralM: z.number().finite().min(-20).max(20).default(0),
+  heightM: z.number().finite().min(0).max(20).default(0),
+  headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
+});
+
 /** One placed prop (or a repeated run of them). */
 export const PropPlacementSchema = z.strictObject({
   id: PropIdSchema,
@@ -52,6 +65,8 @@ export const PropPlacementSchema = z.strictObject({
   pose: FramePoseSchema,
   /** Anchor the pose to a feature instead of the frame origin. */
   feature: FeatureRefSchema.optional(),
+  /** Rigid actor-local attachment; `pose` remains the authoring/fallback pose. */
+  attachment: PropAttachmentSchema.optional(),
   /** Yaw relative to the lane tangent, radians. */
   headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
   /** Uniform scale. Height class is what decides whether a prop occludes. */
@@ -73,5 +88,6 @@ export const PropPlacementSchema = z.strictObject({
 export type PropPlacement = z.infer<typeof PropPlacementSchema>;
 /** A placed prop as authored. */
 export type PropPlacementInput = z.input<typeof PropPlacementSchema>;
+export type PropAttachment = z.infer<typeof PropAttachmentSchema>;
 /** An occlusion pair. */
 export type OcclusionPair = z.infer<typeof OcclusionPairSchema>;

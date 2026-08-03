@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { evaluateMetrics, evaluateTrace } from '../trace/evaluate.js';
+import { criticalityWindow } from '../trace/metrics.js';
 import { runSimulation } from '../sim/engine.js';
 import type { EpisodeMetrics } from '../trace/trace.js';
 import { LANE_LEFT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
@@ -75,9 +76,132 @@ describe('reject filters', () => {
     }
   });
 
+  it('keeps compact clips evidence-gated rather than imposing a long-clip floor', () => {
+    expect(criticalityWindow(3)).toEqual([0.6000000000000001, 2.4]);
+    for (const t of [0.4, 2.7]) {
+      expect(evaluateMetrics(metrics({ minTTC: { value: 1.2, t, pair: ['a', 'b'] } }), 3).findings
+        .map((f) => f.code)).toContain('out_of_window');
+    }
+    expect(evaluateMetrics(metrics({ minTTC: { value: 1.2, t: 1.5, pair: ['a', 'b'] } }), 3).findings
+      .map((f) => f.code)).not.toContain('out_of_window');
+  });
+
   it('flags an episode with no interaction at all', () => {
-    const r = evaluateMetrics(metrics({ minTTC: null }), 20);
+    const r = evaluateMetrics(metrics({ minTTC: null, minPathTTC: null }), 20);
     expect(r.findings.map((f) => f.code)).toContain('no_interaction');
+  });
+
+  it('uses finite crossing path-TTC as hard criticality when circle TTC is absent', () => {
+    const r = evaluateMetrics(metrics({
+      minTTC: null,
+      minPathTTC: {
+        value: 1.1,
+        t: 8,
+        pair: ['cyclist', 'ego'],
+        conflictPoint: { x: 4, y: 7 },
+      },
+    }), 20);
+    expect(r.verdict).toBe('accept');
+    expect(r.findings).toEqual([]);
+    expect(r.summary).toMatchObject({
+      minTTC: null,
+      criticalityKind: 'path-ttc',
+      criticality: 1.1,
+      criticalityT: 8,
+    });
+  });
+
+  it('uses positive PET for a separated crossing instead of longitudinal TTC', () => {
+    const r = evaluateMetrics(metrics({
+      minTTC: { value: 4.1, t: 6, pair: ['ego', 'pedestrian'] },
+      minPathTTC: null,
+      minPET: {
+        value: 0.87,
+        t: 7,
+        pair: ['ego', 'pedestrian'],
+        conflictPoint: { x: 2, y: 3 },
+        firstActor: 'pedestrian',
+        secondActor: 'ego',
+      },
+    }), 20);
+    expect(r.verdict).toBe('accept');
+    expect(r.summary).toMatchObject({ criticalityKind: 'pet', criticality: 0.87, criticalityT: 7 });
+    expect(r.findings.map((finding) => finding.code)).not.toContain('trivially_safe');
+  });
+
+  it('rejects a crossing whose positive PET is only a trivial separation', () => {
+    const r = evaluateMetrics(metrics({
+      minTTC: null,
+      minPathTTC: null,
+      minPET: {
+        value: 2.5,
+        t: 8,
+        pair: ['bicycle', 'ego'],
+        conflictPoint: { x: 1, y: 1 },
+        firstActor: 'bicycle',
+        secondActor: 'ego',
+      },
+    }), 20);
+    expect(r.findings.map((finding) => finding.code)).toContain('trivially_safe');
+  });
+
+  it('applies the criticality window to the mechanism-aware winner', () => {
+    const r = evaluateMetrics(metrics({
+      minTTC: { value: 2, t: 9, pair: ['ego', 'lead'] },
+      minPathTTC: {
+        value: 0.8,
+        t: 2,
+        pair: ['cyclist', 'ego'],
+        conflictPoint: { x: 4, y: 7 },
+      },
+    }), 20);
+    expect(r.summary.criticalityKind).toBe('path-ttc');
+    expect(r.findings.map((finding) => finding.code)).toContain('out_of_window');
+  });
+
+  it('selects the minimum inside the window while preserving the global minimum', () => {
+    const global = { value: 0.4, t: 1, pair: ['crossing', 'ego'] as [string, string] };
+    const r = evaluateMetrics(metrics({
+      minTTC: global,
+      criticalitySamples: {
+        ttc: [{ pair: ['crossing', 'ego'], t: [1, 7], value: [0.4, 1.2] }],
+        pathTTC: [],
+        pet: [],
+      },
+    }), 20);
+    expect(r.verdict).toBe('accept');
+    expect(r.summary).toMatchObject({ criticalityKind: 'ttc', criticality: 1.2, criticalityT: 7 });
+    expect(r.findings.map((finding) => finding.code)).not.toContain('out_of_window');
+    expect(global).toEqual({ value: 0.4, t: 1, pair: ['crossing', 'ego'] });
+  });
+
+  it('ignores an overlap PET sentinel and selects the later positive PET in the window', () => {
+    const r = evaluateMetrics(metrics({
+      minTTC: { value: 4.1, t: 6, pair: ['bus', 'ego'] },
+      minPathTTC: { value: 0.7, t: 5, pair: ['bus', 'ego'], conflictPoint: { x: 2, y: 3 } },
+      minPET: { value: 0, t: 5, pair: ['bus', 'ego'], conflictPoint: { x: 2, y: 3 }, firstActor: 'bus', secondActor: 'ego' },
+      criticalitySamples: {
+        ttc: [{ pair: ['bus', 'ego'], t: [5, 7], value: [4.1, 4.1] }],
+        pathTTC: [{ pair: ['bus', 'ego'], t: [5], value: [0.7], conflictX: [2], conflictY: [3] }],
+        pet: [{
+          pair: ['bus', 'ego'], t: [5, 7], value: [0, 0.8], conflictX: [2, 2], conflictY: [3, 3],
+          firstActor: ['bus', 'bus'], secondActor: ['ego', 'ego'],
+        }],
+      },
+    }), 20, { window: [6, 8] });
+
+    expect(r.verdict).toBe('accept');
+    expect(r.summary).toMatchObject({ criticalityKind: 'pet', criticality: 0.8, criticalityT: 7 });
+  });
+
+  it('rejects when retained evidence has no finite sample inside the window', () => {
+    const global = { value: 0.4, t: 1, pair: ['crossing', 'ego'] as [string, string] };
+    const r = evaluateMetrics(metrics({
+      minTTC: global,
+      criticalitySamples: { ttc: [{ pair: ['crossing', 'ego'], t: [1], value: [0.4] }], pathTTC: [], pet: [] },
+    }), 20);
+    expect(r.findings.map((finding) => finding.code)).toContain('out_of_window');
+    expect(r.findings.map((finding) => finding.code)).not.toContain('no_interaction');
   });
 
   it('tags collisions, and only rejects them when asked', () => {

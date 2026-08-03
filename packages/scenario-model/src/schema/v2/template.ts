@@ -42,6 +42,7 @@ import { InvariantSchema } from './invariants.js';
 import { ParamsBlockSchema } from './params.js';
 import { PropPlacementSchema } from './props.js';
 import { RoleBindingSchema } from './roles.js';
+import { TrafficControlSchema } from './traffic-controls.js';
 import { VariantSchema } from './variants.js';
 
 /** The schema version this module describes. */
@@ -82,6 +83,8 @@ export const ScenarioTemplateV2ObjectSchema = z.strictObject({
   anchor: LogicalAnchorSchema,
   roles: z.array(RoleBindingSchema).max(64).default([]),
   props: z.array(PropPlacementSchema).max(256).default([]),
+  /** Portable executable traffic controls, independent of map-owned signals. */
+  trafficControls: z.array(TrafficControlSchema).max(64).default([]),
   choreography: ChoreographySchema.prefault({}),
   invariants: z.array(InvariantSchema).max(64).default([]),
   variants: z.array(VariantSchema).max(32).default([]),
@@ -125,6 +128,7 @@ export const ScenarioTemplateV2Schema = ScenarioTemplateV2ObjectSchema.check((ct
   };
   dupes(doc.roles, 'roles');
   dupes(doc.props, 'props');
+  dupes(doc.trafficControls, 'trafficControls');
   dupes(doc.invariants, 'invariants');
   dupes(doc.variants, 'variants');
   dupes(doc.params.declarations, 'params');

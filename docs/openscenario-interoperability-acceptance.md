@@ -1,0 +1,81 @@
+# OpenSCENARIO interoperability acceptance
+
+This matrix is the release gate for the OpenSCENARIO workspace. A green XML
+schema badge alone is not interoperability, and a visually plausible video is
+not behavioral parity. The native export, compatibility export, external run,
+and quantitative comparison are independent results.
+
+## Required acceptance matrix
+
+| Layer | Required evidence | Pass condition |
+| --- | --- | --- |
+| Native XML 1.4 | Generated `.xosc`, pinned official XSD digest, validator output | XML validates against the pinned ASAM OpenSCENARIO XML 1.4 XSD; no network or external entities are used during validation |
+| esmini XML 1.3 | Compatibility `.xosc`, capability report | Header is genuinely 1.3; each source field/action is marked preserved, derived, approximated, trajectory-baked, omitted, or unsupported; unsupported required semantics fail closed |
+| Runnable bundle | `.xosc`, complete immutable `.xodr`, dependency manifest, hashes | All references resolve inside the bundle; no absolute paths, `..`, remote URLs, catalogs outside the allowlist, or digest mismatch |
+| External execution | Runner receipt, pinned esmini version/digest, stdout/stderr, exit code, trace | Sandboxed headless job reaches the authored 20.000 s stop condition at a fixed step without timeout, crash, missing assets, or simulation error |
+| Quantitative parity | Canonical trace, esmini trace, comparator report and thresholds | Every mapped actor is aligned by stable identity; completion, position, heading, speed, final state, and collision results pass the declared tolerances |
+| Studio workspace | Overview, Schema, Compatibility, Issues, Validation, Replay and Files views | Current immutable export snapshot is shown; stale results are visibly invalidated; raw XML is read-only; every displayed/downloaded artifact has the same snapshot identity |
+| Replay comparison | Synchronized trace replay and delta panel | Scrubbing uses the same time in both traces; missing actors/samples and threshold failures are explicit; video is supporting evidence only |
+| Provenance/cache | Scenario, map, exporter, schema, runner and threshold digests | Cache hits require the entire key; reports retain immutable inputs, tool versions, timestamps and hashes |
+| Security | Adversarial bundle and runner tests | Reject traversal, symlinks escaping the bundle, remote dependencies, XML entities, oversized archives/files, unexpected file types, output floods and jobs exceeding CPU/memory/time limits |
+
+## Representative scenario set
+
+The gate is intentionally small but covers different portability modes.
+
+| Fixture | Required semantics | Expected external verdict |
+| --- | --- | --- |
+| Vehicle action choreography | Absolute speed, stop, left lane change, left indicator on/off | XML 1.3 semantic execution when supported; all actions visible in the mapping report |
+| Pedestrian crossing | Pedestrian entity and exact crossing trajectory | Trajectory parity required; pedestrian animation appearance is informational |
+| Dynamic signal interaction | Signal phase/control state affects vehicle motion | Fail closed for semantic export when the pinned runner cannot preserve the control; trajectory-baked motion may pass only under a clearly different verdict |
+| Exact trajectory replay | At least two actors, 20 s, fixed samples | Full numerical parity gate and the first mandatory real esmini smoke job |
+
+At least one fixture must contain each of speed control, lane change, indicator
+state, a pedestrian, and a dynamic traffic control. Unsupported features must
+remain visible in capability reporting; fixtures must not be simplified merely
+to make the runner green.
+
+## Comparator contract
+
+Comparison is fail closed. It must report at least:
+
+- actor identity mapping and unmatched actors;
+- requested and observed duration, sample count, and time alignment method;
+- maximum and RMS planar position error;
+- maximum heading error using wrapped angles;
+- maximum and RMS speed error;
+- final pose and presence agreement;
+- collision pair/time agreement where both runtimes expose it;
+- trigger/action timing where an external observable exists;
+- configured thresholds and whether interpolation was required.
+
+Trajectory replay is accepted only when the external run reaches 20.000 s and
+all required actor metrics pass. Editable-action exports use a separate
+`semantic-compatibility` verdict and must never inherit a trajectory-parity
+badge.
+
+## Studio checks
+
+Playwright must verify from a newly loaded editable scenario that:
+
+1. the OpenSCENARIO tab opens without changing editor state;
+2. XML 1.4 and esmini 1.3 are clearly different profiles;
+3. the XML/tree, capability findings and dependency status refer to the same
+   snapshot;
+4. downloads include correct extensions and non-empty content;
+5. editing the scenario invalidates prior validation instead of presenting it
+   as current;
+6. a completed external result exposes synchronized replay and numerical
+   metrics;
+7. an unsupported dynamic-signal export remains blocked or explicitly marked
+   trajectory-baked;
+8. refresh/reopen preserves receipts without confusing them with a different
+   scenario revision.
+
+## Release rule
+
+The feature may ship when native XML 1.4 validation, an honest esmini 1.3
+compatibility bundle, one real 20-second esmini trajectory job, quantitative
+comparison, Studio downloads/replay, provenance, cache invalidation and security
+negative tests are green. Optional rendered video cannot substitute for any of
+these gates.

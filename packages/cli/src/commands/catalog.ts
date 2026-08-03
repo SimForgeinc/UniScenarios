@@ -1,13 +1,19 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import {
   createScenarioCatalog,
+  matcherSiteClosesLocation,
   validateScenarioCatalog,
+  type CatalogIssue,
   type ScenarioCatalogManifest,
 } from '../catalog.js';
 import { CliError, EXIT } from '../errors.js';
+import { REPO_ROOT } from '../maps.js';
 import { emit, emitLines } from '../output.js';
+import { CATALOG_EXACT_SITE_OPTIONS, clearSiteMatchCache, matchOnMap } from '../sites.js';
+import { readTemplate } from '../template-io.js';
 import { writeJsonFile } from '../template-io.js';
 
 export interface CatalogCreateOptions {
@@ -44,6 +50,77 @@ export interface CatalogVerifyOptions {
   readonly pretty: boolean;
 }
 
+/**
+ * Prove that every persisted catalog reservation still exists under the live
+ * exact matcher. Static hashes only prove that the manifest is internally
+ * self-consistent; they cannot detect a matcher-semantics change that makes a
+ * formerly persisted site unreachable.
+ */
+export async function validateCatalogLiveClosure(
+  manifest: ScenarioCatalogManifest,
+): Promise<readonly CatalogIssue[]> {
+  const issues: CatalogIssue[] = [];
+  const groups = new Map<string, Array<{ index: number; slot: ScenarioCatalogManifest['slots'][number] }>>();
+
+  for (const [index, slot] of manifest.slots.entries()) {
+    const source = slot.implementation.templateSource;
+    const matcherSiteId = slot.implementation.matcherSiteId;
+    if (slot.implementation.state !== 'template-backed' || !source || !matcherSiteId) continue;
+    const key = `${source}\0${slot.mapId}`;
+    const group = groups.get(key) ?? [];
+    group.push({ index, slot });
+    groups.set(key, group);
+  }
+
+  for (const [key, group] of groups) {
+    const separator = key.lastIndexOf('\0');
+    const source = key.slice(0, separator);
+    const mapId = key.slice(separator + 1);
+    try {
+      const templateFile = path.resolve(REPO_ROOT, source);
+      const templateBytes = await readFile(templateFile);
+      const templateDigest = createHash('sha256').update(templateBytes).digest('hex');
+      for (const { index, slot } of group) {
+        if (slot.provenance.templateDigest !== templateDigest) {
+          issues.push({
+            code: 'invalid_provenance',
+            path: `slots[${index}].provenance.templateDigest`,
+            reason: `catalog template digest does not match the live executable ${source}`,
+            expected: templateDigest,
+            actual: slot.provenance.templateDigest,
+          });
+        }
+      }
+      const template = await readTemplate(templateFile);
+      const match = await matchOnMap(template, mapId, CATALOG_EXACT_SITE_OPTIONS);
+      for (const { index, slot } of group) {
+        const matcherSiteId = slot.implementation.matcherSiteId!;
+        const site = match.report.sites.find((candidate) => candidate.siteId === matcherSiteId);
+        const location = match.bundle.catalog.locations.find((candidate) => candidate.id === slot.site.locationId);
+        if (!site || !location || !matcherSiteClosesLocation(site, location, match.bundle.index)) {
+          issues.push({
+            code: 'invalid_site_binding',
+            path: `slots[${index}].implementation.matcherSiteId`,
+            reason: `persisted matcher site ${matcherSiteId} no longer closes against catalog location ${slot.site.locationId} under the live exact matcher`,
+          });
+        }
+      }
+    } catch (error) {
+      for (const { index } of group) {
+        issues.push({
+          code: 'invalid_site_binding',
+          path: `slots[${index}].implementation.matcherSiteId`,
+          reason: `could not execute the live exact matcher: ${error instanceof Error ? error.message : String(error)}`,
+        });
+      }
+    } finally {
+      clearSiteMatchCache();
+    }
+  }
+
+  return issues;
+}
+
 export async function catalogVerify(options: CatalogVerifyOptions): Promise<number> {
   let value: unknown;
   try {
@@ -56,11 +133,17 @@ export async function catalogVerify(options: CatalogVerifyOptions): Promise<numb
       path: options.file,
     });
   }
-  const report = validateScenarioCatalog(value, {
+  const staticReport = validateScenarioCatalog(value, {
     manifestFile: options.file,
     evidenceRootOverride: options.evidenceRoot,
     requireEvidence: options.requireEvidence,
   });
+  const liveIssues = staticReport.ok
+    ? await validateCatalogLiveClosure(value as ScenarioCatalogManifest)
+    : [];
+  const report = liveIssues.length === 0
+    ? staticReport
+    : { ...staticReport, ok: false, issues: [...staticReport.issues, ...liveIssues] };
   const payload = { manifest: path.resolve(options.file), ...report };
   if (options.pretty) {
     const lines = [

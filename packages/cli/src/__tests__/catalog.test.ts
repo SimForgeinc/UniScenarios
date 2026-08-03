@@ -8,13 +8,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   CATALOG_SLOTS_PER_MAP,
+  CATALOG_MIN_INCIDENT_TYPES_PER_MAP,
   INCIDENT_DOMAINS,
   INCIDENT_TAXONOMY,
-  createScenarioCatalog,
+  OPERATIONAL_VARIANTS,
+  matcherSiteClosesLocation,
   validateScenarioCatalog,
   type ScenarioCatalogManifest,
 } from '../catalog.js';
 import { DEV_ASSETS, KNOWN_MAPS, REPO_ROOT } from '../maps.js';
+import { templateId as canonicalTemplateId } from '../materialize.js';
+import { matchOnMap } from '../sites.js';
+import { readTemplate } from '../template-io.js';
+import { validateCatalogLiveClosure } from '../commands/catalog.js';
 
 let tmp: string;
 let manifestFile: string;
@@ -23,13 +29,18 @@ let catalog: ScenarioCatalogManifest;
 beforeAll(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-catalog-'));
   manifestFile = path.join(tmp, 'catalog.json');
-  catalog = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets: DEV_ASSETS });
+  // Catalog creation itself is exercised by the checked regeneration command;
+  // focused structural tests consume the exact artifact it committed.
+  catalog = JSON.parse(await readFile(
+    path.join(REPO_ROOT, 'catalog', 'uniscenarios-five-map-v2.catalog.json'),
+    'utf8',
+  )) as ScenarioCatalogManifest;
   await writeFile(manifestFile, `${JSON.stringify(catalog, null, 2)}\n`);
-});
+}, 180_000);
 
 afterAll(async () => {
   if (tmp) await rm(tmp, { recursive: true, force: true });
-});
+}, 60_000);
 
 function clone(): ScenarioCatalogManifest {
   return JSON.parse(JSON.stringify(catalog)) as ScenarioCatalogManifest;
@@ -42,24 +53,26 @@ function refreshSlotDigest(slot: Record<string, unknown>): void {
 }
 
 describe('UniScenarios authored scenario catalog', () => {
-  it('authors exactly 100 distinct, deterministic, map-grounded designs per supported map', async () => {
-    const again = await createScenarioCatalog({ repoRoot: REPO_ROOT, devAssets: DEV_ASSETS });
-    expect(again).toEqual(catalog);
+  it('contains exactly 100 deterministic, map-grounded occurrences per supported map', async () => {
     expect(catalog.slots).toHaveLength(KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP);
     expect(new Set(catalog.slots.map((slot) => slot.identity)).size).toBe(catalog.slots.length);
     expect(new Set(catalog.slots.map((slot) => slot.seed)).size).toBe(catalog.slots.length);
-    expect(new Set(catalog.slots.map((slot) => `${slot.mapId}\0${slot.scenario.incidentId}\0${slot.site.locationId}\0${slot.variant.id}`)).size).toBe(catalog.slots.length);
 
     for (const mapId of KNOWN_MAPS) {
       const slots = catalog.slots.filter((slot) => slot.mapId === mapId);
       expect(slots).toHaveLength(100);
       expect(slots.map((slot) => slot.ordinal)).toEqual(Array.from({ length: 100 }, (_, i) => i));
-      expect(new Set(slots.map((slot) => slot.scenario.incidentId)).size).toBeGreaterThanOrEqual(20);
-      expect(new Set(slots.map((slot) => slot.scenario.domain)).size).toBeGreaterThanOrEqual(7);
+      expect(new Set(slots.map((slot) => slot.scenario.incidentId)).size).toBeGreaterThanOrEqual(CATALOG_MIN_INCIDENT_TYPES_PER_MAP);
       expect(slots.every((slot) => slot.status === 'authored')).toBe(true);
       expect(slots.every((slot) => slot.brief.eventSequence.length >= 3)).toBe(true);
       expect(slots.every((slot) => slot.acceptance.checks.length === 6)).toBe(true);
       expect(slots.every((slot) => slot.evidencePaths.video.startsWith(`evidence/${mapId}/`))).toBe(true);
+      expect(slots.every((slot) =>
+        slot.implementation.state === 'template-backed' &&
+        typeof slot.implementation.matcherSiteId === 'string' &&
+        slot.implementation.matchedLocationId === slot.site.locationId &&
+        slot.implementation.materializedVariantId === slot.variant.id
+      )).toBe(true);
 
       const locationBytes = await readFile(path.join(DEV_ASSETS, mapId, 'derived', 'locations.json.gz'));
       const source = JSON.parse(gunzipSync(locationBytes).toString('utf8')) as { locations: Array<{ id: string }> };
@@ -69,6 +82,10 @@ describe('UniScenarios authored scenario catalog', () => {
 
     expect(catalog.taxonomy.length).toBeGreaterThanOrEqual(30);
     expect(new Set(catalog.taxonomy.map((entry) => entry.domain))).toEqual(new Set(INCIDENT_DOMAINS));
+    expect(new Set(catalog.slots.map((slot) => slot.scenario.incidentId))).toEqual(
+      new Set(INCIDENT_TAXONOMY.map((incident) => incident.id)),
+    );
+    expect(catalog.slots.every((slot) => slot.variant.id === OPERATIONAL_VARIANTS[0]!.id)).toBe(true);
     expect(catalog.progress).toEqual({
       target: 500,
       planned: 0,
@@ -84,7 +101,7 @@ describe('UniScenarios authored scenario catalog', () => {
     expect(report.ok).toBe(true);
     expect(report.issues).toEqual([]);
     expect(report.maps).toEqual(Object.fromEntries(KNOWN_MAPS.map((mapId) => [mapId, 100])));
-  }, 120_000);
+  }, 3_600_000);
 
   it('keeps matcher, engine, and location provenance as distinct digest domains', () => {
     for (const map of catalog.maps) {
@@ -101,33 +118,68 @@ describe('UniScenarios authored scenario catalog', () => {
     }
   });
 
+  it('closes every registry template id to its canonical replay-key identity', async () => {
+    for (const registered of catalog.templates) {
+      const template = await readTemplate(path.join(REPO_ROOT, registered.source));
+      expect(registered.runtimeTemplateId).toBe(canonicalTemplateId(template));
+      const slots = catalog.slots.filter((slot) => slot.implementation.templateSource === registered.source);
+      expect(slots.length, registered.id).toBeGreaterThan(0);
+      expect(slots.every((slot) => slot.implementation.templateId === registered.runtimeTemplateId)).toBe(true);
+    }
+  });
+
+  it('persists only matcher sites that close against the selected catalog location', async () => {
+    const executable = catalog.slots.filter((slot) => slot.implementation.state === 'template-backed');
+    const matchCache = new Map<string, ReturnType<typeof matchOnMap>>();
+    expect(executable.length).toBeGreaterThan(0);
+    for (const slot of executable) {
+      expect(slot.implementation.matchedLocationId).toBe(slot.site.locationId);
+      expect(slot.implementation.matcherSiteId).toMatch(/^[0-9a-f]{16}$/);
+      expect(slot.implementation.materializedVariantId).toBe(slot.variant.id);
+      const matchKey = `${slot.implementation.templateSource}\0${slot.mapId}`;
+      let pendingMatch = matchCache.get(matchKey);
+      if (!pendingMatch) {
+        const template = await readTemplate(path.join(REPO_ROOT, slot.implementation.templateSource!));
+        const qualityFirstTemplate = {
+          ...template,
+          anchor: {
+            ...template.anchor,
+            policy: {
+              ...template.anchor.policy,
+              diversity: 'off' as const,
+              maxSitesPerMap: 1_000,
+            },
+          },
+        };
+        pendingMatch = matchOnMap(qualityFirstTemplate, slot.mapId);
+        matchCache.set(matchKey, pendingMatch);
+      }
+      const match = await pendingMatch;
+      const matcherSite = match.report.sites.find((site) => site.siteId === slot.implementation.matcherSiteId);
+      const location = match.bundle.catalog.locations.find((entry) => entry.id === slot.site.locationId);
+      expect(matcherSite, slot.identity).toBeDefined();
+      expect(location, slot.identity).toBeDefined();
+      expect(matcherSiteClosesLocation(matcherSite!, location, match.bundle.index), slot.identity).toBe(true);
+      expect(slot.provenance.matcherIndexDigest).toBe(match.bundle.index.topologyDigest);
+      expect(slot.provenance.engineGraphDigest).toBe(match.bundle.graph.topologyDigest);
+    }
+  }, 3_600_000);
+
   it('is a broad incident catalog rather than repeated parameter samples of five templates', () => {
     expect(INCIDENT_TAXONOMY.length).toBeGreaterThanOrEqual(30);
     const implemented = catalog.slots.filter((slot) => slot.implementation.state === 'template-backed');
     const authoredDesigns = catalog.slots.filter((slot) => slot.implementation.state === 'authored-design');
-    expect(authoredDesigns.length).toBeGreaterThan(implemented.length);
+    expect(implemented).toHaveLength(500);
+    expect(authoredDesigns).toHaveLength(0);
     expect(new Set(catalog.slots.map((slot) => slot.scenario.incidentId)).size).toBeGreaterThanOrEqual(30);
     expect(catalog.researchSources.every((source) => source.url.startsWith('https://'))).toBe(true);
   });
 
-  it('creates and verifies the 500-design manifest through the real CLI', async () => {
-    const out = path.join(tmp, 'cli-catalog.json');
-    const created = await execa('node', [
-      path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js'),
-      'catalog', 'create', '--out', out,
-    ], { reject: false, timeout: 120_000 });
-    expect(created.exitCode).toBe(0);
-    expect(JSON.parse(created.stdout)).toMatchObject({
-      totalSlots: 500,
-      taxonomy: { incidentTypes: INCIDENT_TAXONOMY.length, domains: INCIDENT_DOMAINS.length },
-      progress: { authored: 500, simulated: 0, visuallyAccepted: 0 },
-      status: { authored: 500 },
-    });
-
+  it('verifies the authoritative 500-occurrence manifest through the real CLI', async () => {
     const verified = await execa('node', [
       path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js'),
-      'catalog', 'verify', out,
-    ], { reject: false, timeout: 120_000 });
+      'catalog', 'verify', manifestFile,
+    ], { reject: false, timeout: 300_000 });
     expect(verified.exitCode).toBe(0);
     expect(JSON.parse(verified.stdout)).toMatchObject({
       ok: true,
@@ -135,16 +187,33 @@ describe('UniScenarios authored scenario catalog', () => {
       statuses: { authored: 500 },
       progress: { authored: 500, rendered: 0, visuallyAccepted: 0 },
     });
+  }, 600_000);
+
+  it('makes verification execute live matcher closure instead of trusting a self-consistent stale id', async () => {
+    const original = catalog.slots.find((slot) => slot.implementation.state === 'template-backed')!;
+    const stale = {
+      ...catalog,
+      slots: [{
+        ...original,
+        implementation: { ...original.implementation, matcherSiteId: '0000000000000000' },
+      }],
+    } as ScenarioCatalogManifest;
+    const issues = await validateCatalogLiveClosure(stale);
+    expect(issues).toEqual([
+      expect.objectContaining({
+        code: 'invalid_site_binding',
+        path: 'slots[0].implementation.matcherSiteId',
+      }),
+    ]);
   }, 180_000);
 
-  it('rejects duplicate identities and duplicate authored designs', () => {
+  it('rejects duplicate occurrence identities', () => {
     const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
     broken.slots[1] = { ...broken.slots[0], ordinal: 1 };
     refreshSlotDigest(broken.slots[1]!);
     const report = validateScenarioCatalog(broken, { manifestFile });
     expect(report.ok).toBe(false);
     expect(report.issues.map((entry) => entry.code)).toContain('duplicate_identity');
-    expect(report.issues.map((entry) => entry.code)).toContain('duplicate_design');
   });
 
   it('rejects a site whose type or affordances do not fit its incident', () => {
@@ -155,6 +224,32 @@ describe('UniScenarios authored scenario catalog', () => {
     refreshSlotDigest(target);
     const report = validateScenarioCatalog(broken, { manifestFile });
     expect(report.issues.map((entry) => entry.code)).toContain('invalid_site_binding');
+  });
+
+  it('rejects a template-backed slot whose persisted matcher/location pair is mismatched', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    const target = broken.slots.find((slot) =>
+      (slot['implementation'] as { state: string }).state === 'template-backed',
+    )!;
+    (target['implementation'] as Record<string, unknown>)['matchedLocationId'] = 'loc_not_the_selected_location';
+    refreshSlotDigest(target);
+    const report = validateScenarioCatalog(broken, { manifestFile });
+    expect(report.issues.some((entry) =>
+      entry.code === 'invalid_site_binding' && entry.path.endsWith('.implementation'),
+    )).toBe(true);
+  });
+
+  it('rejects a template-backed slot that claims a different operational variant', () => {
+    const broken = clone() as unknown as { slots: Array<Record<string, unknown>> };
+    const target = broken.slots.find((slot) =>
+      (slot['implementation'] as { state: string }).state === 'template-backed',
+    )!;
+    (target['implementation'] as Record<string, unknown>)['materializedVariantId'] = 'not-the-reserved-variant';
+    refreshSlotDigest(target);
+    const report = validateScenarioCatalog(broken, { manifestFile });
+    expect(report.issues.some((entry) =>
+      entry.path.endsWith('.implementation.materializedVariantId'),
+    )).toBe(true);
   });
 
   it('rejects collapsed provenance domains', () => {

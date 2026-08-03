@@ -44,7 +44,6 @@ export {
 export {
   buildSiteSignalPlan,
   defaultPhasesForHead,
-  loadMapSignalCatalog,
   parseMapSignalCatalog,
   SYNTHETIC_SIGNAL_OFFSET_S,
   type MapSignalCatalog,
@@ -53,6 +52,7 @@ export {
   type MapSignalJunction,
   type SiteSignalPlan,
 } from './map-signals.js';
+export { loadMapSignalCatalog } from './map-signals-loader.js';
 
 export {
   OPEN_END_M,
@@ -74,8 +74,11 @@ export {
 } from './params.js';
 
 export {
+  applyCatalogVariant,
   mapSetKey,
   materialize,
+  type AppliedCatalogVariant,
+  type CatalogVariantApplication,
   type InstanceManifest,
   type MaterializeOptions,
   type MaterializeResult,
@@ -130,6 +133,7 @@ export {
   INCIDENT_TAXONOMY,
   OPERATIONAL_VARIANTS,
   createScenarioCatalog,
+  refreshScenarioCatalog,
   validateScenarioCatalog,
   type CatalogAcceptanceCheck,
   type CatalogEvidencePaths,
@@ -144,7 +148,7 @@ export {
   type ScenarioCatalogSlot,
 } from './catalog.js';
 
-export { criticalityBand, filtersFor, type EvaluateFilterMode } from './commands/evaluate.js';
+export { evaluate, combinedEvaluationVerdict, criticalityBand, filtersFor, type EvaluateFilterMode, type EvaluateOptions } from './commands/evaluate.js';
 export { metricsSummary } from './commands/simulate.js';
 export { SCHEMAS, type SchemaEntry } from './commands/schemas.js';
 
@@ -153,10 +157,31 @@ export {
   AsamExportError,
   exportAsamScenario,
   exportOpenScenarioDsl22,
+  exportOpenScenarioXml13Esmini,
   exportOpenScenarioXml14,
+  analyzeEsminiCompatibility,
+  type EsminiCompatibilityEntry,
+  type EsminiCompatibilityReport,
+  type EsminiExportMode,
   type AsamExportIssue,
   type AsamExportOptions,
   type AsamExportResult,
   type AsamExportWarning,
   type AsamFormat,
 } from './asam/index.js';
+
+export {
+  ESMINI_BUNDLE_VERSION,
+  OFFICIAL_OPENSCENARIO_131_XSD,
+  buildEsminiRunnableBundle,
+  createServerMapDependencyResolver,
+  validateOpenScenarioXml13,
+  writeEsminiRunnableBundle,
+  type EsminiBundleFile,
+  type EsminiBundleManifest,
+  type EsminiBundleRequest,
+  type EsminiRunnableBundle,
+  type FullOpenDriveDependency,
+  type MapDependencyResolver,
+  type OpenScenarioXsdValidation,
+} from './asam/esmini-bundle.js';

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "profile": {
+    "version": 1,
+    "preset": "light",
+    "maxActors": 24
+  },
+  "candidatePattern": "edge-case-03-ambient-light-pinned-01..20",
+  "attemptedCount": 1,
+  "accepted": true,
+  "acceptedSeed": "edge-case-03-ambient-light-pinned-01",
+  "acceptedTrace": "ambient-light.accepted.trace.json.gz",
+  "attempts": [
+    {
+      "index": 1,
+      "seed": "edge-case-03-ambient-light-pinned-01",
+      "generatedAmbientActors": 7,
+      "deterministic": true,
+      "robustnessAccepted": true,
+      "intentVerdict": "accept",
+      "scenarioReviewAccepted": true,
+      "accepted": true,
+      "failures": [],
+      "robustnessFailures": [],
+      "reviewObserved": {
+        "collisions": [],
+        "triggerNeverFired": [],
+        "initialHoldMaxMps": 0,
+        "firstCreepMaxKph": 4,
+        "secondCreepMaxKph": 0,
+        "stopHoldMaxMps": 0,
+        "legalCyclistClearanceM": 2.770188848404523,
+        "contraflowCyclistClearanceM": 5.784862234399988,
+        "legalCyclistPeakDecelMps2": 0,
+        "contraflowCyclistPeakDecelMps2": 0,
+        "postPassObservationSeconds": 1.1999999999999993
+      },
+      "traceDigest": "9cb4bcbc481012d4144114a2d05f7e1d661053ff784df98010c5398bdb152257"
+    }
+  ]
+}

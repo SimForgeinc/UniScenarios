@@ -41,7 +41,13 @@ export function buildOccluders(occluders: readonly Occluder[]): OccluderShape[] 
 }
 
 /** `true` when the segment `a → b` is not blocked by any occluder. */
-export function hasLineOfSight(a: Vec2, b: Vec2, occluders: readonly OccluderShape[]): boolean {
+export function hasLineOfSight(
+  a: Vec2,
+  b: Vec2,
+  occluders: readonly OccluderShape[],
+  maxRangeM = Infinity,
+): boolean {
+  if (Math.hypot(b.x - a.x, b.y - a.y) > maxRangeM) return false;
   for (const occ of occluders) {
     const c = occ.corners;
     for (let i = 0; i < c.length; i++) {

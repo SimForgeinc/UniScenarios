@@ -1,0 +1,577 @@
+{
+  "version": 1,
+  "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+  "title": "Blind Chicane and Emerging Worker acceptance rubric",
+  "originalIntent": "Ego negotiates an already-committed alternating-flow bottleneck cautiously, honors the portal behind changing to red without stopping inside, yields to an excavator-occluded worker, preserves the clearing van's exit, and resumes only after both hazards clear.",
+  "rubric": {
+    "version": 1,
+    "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+    "title": "Blind Chicane and Emerging Worker acceptance rubric",
+    "originalIntent": "Ego negotiates an already-committed alternating-flow bottleneck cautiously, honors the portal behind changing to red without stopping inside, yields to an excavator-occluded worker, preserves the clearing van's exit, and resumes only after both hazards clear.",
+    "criteria": [
+      {
+        "id": "required-event-order",
+        "kind": "event_order",
+        "required": true,
+        "mode": "required",
+        "interactionIds": [
+          "ego-enters-cautiously",
+          "signal-behind-turns-red",
+          "ego-ignores-stale-red",
+          "worker-emerges",
+          "ego-stops-for-worker",
+          "worker-enters-shared-lane",
+          "van-clears",
+          "worker-clears",
+          "ego-resumes-after-both-clear"
+        ]
+      },
+      {
+        "id": "chicane-speed-cap",
+        "kind": "speed_band",
+        "required": true,
+        "actorId": "ego",
+        "window": [
+          2.5,
+          10.2
+        ],
+        "maxMps": 4.166667
+      },
+      {
+        "id": "worker-stop-hold-resume",
+        "kind": "stop_hold_resume",
+        "required": true,
+        "actorId": "ego",
+        "window": [
+          10,
+          20
+        ],
+        "stopSpeedMps": 0.1,
+        "minHoldSeconds": 5,
+        "mustResume": true,
+        "resumeMinSpeedMps": 0.5,
+        "resumeByS": 18.5
+      },
+      {
+        "id": "worker-clearance",
+        "kind": "clearance",
+        "required": true,
+        "pair": [
+          "ego",
+          "worker"
+        ],
+        "measure": "metric_gap",
+        "minM": 2
+      },
+      {
+        "id": "van-passing-envelope",
+        "kind": "clearance",
+        "required": true,
+        "pair": [
+          "ego",
+          "oncoming-van"
+        ],
+        "measure": "centre_distance",
+        "minM": 4
+      },
+      {
+        "id": "worker-occlusion",
+        "kind": "occlusion",
+        "required": true,
+        "observer": "ego",
+        "target": "worker",
+        "occluderId": "excavator",
+        "outcome": "blocked_then_revealed"
+      },
+      {
+        "id": "near-signal-cycle",
+        "kind": "control_indication",
+        "required": true,
+        "signalId": "control:near-portal-signal",
+        "window": [
+          0,
+          20
+        ],
+        "mode": "required",
+        "indications": [
+          "green",
+          "red"
+        ]
+      },
+      {
+        "id": "far-signal-cycle",
+        "kind": "control_indication",
+        "required": true,
+        "signalId": "control:far-portal-signal",
+        "window": [
+          0,
+          20
+        ],
+        "mode": "required",
+        "indications": [
+          "red",
+          "green"
+        ]
+      },
+      {
+        "id": "collision-free",
+        "kind": "collision",
+        "required": true,
+        "maxCount": 0
+      }
+    ]
+  },
+  "behaviorSummary": {
+    "version": 1,
+    "trace": {
+      "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+      "mapId": "belmont-research-center",
+      "clipSeconds": 20,
+      "dt": 0.02,
+      "actorCount": 3
+    },
+    "actors": [
+      {
+        "actorId": "ego",
+        "presentFromS": 0,
+        "presentToS": 20,
+        "minSpeedMps": 0,
+        "maxSpeedMps": 7.154,
+        "finalSpeedMps": 3.3333,
+        "distanceTravelledM": 52.886756,
+        "stationaryIntervals": [
+          [
+            12.16,
+            17.54
+          ]
+        ],
+        "lanes": [
+          "119:0:1",
+          "402:0:1"
+        ]
+      },
+      {
+        "actorId": "oncoming-van",
+        "presentFromS": 0,
+        "presentToS": 20,
+        "minSpeedMps": 3.2113,
+        "maxSpeedMps": 3.6111,
+        "finalSpeedMps": 3.6111,
+        "distanceTravelledM": 73.979977,
+        "stationaryIntervals": [],
+        "lanes": [
+          "119:0:-1",
+          "124:0:1",
+          "401:0:1"
+        ]
+      },
+      {
+        "actorId": "worker",
+        "presentFromS": 0,
+        "presentToS": 20,
+        "minSpeedMps": 0,
+        "maxSpeedMps": 1.4444,
+        "finalSpeedMps": 0,
+        "distanceTravelledM": 6.049321,
+        "stationaryIntervals": [
+          [
+            0,
+            12.56
+          ],
+          [
+            15.34,
+            20
+          ]
+        ],
+        "lanes": [
+          "402:0:1"
+        ]
+      }
+    ],
+    "events": [
+      {
+        "t": 0,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "ego-enters-cautiously"
+      },
+      {
+        "t": 0,
+        "kind": "trigger_fired",
+        "actorId": "oncoming-van",
+        "interactionId": "van-keeps-clear-of-work-zone"
+      },
+      {
+        "t": 3,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "ego-keeps-right"
+      },
+      {
+        "t": 4,
+        "kind": "state_set",
+        "actorId": "ego",
+        "detail": "signal:control:near-portal-signal.phase=red"
+      },
+      {
+        "t": 4,
+        "kind": "state_set",
+        "actorId": "oncoming-van",
+        "detail": "rules.collisionAvoidance=true"
+      },
+      {
+        "t": 4,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "signal-behind-turns-red"
+      },
+      {
+        "t": 4,
+        "kind": "trigger_fired",
+        "actorId": "oncoming-van",
+        "interactionId": "van-retains-exit"
+      },
+      {
+        "t": 4.02,
+        "kind": "state_set",
+        "actorId": "ego",
+        "detail": "rules.obeySignals=false"
+      },
+      {
+        "t": 4.02,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "ego-ignores-stale-red"
+      },
+      {
+        "t": 10,
+        "kind": "trigger_fired",
+        "actorId": "worker",
+        "interactionId": "worker-emerges"
+      },
+      {
+        "t": 10.2,
+        "kind": "preemption",
+        "actorId": "ego"
+      },
+      {
+        "t": 10.2,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "ego-stops-for-worker"
+      },
+      {
+        "t": 12.5,
+        "kind": "trigger_fired",
+        "actorId": "worker",
+        "interactionId": "worker-enters-shared-lane"
+      },
+      {
+        "t": 16.4,
+        "kind": "state_set",
+        "actorId": "oncoming-van",
+        "detail": "lights.indicator=right"
+      },
+      {
+        "t": 16.4,
+        "kind": "trigger_fired",
+        "actorId": "oncoming-van",
+        "interactionId": "van-clears"
+      },
+      {
+        "t": 16.8,
+        "kind": "preemption",
+        "actorId": "worker"
+      },
+      {
+        "t": 16.8,
+        "kind": "trigger_fired",
+        "actorId": "worker",
+        "interactionId": "worker-clears"
+      },
+      {
+        "t": 17.5,
+        "kind": "preemption",
+        "actorId": "ego"
+      },
+      {
+        "t": 17.5,
+        "kind": "trigger_fired",
+        "actorId": "ego",
+        "interactionId": "ego-resumes-after-both-clear"
+      }
+    ],
+    "metrics": {
+      "collisions": 0,
+      "minTTC": 3.024179,
+      "minPathTTC": null,
+      "minPET": null,
+      "triggerNeverFired": [],
+      "declaredOcclusion": [
+        {
+          "observer": "ego",
+          "target": "worker",
+          "status": "revealed_before_conflict",
+          "firstBlockedT": 0.82,
+          "losOpenT": 4.1
+        }
+      ]
+    },
+    "truncated": {
+      "actors": false,
+      "events": false,
+      "occlusions": false
+    }
+  },
+  "machineEvaluation": {
+    "version": 1,
+    "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+    "verdict": "accept",
+    "counts": {
+      "pass": 9,
+      "fail": 0,
+      "unchecked": 0,
+      "unsupported": 0
+    },
+    "criteria": [
+      {
+        "id": "required-event-order",
+        "kind": "event_order",
+        "required": true,
+        "status": "pass",
+        "reason": "required event-order condition held",
+        "evidence": [
+          {
+            "source": "trace_event",
+            "summary": "ordered trigger evidence",
+            "values": {
+              "interactionIds": [
+                "ego-enters-cautiously",
+                "signal-behind-turns-red",
+                "ego-ignores-stale-red",
+                "worker-emerges",
+                "ego-stops-for-worker",
+                "worker-enters-shared-lane",
+                "van-clears",
+                "worker-clears",
+                "ego-resumes-after-both-clear"
+              ],
+              "matchedTimesS": [
+                0,
+                4,
+                4.02,
+                10,
+                10.2,
+                12.5,
+                16.4,
+                16.8,
+                17.5
+              ],
+              "complete": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "chicane-speed-cap",
+        "kind": "speed_band",
+        "required": true,
+        "status": "pass",
+        "reason": "speed remained inside the authored band",
+        "evidence": [
+          {
+            "source": "actor_track",
+            "summary": "speed extrema in window",
+            "values": {
+              "actorId": "ego",
+              "window": [
+                2.5,
+                10.2
+              ],
+              "minSpeedMps": 2.9355,
+              "maxSpeedMps": 3.8889,
+              "requiredMinMps": null,
+              "requiredMaxMps": 4.166667
+            }
+          }
+        ]
+      },
+      {
+        "id": "worker-stop-hold-resume",
+        "kind": "stop_hold_resume",
+        "required": true,
+        "status": "pass",
+        "reason": "stop/hold/resume behavior held",
+        "evidence": [
+          {
+            "source": "actor_track",
+            "summary": "stop interval and resume evidence",
+            "values": {
+              "actorId": "ego",
+              "longestStop": [
+                12.16,
+                17.54
+              ],
+              "longestStopSeconds": 5.38,
+              "requiredHoldSeconds": 5,
+              "resumedAtS": 17.74,
+              "resumeByS": 18.5
+            }
+          }
+        ]
+      },
+      {
+        "id": "worker-clearance",
+        "kind": "clearance",
+        "required": true,
+        "status": "pass",
+        "reason": "minimum clearance held",
+        "evidence": [
+          {
+            "source": "metric",
+            "summary": "engine minimum shape clearance",
+            "values": {
+              "pair": [
+                "ego",
+                "worker"
+              ],
+              "measure": "metric_gap",
+              "minDistanceM": 5.622016,
+              "atS": 12.18,
+              "requiredMinM": 2,
+              "window": [
+                0,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "van-passing-envelope",
+        "kind": "clearance",
+        "required": true,
+        "status": "pass",
+        "reason": "minimum clearance held",
+        "evidence": [
+          {
+            "source": "actor_track",
+            "summary": "minimum centre distance",
+            "values": {
+              "pair": [
+                "ego",
+                "oncoming-van"
+              ],
+              "measure": "centre_distance",
+              "minDistanceM": 6.560324,
+              "atS": 7.6,
+              "requiredMinM": 4,
+              "window": [
+                0,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "worker-occlusion",
+        "kind": "occlusion",
+        "required": true,
+        "status": "pass",
+        "reason": "occlusion outcome held",
+        "evidence": [
+          {
+            "source": "metric",
+            "summary": "declared occlusion result",
+            "values": {
+              "observer": "ego",
+              "target": "worker",
+              "expectedStatus": "revealed_before_conflict",
+              "observedStatuses": [
+                "revealed_before_conflict"
+              ],
+              "firstBlockedT": 0.82,
+              "losOpenT": 4.1
+            }
+          }
+        ]
+      },
+      {
+        "id": "near-signal-cycle",
+        "kind": "control_indication",
+        "required": true,
+        "status": "pass",
+        "reason": "required control indication condition held",
+        "evidence": [
+          {
+            "source": "signal_track",
+            "summary": "control indications in window",
+            "values": {
+              "signalId": "control:near-portal-signal",
+              "expected": [
+                "green",
+                "red"
+              ],
+              "observed": [
+                "green",
+                "red"
+              ],
+              "window": [
+                0,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "far-signal-cycle",
+        "kind": "control_indication",
+        "required": true,
+        "status": "pass",
+        "reason": "required control indication condition held",
+        "evidence": [
+          {
+            "source": "signal_track",
+            "summary": "control indications in window",
+            "values": {
+              "signalId": "control:far-portal-signal",
+              "expected": [
+                "red",
+                "green"
+              ],
+              "observed": [
+                "green",
+                "red"
+              ],
+              "window": [
+                0,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "collision-free",
+        "kind": "collision",
+        "required": true,
+        "status": "pass",
+        "reason": "collision budget held",
+        "evidence": [
+          {
+            "source": "metric",
+            "summary": "collision evidence",
+            "values": {
+              "pair": [],
+              "observedCount": 0,
+              "maxCount": 0,
+              "timesS": []
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

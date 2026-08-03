@@ -1,13 +1,19 @@
 import {
   contentHash,
+  CONTROL_INDICATIONS,
   decodeTraceGz,
   safeParseSimScenarioInput,
   traceToSceneFrame,
   TRACE_FORMAT_VERSION,
+  READABLE_TRACE_FORMAT_VERSIONS,
+  isReadableTraceFormatVersion,
   type SceneTrace,
   type SimActor,
   type SimScenarioInput,
   type SimTrace,
+  type StaticProp,
+  type AmbientTrafficProvenance,
+  type ControlIndication,
 } from '@uniscenarios/sim-engine';
 import {
   getEntry,
@@ -15,13 +21,27 @@ import {
   type CatalogId,
   type Dims,
 } from '@uniscenarios/prop-catalog';
+import type { OpenScenarioSnapshot } from '../openscenario/model';
 
 const TRACE_CHANNELS = ['x', 'y', 'headingRad', 'speedMps', 'laneRsl', 's', 'present'] as const;
 const STATIC_CHANNELS = ['x', 'y', 'headingRad', 'speedMps', 'present'] as const;
 const KIND_DEFAULTS: Record<SimActor['kind'], CatalogId> = {
   vehicle: 'vehicle.sedan',
+  car: 'vehicle.sedan',
+  truck: 'vehicle.box_truck',
+  bus: 'vehicle.bus',
+  van: 'vehicle.van',
+  motorcycle: 'vehicle.motorcycle',
+  bicycle: 'vehicle.bicycle',
   pedestrian: 'pedestrian.adult_walking',
+  scooter: 'vehicle.bicycle',
+  animal: 'pedestrian.child_walking',
+  static_object: 'hazard.cardboard_box',
 };
+
+export function defaultCatalogIdForActorKind(kind: SimActor['kind']): CatalogId {
+  return KIND_DEFAULTS[kind];
+}
 
 export interface PlaybackSource {
   readonly instanceName: string;
@@ -31,6 +51,8 @@ export interface PlaybackSource {
 export interface ConcreteInstance {
   readonly kind: 'scenario-instance';
   readonly version: 1;
+  /** Exact catalog reservation/attempt closure, when this is a catalog artifact. */
+  readonly catalogSlot?: unknown;
   readonly manifest: {
     readonly instanceId: string;
     readonly inputHash: string;
@@ -45,20 +67,41 @@ export interface PlaybackActor {
   readonly id: string;
   readonly kind: SimActor['kind'];
   readonly static: boolean;
+  readonly tags: readonly string[];
   readonly catalogId: CatalogId;
   readonly modelBasis: 'input-tag' | 'kind-default';
   readonly dims: Dims;
   readonly initial: { readonly x: number; readonly z: number; readonly headingRad: number };
 }
 
+export interface PlaybackProp extends Omit<StaticProp, 'catalogId'> {
+  readonly catalogId: CatalogId;
+}
+
 export interface PlaybackBundle {
   readonly instance: ConcreteInstance;
   readonly trace: SceneTrace;
   readonly actors: readonly PlaybackActor[];
+  readonly props: readonly PlaybackProp[];
   readonly signals: readonly PlaybackSignal[];
   readonly source: PlaybackSource;
+  /** Shared, byte-semantic catalog closure after instance/trace equality validation. */
+  readonly catalogSlot?: unknown;
   readonly startTime: number;
   readonly endTime: number;
+  /** Derived background-traffic provenance; absent for imported legacy evidence. */
+  readonly ambientTraffic?: AmbientTrafficProvenance;
+  /** Exact static-map proxy build used by editable simulation. */
+  readonly mapCollisions?: {
+    readonly digest: string;
+    readonly status: 'ready' | 'unavailable' | 'skipped';
+    readonly warning?: string;
+    readonly accepted: number;
+    readonly rejectedRoadOverlap: number;
+    readonly classes: Readonly<Record<string, number>>;
+  };
+  /** Immutable export evidence produced from the same input, graph and trace. */
+  readonly openScenario?: OpenScenarioSnapshot;
 }
 
 export interface PlaybackSignal {
@@ -81,10 +124,12 @@ export interface SampledActor {
   readonly headingRad: number;
   readonly present: boolean;
   readonly static: boolean;
+  /** Body motion direction; reverse motion must not be presented by flipping heading. */
+  readonly motionDirection: -1 | 1;
 }
 
 export interface SampledSignal extends PlaybackSignal {
-  readonly phase: 'green' | 'yellow' | 'red';
+  readonly phase: ControlIndication;
 }
 
 /** One import failure with all repairable findings, rather than the first opaque throw. */
@@ -207,12 +252,33 @@ export function parsePlaybackPair(
         `${source.traceName}: header.engineGraphDigest does not match manifest.replayKey.engineGraphDigest`,
       );
     }
+    if (typeof replayGraph === 'string' && trace.header.topologyDigest !== replayGraph) {
+      issues.push(
+        `${source.traceName}: header.topologyDigest does not match manifest.replayKey.engineGraphDigest`,
+      );
+    }
+    if (contentHash(trace.header.operationalConditions) !== contentHash(input.operationalConditions)) {
+      issues.push(
+        `${source.traceName}: header.operationalConditions does not exactly match instance input.operationalConditions`,
+      );
+    }
     validateActorIdentity(input, manifest, trace, source, issues);
+    validateCatalogSlotIdentity(
+      raw['catalogSlot'],
+      trace.header.catalogSlot,
+      manifest,
+      input.mapId,
+      input.operationalConditions,
+      source,
+      issues,
+    );
+    validatePropIdentity(input, trace, source, issues);
     validateTracks(input, trace, source.traceName, issues);
     validateSignalTracks(input, trace, source.traceName, issues);
   }
 
   const actors = mapPlaybackActors(input.actors, source.instanceName, issues);
+  const props = mapPlaybackProps(input.props, source.instanceName, issues);
   const signals = mapPlaybackSignals(input, source.instanceName, issues);
   if (issues.length > 0 || !trace) throw new PlaybackLoadError('Scenario/trace identity validation failed', issues);
 
@@ -222,16 +288,125 @@ export function parsePlaybackPair(
     instance: {
       kind: 'scenario-instance',
       version: 1,
+      ...(raw['catalogSlot'] === undefined ? {} : { catalogSlot: raw['catalogSlot'] }),
       manifest: concreteManifest,
       input,
     },
     trace: traceToSceneFrame(trace),
     actors,
+    props,
     signals,
     source,
+    ...(raw['catalogSlot'] === undefined ? {} : { catalogSlot: raw['catalogSlot'] }),
     startTime: times[0] as number,
     endTime: times[times.length - 1] as number,
   };
+}
+
+function validateCatalogSlotIdentity(
+  instanceSlot: unknown,
+  traceSlot: unknown,
+  manifest: Record<string, unknown>,
+  mapId: string,
+  inputConditions: unknown,
+  source: PlaybackSource,
+  issues: string[],
+): void {
+  if (instanceSlot === undefined && traceSlot === undefined) return;
+  if (instanceSlot === undefined) {
+    issues.push(`${source.instanceName}: catalogSlot is missing but the trace carries catalog provenance`);
+    return;
+  }
+  if (traceSlot === undefined) {
+    issues.push(`${source.traceName}: header.catalogSlot is missing but the instance carries catalog provenance`);
+    return;
+  }
+  const slot = objectOf(instanceSlot);
+  if (!slot) {
+    issues.push(`${source.instanceName}: catalogSlot must be an object`);
+    return;
+  }
+  if (slot['mapId'] !== mapId) {
+    issues.push(`${source.instanceName}: catalogSlot.mapId ${display(slot['mapId'])} does not match input.mapId ${mapId}`);
+  }
+  if (typeof slot['identity'] !== 'string' || slot['identity'].length === 0) {
+    issues.push(`${source.instanceName}: catalogSlot.identity is missing`);
+  }
+  if (contentHash(instanceSlot) !== contentHash(traceSlot)) {
+    issues.push(`${source.traceName}: header.catalogSlot does not exactly match the instance catalogSlot closure`);
+  }
+
+  const replayKey = objectOf(manifest['replayKey']);
+  const provenance = objectOf(slot['provenance']);
+  const variant = objectOf(slot['variant']);
+  const joins: Array<readonly [string, unknown, unknown]> = [
+    ['selectedMatcherSiteId', slot['selectedMatcherSiteId'], replayKey?.['siteId']],
+    ['attemptSeed', slot['attemptSeed'], replayKey?.['paramSeed']],
+    ['templateId', slot['templateId'], replayKey?.['templateId']],
+    ['provenance.matcherIndexDigest', provenance?.['matcherIndexDigest'], replayKey?.['matcherIndexDigest']],
+    ['provenance.engineGraphDigest', provenance?.['engineGraphDigest'], replayKey?.['engineGraphDigest']],
+    ['provenance.templateDigest', provenance?.['templateDigest'], replayKey?.['templateDigest']],
+  ];
+  for (const [path, actual, expected] of joins) {
+    if (typeof expected !== 'string' || expected.length === 0 || actual !== expected) {
+      issues.push(
+        `${source.instanceName}: catalogSlot.${path} ${display(actual)} does not match manifest.replayKey value ${display(expected)}`,
+      );
+    }
+  }
+  for (const path of ['seed', 'attemptSeed', 'designDigest'] as const) {
+    if (typeof slot[path] !== 'string' || !/^[0-9a-f]{64}$/.test(slot[path])) {
+      issues.push(`${source.instanceName}: catalogSlot.${path} must be a 64-character lowercase SHA-256 digest`);
+    }
+  }
+  for (const path of ['selectedLocationId', 'selectedMatcherSiteId', 'templateId'] as const) {
+    if (typeof slot[path] !== 'string' || slot[path].length === 0) {
+      issues.push(`${source.instanceName}: catalogSlot.${path} is missing`);
+    }
+  }
+  if (!provenance) issues.push(`${source.instanceName}: catalogSlot.provenance is missing`);
+  if (!variant || typeof variant['id'] !== 'string' || variant['id'].length === 0) {
+    issues.push(`${source.instanceName}: catalogSlot.variant.id is missing`);
+  }
+
+  const operationalVariant = objectOf(manifest['operationalVariant']);
+  if (!operationalVariant) {
+    issues.push(`${source.instanceName}: manifest.operationalVariant is required for catalog playback`);
+  } else {
+    const { concrete, ...variantSource } = operationalVariant;
+    if (contentHash(variantSource) !== contentHash(variant)) {
+      issues.push(
+        `${source.instanceName}: manifest.operationalVariant source fields do not exactly match catalogSlot.variant`,
+      );
+    }
+    if (contentHash(concrete) !== contentHash(inputConditions)) {
+      issues.push(
+        `${source.instanceName}: manifest.operationalVariant.concrete does not exactly match input.operationalConditions`,
+      );
+    }
+  }
+}
+
+function validatePropIdentity(
+  input: SimScenarioInput,
+  trace: SimTrace,
+  source: PlaybackSource,
+  issues: string[],
+): void {
+  const inputIds = input.props.map((prop) => prop.id).sort();
+  const metadata = trace.header.propMetadata;
+  if (!metadata) {
+    if (inputIds.length > 0) issues.push(`${source.traceName}: header.propMetadata is missing for authored props`);
+    return;
+  }
+  const metadataIds = Object.keys(metadata).sort();
+  compareIds(inputIds, metadataIds, 'instance props', 'trace prop metadata', issues);
+  for (const prop of input.props) {
+    const traced = metadata[prop.id];
+    if (traced && contentHash(traced) !== contentHash(prop)) {
+      issues.push(`${source.traceName}: prop metadata for ${prop.id} does not match instance input`);
+    }
+  }
 }
 
 function validateSignalTracks(
@@ -253,7 +428,7 @@ function validateSignalTracks(
       );
       continue;
     }
-    if (phases.some((phase) => phase !== 'green' && phase !== 'yellow' && phase !== 'red')) {
+    if (phases.some((phase) => !CONTROL_INDICATIONS.includes(phase as (typeof CONTROL_INDICATIONS)[number]))) {
       issues.push(`${name}: ticks.signals.${id}.phase contains an unknown phase`);
     }
   }
@@ -301,8 +476,10 @@ function validateTrace(value: unknown, name: string, issues: string[]): SimTrace
     }
   }
   if (header) {
-    if (header['traceVersion'] !== TRACE_FORMAT_VERSION) {
-      issues.push(`${name}: header.traceVersion must be ${TRACE_FORMAT_VERSION}; got ${display(header['traceVersion'])}`);
+    // v1 and v2 are immutable replay/evidence formats. New traces write v3,
+    // but saved campaigns and imported verified bundles remain readable.
+    if (!isReadableTraceFormatVersion(header['traceVersion'])) {
+      issues.push(`${name}: header.traceVersion must be one of ${READABLE_TRACE_FORMAT_VERSIONS.join(', ')} (current ${TRACE_FORMAT_VERSION}); got ${display(header['traceVersion'])}`);
     }
     if (header['frame'] !== 'xodr-local') {
       issues.push(`${name}: header.frame must be "xodr-local"; got ${display(header['frame'])}`);
@@ -336,6 +513,27 @@ function validateActorIdentity(
   compareIds(inputIds, manifestIds, 'instance input', 'manifest', issues);
   compareIds(inputIds, headerIds, 'instance input', 'trace header', issues);
   compareIds(inputIds, trackIds, 'instance input', 'trace tracks', issues);
+  if (trace.header.actorMetadata) {
+    const metadataIds = Object.keys(trace.header.actorMetadata).sort();
+    compareIds(inputIds, metadataIds, 'instance input', 'trace actor metadata', issues);
+    for (const actor of input.actors) {
+      const metadata = trace.header.actorMetadata[actor.id];
+      if (!metadata) continue;
+      if (metadata.kind !== actor.kind) {
+        issues.push(`${source.traceName}: actor metadata kind for ${actor.id} does not match instance input`);
+      }
+      if (metadata.static !== actor.static) {
+        issues.push(`${source.traceName}: actor metadata static flag for ${actor.id} does not match instance input`);
+      }
+      if (
+        metadata.dims.l !== actor.dims.l ||
+        metadata.dims.w !== actor.dims.w ||
+        metadata.dims.h !== actor.dims.h
+      ) {
+        issues.push(`${source.traceName}: actor metadata dimensions for ${actor.id} do not match instance input`);
+      }
+    }
+  }
   if (inputIds.length === 0) issues.push(`${source.instanceName}: input carries zero actors; playback requires at least one`);
 }
 
@@ -362,6 +560,16 @@ function validateTracks(
       }
       if (channel !== 'laneRsl' && values.some((value) => !Number.isFinite(value))) {
         issues.push(`${name}: ticks.actors.${actor.id}.${channel} contains a non-finite value`);
+      }
+    }
+    const motionDirection = track['motionDirection'];
+    if (motionDirection !== undefined) {
+      if (!Array.isArray(motionDirection) || motionDirection.length !== count) {
+        issues.push(
+          `${name}: ticks.actors.${actor.id}.motionDirection length ${Array.isArray(motionDirection) ? motionDirection.length : 'invalid'} does not match ticks.t length ${count}`,
+        );
+      } else if (motionDirection.some((value) => value !== -1 && value !== 1)) {
+        issues.push(`${name}: ticks.actors.${actor.id}.motionDirection must contain only -1 or 1`);
       }
     }
     if (actor.static) {
@@ -400,7 +608,7 @@ function mapPlaybackActors(
       continue;
     }
     const explicit = catalogTags[0]?.slice('catalog:'.length);
-    const catalogId = explicit ?? KIND_DEFAULTS[actor.kind];
+    const catalogId = explicit ?? defaultCatalogIdForActorKind(actor.kind);
     if (!isCatalogId(catalogId)) {
       issues.push(`${name}: actor ${actor.id} requests unknown Studio catalog model ${display(catalogId)}`);
       continue;
@@ -412,6 +620,7 @@ function mapPlaybackActors(
       id: actor.id,
       kind: actor.kind,
       static: actor.static,
+      tags: [...actor.tags],
       catalogId,
       modelBasis: explicit ? 'input-tag' : 'kind-default',
       dims: { l: actor.dims.l, w: actor.dims.w, h: actor.dims.h },
@@ -423,6 +632,23 @@ function mapPlaybackActors(
     });
   }
   return actors;
+}
+
+function mapPlaybackProps(
+  inputProps: readonly StaticProp[],
+  name: string,
+  issues: string[],
+): PlaybackProp[] {
+  const props: PlaybackProp[] = [];
+  for (const prop of inputProps) {
+    if (!isCatalogId(prop.catalogId)) {
+      issues.push(`${name}: prop ${prop.id} requests unknown Studio catalog model ${display(prop.catalogId)}`);
+      continue;
+    }
+    getEntry(prop.catalogId);
+    props.push({ ...prop, catalogId: prop.catalogId });
+  }
+  return props;
 }
 
 export interface SampleBracket {
@@ -459,6 +685,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
     const track = bundle.trace.ticks.actors[actor.id];
     if (!track) throw new Error(`validated trace lost actor track ${actor.id}`);
     const present = Number(track.present[bracket.lower]) !== 0;
+    const motionDirection = track.motionDirection?.[bracket.lower] ?? 1;
     if (actor.static) {
       return {
         id: actor.id,
@@ -469,6 +696,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
         headingRad: actor.initial.headingRad,
         present,
         static: true,
+        motionDirection,
       };
     }
     return {
@@ -484,6 +712,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
       ),
       present,
       static: false,
+      motionDirection,
     };
   });
 }

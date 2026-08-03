@@ -2,7 +2,7 @@
   "scenarioVersion": 2,
   "meta": {
     "name": "School dart-out — ball first, then the child",
-    "description": "C12's ball-then-child cue, wired as two staggered `route` interactions. A ball rolls out of the kerb line `ballLeadS` seconds before the child does, crosses the carriageway and is despawned (`exist: absent`) so it stops competing for the episode's min-TTC; the child then runs after it from behind a short row of parked drop-off cars, and the arrival solver back-solves its start so it reaches the ego lane `arrivalTtc` seconds before the ego. The child is a pedestrian with a child's footprint, which matters twice: it is a smaller target for the line-of-sight test and a shorter one for a future height-aware occlusion test. The school-zone preference is expressed as a low posted limit plus a `school_zone` feature carried cosmetically — the CLI's matcher adapter has no mapping for that feature kind and drops it with a note (campaign defect D4), so the clause degrades everywhere instead of failing anywhere, exactly as intended, but it also buys nothing until the adapter grows the mapping.",
+    "description": "A real signed school-zone dart-out: a ball rolls from behind the pickup row before a child follows, crosses the carriageway completely, and remains present at the far-side refuge. The ego keeps production collision avoidance enabled and brakes after the precursor cue; the scene therefore records a genuine, bounded near-conflict without contact. The school-zone and adjacent pedestrian infrastructure are hard map requirements, not cosmetic hints.",
     "createdAt": "2026-08-01T00:00:00.000Z",
     "modifiedAt": "2026-08-01T00:00:00.000Z",
     "appVersion": "uniscenarios/0.0.1",
@@ -149,14 +149,14 @@
       {
         "id": "sz",
         "kind": "school_zone",
-        "label": "a signed school zone — cosmetic, and dropped by the matcher adapter (campaign defect D4)",
-        "essentiality": "cosmetic",
+        "label": "the exact signed school zone containing the pickup-time dart-out",
+        "essentiality": "required",
         "atM": {
           "value": [
             0,
             200
           ],
-          "essentiality": "cosmetic"
+          "essentiality": "required"
         }
       },
       {
@@ -197,7 +197,7 @@
         "tFrac": 0,
         "headingOffsetRad": 0
       },
-      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)"
+      "initialSpeedKph": "clamp(0.65 * lane.speedLimitKph, 22, 36)"
     },
     {
       "id": "child",
@@ -225,7 +225,8 @@
       "kind": "on_reference",
       "label": "the ball — the precursor cue, at rest against the kerb face just off the child’s pavement line so the two do not read as one closing pair",
       "actor": {
-        "class": "animal",
+        "class": "static_object",
+        "catalogId": "prop.playground_ball",
         "dims": {
           "length": 0.24,
           "width": 0.24,
@@ -350,19 +351,13 @@
         }
       },
       {
-        "id": "ball-vanishes",
-        "label": "the ball leaves the scene once it is across, so it stops competing for the episode min-TTC",
-        "actor": "ball",
-        "verb": "exist",
-        "trigger": {
-          "kind": "after",
-          "of": "ball-rolls",
-          "event": "start",
-          "delayS": 2.2
-        },
-        "target": {
-          "state": "absent"
-        }
+        "id": "ego-brakes-after-cue",
+        "label": "the driver responds to the rolling-ball precursor with a controlled stop before the child reaches the conflict area",
+        "actor": "ego",
+        "verb": "speed",
+        "trigger": { "kind": "after", "of": "ball-rolls", "event": "start", "delayS": 0.6 },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 4.5 }
       },
       {
         "id": "child-chases",
@@ -390,8 +385,8 @@
             },
             {
               "laneOffset": 0,
-              "s": 126,
-              "tFrac": 0.15,
+              "s": 128,
+              "tFrac": 1,
               "headingOffsetRad": 0
             }
           ]
@@ -425,22 +420,30 @@
           "constraint": "time",
           "value": 0.1
         }
+      },
+      {
+        "id": "child-clears-and-stops",
+        "label": "the child reaches the far-side refuge and remains visible after the conflict",
+        "actor": "child",
+        "verb": "speed",
+        "trigger": { "kind": "after", "of": "child-reaches-the-lane", "event": "start", "delayS": 6.5 },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 0.5 }
       }
     ]
   },
   "invariants": [
     {
       "id": "criticality",
-      "kind": "ttc",
+      "kind": "pet",
       "label": "the ego must actually be threatened by the child",
       "essentiality": "required",
       "of": "ego",
       "to": "child",
       "range": [
-        null,
+        0.2,
         3.0
-      ],
-      "mode": "min"
+      ]
     },
     {
       "id": "arrival-band",

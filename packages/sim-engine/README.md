@@ -1,5 +1,12 @@
 # @uniscenarios/sim-engine
 
+The default for new and regenerated simulation is the force-based `dynamic-v1`
+backend. The deterministic `kinematic-v1` choreography model remains available
+explicitly and remains the recorded mode for immutable legacy trace replay.
+Both carry explicit trace provenance. Validation scope,
+performance gates, and current non-claims are documented in
+[`../../docs/physics-validation.md`](../../docs/physics-validation.md).
+
 Layer 3 of `docs/agent-authoring-architecture.md`: the deterministic scenario
 simulation engine. Pure TypeScript, `zod` for the input contract, **no rendering
 dependency** — the editor preview and the headless CLI run this code byte for
@@ -137,11 +144,34 @@ that fails the build if `Math.random` or a wall-clock read appears anywhere in
 (~13 300 recorded ticks/s, ~266× real time) on an M-series laptop. Build the
 `LaneGraph` once and share it across runs.
 
+## Default dynamic-v1 motion
+
+`physics: { mode: 'dynamic-v1' }` explicitly pins the force-based motion
+backend for forward `car` and generic `vehicle` actors. It uses deterministic
+5 ms substeps by default and records body velocity, yaw rate, steering, wheel
+speed, axle loads and tyre utilization alongside solver provenance. The
+scenario layer still owns targets and safety decisions; a speed controller and
+preview path tracker turn those targets into throttle, brake and steering.
+
+This is one calibrated generic passenger-car model, not vehicle-specific
+parameter identification and not a CARLA-equivalence claim. It has planar body
+dynamics, actuator lag, aerodynamic/rolling resistance, quasi-static
+longitudinal axle load transfer and combined-slip axle friction circles. It
+does not yet model suspension, pitch/roll/heave, individual wheels, powertrain
+gears, ABS/ESC, road grade or collision impulses. Collision detection and event
+timing remain active, but contact does not alter velocity in this slice.
+
+Omitting `physics` resolves to `dynamic-v1` from engine 0.3.0 onward. New and
+regenerated editable products write that selection explicitly. Existing
+verified evidence is replayed from its recorded provenance; `physics: {
+mode: 'kinematic-v1' }` remains the explicit legacy pin, and its established
+motion tracks do not pass through the dynamic backend.
+
 ## Deliberate simplifications
 
 Stated plainly, because they bound what a metric from this engine means:
 
-- **No tyre physics.** Vehicles are path followers with a bicycle-ish body slip
+- **Kinematic-v1 has no tyre physics.** Vehicles are path followers with a bicycle-ish body slip
   (`heading = pathHeading + atan2(lateralRate, v)`) and per-class acceleration
   clamps. No yaw inertia, no load transfer, no friction circle.
 - **TTC is the closing-speed form** (`gap / closing speed along the line of

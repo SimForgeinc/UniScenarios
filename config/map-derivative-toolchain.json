@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "gltfTransform": "4.3.0",
+  "ktxSoftware": {
+    "version": "4.4.2",
+    "license": "Apache-2.0",
+    "source": "https://github.com/KhronosGroup/KTX-Software/releases/tag/v4.4.2",
+    "platforms": {
+      "darwin-arm64": {
+        "archive": "KTX-Software-4.4.2-Darwin-arm64.pkg",
+        "archiveUrl": "https://github.com/KhronosGroup/KTX-Software/releases/download/v4.4.2/KTX-Software-4.4.2-Darwin-arm64.pkg",
+        "archiveSha256": "500bd8f9d63358c3f3a0d83b724c8574436a72c37dc0e4bad90ec1ca38032c3c",
+        "installDirectory": "ktx-software/4.4.2-darwin-arm64",
+        "executables": {
+          "ktx": "abd30109cbf84859b2f34951f7967e801111abadaac588468d98ed075100ad37",
+          "toktx": "708e94078c8b8a8096f3573e2899bf08fbcf702d92bbbac47bd2098a1aaa6eb6",
+          "ktxinfo": "6c492431ae61bba6278e924db70e47ec0f5a4093c1e9cef5baf05c7bf9ebafe2",
+          "ktx2check": "4dc207d813aa78ce1ffe2c4bdb0af0824ecba5ce15eb23107f5ca2ebe3469b18"
+        },
+        "libraries": {
+          "lib/libktx.4.4.2.dylib": "bd26f0747b7a800384b7b3c9221dafeb3943ef565a560ab98238cade597c0947"
+        }
+      }
+    }
+  },
+  "three": "0.182.0"
+}

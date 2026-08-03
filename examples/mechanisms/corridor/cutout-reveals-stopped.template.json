@@ -1,0 +1,92 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Lead cut-out reveals stopped vehicle",
+    "description": "A moving lead occludes a stationary vehicle in ego's lane, then changes to the adjacent lane at a short reveal distance.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "longitudinal.cutout-reveals-stopped",
+    "tags": ["corridor", "longitudinal", "cut-out", "occlusion", "stopped-vehicle"],
+    "author": "agent/corridor-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "followGapM", "type": "continuous", "unit": "m", "tier": 1, "range": [14, 26], "default": 19, "distribution": "uniform" },
+      { "id": "revealDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [16, 28], "default": 21, "distribution": "uniform" },
+      { "id": "lateralRateMps", "type": "continuous", "unit": "m/s", "tier": 1, "range": [1.5, 2.5], "default": 2, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "cutout-reveals-stopped",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 8], "essentiality": "required" },
+      "speedLimitKph": { "value": [35, 75], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [240, null], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "either", "sRange": [40, 140] }, "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 25, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 30, 55)"
+    },
+    {
+      "id": "lead-cutout", "kind": "relative_to", "label": "moving lead that hides the stopped vehicle",
+      "actor": { "class": "van", "catalogId": "vehicle.van" },
+      "requiredSameSegmentAs": "ego",
+      "requiredHeadingRelation": { "role": "ego", "relation": "parallel", "maxErrorDeg": 10 },
+      "ref": "ego", "dLane": 0, "dsM": "param.followGapM", "tFrac": 0, "headingOffsetRad": 0,
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 30, 55)",
+      "extensions": { "occludes": { "observer": "ego", "target": "stopped" } }
+    },
+    {
+      "id": "stopped", "kind": "relative_to", "label": "stationary vehicle revealed by the cut-out",
+      "actor": { "class": "car", "catalogId": "vehicle.suv", "static": true },
+      "requiredSameSegmentAs": "ego",
+      "requiredHeadingRelation": { "role": "ego", "relation": "parallel", "maxErrorDeg": 10 },
+      "ref": "lead-cutout", "dLane": 0, "dsM": "param.revealDistanceM + 58", "tFrac": 0, "headingOffsetRad": 0,
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 6.2,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "ego-cannot-react-before-reveal", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "lead-commits", "actor": "lead-cutout", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      {
+        "id": "lead-cuts-out", "actor": "lead-cutout", "verb": "route",
+        "trigger": { "kind": "at", "t": 0.2 },
+        "target": { "mode": "polyline", "points": [
+          { "laneOffset": 0, "s": "28 + param.followGapM", "tFrac": 0, "headingOffsetRad": 0 },
+          { "laneOffset": 0, "s": "32 + param.followGapM", "tFrac": -1, "headingOffsetRad": 0 },
+          { "laneOffset": 0, "s": "230 + param.followGapM", "tFrac": -1, "headingOffsetRad": 0 }
+        ] }
+      },
+      {
+        "id": "ego-brakes-on-reveal", "actor": "ego", "verb": "speed",
+        "trigger": { "kind": "after", "of": "lead-cuts-out", "event": "start", "delayS": "3.5 / param.lateralRateMps" },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 8 }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "following-gap", "kind": "headway", "of": "ego", "to": "lead-cutout", "range": [0.7, 2.5], "window": [0, 0.2], "essentiality": "required" },
+    { "id": "revealed-hazard-criticality", "kind": "ttc", "of": "ego", "to": "stopped", "range": [0.7, 3.5], "mode": "min", "essentiality": "required" },
+    { "id": "reveal-sequence", "kind": "event_order", "events": ["lead-cuts-out", "ego-brakes-on-reveal"], "strict": true, "essentiality": "required" },
+    { "id": "ego-braking-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" },
+    { "id": "stopped-vehicle-clearance", "kind": "gap", "of": "ego", "to": "stopped", "unit": "distance", "range": [4.5, null], "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

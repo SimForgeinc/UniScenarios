@@ -1,6 +1,15 @@
 import { useState, type CSSProperties, type ChangeEvent } from 'react';
 import type { PlaybackController, PlaybackState } from './controller';
 import { PlaybackLoadError, readPlaybackFiles, type PlaybackBundle } from './model';
+import type { CameraView } from '@uniscenarios/city-renderer';
+import type { CameraPolicy } from '../cameras/model';
+
+export interface PlaybackCameraOption {
+  id: string;
+  label: string;
+  policy: CameraPolicy;
+  view?: CameraView;
+}
 
 export interface PlaybackPanelProps {
   bundle: PlaybackBundle | null;
@@ -8,6 +17,8 @@ export interface PlaybackPanelProps {
   state: PlaybackState | null;
   onImport: (bundle: PlaybackBundle) => void;
   onClear: () => void;
+  cameraOptions: readonly PlaybackCameraOption[];
+  cameraError?: string | null;
 }
 
 export function PlaybackPanel({
@@ -16,6 +27,8 @@ export function PlaybackPanel({
   state,
   onImport,
   onClear,
+  cameraOptions,
+  cameraError,
 }: PlaybackPanelProps): JSX.Element {
   const [instanceFile, setInstanceFile] = useState<File | null>(null);
   const [traceFile, setTraceFile] = useState<File | null>(null);
@@ -80,6 +93,7 @@ export function PlaybackPanel({
         <>
           <div style={styles.identity} data-testid="playback-identity">
             <strong>{bundle.instance.manifest.instanceId}</strong>
+            {catalogIdentity(bundle.catalogSlot) ? <span>catalog slot {catalogIdentity(bundle.catalogSlot)}</span> : null}
             <span>{bundle.instance.input.mapId}</span>
             <span>{bundle.actors.length} actors · {bundle.source.traceName}</span>
             <code title={bundle.instance.manifest.inputHash} style={styles.hash}>
@@ -100,6 +114,20 @@ export function PlaybackPanel({
               {(state?.time ?? bundle.startTime).toFixed(2)} / {bundle.endTime.toFixed(2)} s
             </span>
           </div>
+          <label style={styles.cameraRow}>
+            <span>Playback camera</span>
+            <select
+              aria-label="Playback camera"
+              value={state?.cameraSelectionId ?? 'all-actors'}
+              disabled={!controller}
+              onChange={(event) => {
+                const option = cameraOptions.find((item) => item.id === event.target.value);
+                if (option) controller?.selectCamera(option.id, option.policy, option.view);
+              }}
+            >
+              {cameraOptions.map((option) => <option key={option.id} value={option.id}>{option.label}</option>)}
+            </select>
+          </label>
           <input
             type="range"
             min={bundle.startTime}
@@ -114,7 +142,7 @@ export function PlaybackPanel({
           />
           <div style={styles.hint}>
             {state
-              ? `${state.visibleActorCount}/${state.actorCount} visible · trace drives real actor transforms`
+              ? `${state.visibleActorCount}/${state.actorCount} actors visible · ${state.propCount} fixed props · trace drives real actor transforms`
               : 'switching to scenario map…'}
           </div>
           {state && state.signalCount > 0 ? (
@@ -124,6 +152,7 @@ export function PlaybackPanel({
               </strong>
               <span>
                 {state.signalPhases.green} green · {state.signalPhases.yellow} yellow · {state.signalPhases.red} red
+                {' · '}{state.signalPhases.green_arrow} arrow · {state.signalPhases.red_x} X · {state.signalPhases.proceed} proceed · {state.signalPhases.stop} stop · {state.signalPhases.off} dark
               </span>
               <small>{state.signalTimingSources.join(', ')} timing</small>
             </div>
@@ -133,11 +162,18 @@ export function PlaybackPanel({
           </button>
         </>
       )}
+      {cameraError ? <div role="alert" style={styles.error}>{cameraError}</div> : null}
       {error ? (
         <pre style={styles.error} role="alert" data-testid="playback-error">{error}</pre>
       ) : null}
     </section>
   );
+}
+
+function catalogIdentity(value: unknown): string | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const identity = (value as Record<string, unknown>)['identity'];
+  return typeof identity === 'string' && identity.length > 0 ? identity : null;
 }
 
 function FileRow({
@@ -193,6 +229,7 @@ const styles: Record<string, CSSProperties> = {
   identity: { display: 'flex', flexDirection: 'column', gap: 2, color: '#aeb6c3', fontSize: 11 },
   hash: { overflow: 'hidden', textOverflow: 'ellipsis', color: '#6f91d8', whiteSpace: 'nowrap' },
   transport: { display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 },
+  cameraRow: { display: 'grid', gridTemplateColumns: '92px 1fr', alignItems: 'center', gap: 7, marginTop: 8, color: '#aeb6c3', fontSize: 10 },
   play: {
     minWidth: 58,
     padding: '5px 8px',

@@ -62,12 +62,12 @@ describe('uniscenarios — contract', () => {
   });
 
   it('rejects unknown ASAM export formats before touching the input file', async () => {
-    const run = await uniscenarios('export', 'missing.instance.json', '--format', 'xosc-1.3', '--out', 'out.xosc');
+    const run = await uniscenarios('export', 'missing.instance.json', '--format', 'xosc-0.9', '--out', 'out.xosc');
     expect(run.code).toBe(1);
     const error = JSON.parse(run.stderr) as { code: string; path: string; detail: { known: string[] } };
     expect(error.code).toBe('bad_value');
     expect(error.path).toBe('--format');
-    expect(error.detail.known).toEqual(['xosc-1.4', 'osc-2.2']);
+    expect(error.detail.known).toEqual(['xosc-1.4', 'xosc-1.3-esmini', 'osc-2.2']);
   }, 60_000);
 
   it('reports an unknown flag as a structured error on stderr, exit 1', async () => {
@@ -114,9 +114,10 @@ describe('uniscenarios — contract', () => {
 });
 
 describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
-  it('exports a concrete instance through the real CLI in both current ASAM formats', async () => {
+  it('exports a concrete instance through the real CLI in native and esmini-compatible ASAM formats', async () => {
     const instance = path.join(tmp, 'asam.instance.json');
     const xosc = path.join(tmp, 'asam.xosc');
+    const esminiXosc = path.join(tmp, 'asam-esmini.xosc');
     const osc = path.join(tmp, 'asam.osc');
     await writeFile(instance, JSON.stringify({
       mapId: MAP,
@@ -138,6 +139,16 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
       out: xosc,
     });
     expect(await readFile(xosc, 'utf8')).toContain('revMajor="1" revMinor="4"');
+
+    const esminiRun = await uniscenarios('export', instance, '--format', 'xosc-1.3-esmini', '--out', esminiXosc);
+    expect(esminiRun.code).toBe(0);
+    expect(json<{ standard: string; out: string }>(esminiRun)).toMatchObject({
+      standard: 'ASAM OpenSCENARIO XML 1.3.1 · esmini compatibility',
+      out: esminiXosc,
+    });
+    const esminiXml = await readFile(esminiXosc, 'utf8');
+    expect(esminiXml).toContain('revMajor="1" revMinor="3"');
+    expect(esminiXml).not.toContain('revMinor="4"');
 
     const dslRun = await uniscenarios('export', instance, '--format', 'osc-2.2', '--out', osc);
     expect(dslRun.code).toBe(0);

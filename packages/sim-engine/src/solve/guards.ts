@@ -22,8 +22,8 @@ import { localFromScene } from '../frames.js';
 import { ENDPOINT_TOL_M, type LaneGraph } from '../map/lane-graph.js';
 import { buildRoute, type Route } from '../map/route.js';
 import { transitionDuration } from '../sim/dynamics.js';
-import type { SimActor, SimScenarioInput } from '../schema/input.js';
-import { nominalRunwayNeedM } from './nominal.js';
+import { isRoadActorKind, type SimActor, type SimScenarioInput } from '../schema/input.js';
+import { actionAwareRunwayNeedM } from './nominal.js';
 
 /** Comfort and hard deceleration budgets, m/s² (research doc §longitudinal). */
 export const COMFORT_DECEL_MPS2 = 5.5;
@@ -119,14 +119,14 @@ function checkRunway(
   // Pedestrians and freeform paths legitimately end mid-clip (a crossing is
   // *supposed* to finish), so the whole-clip runway rule applies to vehicles on
   // lane routes only.
-  if (r.spec.static || r.spec.kind !== 'vehicle' || r.route.isFreeform) return;
+  if (r.spec.static || !isRoadActorKind(r.spec.kind) || r.route.isFreeform) return;
   // An actor the scenario explicitly despawns is allowed to run out of route.
   const despawned = input.interactions.some(
     (it) => it.actorId === r.spec.id && it.verb === 'exist' && it.target.state === 'absent',
   );
   if (despawned) return;
 
-  const need = nominalRunwayNeedM(
+  const need = actionAwareRunwayNeedM(
     graph,
     {
       kind: r.spec.kind,
@@ -136,6 +136,8 @@ function checkRunway(
       speedFactor: r.spec.behavior.rules.speedFactor,
       cruiseOverrideMps: r.spec.behavior.cruiseSpeedMps ?? null,
     },
+    r.spec.id,
+    input.interactions,
     { dt: input.dt, warmupSeconds: input.warmupSeconds, clipSeconds: input.clipSeconds },
   );
   const available = r.route.lengthM - r.startS;

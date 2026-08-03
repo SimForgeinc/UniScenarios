@@ -7,6 +7,7 @@ import type {
   BarrierRunParams,
   ConeParams,
   FlaggerParams,
+  PipeParams,
   SignParams,
   SpoilPileParams,
 } from './builders/construction.js';
@@ -20,7 +21,11 @@ import {
   buildJerseyBarrier,
   buildJerseyBarrierRun,
   buildPortableToilet,
+  buildPortableSignal,
+  buildPedestrianBarrier,
+  buildLongPipe,
   buildSpoilPile,
+  buildTemporaryStopSign,
   buildTrafficCone,
 } from './builders/construction.js';
 import type { TrashBagParams } from './builders/hazards.js';
@@ -36,6 +41,7 @@ import {
   buildAdultWalking,
   buildChildStanding,
   buildChildWalking,
+  buildTrafficMarshal,
 } from './builders/pedestrians.js';
 import type { RunParams } from './builders/street.js';
 import {
@@ -46,18 +52,22 @@ import {
   buildFoodCart,
   buildHedgeRun,
   buildMailboxCluster,
+  buildShoppingCart,
 } from './builders/street.js';
 import type { VehicleParams } from './builders/vehicles.js';
 import {
+  buildAmbulance,
   buildBoxTruck,
   buildBus,
   buildCyclist,
   buildHatchback,
   buildMotorcycle,
+  buildMobilityScooter,
   buildPickup,
   buildSedan,
   buildSemiTruck,
   buildSuv,
+  buildTram,
   buildVan,
 } from './builders/vehicles.js';
 
@@ -73,13 +83,18 @@ export interface PropParamMap {
   'vehicle.bus': VehicleParams;
   'vehicle.motorcycle': VehicleParams;
   'vehicle.bicycle': VehicleParams;
+  'vehicle.ambulance': VehicleParams;
+  'vehicle.tram': VehicleParams;
+  'vehicle.mobility_scooter': VehicleParams;
   'pedestrian.adult_standing': PedestrianParams;
   'pedestrian.adult_walking': PedestrianParams;
   'pedestrian.child_standing': PedestrianParams;
   'pedestrian.child_walking': PedestrianParams;
+  'pedestrian.traffic_marshal': PedestrianParams;
   'construction.traffic_cone': ConeParams;
   'construction.channelizer_drum': Record<string, never>;
   'construction.barricade_type3': Record<string, never>;
+  'construction.pedestrian_barrier': Record<string, never>;
   'construction.jersey_barrier': BarrierParams;
   'construction.jersey_barrier_run': BarrierRunParams;
   'construction.sign_road_work': SignParams;
@@ -88,6 +103,9 @@ export interface PropParamMap {
   'construction.excavator': Record<string, never>;
   'construction.portable_toilet': Record<string, never>;
   'construction.spoil_pile': SpoilPileParams;
+  'construction.temporary_stop_sign': Record<string, never>;
+  'construction.portable_signal': Record<string, never>;
+  'construction.long_pipe': PipeParams;
   'occluder.dumpster': Record<string, never>;
   'occluder.covered_car': Record<string, never>;
   'occluder.hedge_run': RunParams;
@@ -95,6 +113,7 @@ export interface PropParamMap {
   'street.mailbox_cluster': Record<string, never>;
   'street.bus_shelter': Record<string, never>;
   'street.food_cart': Record<string, never>;
+  'street.shopping_cart': Record<string, never>;
   'hazard.tire_debris': Record<string, never>;
   'hazard.cardboard_box': Record<string, never>;
   'hazard.trash_bags': TrashBagParams;
@@ -119,13 +138,18 @@ const BUILDERS: Builders = {
   'vehicle.bus': buildBus,
   'vehicle.motorcycle': buildMotorcycle,
   'vehicle.bicycle': buildCyclist,
+  'vehicle.ambulance': buildAmbulance,
+  'vehicle.tram': buildTram,
+  'vehicle.mobility_scooter': buildMobilityScooter,
   'pedestrian.adult_standing': buildAdultStanding,
   'pedestrian.adult_walking': buildAdultWalking,
   'pedestrian.child_standing': buildChildStanding,
   'pedestrian.child_walking': buildChildWalking,
+  'pedestrian.traffic_marshal': buildTrafficMarshal,
   'construction.traffic_cone': buildTrafficCone,
   'construction.channelizer_drum': buildChannelizerDrum,
   'construction.barricade_type3': buildBarricadeTypeIII,
+  'construction.pedestrian_barrier': buildPedestrianBarrier,
   'construction.jersey_barrier': buildJerseyBarrier,
   'construction.jersey_barrier_run': buildJerseyBarrierRun,
   'construction.sign_road_work': buildConstructionSign,
@@ -134,6 +158,9 @@ const BUILDERS: Builders = {
   'construction.excavator': buildExcavator,
   'construction.portable_toilet': buildPortableToilet,
   'construction.spoil_pile': buildSpoilPile,
+  'construction.temporary_stop_sign': buildTemporaryStopSign,
+  'construction.portable_signal': buildPortableSignal,
+  'construction.long_pipe': buildLongPipe,
   'occluder.dumpster': buildDumpster,
   'occluder.covered_car': buildCoveredCar,
   'occluder.hedge_run': buildHedgeRun,
@@ -141,6 +168,7 @@ const BUILDERS: Builders = {
   'street.mailbox_cluster': buildMailboxCluster,
   'street.bus_shelter': buildBusShelter,
   'street.food_cart': buildFoodCart,
+  'street.shopping_cart': buildShoppingCart,
   'hazard.tire_debris': buildTireDebris,
   'hazard.cardboard_box': buildCardboardBox,
   'hazard.trash_bags': buildTrashBags,

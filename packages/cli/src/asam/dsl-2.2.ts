@@ -1,6 +1,13 @@
-import type { Interaction, Pose, SimActor, SimScenarioInput } from '@uniscenarios/sim-engine';
+import { DYNAMIC_V1_DEFAULT_SUBSTEP_S, resolvePhysicsConfig, type Interaction, type Pose, type SimActor, type SimScenarioInput } from '@uniscenarios/sim-engine';
 
-import { assertDefaultControllerRules, finite, identifier, resolveScenario } from './common.js';
+import {
+  analyzeAsamCapabilities,
+  assertDefaultControllerRules,
+  finite,
+  identifier,
+  mergeAsamWarnings,
+  resolveScenario,
+} from './common.js';
 import {
   AsamExportError,
   type AsamExportIssue,
@@ -9,29 +16,48 @@ import {
   type ResolvedAsamScenario,
   type ResolvedInteraction,
 } from './types.js';
+import { assertOpenScenarioDsl22ProfileSyntax } from './dsl-2.2-syntax.js';
 
 function indent(text: string, spaces: number): string {
   const prefix = ' '.repeat(spaces);
   return text.split('\n').map((line) => `${prefix}${line}`).join('\n');
 }
 
-function position(pose: Pose): string {
-  return `position_3d(x: ${finite(pose.x)}m, y: ${finite(-pose.z)}m, z: 0m)`;
+function poseName(pathName: string, index: number): string {
+  return `${pathName}_pose_${index}`;
 }
 
-function orientation(pose: Pose): string {
-  return `orientation_3d(roll: 0rad, pitch: 0rad, yaw: ${finite(pose.headingRad)}rad)`;
-}
-
-function pose(pose: Pose): string {
-  return `pose_3d(position: ${position(pose)}, orientation: ${orientation(pose)})`;
+function poseDeclaration(name: string, value: Pose): string {
+  return [
+    `${name}: pose_3d with:`,
+    `    keep(it.position.x == ${finite(value.x)}m)`,
+    `    keep(it.position.y == ${finite(-value.z)}m)`,
+    '    keep(it.position.z == 0m)',
+    '    keep(it.orientation.roll == 0rad)',
+    '    keep(it.orientation.pitch == 0rad)',
+    `    keep(it.orientation.yaw == ${finite(value.headingRad)}rad)`,
+  ].join('\n');
 }
 
 function actorDeclaration(actor: SimActor, name: string): string {
-  const type = actor.kind === 'vehicle' ? 'vehicle' : 'person';
+  const type = actor.kind === 'pedestrian' ? 'person'
+    : actor.kind === 'animal' ? 'animal'
+      : actor.kind === 'static_object' ? 'stationary_object'
+        : 'vehicle';
+  const vehicleCategoryByKind: Partial<Record<SimActor['kind'], string>> = {
+    vehicle: 'other',
+    car: 'car',
+    truck: 'heavy_truck',
+    bus: 'bus',
+    van: 'van',
+    motorcycle: 'motorcycle',
+    bicycle: 'bicycle',
+    scooter: 'stand_up_scooter',
+  };
+  const vehicleCategory = vehicleCategoryByKind[actor.kind];
   const lines = [
     `${name}: ${type} with:`,
-    ...(actor.kind === 'vehicle' ? ['    keep(it.vehicle_category == car)'] : []),
+    ...(vehicleCategory ? [`    keep(it.vehicle_category == ${vehicleCategory})`] : []),
     '    keep(it.bounding_box.center.x == 0m)',
     '    keep(it.bounding_box.center.y == 0m)',
     `    keep(it.bounding_box.center.z == ${finite(actor.dims.h / 2)}m)`,
@@ -41,19 +67,17 @@ function actorDeclaration(actor: SimActor, name: string): string {
     '    keep(it.center_of_gravity.x == 0m)',
     '    keep(it.center_of_gravity.y == 0m)',
     `    keep(it.center_of_gravity.z == ${finite(actor.dims.h / 2)}m)`,
-    '    keep(it.intended_infrastructure == [driving])',
+    ...(actor.kind === 'static_object' ? [] : [
+      `    keep(it.intended_infrastructure == [${actor.kind === 'pedestrian' || actor.kind === 'animal' ? 'sidewalk' : actor.kind === 'bicycle' || actor.kind === 'scooter' ? 'biking' : actor.kind === 'bus' ? 'bus' : 'driving'}])`,
+    ]),
   ];
   return lines.join('\n');
 }
 
 function pathDeclaration(name: string, points: readonly Pose[]): string {
   return [
-    `${name}: path = path(`,
-    '    points: [',
-    ...points.map((point, i) => `        ${pose(point)}${i === points.length - 1 ? '' : ','}`),
-    '    ],',
-    '    interpolation: straight_line',
-    ')',
+    ...points.flatMap((point, index) => [poseDeclaration(poseName(name, index), point), '']),
+    `${name}: path = map_ref.create_path(points: [${points.map((_, index) => poseName(name, index)).join(', ')}], interpolation: straight_line)`,
   ].join('\n');
 }
 
@@ -72,22 +96,20 @@ function occluderDeclaration(input: SimScenarioInput, index: number): string {
     '    keep(it.center_of_gravity.x == 0m)',
     '    keep(it.center_of_gravity.y == 0m)',
     `    keep(it.center_of_gravity.z == ${finite(o.obb.heightM / 2)}m)`,
-    `${poseName}: pose_3d = ${pose({ x: o.obb.center.x, z: o.obb.center.z, headingRad: o.obb.headingRad })}`,
+    poseDeclaration(poseName, { x: o.obb.center.x, z: o.obb.center.z, headingRad: o.obb.headingRad }),
     `${name}.location(pose: ${poseName})`,
   ].join('\n');
 }
 
 function initialActorBranch(actor: SimActor, name: string, routeName: string, clipSeconds: number): string {
-  const motion = actor.static
-    ? `${name}.remain_stationary(duration: ${finite(clipSeconds)}s)`
-    : [
-        `${name}.follow_path(absolute: ${routeName}, duration: ${finite(clipSeconds)}s)${actor.behavior.rules.collisionAvoidance ? '' : ' with:'}`,
-        ...(actor.behavior.rules.collisionAvoidance ? [] : ['    avoid_collisions(avoid: false)']),
-      ].join('\n');
+  const motion = [
+    `${name}.follow_path(absolute: ${routeName}, duration: ${finite(clipSeconds)}s)${actor.behavior.rules.collisionAvoidance ? '' : ' with:'}`,
+    ...(actor.behavior.rules.collisionAvoidance ? [] : ['    avoid_collisions(avoid: false)']),
+  ].join('\n');
   return [
     'serial:',
-    `    ${name}.assign_position(position: ${position(actor.initial.pose)})`,
-    `    ${name}.assign_orientation(orientation: ${orientation(actor.initial.pose)})`,
+    `    ${name}.assign_position(position: ${poseName(routeName, 0)}.position)`,
+    `    ${name}.assign_orientation(orientation: ${poseName(routeName, 0)}.orientation)`,
     `    ${name}.assign_speed(speed: ${finite(actor.initial.speedMps)}mps)`,
     indent(motion, 4),
   ].join('\n');
@@ -202,17 +224,39 @@ function validateDslProfile(input: SimScenarioInput): void {
     if (!actor.presentAtStart) {
       issues.push({ code: 'unsupported_entity_lifecycle', path: `actors.${i}.presentAtStart`, reason: 'DSL 2.2 has no standard dynamic spawn action' });
     }
+    if (actor.tags.includes('motion:reverse')) {
+      issues.push({
+        code: 'unsupported_reverse_motion',
+        path: `actors.${i}.tags`,
+        reason: 'DSL follow_path does not define the engine reverse-driving controller semantics; use XML trajectory replay',
+      });
+    }
+    if (actor.static && actor.initial.speedMps > 1e-9) {
+      issues.push({
+        code: 'invalid_static_actor_speed',
+        path: `actors.${i}.initial.speedMps`,
+        reason: 'a stationary_object cannot preserve a non-zero initial speed',
+      });
+    }
   }
   for (const [i, interaction] of input.interactions.entries()) {
     if (interaction.until) {
       issues.push({ code: 'unsupported_until', path: `interactions.${i}.until`, reason: 'the concrete DSL profile schedules actions explicitly and cannot preserve this condition exactly' });
+    }
+    const actor = input.actors.find((candidate) => candidate.id === interaction.actorId);
+    if (actor?.static && interaction.verb !== 'exist') {
+      issues.push({
+        code: 'unsupported_static_actor_action',
+        path: `interactions.${i}`,
+        reason: `${interaction.verb} cannot be applied to a DSL stationary_object without substituting movable-object semantics`,
+      });
     }
   }
   if (input.signalPrograms.length > 0) {
     issues.push({
       code: 'unsupported_signal_program',
       path: 'signalPrograms',
-      reason: 'DSL traffic-light cycles require concrete map traffic_light_group bindings that are not present in SimScenarioInput',
+      reason: 'the concrete DSL profile has no standard traffic-light cycle action; controllerHeadGroups provenance is not an executable substitute',
     });
   }
   if (issues.length > 0) throw new AsamExportError(issues);
@@ -222,6 +266,7 @@ export function exportOpenScenarioDsl22(
   input: SimScenarioInput,
   options: AsamExportOptions,
 ): AsamExportResult {
+  const capabilities = analyzeAsamCapabilities(input, 'dsl-2.2-actions');
   assertDefaultControllerRules(input, true);
   validateDslProfile(input);
   const resolved = resolveScenario(input, options, true);
@@ -242,9 +287,18 @@ export function exportOpenScenarioDsl22(
   }
   if (issues.length > 0) throw new AsamExportError(issues);
 
+  const physics = resolvePhysicsConfig(input);
   const content = [
     '# ASAM OpenSCENARIO DSL 2.2.0',
     '# Generated from a concrete UniScenarios scenario instance.',
+    '# uniscenarios.export.profile=dsl-2.2-actions',
+    '# uniscenarios.export.intent=editable-semantic',
+    `# uniscenarios.input.schemaVersion=${input.schemaVersion}`,
+    `# uniscenarios.physics.mode=${physics.mode}`,
+    `# uniscenarios.physics.substepS=${physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt)}`,
+    ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
+      ([key, value]) => `# uniscenarios.provenance.${key}=${String(value).replace(/[\r\n]/g, ' ')}`,
+    ),
     'import osc.standard',
     '',
     'scenario uniscenarios_instance:',
@@ -252,10 +306,17 @@ export function exportOpenScenarioDsl22(
     `        keep(it.map_file == "${(options.roadFile ?? `${input.mapId}.xodr`).replaceAll('\\', '\\\\').replaceAll('"', '\\"')}")`,
     '',
     ...resolved.actors.flatMap(({ actor, name }) => [indent(actorDeclaration(actor, name), 4), '']),
-    ...resolved.actors.flatMap(({ routeName, points }) => [indent(pathDeclaration(routeName, points), 4), '']),
+    ...resolved.actors.flatMap(({ actor, name, routeName, points }) => actor.static
+      ? [indent([
+          poseDeclaration(identifier('initial_pose', actor.id), actor.initial.pose),
+          `${name}.location(pose: ${identifier('initial_pose', actor.id)})`,
+        ].join('\n'), 4), '']
+      : [indent(pathDeclaration(routeName, points), 4), '']),
     ...input.occluders.flatMap((_, i) => [indent(occluderDeclaration(input, i), 4), '']),
-    `    do parallel(duration: ${finite(input.clipSeconds)}s):`,
-    ...resolved.actors.map(({ actor, name, routeName }) => indent(initialActorBranch(actor, name, routeName, input.clipSeconds), 8)),
+    `    do parallel(duration: ${finite(input.warmupSeconds + input.clipSeconds)}s):`,
+    ...resolved.actors.flatMap(({ actor, name, routeName }) => actor.static
+      ? []
+      : [indent(initialActorBranch(actor, name, routeName, input.warmupSeconds + input.clipSeconds), 8)]),
     ...interactionBranches.map((branch) => indent([
       `serial: # ${branch.id}`,
       ...(branch.time > 0 ? [`    wait elapsed(${finite(branch.time)}s)`] : []),
@@ -264,12 +325,21 @@ export function exportOpenScenarioDsl22(
     '',
   ].join('\n');
 
+  // This is a deterministic parser for the concrete grammar profile emitted
+  // above. Keeping it on the production path prevents a syntactically invalid
+  // artifact from escaping merely because an optional external compiler is
+  // unavailable.
+  assertOpenScenarioDsl22ProfileSyntax(content);
+
   return {
     format: 'osc-2.2',
     standard: 'ASAM OpenSCENARIO DSL 2.2.0',
     extension: '.osc',
     mediaType: 'text/plain',
     content,
-    warnings: resolved.warnings,
+    profile: capabilities.report.profile,
+    intent: capabilities.report.intent,
+    capabilityReport: capabilities.report,
+    warnings: mergeAsamWarnings(resolved.warnings, capabilities.warnings),
   };
 }

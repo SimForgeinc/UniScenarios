@@ -1,0 +1,4467 @@
+{
+  "version": 1,
+  "scenario": "blind-chicane-emerging-worker",
+  "baseline": {
+    "engineEvaluation": {
+      "verdict": "reject",
+      "findings": [
+        {
+          "code": "trivially_safe",
+          "reason": "min ttc 3.02 s exceeds the 3 s triviality threshold",
+          "detail": {
+            "criticality": 3.024179221811583,
+            "kind": "ttc",
+            "pair": [
+              "ego",
+              "oncoming-van"
+            ]
+          }
+        }
+      ],
+      "tags": [
+        "negative-control"
+      ],
+      "summary": {
+        "minTTC": 3.024179221811583,
+        "minTTCt": 4.18,
+        "criticalityKind": "ttc",
+        "criticality": 3.024179221811583,
+        "criticalityT": 4.18,
+        "requiredDecelMax": 2.1098844950686955,
+        "collisions": 0,
+        "neverFired": 0,
+        "occlusionUnproven": 0
+      }
+    },
+    "trace": {
+      "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+      "traceDigest": "a70aabd1c6cd824250af5df06b249807e1cec7af742708f230c66381b8f03758",
+      "ticks": 1001,
+      "durationS": 20,
+      "collisions": 0,
+      "missedTriggers": []
+    },
+    "intentEvaluation": {
+      "version": 1,
+      "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+      "verdict": "accept",
+      "counts": {
+        "pass": 9,
+        "fail": 0,
+        "unchecked": 0,
+        "unsupported": 0
+      },
+      "criteria": [
+        {
+          "id": "required-event-order",
+          "kind": "event_order",
+          "required": true,
+          "status": "pass",
+          "reason": "required event-order condition held",
+          "evidence": [
+            {
+              "source": "trace_event",
+              "summary": "ordered trigger evidence",
+              "values": {
+                "interactionIds": [
+                  "ego-enters-cautiously",
+                  "signal-behind-turns-red",
+                  "ego-ignores-stale-red",
+                  "worker-emerges",
+                  "ego-stops-for-worker",
+                  "worker-enters-shared-lane",
+                  "van-clears",
+                  "worker-clears",
+                  "ego-resumes-after-both-clear"
+                ],
+                "matchedTimesS": [
+                  0,
+                  4,
+                  4.02,
+                  10,
+                  10.2,
+                  12.5,
+                  16.4,
+                  16.8,
+                  17.5
+                ],
+                "complete": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "chicane-speed-cap",
+          "kind": "speed_band",
+          "required": true,
+          "status": "pass",
+          "reason": "speed remained inside the authored band",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "speed extrema in window",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  2.5,
+                  10.2
+                ],
+                "minSpeedMps": 2.935486,
+                "maxSpeedMps": 3.888889,
+                "requiredMinMps": null,
+                "requiredMaxMps": 4.166667
+              }
+            }
+          ]
+        },
+        {
+          "id": "worker-stop-hold-resume",
+          "kind": "stop_hold_resume",
+          "required": true,
+          "status": "pass",
+          "reason": "stop/hold/resume behavior held",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stop interval and resume evidence",
+              "values": {
+                "actorId": "ego",
+                "longestStop": [
+                  12.16,
+                  17.54
+                ],
+                "longestStopSeconds": 5.38,
+                "requiredHoldSeconds": 5,
+                "resumedAtS": 17.74,
+                "resumeByS": 18.5
+              }
+            }
+          ]
+        },
+        {
+          "id": "worker-clearance",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "worker"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 5.622016,
+                "atS": 12.18,
+                "requiredMinM": 2,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "van-passing-envelope",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "minimum centre distance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "oncoming-van"
+                ],
+                "measure": "centre_distance",
+                "minDistanceM": 6.560332,
+                "atS": 7.6,
+                "requiredMinM": 4,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "worker-occlusion",
+          "kind": "occlusion",
+          "required": true,
+          "status": "pass",
+          "reason": "occlusion outcome held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "declared occlusion result",
+              "values": {
+                "observer": "ego",
+                "target": "worker",
+                "expectedStatus": "revealed_before_conflict",
+                "observedStatuses": [
+                  "revealed_before_conflict"
+                ],
+                "firstBlockedT": 0.8200000000000001,
+                "losOpenT": 4.1
+              }
+            }
+          ]
+        },
+        {
+          "id": "near-signal-cycle",
+          "kind": "control_indication",
+          "required": true,
+          "status": "pass",
+          "reason": "required control indication condition held",
+          "evidence": [
+            {
+              "source": "signal_track",
+              "summary": "control indications in window",
+              "values": {
+                "signalId": "control:near-portal-signal",
+                "expected": [
+                  "green",
+                  "red"
+                ],
+                "observed": [
+                  "green",
+                  "red"
+                ],
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "far-signal-cycle",
+          "kind": "control_indication",
+          "required": true,
+          "status": "pass",
+          "reason": "required control indication condition held",
+          "evidence": [
+            {
+              "source": "signal_track",
+              "summary": "control indications in window",
+              "values": {
+                "signalId": "control:far-portal-signal",
+                "expected": [
+                  "red",
+                  "green"
+                ],
+                "observed": [
+                  "green",
+                  "red"
+                ],
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "collision-free",
+          "kind": "collision",
+          "required": true,
+          "status": "pass",
+          "reason": "collision budget held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "collision evidence",
+              "values": {
+                "pair": [],
+                "observedCount": 0,
+                "maxCount": 0,
+                "timesS": []
+              }
+            }
+          ]
+        }
+      ],
+      "behaviorSummary": {
+        "version": 1,
+        "trace": {
+          "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+          "mapId": "belmont-research-center",
+          "clipSeconds": 20,
+          "dt": 0.02,
+          "actorCount": 3
+        },
+        "actors": [
+          {
+            "actorId": "ego",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 7.154008,
+            "finalSpeedMps": 3.333333,
+            "distanceTravelledM": 52.886789,
+            "stationaryIntervals": [
+              [
+                12.16,
+                17.54
+              ]
+            ],
+            "lanes": [
+              "119:0:1",
+              "402:0:1"
+            ]
+          },
+          {
+            "actorId": "oncoming-van",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 3.211292,
+            "maxSpeedMps": 3.611111,
+            "finalSpeedMps": 3.611111,
+            "distanceTravelledM": 73.980109,
+            "stationaryIntervals": [],
+            "lanes": [
+              "119:0:-1",
+              "124:0:1",
+              "401:0:1"
+            ]
+          },
+          {
+            "actorId": "worker",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 1.444444,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 6.04782,
+            "stationaryIntervals": [
+              [
+                0,
+                12.56
+              ],
+              [
+                15.34,
+                20
+              ]
+            ],
+            "lanes": [
+              "402:0:1"
+            ]
+          }
+        ],
+        "events": [
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-enters-cautiously"
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "actorId": "oncoming-van",
+            "interactionId": "van-keeps-clear-of-work-zone"
+          },
+          {
+            "t": 3,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-keeps-right"
+          },
+          {
+            "t": 4,
+            "kind": "state_set",
+            "actorId": "ego",
+            "detail": "signal:control:near-portal-signal.phase=red"
+          },
+          {
+            "t": 4,
+            "kind": "state_set",
+            "actorId": "oncoming-van",
+            "detail": "rules.collisionAvoidance=true"
+          },
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "signal-behind-turns-red"
+          },
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "actorId": "oncoming-van",
+            "interactionId": "van-retains-exit"
+          },
+          {
+            "t": 4.02,
+            "kind": "state_set",
+            "actorId": "ego",
+            "detail": "rules.obeySignals=false"
+          },
+          {
+            "t": 4.02,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-ignores-stale-red"
+          },
+          {
+            "t": 10,
+            "kind": "trigger_fired",
+            "actorId": "worker",
+            "interactionId": "worker-emerges"
+          },
+          {
+            "t": 10.2,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 10.2,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-stops-for-worker"
+          },
+          {
+            "t": 12.5,
+            "kind": "trigger_fired",
+            "actorId": "worker",
+            "interactionId": "worker-enters-shared-lane"
+          },
+          {
+            "t": 16.4,
+            "kind": "state_set",
+            "actorId": "oncoming-van",
+            "detail": "lights.indicator=right"
+          },
+          {
+            "t": 16.4,
+            "kind": "trigger_fired",
+            "actorId": "oncoming-van",
+            "interactionId": "van-clears"
+          },
+          {
+            "t": 16.8,
+            "kind": "preemption",
+            "actorId": "worker"
+          },
+          {
+            "t": 16.8,
+            "kind": "trigger_fired",
+            "actorId": "worker",
+            "interactionId": "worker-clears"
+          },
+          {
+            "t": 17.5,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 17.5,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-resumes-after-both-clear"
+          }
+        ],
+        "metrics": {
+          "collisions": 0,
+          "minTTC": 3.024179221811583,
+          "minPathTTC": null,
+          "minPET": null,
+          "triggerNeverFired": [],
+          "declaredOcclusion": [
+            {
+              "observer": "ego",
+              "target": "worker",
+              "status": "revealed_before_conflict",
+              "firstBlockedT": 0.8200000000000001,
+              "losOpenT": 4.1
+            }
+          ]
+        },
+        "truncated": {
+          "actors": false,
+          "events": false,
+          "occlusions": false
+        }
+      }
+    }
+  },
+  "accepted": true,
+  "cases": [
+    {
+      "label": "off",
+      "profile": {
+        "version": 1,
+        "preset": "off",
+        "seed": "edge-01-off"
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "off",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-01-off",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 0
+        },
+        "profileHash": "3254c6c5625e19c99f556a6b425977e2009eafdc2f1137f7bcdb4526ea3bc01f",
+        "baseInputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+        "generatedInputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+        "actors": [],
+        "rejectedSpawnCount": 0,
+        "eligibleLaneKm": 0,
+        "screening": {
+          "count": 0,
+          "actorIds": [],
+          "reasons": []
+        },
+        "warnings": []
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 3.02 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 3.024179221811583,
+              "kind": "ttc",
+              "pair": [
+                "ego",
+                "oncoming-van"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 3.024179221811583,
+          "minTTCt": 4.18,
+          "criticalityKind": "ttc",
+          "criticality": 3.024179221811583,
+          "criticalityT": 4.18,
+          "requiredDecelMax": 2.1098844950686955,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 9,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "ego-enters-cautiously",
+                    "signal-behind-turns-red",
+                    "ego-ignores-stale-red",
+                    "worker-emerges",
+                    "ego-stops-for-worker",
+                    "worker-enters-shared-lane",
+                    "van-clears",
+                    "worker-clears",
+                    "ego-resumes-after-both-clear"
+                  ],
+                  "matchedTimesS": [
+                    0,
+                    4,
+                    4.02,
+                    10,
+                    10.2,
+                    12.5,
+                    16.4,
+                    16.8,
+                    17.5
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "chicane-speed-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    2.5,
+                    10.2
+                  ],
+                  "minSpeedMps": 2.935486,
+                  "maxSpeedMps": 3.888889,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 4.166667
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-stop-hold-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "ego",
+                  "longestStop": [
+                    12.16,
+                    17.54
+                  ],
+                  "longestStopSeconds": 5.38,
+                  "requiredHoldSeconds": 5,
+                  "resumedAtS": 17.74,
+                  "resumeByS": 18.5
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "worker"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.622016,
+                  "atS": 12.18,
+                  "requiredMinM": 2,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "van-passing-envelope",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "minimum centre distance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "oncoming-van"
+                  ],
+                  "measure": "centre_distance",
+                  "minDistanceM": 6.560332,
+                  "atS": 7.6,
+                  "requiredMinM": 4,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "worker",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0.8200000000000001,
+                  "losOpenT": 4.1
+                }
+              }
+            ]
+          },
+          {
+            "id": "near-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:near-portal-signal",
+                  "expected": [
+                    "green",
+                    "red"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "far-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:far-portal-signal",
+                  "expected": [
+                    "red",
+                    "green"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+            "mapId": "belmont-research-center",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 3
+          },
+          "actors": [
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.154008,
+              "finalSpeedMps": 3.333333,
+              "distanceTravelledM": 52.886789,
+              "stationaryIntervals": [
+                [
+                  12.16,
+                  17.54
+                ]
+              ],
+              "lanes": [
+                "119:0:1",
+                "402:0:1"
+              ]
+            },
+            {
+              "actorId": "oncoming-van",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.211292,
+              "maxSpeedMps": 3.611111,
+              "finalSpeedMps": 3.611111,
+              "distanceTravelledM": 73.980109,
+              "stationaryIntervals": [],
+              "lanes": [
+                "119:0:-1",
+                "124:0:1",
+                "401:0:1"
+              ]
+            },
+            {
+              "actorId": "worker",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.444444,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 6.04782,
+              "stationaryIntervals": [
+                [
+                  0,
+                  12.56
+                ],
+                [
+                  15.34,
+                  20
+                ]
+              ],
+              "lanes": [
+                "402:0:1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-cautiously"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-keeps-clear-of-work-zone"
+            },
+            {
+              "t": 3,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-keeps-right"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:control:near-portal-signal.phase=red"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "rules.collisionAvoidance=true"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "signal-behind-turns-red"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-retains-exit"
+            },
+            {
+              "t": 4.02,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "rules.obeySignals=false"
+            },
+            {
+              "t": 4.02,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-ignores-stale-red"
+            },
+            {
+              "t": 10,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-emerges"
+            },
+            {
+              "t": 10.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 10.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-worker"
+            },
+            {
+              "t": 12.5,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-enters-shared-lane"
+            },
+            {
+              "t": 16.4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "lights.indicator=right"
+            },
+            {
+              "t": 16.4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-clears"
+            },
+            {
+              "t": 16.8,
+              "kind": "preemption",
+              "actorId": "worker"
+            },
+            {
+              "t": 16.8,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-clears"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-resumes-after-both-clear"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 3.024179221811583,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "worker",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0.8200000000000001,
+                "losOpenT": 4.1
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+        "traceDigest": "a70aabd1c6cd824250af5df06b249807e1cec7af742708f230c66381b8f03758",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    },
+    {
+      "label": "light",
+      "profile": {
+        "version": 1,
+        "preset": "light",
+        "seed": "edge-01-light",
+        "maxActors": 24
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "light",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-01-light",
+          "maxActors": 24,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 3
+        },
+        "profileHash": "6652d8a88c93e067e27df35f38a71f8c5b50ae501bd0fbc8a4bfd88d8ac96fea",
+        "baseInputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+        "generatedInputHash": "5e1900e097c56d99162defa2d86ed484695923a97d5cd5ec7354c8d80665f808",
+        "actors": [
+          {
+            "id": "ambient:v1:c82e3e6d0fb6c831:000",
+            "kind": "car",
+            "routeLaneRsls": [
+              "111:0:1",
+              "162:0:1",
+              "110:0:1",
+              "4321:0:1",
+              "58:0:1",
+              "513:0:1",
+              "35:0:1",
+              "1310:0:1",
+              "33:0:1",
+              "978:0:1",
+              "32:0:-1",
+              "498:0:-1",
+              "116:0:-1",
+              "157:0:-1",
+              "111:0:-1",
+              "1210:0:-1",
+              "112:0:-1",
+              "252:0:-1",
+              "113:0:-1",
+              "1186:0:-1",
+              "47:0:1",
+              "1183:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "490:0:-1"
+            ],
+            "seedKey": "c82e3e6d0fb6c831"
+          },
+          {
+            "id": "ambient:v1:f631ce167c90c8c7:001",
+            "kind": "car",
+            "routeLaneRsls": [
+              "62:0:-1",
+              "1228:0:-1",
+              "63:0:-1",
+              "793:0:-1",
+              "81:0:-1",
+              "142:0:-1",
+              "18:0:1",
+              "228:0:1",
+              "17:0:1",
+              "1160:0:1",
+              "92:0:-1",
+              "914:0:-1",
+              "67:0:-1",
+              "813:0:-1",
+              "68:0:-1",
+              "1063:0:-1"
+            ],
+            "seedKey": "f631ce167c90c8c7"
+          },
+          {
+            "id": "ambient:v1:b70e2eaf1cd1f3b0:002",
+            "kind": "van",
+            "routeLaneRsls": [
+              "88:0:1",
+              "965:0:1",
+              "79:0:1",
+              "843:0:1",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2",
+              "60:0:-2",
+              "286:0:-1",
+              "36:0:-1",
+              "1125:0:-1"
+            ],
+            "seedKey": "b70e2eaf1cd1f3b0"
+          },
+          {
+            "id": "ambient:v1:3ac9d13feee3ff88:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "40:0:-1",
+              "771:0:-1",
+              "6:0:-1",
+              "426:0:-1",
+              "21:0:1",
+              "1043:0:1",
+              "20:0:1",
+              "333:0:1",
+              "19:0:1",
+              "148:0:1",
+              "18:0:1",
+              "228:0:1",
+              "17:0:1",
+              "1163:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "976:0:-1",
+              "79:0:1",
+              "843:0:1"
+            ],
+            "seedKey": "3ac9d13feee3ff88"
+          },
+          {
+            "id": "ambient:v1:873d3bb5cba16012:004",
+            "kind": "van",
+            "routeLaneRsls": [
+              "0:0:1",
+              "302:0:1",
+              "26:0:-1",
+              "865:0:-1",
+              "27:0:-1",
+              "778:0:-1",
+              "9:0:-1",
+              "1025:0:-1",
+              "72:0:1",
+              "1283:0:1",
+              "71:0:1",
+              "503:0:1",
+              "70:0:1",
+              "4357:0:1",
+              "69:0:1",
+              "335:0:1",
+              "20:0:-1",
+              "1032:0:-1",
+              "10:0:-1",
+              "477:0:-1",
+              "76:0:-1",
+              "1308:0:-1",
+              "93:0:1"
+            ],
+            "seedKey": "873d3bb5cba16012"
+          },
+          {
+            "id": "ambient:v1:b41057f226502b5d:005",
+            "kind": "car",
+            "routeLaneRsls": [
+              "67:0:-1",
+              "805:0:-1",
+              "68:0:-3",
+              "1074:0:-1",
+              "118:0:2",
+              "1230:0:1",
+              "105:0:2",
+              "3149:0:1",
+              "127:0:2",
+              "368:0:1",
+              "22:0:1",
+              "435:0:1",
+              "21:0:1",
+              "1043:0:1",
+              "20:0:1",
+              "339:0:1",
+              "69:0:-1",
+              "4358:0:-1",
+              "70:0:-1",
+              "504:0:-1",
+              "71:0:-1",
+              "1285:0:-1",
+              "109:0:1"
+            ],
+            "seedKey": "b41057f226502b5d"
+          },
+          {
+            "id": "ambient:v1:483d393bd974efa6:006",
+            "kind": "car",
+            "routeLaneRsls": [
+              "72:0:-1",
+              "1026:0:-1",
+              "9:0:1",
+              "781:0:1",
+              "27:0:1",
+              "864:0:1",
+              "26:0:1",
+              "301:0:1",
+              "0:0:-1",
+              "306:0:-1",
+              "1:0:-1",
+              "319:0:-1",
+              "14:0:1",
+              "1197:0:1",
+              "13:0:1",
+              "1194:0:1",
+              "122:0:-1",
+              "292:0:-1",
+              "77:0:-1",
+              "466:0:-1"
+            ],
+            "seedKey": "483d393bd974efa6"
+          },
+          {
+            "id": "ambient:v1:835f20b46fe7bb27:007",
+            "kind": "car",
+            "routeLaneRsls": [
+              "116:0:1",
+              "497:0:1",
+              "32:0:1",
+              "979:0:1",
+              "33:0:-1",
+              "1311:0:-1",
+              "35:0:-1",
+              "510:0:-1",
+              "58:0:-1",
+              "4320:0:-1",
+              "110:0:-1",
+              "163:0:-1",
+              "111:0:-1",
+              "1210:0:-1",
+              "112:0:-1",
+              "252:0:-1",
+              "113:0:-1",
+              "1186:0:-1",
+              "47:0:1",
+              "1183:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "488:0:-1",
+              "45:0:-1",
+              "524:0:-1",
+              "30:0:-1",
+              "151:0:-1",
+              "85:0:-1"
+            ],
+            "seedKey": "835f20b46fe7bb27"
+          },
+          {
+            "id": "ambient:v1:96f52873329d8c95:008",
+            "kind": "car",
+            "routeLaneRsls": [
+              "18:0:-1",
+              "147:0:-1",
+              "19:0:-1",
+              "334:0:-1",
+              "20:0:-1",
+              "1044:0:-1",
+              "21:0:-1",
+              "436:0:-1",
+              "22:0:-1",
+              "376:0:-1",
+              "121:0:2",
+              "1531:0:1",
+              "105:0:-1",
+              "1242:0:-1",
+              "129:0:2",
+              "1062:0:1",
+              "12:0:2",
+              "883:0:1",
+              "11:0:2",
+              "1054:0:1",
+              "68:0:1"
+            ],
+            "seedKey": "96f52873329d8c95"
+          },
+          {
+            "id": "ambient:v1:0900997fdc152dce:010",
+            "kind": "van",
+            "routeLaneRsls": [
+              "36:0:-1",
+              "1125:0:-1",
+              "92:0:-1",
+              "917:0:-1",
+              "117:0:2",
+              "670:0:1",
+              "80:0:-2",
+              "205:0:-1",
+              "46:0:-2",
+              "1256:0:-1",
+              "28:0:-2",
+              "1082:0:-1"
+            ],
+            "seedKey": "0900997fdc152dce"
+          },
+          {
+            "id": "ambient:v1:447a836acac60ba7:012",
+            "kind": "car",
+            "routeLaneRsls": [
+              "85:0:1",
+              "150:0:1",
+              "30:0:1",
+              "526:0:1",
+              "45:0:1",
+              "487:0:1",
+              "44:0:1",
+              "970:0:1",
+              "79:0:1",
+              "843:0:1",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2"
+            ],
+            "seedKey": "447a836acac60ba7"
+          },
+          {
+            "id": "ambient:v1:43e2eaf58afefbcf:013",
+            "kind": "car",
+            "routeLaneRsls": [
+              "14:0:-1",
+              "318:0:-1",
+              "125:0:-1",
+              "451:0:-1",
+              "126:0:-1",
+              "468:0:-1",
+              "77:0:1",
+              "293:0:1",
+              "102:0:-1",
+              "454:0:-1",
+              "125:0:1",
+              "315:0:1",
+              "1:0:1",
+              "305:0:1",
+              "0:0:1",
+              "302:0:1",
+              "26:0:-1",
+              "865:0:-1",
+              "27:0:-1",
+              "778:0:-1",
+              "9:0:-1"
+            ],
+            "seedKey": "43e2eaf58afefbcf"
+          }
+        ],
+        "rejectedSpawnCount": 31,
+        "eligibleLaneKm": 4.767800377200569,
+        "screening": {
+          "count": 2,
+          "actorIds": [
+            "ambient:v1:4045af8dcd3a8b50:011",
+            "ambient:v1:591c167308b3c61e:009"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:4045af8dcd3a8b50:011",
+              "reason": "required_decel",
+              "requiredDecelMps2": 8,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "8.000 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:591c167308b3c61e:009",
+              "reason": "required_decel",
+              "requiredDecelMps2": 9.354582497201449,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "9.355 m/s² exceeds 7.848 m/s²"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 2 ambient actor(s) during full-clip safety screening (0 collision, 2 required-deceleration)."
+        ]
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 3.02 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 3.024179221811583,
+              "kind": "ttc",
+              "pair": [
+                "ego",
+                "oncoming-van"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 3.024179221811583,
+          "minTTCt": 4.18,
+          "criticalityKind": "ttc",
+          "criticality": 3.024179221811583,
+          "criticalityT": 4.18,
+          "requiredDecelMax": 3.629342488797824,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 9,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "ego-enters-cautiously",
+                    "signal-behind-turns-red",
+                    "ego-ignores-stale-red",
+                    "worker-emerges",
+                    "ego-stops-for-worker",
+                    "worker-enters-shared-lane",
+                    "van-clears",
+                    "worker-clears",
+                    "ego-resumes-after-both-clear"
+                  ],
+                  "matchedTimesS": [
+                    0,
+                    4,
+                    4.02,
+                    10,
+                    10.2,
+                    12.5,
+                    16.4,
+                    16.8,
+                    17.5
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "chicane-speed-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    2.5,
+                    10.2
+                  ],
+                  "minSpeedMps": 2.935486,
+                  "maxSpeedMps": 3.888889,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 4.166667
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-stop-hold-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "ego",
+                  "longestStop": [
+                    12.16,
+                    17.54
+                  ],
+                  "longestStopSeconds": 5.38,
+                  "requiredHoldSeconds": 5,
+                  "resumedAtS": 17.74,
+                  "resumeByS": 18.5
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "worker"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.622016,
+                  "atS": 12.18,
+                  "requiredMinM": 2,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "van-passing-envelope",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "minimum centre distance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "oncoming-van"
+                  ],
+                  "measure": "centre_distance",
+                  "minDistanceM": 6.560332,
+                  "atS": 7.6,
+                  "requiredMinM": 4,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "worker",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0.8200000000000001,
+                  "losOpenT": 4.1
+                }
+              }
+            ]
+          },
+          {
+            "id": "near-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:near-portal-signal",
+                  "expected": [
+                    "green",
+                    "red"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "far-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:far-portal-signal",
+                  "expected": [
+                    "red",
+                    "green"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "5e1900e097c56d99162defa2d86ed484695923a97d5cd5ec7354c8d80665f808",
+            "mapId": "belmont-research-center",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 15
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:0900997fdc152dce:010",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.21787,
+              "maxSpeedMps": 16.21787,
+              "finalSpeedMps": 16.21787,
+              "distanceTravelledM": 324.353287,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1125:0:-1",
+                "117:0:2",
+                "205:0:-1",
+                "36:0:-1",
+                "46:0:-2",
+                "670:0:1",
+                "80:0:-2",
+                "917:0:-1",
+                "92:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:3ac9d13feee3ff88:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 10.141111,
+              "maxSpeedMps": 15.660204,
+              "finalSpeedMps": 10.769113,
+              "distanceTravelledM": 299.56154,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1043:0:1",
+                "1163:0:1",
+                "148:0:1",
+                "17:0:1",
+                "18:0:1",
+                "19:0:1",
+                "20:0:1",
+                "21:0:1",
+                "228:0:1",
+                "333:0:1",
+                "426:0:-1",
+                "6:0:-1",
+                "771:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:43e2eaf58afefbcf:013",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.880575,
+              "maxSpeedMps": 17.880575,
+              "finalSpeedMps": 17.880575,
+              "distanceTravelledM": 357.589063,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "102:0:-1",
+                "125:0:-1",
+                "125:0:1",
+                "126:0:-1",
+                "1:0:1",
+                "26:0:-1",
+                "27:0:-1",
+                "293:0:1",
+                "302:0:1",
+                "305:0:1",
+                "315:0:1",
+                "318:0:-1",
+                "451:0:-1",
+                "454:0:-1",
+                "468:0:-1",
+                "77:0:1",
+                "865:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:447a836acac60ba7:012",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 12.170145,
+              "maxSpeedMps": 17.7027,
+              "finalSpeedMps": 17.7027,
+              "distanceTravelledM": 340.465167,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1123:0:1",
+                "150:0:1",
+                "30:0:1",
+                "44:0:1",
+                "45:0:1",
+                "487:0:1",
+                "526:0:1",
+                "5:0:-3",
+                "79:0:1",
+                "843:0:1",
+                "898:0:-1",
+                "92:0:1",
+                "970:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:483d393bd974efa6:006",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.538695,
+              "maxSpeedMps": 17.538695,
+              "finalSpeedMps": 17.538695,
+              "distanceTravelledM": 350.751359,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:-1",
+                "14:0:1",
+                "1:0:-1",
+                "26:0:1",
+                "27:0:1",
+                "301:0:1",
+                "306:0:-1",
+                "319:0:-1",
+                "781:0:1",
+                "864:0:1",
+                "9:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:835f20b46fe7bb27:007",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.172258,
+              "maxSpeedMps": 18.172258,
+              "finalSpeedMps": 18.172258,
+              "distanceTravelledM": 363.416631,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:-1",
+                "111:0:-1",
+                "112:0:-1",
+                "113:0:-1",
+                "1183:0:1",
+                "1186:0:-1",
+                "1210:0:-1",
+                "1311:0:-1",
+                "163:0:-1",
+                "252:0:-1",
+                "32:0:1",
+                "33:0:-1",
+                "35:0:-1",
+                "417:0:-1",
+                "42:0:-1",
+                "4320:0:-1",
+                "43:0:-1",
+                "44:0:-1",
+                "47:0:1",
+                "488:0:-1",
+                "497:0:1",
+                "510:0:-1",
+                "58:0:-1",
+                "974:0:-1",
+                "979:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:873d3bb5cba16012:004",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.552154,
+              "maxSpeedMps": 17.552154,
+              "finalSpeedMps": 17.552154,
+              "distanceTravelledM": 351.012178,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "1025:0:-1",
+                "1032:0:-1",
+                "1283:0:1",
+                "20:0:-1",
+                "26:0:-1",
+                "27:0:-1",
+                "302:0:1",
+                "335:0:1",
+                "4357:0:1",
+                "503:0:1",
+                "69:0:1",
+                "70:0:1",
+                "71:0:1",
+                "72:0:1",
+                "778:0:-1",
+                "865:0:-1",
+                "9:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:96f52873329d8c95:008",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 19.650281,
+              "maxSpeedMps": 19.650281,
+              "finalSpeedMps": 19.650281,
+              "distanceTravelledM": 392.978095,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1044:0:-1",
+                "105:0:-1",
+                "1062:0:1",
+                "11:0:2",
+                "121:0:2",
+                "1242:0:-1",
+                "129:0:2",
+                "12:0:2",
+                "147:0:-1",
+                "1531:0:1",
+                "18:0:-1",
+                "19:0:-1",
+                "20:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "334:0:-1",
+                "376:0:-1",
+                "436:0:-1",
+                "883:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b41057f226502b5d:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.65109,
+              "maxSpeedMps": 17.65109,
+              "finalSpeedMps": 17.65109,
+              "distanceTravelledM": 353.007535,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1043:0:1",
+                "105:0:2",
+                "1074:0:-1",
+                "118:0:2",
+                "1230:0:1",
+                "127:0:2",
+                "20:0:1",
+                "21:0:1",
+                "22:0:1",
+                "3149:0:1",
+                "339:0:1",
+                "368:0:1",
+                "4358:0:-1",
+                "435:0:1",
+                "68:0:-3",
+                "69:0:-1",
+                "805:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b70e2eaf1cd1f3b0:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.864105,
+              "maxSpeedMps": 17.864105,
+              "finalSpeedMps": 17.864105,
+              "distanceTravelledM": 357.25033,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1123:0:1",
+                "120:0:-2",
+                "261:0:1",
+                "286:0:-1",
+                "36:0:1",
+                "4323:0:-2",
+                "59:0:-2",
+                "5:0:-3",
+                "60:0:-2",
+                "79:0:1",
+                "843:0:1",
+                "898:0:-1",
+                "92:0:1",
+                "965:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:c82e3e6d0fb6c831:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 14.703064,
+              "maxSpeedMps": 15.869151,
+              "finalSpeedMps": 15.869151,
+              "distanceTravelledM": 316.225024,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:1",
+                "111:0:-1",
+                "112:0:-1",
+                "113:0:-1",
+                "116:0:-1",
+                "1183:0:1",
+                "1186:0:-1",
+                "1210:0:-1",
+                "1310:0:1",
+                "157:0:-1",
+                "252:0:-1",
+                "32:0:-1",
+                "33:0:1",
+                "35:0:1",
+                "4321:0:1",
+                "47:0:1",
+                "498:0:-1",
+                "513:0:1",
+                "58:0:1",
+                "978:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f631ce167c90c8c7:001",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.55998,
+              "maxSpeedMps": 17.843696,
+              "finalSpeedMps": 17.843696,
+              "distanceTravelledM": 355.833219,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1160:0:1",
+                "1228:0:-1",
+                "142:0:-1",
+                "17:0:1",
+                "18:0:1",
+                "228:0:1",
+                "63:0:-1",
+                "67:0:-1",
+                "793:0:-1",
+                "813:0:-1",
+                "81:0:-1",
+                "914:0:-1",
+                "92:0:-1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.154008,
+              "finalSpeedMps": 3.333333,
+              "distanceTravelledM": 52.886789,
+              "stationaryIntervals": [
+                [
+                  12.16,
+                  17.54
+                ]
+              ],
+              "lanes": [
+                "119:0:1",
+                "402:0:1"
+              ]
+            },
+            {
+              "actorId": "oncoming-van",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.211292,
+              "maxSpeedMps": 3.611111,
+              "finalSpeedMps": 3.611111,
+              "distanceTravelledM": 73.980109,
+              "stationaryIntervals": [],
+              "lanes": [
+                "119:0:-1",
+                "124:0:1",
+                "401:0:1"
+              ]
+            },
+            {
+              "actorId": "worker",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.444444,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 6.04782,
+              "stationaryIntervals": [
+                [
+                  0,
+                  12.56
+                ],
+                [
+                  15.34,
+                  20
+                ]
+              ],
+              "lanes": [
+                "402:0:1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-cautiously"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-keeps-clear-of-work-zone"
+            },
+            {
+              "t": 3,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-keeps-right"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:control:near-portal-signal.phase=red"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "rules.collisionAvoidance=true"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "signal-behind-turns-red"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-retains-exit"
+            },
+            {
+              "t": 4.02,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "rules.obeySignals=false"
+            },
+            {
+              "t": 4.02,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-ignores-stale-red"
+            },
+            {
+              "t": 10,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-emerges"
+            },
+            {
+              "t": 10.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 10.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-worker"
+            },
+            {
+              "t": 12.5,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-enters-shared-lane"
+            },
+            {
+              "t": 16.4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "lights.indicator=right"
+            },
+            {
+              "t": 16.4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-clears"
+            },
+            {
+              "t": 16.8,
+              "kind": "preemption",
+              "actorId": "worker"
+            },
+            {
+              "t": 16.8,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-clears"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-resumes-after-both-clear"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 3.024179221811583,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "worker",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0.8200000000000001,
+                "losOpenT": 4.1
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "5e1900e097c56d99162defa2d86ed484695923a97d5cd5ec7354c8d80665f808",
+        "traceDigest": "b3f972fdc399615e7277e36b65292c952537ea874d006bd55dcb0c1d67b3d5db",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    },
+    {
+      "label": "moderate",
+      "profile": {
+        "version": 1,
+        "preset": "moderate",
+        "seed": "edge-01-moderate",
+        "maxActors": 40
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "moderate",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-01-moderate",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 8
+        },
+        "profileHash": "8692be492152aa9d5d3dbad4ba9db7ecdb3f2f4601e911a28a1879631bb00906",
+        "baseInputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+        "generatedInputHash": "797e0ab63d731adeeb103292d70c710a4bc5d5acb417074c4d1bea9108c8e7ee",
+        "actors": [
+          {
+            "id": "ambient:v1:9cb3d7845dc59765:001",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "37:0:1",
+              "784:0:1",
+              "27:0:1",
+              "864:0:1",
+              "26:0:1",
+              "301:0:1",
+              "0:0:-1",
+              "306:0:-1",
+              "1:0:-1",
+              "319:0:-1",
+              "14:0:1",
+              "1197:0:1",
+              "13:0:1",
+              "1194:0:1",
+              "122:0:-1",
+              "292:0:-1",
+              "77:0:-1",
+              "469:0:-1",
+              "126:0:1",
+              "450:0:1",
+              "125:0:1",
+              "317:0:1"
+            ],
+            "seedKey": "9cb3d7845dc59765"
+          },
+          {
+            "id": "ambient:v1:a06db06803ee180e:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "22:0:-1",
+              "376:0:-1",
+              "121:0:2",
+              "1531:0:1",
+              "105:0:-1",
+              "1242:0:-1",
+              "129:0:2",
+              "1062:0:1",
+              "12:0:2",
+              "883:0:1",
+              "11:0:2",
+              "1054:0:1",
+              "68:0:1",
+              "812:0:1",
+              "67:0:1",
+              "909:0:1",
+              "92:0:1"
+            ],
+            "seedKey": "a06db06803ee180e"
+          },
+          {
+            "id": "ambient:v1:dba34b8c7e15a23f:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "61:0:3",
+              "166:0:1",
+              "91:0:3",
+              "537:0:1",
+              "4:0:-2",
+              "836:0:-2",
+              "5:0:-2",
+              "887:0:-1",
+              "67:0:-1",
+              "805:0:-1",
+              "68:0:-3",
+              "1074:0:-1",
+              "118:0:2",
+              "1230:0:1",
+              "105:0:2",
+              "3124:0:1",
+              "127:0:2"
+            ],
+            "seedKey": "dba34b8c7e15a23f"
+          },
+          {
+            "id": "ambient:v1:465e0e365d39985e:004",
+            "kind": "car",
+            "routeLaneRsls": [
+              "87:0:1",
+              "308:0:1",
+              "0:0:1",
+              "302:0:1",
+              "26:0:-1",
+              "865:0:-1",
+              "27:0:-1",
+              "786:0:-1",
+              "37:0:-1",
+              "1018:0:-1",
+              "38:0:-1",
+              "38:1:-1",
+              "858:0:-1",
+              "40:0:-1",
+              "771:0:-1",
+              "6:0:-1",
+              "443:0:-1",
+              "22:0:-1",
+              "376:0:-1",
+              "121:0:2",
+              "1531:0:1"
+            ],
+            "seedKey": "465e0e365d39985e"
+          },
+          {
+            "id": "ambient:v1:30cc48d10a453228:006",
+            "kind": "car",
+            "routeLaneRsls": [
+              "129:0:2",
+              "1065:0:1",
+              "68:0:1",
+              "812:0:1",
+              "67:0:1",
+              "909:0:1",
+              "92:0:1",
+              "1180:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "490:0:-1",
+              "116:0:-1",
+              "160:0:-1",
+              "110:0:1",
+              "4321:0:1",
+              "58:0:1",
+              "513:0:1",
+              "35:0:1",
+              "1310:0:1",
+              "33:0:1",
+              "978:0:1"
+            ],
+            "seedKey": "30cc48d10a453228"
+          },
+          {
+            "id": "ambient:v1:a7554b6c69c299ba:007",
+            "kind": "car",
+            "routeLaneRsls": [
+              "21:0:-1",
+              "436:0:-1",
+              "22:0:-1",
+              "376:0:-1",
+              "121:0:2",
+              "1531:0:1",
+              "105:0:-1",
+              "1242:0:-1",
+              "129:0:2",
+              "1065:0:1",
+              "68:0:1",
+              "812:0:1",
+              "67:0:1",
+              "902:0:1",
+              "117:0:3",
+              "648:0:1",
+              "80:0:-3"
+            ],
+            "seedKey": "a7554b6c69c299ba"
+          },
+          {
+            "id": "ambient:v1:4fccd476a084882e:008",
+            "kind": "car",
+            "routeLaneRsls": [
+              "42:0:1",
+              "1166:0:1",
+              "17:0:-1",
+              "229:0:-1",
+              "18:0:-1",
+              "147:0:-1",
+              "19:0:-1",
+              "334:0:-1",
+              "20:0:-1",
+              "1044:0:-1",
+              "21:0:-1",
+              "421:0:-1",
+              "6:0:1",
+              "768:0:1",
+              "40:0:1",
+              "857:0:1",
+              "38:1:1",
+              "38:0:1",
+              "1019:0:1",
+              "37:0:1",
+              "791:0:1",
+              "9:0:-1",
+              "1025:0:-1"
+            ],
+            "seedKey": "4fccd476a084882e"
+          },
+          {
+            "id": "ambient:v1:1eb0d4e18fe20357:009",
+            "kind": "car",
+            "routeLaneRsls": [
+              "122:0:-1",
+              "292:0:-1",
+              "77:0:-1",
+              "469:0:-1",
+              "126:0:1",
+              "450:0:1",
+              "125:0:1",
+              "315:0:1",
+              "1:0:1",
+              "305:0:1",
+              "0:0:1",
+              "302:0:1",
+              "26:0:-1",
+              "865:0:-1",
+              "27:0:-1",
+              "786:0:-1",
+              "37:0:-1",
+              "1018:0:-1",
+              "38:0:-1",
+              "38:1:-1",
+              "858:0:-1",
+              "40:0:-1",
+              "771:0:-1",
+              "6:0:-1",
+              "426:0:-1",
+              "21:0:1",
+              "1043:0:1"
+            ],
+            "seedKey": "1eb0d4e18fe20357"
+          },
+          {
+            "id": "ambient:v1:0cac94a47d95d5ff:011",
+            "kind": "car",
+            "routeLaneRsls": [
+              "110:0:1",
+              "4321:0:1",
+              "58:0:1",
+              "521:0:1",
+              "30:0:-1",
+              "151:0:-1",
+              "85:0:-1",
+              "546:0:-1",
+              "4:0:-3",
+              "836:0:-3",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2",
+              "60:0:-2",
+              "286:0:-1",
+              "36:0:-1"
+            ],
+            "seedKey": "0cac94a47d95d5ff"
+          },
+          {
+            "id": "ambient:v1:f21700afcabd1358:012",
+            "kind": "car",
+            "routeLaneRsls": [
+              "45:0:1",
+              "487:0:1",
+              "44:0:1",
+              "973:0:1",
+              "43:0:1",
+              "416:0:1",
+              "42:0:1",
+              "1166:0:1",
+              "17:0:-1",
+              "229:0:-1",
+              "18:0:-1",
+              "147:0:-1",
+              "19:0:-1",
+              "334:0:-1",
+              "20:0:-1",
+              "1044:0:-1",
+              "21:0:-1",
+              "436:0:-1",
+              "22:0:-1",
+              "376:0:-1",
+              "121:0:2",
+              "1604:0:1"
+            ],
+            "seedKey": "f21700afcabd1358"
+          },
+          {
+            "id": "ambient:v1:311d977bb1bcffff:013",
+            "kind": "car",
+            "routeLaneRsls": [
+              "89:0:1",
+              "762:0:1",
+              "6:0:-1",
+              "443:0:-1",
+              "22:0:-1",
+              "374:0:-1",
+              "107:0:-1",
+              "314:0:-1",
+              "14:0:1",
+              "1201:0:1",
+              "87:0:1",
+              "308:0:1",
+              "0:0:1",
+              "302:0:1",
+              "26:0:-1",
+              "865:0:-1",
+              "27:0:-1"
+            ],
+            "seedKey": "311d977bb1bcffff"
+          },
+          {
+            "id": "ambient:v1:dc0a0ed1fd5ba838:015",
+            "kind": "car",
+            "routeLaneRsls": [
+              "70:0:1",
+              "4357:0:1",
+              "69:0:1",
+              "335:0:1",
+              "20:0:-1",
+              "1044:0:-1",
+              "21:0:-1",
+              "436:0:-1",
+              "22:0:-1",
+              "374:0:-1",
+              "107:0:-1",
+              "314:0:-1",
+              "14:0:1",
+              "1197:0:1",
+              "13:0:1",
+              "1194:0:1",
+              "122:0:-1",
+              "296:0:-1",
+              "102:0:-1",
+              "446:0:-1",
+              "126:0:-1",
+              "465:0:-1",
+              "95:0:-1",
+              "465:0:-1"
+            ],
+            "seedKey": "dc0a0ed1fd5ba838"
+          },
+          {
+            "id": "ambient:v1:275a8c99c9c660cb:016",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "35:0:1",
+              "1310:0:1",
+              "33:0:1",
+              "978:0:1",
+              "32:0:-1",
+              "498:0:-1",
+              "116:0:-1",
+              "160:0:-1",
+              "110:0:1",
+              "4321:0:1",
+              "58:0:1",
+              "513:0:1"
+            ],
+            "seedKey": "275a8c99c9c660cb"
+          },
+          {
+            "id": "ambient:v1:f7e629e3f810cb93:017",
+            "kind": "car",
+            "routeLaneRsls": [
+              "31:0:1",
+              "155:0:1",
+              "30:0:1",
+              "526:0:1",
+              "45:0:1",
+              "487:0:1",
+              "44:0:1",
+              "970:0:1",
+              "79:0:1",
+              "843:0:1",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2",
+              "60:0:-2",
+              "276:0:-1"
+            ],
+            "seedKey": "f7e629e3f810cb93"
+          },
+          {
+            "id": "ambient:v1:c40d2687856837b6:019",
+            "kind": "truck",
+            "routeLaneRsls": [
+              "6:0:1",
+              "768:0:1",
+              "40:0:1",
+              "857:0:1",
+              "38:1:1",
+              "38:0:1",
+              "1020:0:1",
+              "109:0:-1",
+              "1284:0:-1",
+              "71:0:1",
+              "503:0:1",
+              "70:0:1",
+              "4368:0:1",
+              "89:0:1",
+              "762:0:1",
+              "6:0:-1",
+              "426:0:-1",
+              "21:0:1",
+              "1043:0:1",
+              "20:0:1",
+              "333:0:1",
+              "19:0:1",
+              "148:0:1",
+              "18:0:1",
+              "228:0:1",
+              "17:0:1"
+            ],
+            "seedKey": "c40d2687856837b6"
+          },
+          {
+            "id": "ambient:v1:efedc66e33f887b4:021",
+            "kind": "truck",
+            "routeLaneRsls": [
+              "38:1:-1",
+              "851:0:-1",
+              "108:0:-1",
+              "506:0:-1",
+              "70:0:1",
+              "4357:0:1",
+              "69:0:1",
+              "327:0:1",
+              "19:0:1",
+              "148:0:1",
+              "18:0:1",
+              "228:0:1",
+              "17:0:1",
+              "1163:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "490:0:-1",
+              "116:0:-1",
+              "157:0:-1",
+              "111:0:-1",
+              "1210:0:-1",
+              "112:0:-1",
+              "252:0:-1"
+            ],
+            "seedKey": "efedc66e33f887b4"
+          },
+          {
+            "id": "ambient:v1:1a2eb773e547a792:022",
+            "kind": "car",
+            "routeLaneRsls": [
+              "95:0:1",
+              "467:0:1",
+              "77:0:1",
+              "291:0:1",
+              "122:0:1",
+              "1193:0:1",
+              "13:0:-1",
+              "1200:0:-1",
+              "87:0:1",
+              "309:0:1",
+              "1:0:-1",
+              "316:0:-1",
+              "125:0:-1",
+              "451:0:-1",
+              "126:0:-1",
+              "465:0:-1",
+              "95:0:-1",
+              "4269:0:-1",
+              "105:0:-1",
+              "1242:0:-1",
+              "129:0:2",
+              "1065:0:1",
+              "68:0:1",
+              "812:0:1",
+              "67:0:1",
+              "902:0:1",
+              "117:0:3"
+            ],
+            "seedKey": "1a2eb773e547a792"
+          },
+          {
+            "id": "ambient:v1:2e0b9755b1cd7f63:023",
+            "kind": "motorcycle",
+            "routeLaneRsls": [
+              "58:0:-1",
+              "4320:0:-1",
+              "110:0:-1",
+              "163:0:-1",
+              "111:0:-1",
+              "1205:0:-1",
+              "88:0:1",
+              "965:0:1",
+              "79:0:1",
+              "843:0:1",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "272:0:1",
+              "50:0:-1",
+              "50:1:-1",
+              "1111:0:-1",
+              "52:0:-1",
+              "363:0:-1"
+            ],
+            "seedKey": "2e0b9755b1cd7f63"
+          },
+          {
+            "id": "ambient:v1:42ce5c4dbc2687c0:024",
+            "kind": "car",
+            "routeLaneRsls": [
+              "67:0:1",
+              "909:0:1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2",
+              "60:0:-2",
+              "276:0:-1",
+              "50:0:-1",
+              "50:1:-1",
+              "1111:0:-1",
+              "52:0:-1",
+              "363:0:-1",
+              "53:0:-1",
+              "958:0:-1",
+              "54:0:-1",
+              "1304:0:-1",
+              "55:0:-1",
+              "25:0:-1"
+            ],
+            "seedKey": "42ce5c4dbc2687c0"
+          },
+          {
+            "id": "ambient:v1:08caca387c60b371:026",
+            "kind": "van",
+            "routeLaneRsls": [
+              "76:0:1",
+              "476:0:1",
+              "75:0:1",
+              "1245:0:1",
+              "119:0:1",
+              "402:0:1",
+              "124:0:-1",
+              "1315:0:-1",
+              "34:0:1",
+              "829:0:1",
+              "68:0:-3",
+              "1074:0:-1",
+              "118:0:2",
+              "1230:0:1",
+              "105:0:2",
+              "3131:0:1",
+              "127:0:2",
+              "368:0:1"
+            ],
+            "seedKey": "08caca387c60b371"
+          },
+          {
+            "id": "ambient:v1:96b2136bfb80317a:028",
+            "kind": "car",
+            "routeLaneRsls": [
+              "18:0:-1",
+              "136:0:-1",
+              "81:0:1",
+              "801:0:1",
+              "90:0:1",
+              "460:0:1",
+              "96:0:-1",
+              "1225:0:-1",
+              "63:0:-1",
+              "793:0:-1",
+              "81:0:-1",
+              "142:0:-1",
+              "18:0:1",
+              "228:0:1",
+              "17:0:1",
+              "1163:0:1",
+              "42:0:-1",
+              "417:0:-1",
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "488:0:-1",
+              "45:0:-1",
+              "524:0:-1",
+              "30:0:-1"
+            ],
+            "seedKey": "96b2136bfb80317a"
+          },
+          {
+            "id": "ambient:v1:d36039ffcc3cff3a:029",
+            "kind": "car",
+            "routeLaneRsls": [
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1161:0:1",
+              "17:0:-1",
+              "229:0:-1",
+              "18:0:-1",
+              "136:0:-1",
+              "81:0:1",
+              "801:0:1",
+              "90:0:1",
+              "460:0:1",
+              "96:0:-1",
+              "1222:0:-1",
+              "62:0:1",
+              "1219:0:1",
+              "16:0:1",
+              "399:0:1"
+            ],
+            "seedKey": "d36039ffcc3cff3a"
+          },
+          {
+            "id": "ambient:v1:6315204243ba6417:030",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "117:0:3",
+              "648:0:1",
+              "80:0:-3",
+              "204:0:-1",
+              "46:0:-3",
+              "1255:0:-1",
+              "28:0:-3",
+              "1083:0:-1",
+              "94:0:-3",
+              "1257:0:-1",
+              "41:0:-3"
+            ],
+            "seedKey": "6315204243ba6417"
+          },
+          {
+            "id": "ambient:v1:fc32f13996303f73:031",
+            "kind": "van",
+            "routeLaneRsls": [
+              "75:0:1",
+              "1245:0:1",
+              "119:0:1",
+              "402:0:1",
+              "124:0:-1",
+              "1315:0:-1",
+              "34:0:1",
+              "816:0:1",
+              "67:0:1",
+              "909:0:1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1"
+            ],
+            "seedKey": "fc32f13996303f73"
+          },
+          {
+            "id": "ambient:v1:9a333b1f30f00659:032",
+            "kind": "car",
+            "routeLaneRsls": [
+              "91:0:4",
+              "601:0:1",
+              "85:0:1",
+              "150:0:1",
+              "30:0:1",
+              "526:0:1",
+              "45:0:1",
+              "493:0:1",
+              "116:0:-1",
+              "157:0:-1",
+              "111:0:-1",
+              "1205:0:-1",
+              "88:0:1",
+              "965:0:1",
+              "79:0:1",
+              "843:0:1",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1169:0:1",
+              "92:0:-1"
+            ],
+            "seedKey": "9a333b1f30f00659"
+          },
+          {
+            "id": "ambient:v1:325aae4da8de180e:033",
+            "kind": "bus",
+            "routeLaneRsls": [
+              "27:0:1",
+              "864:0:1",
+              "26:0:1",
+              "301:0:1",
+              "0:0:-1",
+              "306:0:-1",
+              "1:0:-1",
+              "319:0:-1",
+              "14:0:1",
+              "1197:0:1",
+              "13:0:1",
+              "1194:0:1",
+              "122:0:-1",
+              "292:0:-1",
+              "77:0:-1",
+              "466:0:-1",
+              "95:0:-1",
+              "466:0:-1"
+            ],
+            "seedKey": "325aae4da8de180e"
+          },
+          {
+            "id": "ambient:v1:cf54adce1dcb07b5:034",
+            "kind": "car",
+            "routeLaneRsls": [
+              "35:0:-1",
+              "510:0:-1",
+              "58:0:-1",
+              "4320:0:-1",
+              "110:0:-1",
+              "159:0:-1",
+              "116:0:1",
+              "489:0:1",
+              "44:0:1",
+              "973:0:1",
+              "43:0:1",
+              "416:0:1",
+              "42:0:1",
+              "1166:0:1",
+              "17:0:-1",
+              "229:0:-1",
+              "18:0:-1",
+              "136:0:-1",
+              "81:0:1",
+              "794:0:1",
+              "63:0:1",
+              "1227:0:1",
+              "62:0:1",
+              "1219:0:1"
+            ],
+            "seedKey": "cf54adce1dcb07b5"
+          },
+          {
+            "id": "ambient:v1:6b41e4db809c7157:035",
+            "kind": "car",
+            "routeLaneRsls": [
+              "43:0:-1",
+              "974:0:-1",
+              "44:0:-1",
+              "488:0:-1",
+              "45:0:-1",
+              "524:0:-1",
+              "30:0:-1",
+              "151:0:-1",
+              "85:0:-1",
+              "546:0:-1",
+              "4:0:-3",
+              "836:0:-3",
+              "5:0:-3",
+              "898:0:-1",
+              "92:0:1",
+              "1123:0:1",
+              "36:0:1",
+              "261:0:1",
+              "120:0:-2",
+              "59:0:-2",
+              "4323:0:-2",
+              "60:0:-2",
+              "286:0:-1"
+            ],
+            "seedKey": "6b41e4db809c7157"
+          },
+          {
+            "id": "ambient:v1:e6ca9a5ec6318139:037",
+            "kind": "car",
+            "routeLaneRsls": [
+              "3:0:-1",
+              "256:0:-1",
+              "112:0:1",
+              "1209:0:1",
+              "111:0:1",
+              "162:0:1",
+              "110:0:1",
+              "4321:0:1",
+              "58:0:1",
+              "528:0:1",
+              "45:0:1",
+              "495:0:1",
+              "32:0:1",
+              "979:0:1",
+              "33:0:-1",
+              "1311:0:-1",
+              "35:0:-1",
+              "510:0:-1",
+              "58:0:-1",
+              "4320:0:-1",
+              "110:0:-1",
+              "163:0:-1",
+              "111:0:-1",
+              "1210:0:-1",
+              "112:0:-1",
+              "252:0:-1",
+              "113:0:-1",
+              "1191:0:-1",
+              "48:0:-1"
+            ],
+            "seedKey": "e6ca9a5ec6318139"
+          }
+        ],
+        "rejectedSpawnCount": 56,
+        "eligibleLaneKm": 4.767800377200569,
+        "screening": {
+          "count": 9,
+          "actorIds": [
+            "ambient:v1:2ec6cffb95c9605e:020",
+            "ambient:v1:422d2adcaf110abe:000",
+            "ambient:v1:57d1fd47d901f835:036",
+            "ambient:v1:65c446d74f209408:014",
+            "ambient:v1:6dc6239a0e9ae7ee:010",
+            "ambient:v1:7f7cd1c7d58b5374:027",
+            "ambient:v1:888cef4c7075d16a:018",
+            "ambient:v1:96ecdd4a95bbe59c:005",
+            "ambient:v1:e89f9116ce055c90:025"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:2ec6cffb95c9605e:020",
+              "reason": "required_decel",
+              "requiredDecelMps2": 10.732979248365362,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "10.733 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:422d2adcaf110abe:000",
+              "reason": "collision",
+              "detail": "collision with prop:far-portable-signal"
+            },
+            {
+              "actorId": "ambient:v1:57d1fd47d901f835:036",
+              "reason": "required_decel",
+              "requiredDecelMps2": 10.113299850094243,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "10.113 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:65c446d74f209408:014",
+              "reason": "collision",
+              "detail": "collision with prop:far-portable-signal"
+            },
+            {
+              "actorId": "ambient:v1:6dc6239a0e9ae7ee:010",
+              "reason": "required_decel",
+              "requiredDecelMps2": 8.267724485499345,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "8.268 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:7f7cd1c7d58b5374:027",
+              "reason": "required_decel",
+              "requiredDecelMps2": 8.318504875814924,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "8.319 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:888cef4c7075d16a:018",
+              "reason": "collision",
+              "detail": "collision with worker"
+            },
+            {
+              "actorId": "ambient:v1:96ecdd4a95bbe59c:005",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:e89f9116ce055c90:025"
+            },
+            {
+              "actorId": "ambient:v1:e89f9116ce055c90:025",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:96ecdd4a95bbe59c:005"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 9 ambient actor(s) during full-clip safety screening (5 collision, 4 required-deceleration)."
+        ]
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 3.02 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 3.024179221811583,
+              "kind": "ttc",
+              "pair": [
+                "ego",
+                "oncoming-van"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 3.024179221811583,
+          "minTTCt": 4.18,
+          "criticalityKind": "ttc",
+          "criticality": 3.024179221811583,
+          "criticalityT": 4.18,
+          "requiredDecelMax": 7.194849747039139,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 9,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "ego-enters-cautiously",
+                    "signal-behind-turns-red",
+                    "ego-ignores-stale-red",
+                    "worker-emerges",
+                    "ego-stops-for-worker",
+                    "worker-enters-shared-lane",
+                    "van-clears",
+                    "worker-clears",
+                    "ego-resumes-after-both-clear"
+                  ],
+                  "matchedTimesS": [
+                    0,
+                    4,
+                    4.02,
+                    10,
+                    10.2,
+                    12.5,
+                    16.4,
+                    16.8,
+                    17.5
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "chicane-speed-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    2.5,
+                    10.2
+                  ],
+                  "minSpeedMps": 2.935486,
+                  "maxSpeedMps": 3.888889,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 4.166667
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-stop-hold-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "ego",
+                  "longestStop": [
+                    12.16,
+                    17.54
+                  ],
+                  "longestStopSeconds": 5.38,
+                  "requiredHoldSeconds": 5,
+                  "resumedAtS": 17.74,
+                  "resumeByS": 18.5
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "worker"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.622016,
+                  "atS": 12.18,
+                  "requiredMinM": 2,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "van-passing-envelope",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "minimum centre distance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "oncoming-van"
+                  ],
+                  "measure": "centre_distance",
+                  "minDistanceM": 6.560332,
+                  "atS": 7.6,
+                  "requiredMinM": 4,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "worker-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "worker",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0.8200000000000001,
+                  "losOpenT": 4.1
+                }
+              }
+            ]
+          },
+          {
+            "id": "near-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:near-portal-signal",
+                  "expected": [
+                    "green",
+                    "red"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "far-signal-cycle",
+            "kind": "control_indication",
+            "required": true,
+            "status": "pass",
+            "reason": "required control indication condition held",
+            "evidence": [
+              {
+                "source": "signal_track",
+                "summary": "control indications in window",
+                "values": {
+                  "signalId": "control:far-portal-signal",
+                  "expected": [
+                    "red",
+                    "green"
+                  ],
+                  "observed": [
+                    "green",
+                    "red"
+                  ],
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "797e0ab63d731adeeb103292d70c710a4bc5d5acb417074c4d1bea9108c8e7ee",
+            "mapId": "belmont-research-center",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 32
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:08caca387c60b371:026",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.003588,
+              "maxSpeedMps": 18.918315,
+              "finalSpeedMps": 0.003588,
+              "distanceTravelledM": 106.355219,
+              "stationaryIntervals": [
+                [
+                  15.4,
+                  20
+                ]
+              ],
+              "lanes": [
+                "119:0:1",
+                "1245:0:1",
+                "476:0:1",
+                "75:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:0cac94a47d95d5ff:011",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 19.236522,
+              "maxSpeedMps": 19.236522,
+              "finalSpeedMps": 19.236522,
+              "distanceTravelledM": 384.719327,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1123:0:1",
+                "151:0:-1",
+                "261:0:1",
+                "30:0:-1",
+                "36:0:1",
+                "4:0:-3",
+                "521:0:1",
+                "546:0:-1",
+                "58:0:1",
+                "5:0:-3",
+                "836:0:-3",
+                "85:0:-1",
+                "898:0:-1",
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1a2eb773e547a792:022",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.23337,
+              "maxSpeedMps": 17.957921,
+              "finalSpeedMps": 17.957909,
+              "distanceTravelledM": 356.428308,
+              "stationaryIntervals": [],
+              "lanes": [
+                "105:0:-1",
+                "1065:0:1",
+                "1193:0:1",
+                "1200:0:-1",
+                "122:0:1",
+                "1242:0:-1",
+                "125:0:-1",
+                "126:0:-1",
+                "129:0:2",
+                "13:0:-1",
+                "1:0:-1",
+                "291:0:1",
+                "309:0:1",
+                "316:0:-1",
+                "4269:0:-1",
+                "451:0:-1",
+                "465:0:-1",
+                "467:0:1",
+                "68:0:1",
+                "77:0:1",
+                "87:0:1",
+                "95:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1eb0d4e18fe20357:009",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.946322,
+              "maxSpeedMps": 17.596322,
+              "finalSpeedMps": 17.136089,
+              "distanceTravelledM": 349.024111,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "1018:0:-1",
+                "125:0:1",
+                "126:0:1",
+                "1:0:1",
+                "26:0:-1",
+                "27:0:-1",
+                "292:0:-1",
+                "302:0:1",
+                "305:0:1",
+                "315:0:1",
+                "37:0:-1",
+                "450:0:1",
+                "469:0:-1",
+                "77:0:-1",
+                "786:0:-1",
+                "865:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:275a8c99c9c660cb:016",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 6.005462,
+              "maxSpeedMps": 6.005462,
+              "finalSpeedMps": 6.005462,
+              "distanceTravelledM": 120.103603,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1310:0:1",
+                "32:0:-1",
+                "33:0:1",
+                "35:0:1",
+                "498:0:-1",
+                "978:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:2e0b9755b1cd7f63:023",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 7.188855,
+              "maxSpeedMps": 16.594692,
+              "finalSpeedMps": 14.173239,
+              "distanceTravelledM": 280.666753,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:-1",
+                "111:0:-1",
+                "1123:0:1",
+                "1205:0:-1",
+                "163:0:-1",
+                "4320:0:-1",
+                "5:0:-3",
+                "79:0:1",
+                "843:0:1",
+                "88:0:1",
+                "898:0:-1",
+                "92:0:1",
+                "965:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:30cc48d10a453228:006",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.933209,
+              "maxSpeedMps": 18.946526,
+              "finalSpeedMps": 18.946525,
+              "distanceTravelledM": 373.773542,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1065:0:1",
+                "110:0:1",
+                "116:0:-1",
+                "1180:0:1",
+                "160:0:-1",
+                "35:0:1",
+                "417:0:-1",
+                "42:0:-1",
+                "4321:0:1",
+                "43:0:-1",
+                "44:0:-1",
+                "490:0:-1",
+                "513:0:1",
+                "58:0:1",
+                "67:0:1",
+                "68:0:1",
+                "812:0:1",
+                "909:0:1",
+                "92:0:1",
+                "974:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:311d977bb1bcffff:013",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 11.638322,
+              "maxSpeedMps": 17.692941,
+              "finalSpeedMps": 17.692941,
+              "distanceTravelledM": 324.026442,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "107:0:-1",
+                "1201:0:1",
+                "14:0:1",
+                "22:0:-1",
+                "302:0:1",
+                "308:0:1",
+                "314:0:-1",
+                "374:0:-1",
+                "443:0:-1",
+                "6:0:-1",
+                "762:0:1",
+                "87:0:1",
+                "89:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:325aae4da8de180e:033",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 11.881662,
+              "maxSpeedMps": 16.924565,
+              "finalSpeedMps": 11.881662,
+              "distanceTravelledM": 326.248255,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:-1",
+                "1194:0:1",
+                "1197:0:1",
+                "122:0:-1",
+                "13:0:1",
+                "14:0:1",
+                "1:0:-1",
+                "26:0:1",
+                "27:0:1",
+                "292:0:-1",
+                "301:0:1",
+                "306:0:-1",
+                "319:0:-1",
+                "864:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:42ce5c4dbc2687c0:024",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 12.977211,
+              "maxSpeedMps": 18.717211,
+              "finalSpeedMps": 18.717211,
+              "distanceTravelledM": 347.794222,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1111:0:-1",
+                "1123:0:1",
+                "120:0:-2",
+                "261:0:1",
+                "276:0:-1",
+                "363:0:-1",
+                "36:0:1",
+                "4323:0:-2",
+                "50:0:-1",
+                "50:1:-1",
+                "52:0:-1",
+                "53:0:-1",
+                "59:0:-2",
+                "60:0:-2",
+                "909:0:1",
+                "92:0:1",
+                "958:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:465e0e365d39985e:004",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.938637,
+              "maxSpeedMps": 19.875283,
+              "finalSpeedMps": 19.875274,
+              "distanceTravelledM": 390.620155,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "1018:0:-1",
+                "121:0:2",
+                "22:0:-1",
+                "26:0:-1",
+                "27:0:-1",
+                "302:0:1",
+                "308:0:1",
+                "376:0:-1",
+                "37:0:-1",
+                "38:0:-1",
+                "38:1:-1",
+                "40:0:-1",
+                "443:0:-1",
+                "6:0:-1",
+                "771:0:-1",
+                "786:0:-1",
+                "858:0:-1",
+                "865:0:-1",
+                "87:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:4fccd476a084882e:008",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.00509,
+              "maxSpeedMps": 17.378338,
+              "finalSpeedMps": 17.378337,
+              "distanceTravelledM": 319.579401,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1044:0:-1",
+                "1166:0:1",
+                "147:0:-1",
+                "17:0:-1",
+                "18:0:-1",
+                "19:0:-1",
+                "20:0:-1",
+                "21:0:-1",
+                "229:0:-1",
+                "334:0:-1",
+                "421:0:-1",
+                "6:0:1",
+                "768:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:6315204243ba6417:030",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.528059,
+              "maxSpeedMps": 5.528059,
+              "finalSpeedMps": 5.528059,
+              "distanceTravelledM": 110.561187,
+              "stationaryIntervals": [],
+              "lanes": [
+                "117:0:3",
+                "204:0:-1",
+                "648:0:1",
+                "80:0:-3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:6b41e4db809c7157:035",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.335608,
+              "maxSpeedMps": 19.069028,
+              "finalSpeedMps": 13.81336,
+              "distanceTravelledM": 283.894198,
+              "stationaryIntervals": [],
+              "lanes": [
+                "151:0:-1",
+                "30:0:-1",
+                "44:0:-1",
+                "45:0:-1",
+                "488:0:-1",
+                "4:0:-3",
+                "524:0:-1",
+                "546:0:-1",
+                "5:0:-3",
+                "836:0:-3",
+                "85:0:-1",
+                "898:0:-1",
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:96b2136bfb80317a:028",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.963649,
+              "maxSpeedMps": 17.843999,
+              "finalSpeedMps": 13.749982,
+              "distanceTravelledM": 320.035321,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1225:0:-1",
+                "136:0:-1",
+                "142:0:-1",
+                "17:0:1",
+                "18:0:1",
+                "228:0:1",
+                "460:0:1",
+                "63:0:-1",
+                "793:0:-1",
+                "801:0:1",
+                "81:0:-1",
+                "81:0:1",
+                "90:0:1",
+                "96:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:9a333b1f30f00659:032",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.915906,
+              "maxSpeedMps": 18.309342,
+              "finalSpeedMps": 9.915906,
+              "distanceTravelledM": 330.676019,
+              "stationaryIntervals": [],
+              "lanes": [
+                "111:0:-1",
+                "116:0:-1",
+                "1205:0:-1",
+                "150:0:1",
+                "157:0:-1",
+                "30:0:1",
+                "45:0:1",
+                "493:0:1",
+                "526:0:1",
+                "5:0:-3",
+                "601:0:1",
+                "79:0:1",
+                "843:0:1",
+                "85:0:1",
+                "88:0:1",
+                "91:0:4",
+                "965:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:9cb3d7845dc59765:001",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.676609,
+              "maxSpeedMps": 5.676609,
+              "finalSpeedMps": 5.676609,
+              "distanceTravelledM": 113.531255,
+              "stationaryIntervals": [],
+              "lanes": [
+                "26:0:1",
+                "27:0:1",
+                "784:0:1",
+                "864:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:a06db06803ee180e:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 14.636063,
+              "maxSpeedMps": 19.124573,
+              "finalSpeedMps": 16.856063,
+              "distanceTravelledM": 373.157367,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1054:0:1",
+                "105:0:-1",
+                "1062:0:1",
+                "11:0:2",
+                "121:0:2",
+                "1242:0:-1",
+                "129:0:2",
+                "12:0:2",
+                "1531:0:1",
+                "376:0:-1",
+                "67:0:1",
+                "68:0:1",
+                "812:0:1",
+                "883:0:1",
+                "909:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:a7554b6c69c299ba:007",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.934967,
+              "maxSpeedMps": 18.883205,
+              "finalSpeedMps": 18.883205,
+              "distanceTravelledM": 372.78502,
+              "stationaryIntervals": [],
+              "lanes": [
+                "105:0:-1",
+                "1065:0:1",
+                "117:0:3",
+                "121:0:2",
+                "1242:0:-1",
+                "129:0:2",
+                "1531:0:1",
+                "22:0:-1",
+                "376:0:-1",
+                "436:0:-1",
+                "67:0:1",
+                "68:0:1",
+                "812:0:1",
+                "902:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:c40d2687856837b6:019",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 14.849228,
+              "maxSpeedMps": 16.039228,
+              "finalSpeedMps": 16.039228,
+              "distanceTravelledM": 320.095788,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1020:0:1",
+                "1043:0:1",
+                "109:0:-1",
+                "1284:0:-1",
+                "19:0:1",
+                "20:0:1",
+                "21:0:1",
+                "333:0:1",
+                "38:0:1",
+                "38:1:1",
+                "40:0:1",
+                "426:0:-1",
+                "4368:0:1",
+                "503:0:1",
+                "6:0:-1",
+                "70:0:1",
+                "71:0:1",
+                "762:0:1",
+                "768:0:1",
+                "857:0:1",
+                "89:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:cf54adce1dcb07b5:034",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.745921,
+              "maxSpeedMps": 15.70222,
+              "finalSpeedMps": 15.70222,
+              "distanceTravelledM": 292.714329,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:-1",
+                "1166:0:1",
+                "116:0:1",
+                "159:0:-1",
+                "17:0:-1",
+                "35:0:-1",
+                "416:0:1",
+                "42:0:1",
+                "4320:0:-1",
+                "43:0:1",
+                "44:0:1",
+                "489:0:1",
+                "510:0:-1",
+                "58:0:-1",
+                "973:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:d36039ffcc3cff3a:029",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.946898,
+              "maxSpeedMps": 16.343687,
+              "finalSpeedMps": 16.343644,
+              "distanceTravelledM": 317.555212,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1161:0:1",
+                "136:0:-1",
+                "17:0:-1",
+                "18:0:-1",
+                "229:0:-1",
+                "801:0:1",
+                "81:0:1",
+                "898:0:-1",
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:dba34b8c7e15a23f:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.102992,
+              "maxSpeedMps": 18.610564,
+              "finalSpeedMps": 18.610564,
+              "distanceTravelledM": 370.188306,
+              "stationaryIntervals": [],
+              "lanes": [
+                "105:0:2",
+                "1074:0:-1",
+                "118:0:2",
+                "1230:0:1",
+                "166:0:1",
+                "3124:0:1",
+                "4:0:-2",
+                "537:0:1",
+                "5:0:-2",
+                "67:0:-1",
+                "68:0:-3",
+                "805:0:-1",
+                "836:0:-2",
+                "887:0:-1",
+                "91:0:3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:dc0a0ed1fd5ba838:015",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.229333,
+              "maxSpeedMps": 17.876494,
+              "finalSpeedMps": 17.876494,
+              "distanceTravelledM": 340.76091,
+              "stationaryIntervals": [],
+              "lanes": [
+                "102:0:-1",
+                "1044:0:-1",
+                "107:0:-1",
+                "1194:0:1",
+                "1197:0:1",
+                "122:0:-1",
+                "126:0:-1",
+                "13:0:1",
+                "14:0:1",
+                "20:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "296:0:-1",
+                "314:0:-1",
+                "335:0:1",
+                "374:0:-1",
+                "4357:0:1",
+                "436:0:-1",
+                "446:0:-1",
+                "465:0:-1",
+                "69:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:e6ca9a5ec6318139:037",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.013158,
+              "maxSpeedMps": 16.401145,
+              "finalSpeedMps": 16.401145,
+              "distanceTravelledM": 299.526481,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:-1",
+                "110:0:1",
+                "111:0:1",
+                "112:0:1",
+                "1209:0:1",
+                "1311:0:-1",
+                "162:0:1",
+                "32:0:1",
+                "33:0:-1",
+                "35:0:-1",
+                "4320:0:-1",
+                "4321:0:1",
+                "45:0:1",
+                "495:0:1",
+                "510:0:-1",
+                "528:0:1",
+                "58:0:-1",
+                "58:0:1",
+                "979:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:efedc66e33f887b4:021",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.829783,
+              "maxSpeedMps": 16.829783,
+              "finalSpeedMps": 16.829783,
+              "distanceTravelledM": 336.581993,
+              "stationaryIntervals": [],
+              "lanes": [
+                "108:0:-1",
+                "1163:0:1",
+                "148:0:1",
+                "17:0:1",
+                "18:0:1",
+                "19:0:1",
+                "228:0:1",
+                "327:0:1",
+                "4357:0:1",
+                "506:0:-1",
+                "69:0:1",
+                "70:0:1",
+                "851:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f21700afcabd1358:012",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.977643,
+              "maxSpeedMps": 15.977643,
+              "finalSpeedMps": 15.977643,
+              "distanceTravelledM": 319.551482,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1044:0:-1",
+                "1166:0:1",
+                "147:0:-1",
+                "17:0:-1",
+                "18:0:-1",
+                "19:0:-1",
+                "20:0:-1",
+                "229:0:-1",
+                "334:0:-1",
+                "416:0:1",
+                "42:0:1",
+                "43:0:1",
+                "44:0:1",
+                "973:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f7e629e3f810cb93:017",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.004967,
+              "maxSpeedMps": 17.047975,
+              "finalSpeedMps": 14.192281,
+              "distanceTravelledM": 237.070117,
+              "stationaryIntervals": [],
+              "lanes": [
+                "155:0:1",
+                "30:0:1",
+                "44:0:1",
+                "45:0:1",
+                "487:0:1",
+                "526:0:1",
+                "5:0:-3",
+                "79:0:1",
+                "843:0:1",
+                "898:0:-1",
+                "970:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:fc32f13996303f73:031",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 16.523795,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 59.665124,
+              "stationaryIntervals": [
+                [
+                  5,
+                  20
+                ]
+              ],
+              "lanes": [
+                "119:0:1",
+                "1245:0:1",
+                "75:0:1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.154008,
+              "finalSpeedMps": 3.333333,
+              "distanceTravelledM": 52.886789,
+              "stationaryIntervals": [
+                [
+                  12.16,
+                  17.54
+                ]
+              ],
+              "lanes": [
+                "119:0:1",
+                "402:0:1"
+              ]
+            },
+            {
+              "actorId": "oncoming-van",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.211292,
+              "maxSpeedMps": 3.611111,
+              "finalSpeedMps": 3.611111,
+              "distanceTravelledM": 73.980109,
+              "stationaryIntervals": [],
+              "lanes": [
+                "119:0:-1",
+                "124:0:1",
+                "401:0:1"
+              ]
+            },
+            {
+              "actorId": "worker",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.444444,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 6.04782,
+              "stationaryIntervals": [
+                [
+                  0,
+                  12.56
+                ],
+                [
+                  15.34,
+                  20
+                ]
+              ],
+              "lanes": [
+                "402:0:1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-cautiously"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-keeps-clear-of-work-zone"
+            },
+            {
+              "t": 3,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-keeps-right"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:control:near-portal-signal.phase=red"
+            },
+            {
+              "t": 4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "rules.collisionAvoidance=true"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "signal-behind-turns-red"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-retains-exit"
+            },
+            {
+              "t": 4.02,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "rules.obeySignals=false"
+            },
+            {
+              "t": 4.02,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-ignores-stale-red"
+            },
+            {
+              "t": 10,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-emerges"
+            },
+            {
+              "t": 10.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 10.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-worker"
+            },
+            {
+              "t": 12.5,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-enters-shared-lane"
+            },
+            {
+              "t": 16.4,
+              "kind": "state_set",
+              "actorId": "oncoming-van",
+              "detail": "lights.indicator=right"
+            },
+            {
+              "t": 16.4,
+              "kind": "trigger_fired",
+              "actorId": "oncoming-van",
+              "interactionId": "van-clears"
+            },
+            {
+              "t": 16.8,
+              "kind": "preemption",
+              "actorId": "worker"
+            },
+            {
+              "t": 16.8,
+              "kind": "trigger_fired",
+              "actorId": "worker",
+              "interactionId": "worker-clears"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-resumes-after-both-clear"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 3.024179221811583,
+            "minPathTTC": 5.641286663016752,
+            "minPET": 0,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "worker",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0.8200000000000001,
+                "losOpenT": 4.1
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "797e0ab63d731adeeb103292d70c710a4bc5d5acb417074c4d1bea9108c8e7ee",
+        "traceDigest": "25d70e77b9448b8a8d52a5eb7832e75bc92d188fa8d7ba74ff7379adbd54e594",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    }
+  ]
+}

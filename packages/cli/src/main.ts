@@ -26,6 +26,7 @@ import { emit, emitError } from './output.js';
 import { availableMaps, resolveMapSelection } from './maps.js';
 import { batch } from './commands/batch.js';
 import { catalogCreate, catalogVerify } from './commands/catalog.js';
+import { catalogBatch } from './commands/catalog-batch.js';
 import { evaluate, type EvaluateFilterMode } from './commands/evaluate.js';
 import { evidenceVerify } from './commands/evidence.js';
 import { exportScenario } from './commands/export.js';
@@ -50,9 +51,10 @@ const COMMANDS = [
   { name: 'validate', summary: 'tier-1, or tier-2 (one engine pass + invariant residuals)' },
   { name: 'evaluate', summary: 'reject filters over a trace' },
   { name: 'evidence verify', summary: 'prove one instance/trace pair shares the same input hash' },
-  { name: 'export', summary: 'concrete instance → ASAM OpenSCENARIO XML 1.4.0 or DSL 2.2.0' },
+  { name: 'export', summary: 'concrete instance → native XML 1.4, explicit XML 1.3 esmini compatibility, or DSL 2.2' },
   { name: 'catalog create', summary: 'reserve exactly 100 deterministic scenario identities per supported map' },
   { name: 'catalog verify', summary: 'reject catalog identity, cardinality, provenance, or evidence gaps' },
+  { name: 'catalog batch', summary: 'resumable catalog materialization + simulation with an attempt ledger' },
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
   { name: 'schemas', summary: 'the published JSON Schemas — the LLM emission contract' },
 ] as const;
@@ -274,13 +276,15 @@ async function dispatch(argv: readonly string[]): Promise<number> {
     case 'evaluate': {
       const args = parseArgs(argv.slice(1), {
         booleans: [...GLOBAL_BOOLEANS, 'reject-collisions'],
-        values: ['filter', 'trivial-ttc'],
+        values: ['filter', 'trivial-ttc', 'rubric', 'blind-review-out'],
       });
       return evaluate({
         file: positional(args, 0, 'trace'),
         filter: filterMode(args),
         trivialTtcS: optionalNumber(args, 'trivial-ttc'),
         rejectCollisions: boolFlag(args, 'reject-collisions'),
+        rubric: optionalString(args, 'rubric'),
+        blindReviewOut: optionalString(args, 'blind-review-out'),
         pretty: boolFlag(args, 'pretty'),
       });
     }
@@ -291,10 +295,10 @@ async function dispatch(argv: readonly string[]): Promise<number> {
         values: ['format', 'out', 'road-file', 'author', 'description', 'route-sample-m'],
       });
       const format = requireString(args, 'format');
-      if (format !== 'xosc-1.4' && format !== 'osc-2.2') {
-        throw new CliError('bad_value', '--format must be xosc-1.4 | osc-2.2', {
+      if (format !== 'xosc-1.4' && format !== 'xosc-1.3-esmini' && format !== 'osc-2.2') {
+        throw new CliError('bad_value', '--format must be xosc-1.4 | xosc-1.3-esmini | osc-2.2', {
           path: '--format',
-          detail: { known: ['xosc-1.4', 'osc-2.2'] },
+          detail: { known: ['xosc-1.4', 'xosc-1.3-esmini', 'osc-2.2'] },
         });
       }
       return exportScenario({
@@ -348,8 +352,29 @@ async function dispatch(argv: readonly string[]): Promise<number> {
           pretty: boolFlag(args, 'pretty'),
         });
       }
+      if (sub === 'batch') {
+        const args = parseArgs(argv.slice(2), {
+          booleans: [...GLOBAL_BOOLEANS, 'force', 'allow-collisions'],
+          values: ['ledger', 'slots', 'map', 'maps', 'mechanisms', 'attempts', 'concurrency', 'filter', 'trivial-ttc'],
+        });
+        const map = optionalString(args, 'map');
+        return catalogBatch({
+          file: positional(args, 0, 'catalog.json'),
+          ledger: optionalString(args, 'ledger'),
+          slotIds: listFlag(args, 'slots'),
+          mapIds: map ? [map] : listFlag(args, 'maps'),
+          mechanismIds: listFlag(args, 'mechanisms'),
+          maxAttempts: optionalInt(args, 'attempts') ?? 3,
+          concurrency: optionalInt(args, 'concurrency'),
+          force: boolFlag(args, 'force'),
+          filter: filterMode(args),
+          trivialTtcS: optionalNumber(args, 'trivial-ttc'),
+          collisionPolicy: boolFlag(args, 'allow-collisions') ? 'allow' : 'reject',
+          pretty: boolFlag(args, 'pretty'),
+        });
+      }
       throw new CliError('unknown_command', `uniscenarios catalog ${sub ?? ''}`.trim(), {
-        detail: { known: ['create', 'verify'] },
+        detail: { known: ['create', 'verify', 'batch'] },
       });
     }
 

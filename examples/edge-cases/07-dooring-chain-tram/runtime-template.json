@@ -1,0 +1,418 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Dooring Chain Reaction Beside Tram Tracks",
+    "description": "A door opens into a parking-adjacent bicycle space, forcing the lead cyclist toward ego while an occupied tram swept path prevents a left escape and a second cyclist closes from behind.",
+    "createdAt": "2026-08-02T06:30:00.000Z",
+    "modifiedAt": "2026-08-02T06:30:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "edge.dooring-chain-tram",
+    "tags": [
+      "edge-case",
+      "dooring",
+      "bicycle",
+      "tram",
+      "chain-reaction",
+      "rain-independent"
+    ],
+    "author": "codex/edge-campaign-07-08",
+    "negativeControl": false
+  },
+  "sourceMap": {
+    "mapId": "yale-street",
+    "mapName": "yale-street"
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "trafficSpeedKph",
+        "unit": "kph",
+        "tier": 1,
+        "type": "continuous",
+        "range": [
+          22,
+          27
+        ],
+        "default": 25,
+        "distribution": "uniform"
+      },
+      {
+        "id": "cyclistSpeedKph",
+        "unit": "kph",
+        "tier": 1,
+        "type": "continuous",
+        "range": [
+          20,
+          25
+        ],
+        "default": 23,
+        "distribution": "uniform"
+      },
+      {
+        "id": "tramSpeedKph",
+        "unit": "kph",
+        "tier": 1,
+        "type": "continuous",
+        "range": [
+          18,
+          26
+        ],
+        "default": 22,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "clear",
+    "timeOfDay": "afternoon"
+  },
+  "anchor": {
+    "id": "dooring-chain-tram",
+    "features": [],
+    "policy": {
+      "allowMirror": false,
+      "maxSitesPerMap": 10,
+      "diversity": "strict",
+      "minScore": 0.5
+    },
+    "pin": {
+      "mapId": "yale-street"
+    }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan",
+        "static": false
+      },
+      "label": "ego following the lead cyclist",
+      "initialSpeedKph": {
+        "kind": "ref",
+        "name": "param.trafficSpeedKph"
+      },
+      "essentiality": "required",
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 911.0559621531826,
+          "y": 0,
+          "z": -1590.1978595233984
+        },
+        "headingRad": 2.563658146269655
+      },
+      "laneRef": {
+        "roadId": "83",
+        "section": 0,
+        "laneId": -2,
+        "s": 40,
+        "t": 0,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "lead-cyclist",
+      "actor": {
+        "class": "bicycle",
+        "static": false
+      },
+      "label": "cyclist forced out by opening door",
+      "initialSpeedKph": {
+        "kind": "ref",
+        "name": "param.cyclistSpeedKph"
+      },
+      "essentiality": "required",
+      "extensions": {
+        "mustNotSubstituteClass": true,
+        "occupiesPaintedBikeSpace": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 894.8278722823138,
+          "y": 0,
+          "z": -1598.2869893727104
+        },
+        "headingRad": 2.5582010652995923
+      },
+      "laneRef": {
+        "roadId": "83",
+        "section": 0,
+        "laneId": -2,
+        "s": 58,
+        "t": 2.1469550589612405,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "parked-car",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.hatchback",
+        "static": true
+      },
+      "label": "parked car whose occupant opens the left door",
+      "initialSpeedKph": 0,
+      "essentiality": "required",
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 855.9245272082278,
+          "y": 0,
+          "z": -1622.8398247692267
+        },
+        "headingRad": 2.5601350526259896
+      },
+      "laneRef": {
+        "roadId": "757",
+        "section": 0,
+        "laneId": -1,
+        "s": 39.25359056236893,
+        "t": 3.080916959778046,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "tram",
+      "actor": {
+        "class": "bus",
+        "catalogId": "vehicle.tram",
+        "dims": {
+          "length": 30,
+          "width": 2.65,
+          "height": 3.5
+        },
+        "static": false
+      },
+      "label": "moving tram occupying the hard left escape corridor",
+      "initialSpeedKph": {
+        "kind": "ref",
+        "name": "param.tramSpeedKph"
+      },
+      "essentiality": "required",
+      "extensions": {
+        "semanticClass": "tram",
+        "railBound": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 942.0908209154951,
+          "y": 0,
+          "z": -1573.6708869697131
+        },
+        "headingRad": 2.560156680237876
+      },
+      "laneRef": {
+        "roadId": "83",
+        "section": 0,
+        "laneId": -3,
+        "s": 5,
+        "t": 0,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "trailing-cyclist",
+      "actor": {
+        "class": "bicycle",
+        "static": false
+      },
+      "label": "second cyclist closing behind ego",
+      "initialSpeedKph": 22,
+      "essentiality": "required",
+      "extensions": {
+        "mustNotSubstituteClass": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 925.0820352177637,
+          "y": 0,
+          "z": -1578.7455546546782
+        },
+        "headingRad": 2.565960571833852
+      },
+      "laneRef": {
+        "roadId": "83",
+        "section": 0,
+        "laneId": -2,
+        "s": 22,
+        "t": 1.950769158304888,
+        "headingOffsetRad": 0
+      }
+    }
+  ],
+  "props": [],
+  "trafficControls": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "interactions": [
+      {
+        "id": "door-opens",
+        "actor": "parked-car",
+        "trigger": {
+          "kind": "at",
+          "t": 5.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "doors.left",
+          "value": "opening"
+        }
+      },
+      {
+        "id": "cyclist-swerves",
+        "actor": "lead-cyclist",
+        "trigger": {
+          "kind": "after",
+          "of": "door-opens",
+          "event": "start",
+          "delayS": 0.35
+        },
+        "verb": "laneOffset",
+        "target": {
+          "tFrac": 0.2,
+          "reference": "lane_center"
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "cyclist-brakes",
+        "actor": "lead-cyclist",
+        "trigger": {
+          "kind": "after",
+          "of": "cyclist-swerves",
+          "event": "start",
+          "delayS": 0.15
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "valueKph": 4
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1.4
+        }
+      },
+      {
+        "id": "ego-brakes",
+        "actor": "ego",
+        "trigger": {
+          "kind": "after",
+          "of": "cyclist-brakes",
+          "event": "start",
+          "delayS": 0.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1.3
+        }
+      },
+      {
+        "id": "trailing-cyclist-stops",
+        "actor": "trailing-cyclist",
+        "trigger": {
+          "kind": "after",
+          "of": "ego-brakes",
+          "event": "start",
+          "delayS": 0.55
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1.8
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "pre-event-following-gap",
+      "essentiality": "required",
+      "window": [
+        0,
+        5
+      ],
+      "kind": "headway",
+      "of": "ego",
+      "to": "lead-cyclist",
+      "range": [
+        2,
+        4
+      ]
+    },
+    {
+      "id": "final-ego-gap",
+      "essentiality": "required",
+      "window": [
+        17,
+        20
+      ],
+      "kind": "gap",
+      "of": "ego",
+      "to": "lead-cyclist",
+      "unit": "distance",
+      "range": [
+        2,
+        null
+      ]
+    },
+    {
+      "id": "ego-braking-budget",
+      "essentiality": "required",
+      "kind": "decel_budget",
+      "of": "ego",
+      "maxMps2": 7
+    },
+    {
+      "id": "chain-order",
+      "essentiality": "required",
+      "kind": "event_order",
+      "events": [
+        "door-opens",
+        "cyclist-swerves",
+        "cyclist-brakes",
+        "ego-brakes",
+        "trailing-cyclist-stops"
+      ],
+      "strict": true
+    }
+  ],
+  "variants": [],
+  "metricSubject": "ego",
+  "extensions": {
+    "intentId": "edge-case-07-dooring-chain-tram",
+    "requiredPrimitive": "doors.left must drive a hinged collidable sweep",
+    "hardLateralConstraint": {
+      "role": "tram",
+      "side": "left",
+      "forbiddenFor": "ego"
+    },
+    "requiredSiteEvidence": {
+      "embeddedTramRail": true,
+      "tramSweptPathLeftOfGeneralLane": true,
+      "narrowNoSimultaneousPass": true
+    },
+    "evidenceRendition": "behavioral-surrogate",
+    "exactMatchCount": 0
+  }
+}

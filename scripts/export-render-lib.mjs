@@ -11,7 +11,7 @@ export const TRACE_CHANNELS = [
 ];
 
 export const REQUIRED_INCIDENT_PHASES = [
-  'pre-reveal',
+  'pre-event',
   'reveal',
   'conflict',
   'aftermath',
@@ -21,8 +21,16 @@ export const SCENARIO_EVIDENCE_SCHEMA = 'uniscenarios.scenario-visual-evidence.v
 
 const KIND_DEFAULT_MODELS = {
   vehicle: 'vehicle.sedan',
+  car: 'vehicle.sedan',
+  truck: 'vehicle.box_truck',
+  bus: 'vehicle.bus',
+  van: 'vehicle.van',
+  motorcycle: 'vehicle.motorcycle',
+  bicycle: 'vehicle.bicycle',
   pedestrian: 'pedestrian.adult_walking',
 };
+
+const SEMANTIC_RENDER_KINDS = new Set(['animal', 'scooter', 'static_object']);
 
 export function canonicalJson(value) {
   return writeCanonical(value);
@@ -87,11 +95,28 @@ function catalogModelFor(actor) {
     .map((tag) => tag.slice('catalog:'.length));
   if (explicit.length > 1) throw new Error(`actor ${actor.id} has multiple catalog model tags`);
   if (explicit.length === 1 && explicit[0]) {
-    return { catalogId: explicit[0], basis: 'input-tag' };
+    return {
+      catalogId: explicit[0],
+      basis: 'input-tag',
+      renderIdentity: { source: 'catalog', catalogId: explicit[0] },
+    };
+  }
+  if (SEMANTIC_RENDER_KINDS.has(actor.kind)) {
+    return {
+      // ActorRenderer requires a catalog id in its transport view, but
+      // renderIdentity ignores it for verified semantic-kind actors.
+      catalogId: 'vehicle.sedan',
+      basis: 'semantic-kind',
+      renderIdentity: { source: 'semantic', kind: actor.kind },
+    };
   }
   const catalogId = KIND_DEFAULT_MODELS[actor.kind];
   if (!catalogId) throw new Error(`actor ${actor.id} kind ${JSON.stringify(actor.kind)} has no renderer model`);
-  return { catalogId, basis: 'kind-default' };
+  return {
+    catalogId,
+    basis: 'kind-default',
+    renderIdentity: { source: 'catalog', catalogId },
+  };
 }
 
 function validateTrack(actorId, track, tickCount, issues) {
@@ -127,7 +152,7 @@ function requiredString(value, label, issues) {
 }
 
 /** Strictly join a concrete scenario instance to the one trace it produced. */
-export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, options = {}) {
+export function validateScenarioPair(instanceDoc, trace, _traceCanonicalBytes, options = {}) {
   const issues = [];
   const input = instanceDoc?.input;
   if (!input || typeof input !== 'object') throw new Error('evidence integrity failed: instance.input is missing');
@@ -143,6 +168,19 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
   }
   if (traceInputHash !== inputHash) {
     issues.push(`trace.header.inputHash ${traceInputHash} != recomputed ${inputHash}`);
+  }
+
+  const instanceCatalogSlot = instanceDoc.catalogSlot ?? null;
+  const traceCatalogSlot = trace.header.catalogSlot ?? null;
+  if ((instanceCatalogSlot === null) !== (traceCatalogSlot === null)) {
+    issues.push('catalogSlot must be present in both instance and trace or in neither');
+  } else if (instanceCatalogSlot !== null
+    && canonicalJson(instanceCatalogSlot) !== canonicalJson(traceCatalogSlot)) {
+    issues.push('instance and trace catalogSlot provenance differ');
+  }
+  if (options.requiredCatalogSlot !== undefined
+    && canonicalJson(instanceCatalogSlot) !== canonicalJson(options.requiredCatalogSlot)) {
+    issues.push('instance/trace catalogSlot differs from the required catalog slot');
   }
 
   const inputMapId = requiredString(input.mapId, 'instance.input.mapId', issues);
@@ -213,6 +251,28 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
     validateStaticActor(actor, track, issues);
   }
 
+  const props = Array.isArray(input.props) ? input.props : [];
+  const propIds = exactSortedIds(props.map((prop) => prop?.id), 'input prop ids', issues);
+  const overlappingIds = propIds.filter((id) => inputActorIds.includes(id));
+  if (overlappingIds.length > 0) {
+    issues.push(`actor and prop ids overlap: ${overlappingIds.join(',')}`);
+  }
+  const tracePropMetadata = trace.header.propMetadata ?? {};
+  const tracePropIds = Object.keys(tracePropMetadata).sort();
+  if (!sameIds(propIds, tracePropIds)) {
+    issues.push(`prop ids differ: input=${propIds.join(',')} trace-metadata=${tracePropIds.join(',')}`);
+  }
+  for (const prop of props) {
+    if (!prop || typeof prop !== 'object') continue;
+    const traced = tracePropMetadata[prop.id];
+    if (traced && canonicalJson(traced) !== canonicalJson(prop)) {
+      issues.push(`trace prop metadata differs from input for ${prop.id}`);
+    }
+    if (prop.attachment && !inputActorIds.includes(prop.attachment.actorId)) {
+      issues.push(`prop ${prop.id} attaches to unknown actor ${prop.attachment.actorId}`);
+    }
+  }
+
   const metricPair = trace.metrics?.revealToConflict?.pair ?? trace.metrics?.minTTC?.pair ?? [];
   if (!Array.isArray(metricPair) || metricPair.length !== 2 || metricPair.some((id) => !inputActorIds.includes(id))) {
     issues.push(`metric pair must name exactly two input actors; got ${metricPair.join?.(',') ?? 'invalid'}`);
@@ -228,6 +288,7 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
         static: actor.static === true,
         catalogId: model.catalogId,
         modelBasis: model.basis,
+        renderIdentity: model.renderIdentity,
         dims: actor.dims,
       });
     } catch (error) {
@@ -243,10 +304,58 @@ export function validateScenarioPair(instanceDoc, trace, traceCanonicalBytes, op
       matcherIndexDigest,
       engineGraphDigest: traceEngineGraphDigest,
     },
-    traceDigest: sha256Bytes(traceCanonicalBytes),
+    // This is the semantic trace digest. The exact compressed/on-disk bytes
+    // are committed separately as traceFileSha256, so JSON whitespace and
+    // gzip headers cannot create two identities for the same trace.
+    traceDigest: sha256Json(trace),
     actorIds: inputActorIds,
     actorModels: actorModels.sort((left, right) => left.id.localeCompare(right.id)),
+    props: props.map((prop) => structuredClone(prop)).sort((left, right) => left.id.localeCompare(right.id)),
     metricPair: [...metricPair],
+    catalogSlot: instanceCatalogSlot,
+  };
+}
+
+/** Join the evaluator result to the exact instance/trace/catalog reservation. */
+export function validateScenarioResult(instanceDoc, trace, result, traceCanonicalBytes, options = {}) {
+  const issues = [];
+  const expectedSlot = instanceDoc?.catalogSlot ?? null;
+  if (expectedSlot === null) issues.push('instance catalogSlot is missing');
+  if (canonicalJson(trace?.header?.catalogSlot ?? null) !== canonicalJson(expectedSlot)) {
+    issues.push('trace catalogSlot differs from instance');
+  }
+  if (canonicalJson(result?.catalogSlot ?? null) !== canonicalJson(expectedSlot)) {
+    issues.push('result catalogSlot differs from instance');
+  }
+  if (result?.instanceId !== expectedSlot?.identity) issues.push('result instanceId differs from catalog slot identity');
+  if (result?.status !== 'ok') issues.push(`result status is ${result?.status ?? 'missing'}, expected ok`);
+  if (result?.feasible !== true) issues.push('result is not feasible');
+  if (result?.verdict !== 'accept') issues.push(`result verdict is ${result?.verdict ?? 'missing'}, expected accept`);
+  if (result?.eligibility?.eligible !== true) issues.push('result eligibility.eligible is not true');
+  if (result?.eligibility?.collisionPolicy !== 'reject') {
+    issues.push(`result collisionPolicy is ${result?.eligibility?.collisionPolicy ?? 'missing'}, expected reject`);
+  }
+  if (!Array.isArray(result?.eligibility?.hardFailureCodes)
+    || result.eligibility.hardFailureCodes.length !== 0) {
+    issues.push('result hardFailureCodes must be an empty array');
+  }
+  if (result?.inputHash !== instanceDoc?.manifest?.inputHash) issues.push('result inputHash differs from instance');
+  const traceDigest = sha256Json(trace);
+  if (result?.traceDigest !== traceDigest) issues.push('result traceDigest differs from the semantic trace digest');
+  if (expectedSlot !== null) {
+    const instanceFileSha256 = options.instanceFileBytes ? sha256Bytes(options.instanceFileBytes) : null;
+    const traceFileSha256 = options.traceFileBytes ? sha256Bytes(options.traceFileBytes) : null;
+    if (result?.artifactHashes?.instanceSha256 !== instanceFileSha256 || instanceFileSha256 === null) {
+      issues.push('result artifactHashes.instanceSha256 differs from exact instance bytes');
+    }
+    if (result?.artifactHashes?.traceSha256 !== traceFileSha256 || traceFileSha256 === null) {
+      issues.push('result artifactHashes.traceSha256 differs from exact trace file bytes');
+    }
+  }
+  if (issues.length > 0) throw new Error(`result evidence integrity failed: ${issues.join('; ')}`);
+  return {
+    catalogSlot: expectedSlot,
+    resultDigest: sha256Json(result),
   };
 }
 
@@ -264,7 +373,7 @@ export function selectIncidentFrames(trace) {
   const last = times[times.length - 1];
   const clamp = (time) => Math.max(first, Math.min(last, time));
   const requested = [
-    { phase: 'pre-reveal', targetT: clamp(revealT - 0.2) },
+    { phase: 'pre-event', targetT: clamp(revealT - 0.2) },
     { phase: 'reveal', targetT: clamp(revealT) },
     { phase: 'conflict', targetT: clamp(conflictT) },
     { phase: 'aftermath', targetT: clamp(conflictT + 0.5) },
@@ -349,8 +458,110 @@ export function tracePose(trace, actorId, index) {
   };
 }
 
+const DOOR_NAMES = new Set(['left', 'right', 'rear']);
+const DOOR_STATES = new Set(['closed', 'opening', 'open', 'closing']);
+
+/** Sample export-facing discrete state in stable trace order at one recorded tick. */
+export function traceRenderState(trace, time) {
+  const doors = new Map();
+  const cues = new Map();
+  for (const event of trace.events ?? []) {
+    if (event?.kind !== 'state_set') continue;
+    if (typeof event.key === 'string' && event.key.startsWith('doors.')) {
+      const name = event.key.slice('doors.'.length);
+      if (!DOOR_NAMES.has(name) || !DOOR_STATES.has(event.value)) continue;
+      let actorDoors = doors.get(event.actorId);
+      if (!actorDoors) {
+        actorDoors = {};
+        doors.set(event.actorId, actorDoors);
+      }
+      if (actorDoors[name] === undefined) actorDoors[name] = 'closed';
+      if (event.t <= time) actorDoors[name] = event.value;
+      continue;
+    }
+    if (event.t > time) continue;
+    const current = cues.get(event.actorId) ?? { emergency: 'off', hornActive: false };
+    if (event.key === 'lights.emergency'
+      && ['off', 'flashing', 'flashing_siren'].includes(event.value)) {
+      cues.set(event.actorId, { ...current, emergency: event.value });
+    } else if (event.key === 'audio.horn' && typeof event.value === 'boolean') {
+      cues.set(event.actorId, { ...current, hornActive: event.value });
+    }
+  }
+  return { doors, cues };
+}
+
+/**
+ * Project the exact recorded tick into the ActorRenderer transport shape.
+ * This keeps headless evidence export aligned with interactive Studio playback,
+ * including semantic actors, attached/fixed props, reverse motion and doors.
+ */
+export function renderViewsAtTraceIndex(instanceDoc, trace, evidence, index) {
+  if (!Number.isInteger(index) || index < 0 || index >= trace.ticks.t.length) {
+    throw new Error(`trace render index ${index} is out of range`);
+  }
+  const time = trace.ticks.t[index];
+  const state = traceRenderState(trace, time);
+  const actors = evidence.actorModels.map((actor) => {
+    const pose = tracePose(trace, actor.id, index);
+    const cues = state.cues.get(actor.id);
+    return {
+      ...pose,
+      catalogId: actor.catalogId,
+      kind: actor.kind,
+      catalogIdAuthored: actor.modelBasis === 'input-tag',
+      dims: actor.dims,
+      static: actor.static,
+      reversing: trace.ticks.actors[actor.id]?.motionDirection?.[index] === -1,
+      ...(state.doors.has(actor.id) ? { doors: state.doors.get(actor.id) } : {}),
+      ...(cues ? { emergency: cues.emergency, hornActive: cues.hornActive } : {}),
+    };
+  });
+  const actorById = new Map(actors.map((actor) => [actor.id, actor]));
+  const props = evidence.props.flatMap((prop) => {
+    let x = prop.pose.x;
+    let z = prop.pose.z;
+    let headingRad = prop.pose.headingRad;
+    let heightM = 0;
+    if (prop.attachment) {
+      const carrier = actorById.get(prop.attachment.actorId);
+      if (!carrier?.present) return [];
+      const cos = Math.cos(carrier.headingRad);
+      const sin = Math.sin(carrier.headingRad);
+      x = carrier.x + cos * prop.attachment.longitudinalM - sin * prop.attachment.lateralM;
+      z = carrier.z - sin * prop.attachment.longitudinalM - cos * prop.attachment.lateralM;
+      headingRad = carrier.headingRad + prop.attachment.headingOffsetRad;
+      heightM = prop.attachment.heightM;
+    }
+    return [{
+      id: prop.id,
+      catalogId: prop.catalogId,
+      catalogIdAuthored: true,
+      dims: {
+        l: prop.dims.l * prop.scale,
+        w: prop.dims.w * prop.scale,
+        h: prop.dims.h * prop.scale,
+      },
+      x,
+      z,
+      headingRad,
+      heightM,
+      present: true,
+      static: true,
+    }];
+  });
+  return { time, actors, props };
+}
+
 /** Stable map camera that keeps both members of the incident pair in frame. */
-export function cameraForIncident(trace, pair, index, groundY = 0, framingActorIds = pair) {
+export function cameraForIncident(
+  trace,
+  pair,
+  index,
+  groundY = 0,
+  framingActorIds = pair,
+  framingPropPoses = [],
+) {
   const sampleT = trace.ticks.t[index];
   const conflictT = trace.metrics?.revealToConflict?.conflictT ?? sampleT;
   const conflictIndex = nearestIndex(trace.ticks.t, conflictT);
@@ -358,12 +569,17 @@ export function cameraForIncident(trace, pair, index, groundY = 0, framingActorI
   // present there. Freeze it for the tail instead of allowing a following
   // camera to drift through the bus, trees or buildings after despawn.
   const cameraIndex = sampleT > conflictT ? conflictIndex : index;
+  const conflictFrozen = sampleT > conflictT;
   const cameraT = trace.ticks.t[cameraIndex];
-  const allPoses = framingActorIds.map((id) => tracePose(trace, id, cameraIndex));
+  const allPoses = [
+    ...framingActorIds.map((id) => tracePose(trace, id, cameraIndex)),
+    ...framingPropPoses.map((pose) => ({ ...pose, present: pose.present !== false })),
+  ];
   const poses = allPoses.filter((pose) => pose.present);
-  const visibleAtSample = framingActorIds
-    .map((id) => tracePose(trace, id, index))
-    .filter((pose) => pose.present);
+  const visibleAtSample = [
+    ...framingActorIds.map((id) => tracePose(trace, id, index)),
+    ...framingPropPoses.map((pose) => ({ ...pose, present: pose.present !== false })),
+  ].filter((pose) => pose.present);
   if (poses.length === 0) throw new Error(`no framing actors are present at trace index ${index}`);
   const centerX = poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length;
   const centerZ = poses.reduce((sum, pose) => sum + pose.z, 0) / poses.length;
@@ -396,10 +612,11 @@ export function cameraForIncident(trace, pair, index, groundY = 0, framingActorI
   };
   const fovDeg = Math.max(24, Math.min(52, 52 - (radius - 8) * 1.1));
   return {
-    basis: cameraIndex === index ? 'ego-sightline-low-oblique' : 'conflict-frozen-low-oblique',
-    frozenAtT: cameraIndex === index ? null : cameraT,
+    basis: conflictFrozen ? 'conflict-frozen-low-oblique' : 'ego-sightline-low-oblique',
+    frozenAtT: conflictFrozen ? conflictT : null,
     pair: [...pair],
     framingActorIds: [...framingActorIds],
+    framingPropIds: framingPropPoses.map((pose) => pose.id),
     visibleFramingActorIds: visibleAtSample.map((pose) => pose.id),
     fovDeg,
     eye: [
@@ -439,9 +656,11 @@ export function cameraActorClearance(camera, poses, actorModels) {
 
 export function scenarioIdentity(instanceDoc) {
   const replay = instanceDoc.manifest.replayKey;
+  const slot = instanceDoc.catalogSlot ?? null;
   return {
-    scenarioId: instanceDoc.manifest.instanceId,
-    templateId: replay.templateId,
+    scenarioId: slot?.identity ?? instanceDoc.manifest.instanceId,
+    catalogSlot: slot,
+    templateId: slot?.templateId ?? replay.templateId,
     archetypeId: instanceDoc.manifest.archetype,
     siteId: replay.siteId,
     drawId: replay.drawIndex,
@@ -491,9 +710,9 @@ export function buildScenarioEvidenceGates({
   const byPhase = new Map(frameRecords.map((frame) => [frame.phase, frame]));
   const phaseTimesValid = Number.isFinite(revealT)
     && Number.isFinite(conflictT)
-    && byPhase.get('pre-reveal')?.t < revealT
-    && byPhase.get('reveal')?.t >= revealT
-    && Math.abs((byPhase.get('conflict')?.t ?? Infinity) - conflictT) <= 1e-9
+    && byPhase.get('pre-event')?.t < revealT
+    && byPhase.get('reveal')?.index === nearestIndex(trace.ticks.t, revealT)
+    && byPhase.get('conflict')?.index === nearestIndex(trace.ticks.t, conflictT)
     && byPhase.get('aftermath')?.t > conflictT;
   gates.push((phaseTimesValid ? pass : fail)('phase-times-bracket-reveal-and-conflict', {
     revealT,
@@ -512,6 +731,26 @@ export function buildScenarioEvidenceGates({
     frames: frameRecords.map((frame) => ({
       phase: frame.phase,
       actorIds: (frame.poses ?? []).map((pose) => pose.id).sort(),
+    })),
+  }));
+
+  const propPosesExact = frameRecords.every((frame) => {
+    const expectedPropIds = evidence.props.filter((prop) => (
+      !prop.attachment
+      || trace.ticks.actors[prop.attachment.actorId]?.present?.[frame.index] !== 0
+    )).map((prop) => prop.id).sort();
+    const actual = (frame.props ?? []).map((prop) => prop.id).sort();
+    return actual.length === expectedPropIds.length
+      && actual.every((id, index) => id === expectedPropIds[index]);
+  });
+  gates.push((propPosesExact ? pass : fail)('every-key-frame-carries-all-fixed-props', {
+    frames: frameRecords.map((frame) => ({
+      phase: frame.phase,
+      expectedPropIds: evidence.props.filter((prop) => (
+        !prop.attachment
+        || trace.ticks.actors[prop.attachment.actorId]?.present?.[frame.index] !== 0
+      )).map((prop) => prop.id).sort(),
+      propIds: (frame.props ?? []).map((prop) => prop.id).sort(),
     })),
   }));
 
@@ -649,15 +888,29 @@ export function buildScenarioManifest({
     mapId: evidence.mapId,
     inputHash: evidence.inputHash,
     traceDigest: evidence.traceDigest,
+    physics: trace.header.physics ?? null,
     topologyDomains,
     actors: {
       count: evidence.actorIds.length,
       ids: evidence.actorIds,
       models: evidence.actorModels.map(({ dims, ...model }) => ({
         ...model,
+        catalogId: model.renderIdentity.source === 'catalog' ? model.catalogId : null,
         simulationDims: dims,
       })),
       staticInvariant: evidence.actorModels.filter((actor) => actor.static).map((actor) => actor.id),
+    },
+    props: {
+      count: evidence.props.length,
+      ids: evidence.props.map((prop) => prop.id),
+      models: evidence.props.map((prop) => ({
+        id: prop.id,
+        catalogId: prop.catalogId,
+        dims: prop.dims,
+        scale: prop.scale,
+        attachedTo: prop.attachment?.actorId ?? null,
+        essentiality: prop.essentiality,
+      })),
     },
     metricPair: evidence.metricPair,
     metrics: {

@@ -61,6 +61,24 @@ export const TtcInvariantSchema = z.strictObject({
   mode: z.enum(['min', 'always']).default('min'),
 });
 
+/** Route-aware TTC at an overlapping future conflict-zone occupancy. */
+export const PathTtcInvariantSchema = z.strictObject({
+  ...invariantBase,
+  kind: z.literal('path_ttc'),
+  of: RoleRefSchema,
+  to: RoleRefSchema,
+  range: RangeSchema,
+});
+
+/** Predicted post-encroachment time at a future route intersection. */
+export const PetInvariantSchema = z.strictObject({
+  ...invariantBase,
+  kind: z.literal('pet'),
+  of: RoleRefSchema,
+  to: RoleRefSchema,
+  range: RangeSchema,
+});
+
 /** Arrival-time offset at a conflict point — the criticality of a crossing conflict. */
 export const ArrivalInvariantSchema = z.strictObject({
   ...invariantBase,
@@ -139,6 +157,8 @@ export const InvariantSchema = z.discriminatedUnion('kind', [
   HeadwayInvariantSchema,
   GapInvariantSchema,
   TtcInvariantSchema,
+  PathTtcInvariantSchema,
+  PetInvariantSchema,
   ArrivalInvariantSchema,
   ClosingSpeedInvariantSchema,
   SpeedRelLimitInvariantSchema,

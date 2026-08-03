@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "intentId": "edge-01-blind-chicane-emerging-worker-v1",
+  "title": "Blind Chicane and Emerging Worker acceptance rubric",
+  "originalIntent": "Ego negotiates an already-committed alternating-flow bottleneck cautiously, honors the portal behind changing to red without stopping inside, yields to an excavator-occluded worker, preserves the clearing van's exit, and resumes only after both hazards clear.",
+  "criteria": [
+    { "id": "required-event-order", "kind": "event_order", "required": true, "mode": "required", "interactionIds": ["ego-enters-cautiously", "signal-behind-turns-red", "ego-ignores-stale-red", "worker-emerges", "ego-stops-for-worker", "worker-enters-shared-lane", "van-clears", "worker-clears", "ego-resumes-after-both-clear"] },
+    { "id": "chicane-speed-cap", "kind": "speed_band", "required": true, "actorId": "ego", "window": [2.5, 10.2], "maxMps": 4.166667 },
+    { "id": "worker-stop-hold-resume", "kind": "stop_hold_resume", "required": true, "actorId": "ego", "window": [10, 20], "stopSpeedMps": 0.1, "minHoldSeconds": 5, "mustResume": true, "resumeMinSpeedMps": 0.5, "resumeByS": 18.5 },
+    { "id": "worker-clearance", "kind": "clearance", "required": true, "pair": ["ego", "worker"], "measure": "metric_gap", "minM": 2 },
+    { "id": "van-passing-envelope", "kind": "clearance", "required": true, "pair": ["ego", "oncoming-van"], "measure": "centre_distance", "minM": 4 },
+    { "id": "worker-occlusion", "kind": "occlusion", "required": true, "observer": "ego", "target": "worker", "occluderId": "excavator", "outcome": "blocked_then_revealed" },
+    { "id": "near-signal-cycle", "kind": "control_indication", "required": true, "signalId": "control:near-portal-signal", "window": [0, 20], "mode": "required", "indications": ["green", "red"] },
+    { "id": "far-signal-cycle", "kind": "control_indication", "required": true, "signalId": "control:far-portal-signal", "window": [0, 20], "mode": "required", "indications": ["red", "green"] },
+    { "id": "collision-free", "kind": "collision", "required": true, "maxCount": 0 }
+  ]
+}

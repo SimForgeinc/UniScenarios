@@ -1,0 +1,7 @@
+examples/edge-cases/08-runaway-shopping-cart/instance.json ↔ examples/edge-cases/08-runaway-shopping-cart/trace.json.gz: OK
+inputHash manifest=328c2e69e61e1deb41021c64f053298f5ce304112157b5f4804e8afe7663bff2 trace=328c2e69e61e1deb41021c64f053298f5ce304112157b5f4804e8afe7663bff2 recomputed=328c2e69e61e1deb41021c64f053298f5ce304112157b5f4804e8afe7663bff2
+mapId input=el-camino-road manifest=el-camino-road trace=el-camino-road
+matcherIndexDigest 986a9135415f3b045a7fb5d8f552bea3a1e7bdc9f35aba33e70092ee1dbd91d0
+engineGraphDigest manifest=00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a trace=00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a
+input actors 5: cart, ego, oncoming-glare, shopper, umbrella-pedestrian
+trace actors 5: cart, ego, oncoming-glare, shopper, umbrella-pedestrian

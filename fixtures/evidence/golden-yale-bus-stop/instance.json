@@ -7,13 +7,13 @@
     "replayKey": {
       "templateId": "bus-stop-emergence",
       "templateVersion": 2,
-      "templateDigest": "917517ff993d0c45",
+      "templateDigest": "7422602118553104",
       "mapId": "yale-street",
       "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
       "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
       "siteId": "fa9fa19457cf576f",
       "matcherVersion": "1.0.0",
-      "solverVersion": "0.1.0",
+      "solverVersion": "0.2.0",
       "paramSeed": "085387c9dc6981bfc5743a61ef6d64c4dcfcdb29e1f791dc764b8f5a4d804df9",
       "drawIndex": 8
     },
@@ -21,6 +21,7 @@
     "archetype": "C5.bus-stop-emergence",
     "negativeControl": false,
     "metricSubject": "ego",
+    "operationalVariant": null,
     "site": {
       "siteId": "fa9fa19457cf576f",
       "score": 0.7759999999999999,
@@ -50,6 +51,7 @@
     "actors": [
       {
         "id": "bus",
+        "actorKind": "bus",
         "roleKind": "lane_offset",
         "laneRsl": "87:0:-4",
         "spawnS": 91.13725225268686,
@@ -58,14 +60,16 @@
       },
       {
         "id": "ego",
+        "actorKind": "car",
         "roleKind": "lane_offset",
         "laneRsl": "133:0:1",
-        "spawnS": 11.604833061901594,
+        "spawnS": 21.05543740368735,
         "initialSpeedMps": 13.88888888888889,
         "bindingStatus": "bound"
       },
       {
         "id": "ped",
+        "actorKind": "pedestrian",
         "roleKind": "relative_to",
         "laneRsl": null,
         "spawnS": 0,
@@ -73,32 +77,33 @@
         "bindingStatus": "bound"
       }
     ],
+    "props": [],
     "arrival": [
       {
         "interactionId": "ped-reaches-the-lane",
         "actorId": "ped",
         "referenceActorId": "ego",
-        "spawnDeltaS": 3.8218286818617377,
-        "spawnS": 3.8218880850538013,
+        "spawnDeltaS": 0.11028216910844454,
+        "spawnS": 0.11034157230050809,
         "targetDeltaT": -1.2466376800555736,
-        "achievedDeltaT": -1.2465913753543028,
-        "achievedTtc": 1.2465913753543028,
-        "fireTime": 5.773156435483819,
-        "iterations": 15,
+        "achievedDeltaT": -1.2468254730097472,
+        "achievedTtc": 1.2468254730097472,
+        "fireTime": 5.752272363721967,
+        "iterations": 14,
         "converged": true
       }
     ],
-    "inputHash": "29309981338d6ada82186b3a7e21d2138775dd8cedd16e587efbca5f4da66531",
+    "inputHash": "e0538cb4b73547228248372bc6f2f606bbab8d3b97722b46789d41c229e70897",
     "feasible": true,
     "issues": [],
     "notes": [
       {
         "path": "roles.ego.route",
-        "reason": "lane chain extended upstream by 1 lane(s) to reach the site-evaluated spawn at frame s=11.9 m"
+        "reason": "lane chain extended upstream by 1 lane(s) to reach the site-evaluated spawn at frame s=21.0 m"
       },
       {
         "path": "choreography.interactions.ped-rounds-the-bus",
-        "reason": "route(polyline) at t=0 folded into ped's spawn route (21.9 m), so the arrival solver can place the actor along it"
+        "reason": "route(polyline) at t=0 folded into ped's spawn route (18.1 m), so the arrival solver can place the actor along it"
       }
     ]
   },
@@ -109,11 +114,22 @@
     "warmupSeconds": 1,
     "dt": 0.02,
     "seed": "085387c9dc6981bf",
+    "operationalConditions": {
+      "weather": "clear",
+      "timeOfDay": "day",
+      "traffic": "moderate",
+      "visibility": "unrestricted",
+      "effects": {
+        "visibilityRangeM": 10000,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 1
+      }
+    },
     "metricSubject": "ego",
     "actors": [
       {
         "id": "bus",
-        "kind": "vehicle",
+        "kind": "bus",
         "dims": {
           "l": 12,
           "w": 2.55,
@@ -136,6 +152,8 @@
           "rules": {
             "obeySignals": true,
             "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
             "collisionAvoidance": true,
             "aggression": 0.5,
             "speedFactor": 1
@@ -161,7 +179,7 @@
       },
       {
         "id": "ego",
-        "kind": "vehicle",
+        "kind": "car",
         "dims": {
           "l": 4.8,
           "w": 1.9,
@@ -170,13 +188,13 @@
         "initial": {
           "laneRef": {
             "rsl": "133:0:1",
-            "s": 12.86060473855827,
+            "s": 3.4100003967725137,
             "tFrac": 0
           },
           "pose": {
-            "x": 729.7573497893538,
-            "z": -1696.641817107016,
-            "headingRad": -0.6633864320171838
+            "x": 737.4180778329086,
+            "z": -1691.1134296447312,
+            "headingRad": -0.5767095579219337
           },
           "speedMps": 13.88888888888889
         },
@@ -184,6 +202,8 @@
           "rules": {
             "obeySignals": true,
             "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
             "collisionAvoidance": true,
             "aggression": 0.5,
             "speedFactor": 1
@@ -220,16 +240,18 @@
         },
         "initial": {
           "pose": {
-            "x": 810.9906836980787,
-            "z": -1634.807054665499,
-            "headingRad": -0.5826480600213676
+            "x": 817.7440444970471,
+            "z": -1630.3566434710292,
+            "headingRad": -0.5824672810386505
           },
           "speedMps": 2.269680283659707
         },
         "behavior": {
           "rules": {
             "obeySignals": true,
-            "yield": false,
+            "yield": true,
+            "yieldToVehicles": false,
+            "yieldToPedestrians": true,
             "collisionAvoidance": false,
             "aggression": 0.5,
             "speedFactor": 1
@@ -238,96 +260,84 @@
             "kind": "polyline",
             "points": [
               {
-                "x": 807.7993745899067,
-                "z": -1636.9099989611889
+                "x": 817.6518973699073,
+                "z": -1630.4173408312488
               },
               {
-                "x": 808.6301639260579,
-                "z": -1636.3625422165867
+                "x": 818.4477109780736,
+                "z": -1629.8931379966969
               },
               {
-                "x": 809.4609532622089,
-                "z": -1635.8150854719845
+                "x": 819.2438516511788,
+                "z": -1629.3694321552152
               },
               {
-                "x": 810.2917425983601,
-                "z": -1635.2676287273823
+                "x": 820.040113292338,
+                "z": -1628.8459101313103
               },
               {
-                "x": 811.1225319345111,
-                "z": -1634.7201719827804
+                "x": 820.8363749334973,
+                "z": -1628.3223881074055
               },
               {
-                "x": 811.9533212706623,
-                "z": -1634.1727152381782
+                "x": 821.6326365746564,
+                "z": -1627.7988660835008
               },
               {
-                "x": 812.7841106068133,
-                "z": -1633.625258493576
+                "x": 822.4288982158156,
+                "z": -1627.275344059596
               },
               {
-                "x": 813.6148917766557,
-                "z": -1633.0777893564539
+                "x": 823.2251598569748,
+                "z": -1626.751822035691
               },
               {
-                "x": 814.4456726926437,
-                "z": -1632.530319834103
+                "x": 824.0214214981339,
+                "z": -1626.2283000117861
               },
               {
-                "x": 815.2764536086318,
-                "z": -1631.9828503117524
+                "x": 824.8176831392932,
+                "z": -1625.7047779878812
               },
               {
-                "x": 816.1072345246197,
-                "z": -1631.4353807894017
+                "x": 825.5605818696915,
+                "z": -1626.153776009016
               },
               {
-                "x": 816.9380154406077,
-                "z": -1630.887911267051
+                "x": 826.2947834929637,
+                "z": -1626.7612757103159
               },
               {
-                "x": 817.7687963565958,
-                "z": -1630.3404417447002
+                "x": 827.0289851162358,
+                "z": -1627.3687754116158
               },
               {
-                "x": 818.570575691704,
-                "z": -1629.9712567588915
+                "x": 827.763186739508,
+                "z": -1627.9762751129158
               },
               {
-                "x": 819.185000217651,
-                "z": -1630.7538181367959
+                "x": 828.4973883627802,
+                "z": -1628.5837748142158
               },
               {
-                "x": 819.7994247435979,
-                "z": -1631.5363795147005
+                "x": 829.2315899860522,
+                "z": -1629.1912745155155
               },
               {
-                "x": 820.4138492695449,
-                "z": -1632.3189408926048
+                "x": 829.9657916093244,
+                "z": -1629.7987742168154
               },
               {
-                "x": 821.0282737954919,
-                "z": -1633.1015022705092
+                "x": 830.5502955750218,
+                "z": -1630.5401857481402
               },
               {
-                "x": 821.642698321439,
-                "z": -1633.8840636484135
+                "x": 831.0725631982011,
+                "z": -1631.3372707125407
               },
               {
-                "x": 822.2571228473859,
-                "z": -1634.666625026318
-              },
-              {
-                "x": 822.8284262815533,
-                "z": -1635.4800214708948
-              },
-              {
-                "x": 823.370292873873,
-                "z": -1636.3144676371635
-              },
-              {
-                "x": 823.9121594661926,
-                "z": -1637.1489138034324
+                "x": 831.5948308213805,
+                "z": -1632.1343556769414
               }
             ]
           },
@@ -344,11 +354,24 @@
     ],
     "interactions": [
       {
+        "id": "bus-curbside-doors-open",
+        "actorId": "bus",
+        "trigger": {
+          "kind": "at",
+          "t": -1
+        },
+        "verb": "set",
+        "target": {
+          "key": "doors.right",
+          "value": "open"
+        }
+      },
+      {
         "id": "ped-reaches-the-lane",
         "actorId": "ped",
         "trigger": {
           "kind": "at",
-          "t": 5.773156435483819
+          "t": 5.752272363721967
         },
         "verb": "speed",
         "target": {
@@ -363,6 +386,8 @@
       }
     ],
     "signalPrograms": [],
+    "roadControls": [],
+    "props": [],
     "occluders": [],
     "occlusionPairs": [
       {

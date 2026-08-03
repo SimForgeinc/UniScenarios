@@ -119,6 +119,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('violator', 'vehicle', 'Enter from the crossing arm without completing the required stop.')],
     eventSequence: ['Ego enters with priority.', 'Cross traffic rolls past its control point.', 'Paths overlap in the junction conflict zone.'],
     criticality: ['lateral time-to-collision', 'stop-line violation speed', 'junction occupancy'], sourceIds: vehicleSources,
+    implementationTemplateId: 'intersection.cross-traffic-stop-violation',
   },
   {
     id: 'intersection.red-light-late-entry', title: 'Late red-light entry against released traffic', domain: 'intersection',
@@ -127,6 +128,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('late-entry', 'vehicle', 'Continue into the junction after the permissive phase ends.')],
     eventSequence: ['Conflicting phase releases ego.', 'Late vehicle crosses its stop line.', 'Both movements occupy the conflict zone.'],
     criticality: ['signal phase relation', 'stop-line crossing time', 'lateral clearance'], sourceIds: vehicleSources,
+    implementationTemplateId: 'intersection.red-light-late-entry',
   },
   {
     id: 'intersection.right-turn-crosswalk', title: 'Right turn across an occupied crosswalk', domain: 'intersection',
@@ -135,6 +137,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('pedestrian', 'pedestrian', 'Cross at a steady walking pace with priority.')],
     eventSequence: ['Pedestrian enters the crosswalk.', 'Ego begins the right turn.', 'Ego path crosses the pedestrian trajectory.'],
     criticality: ['pedestrian lateral offset', 'turn speed', 'yield-point stopping margin'], sourceIds: vruSources,
+    implementationTemplateId: 'intersection.right-turn-crosswalk',
   },
   {
     id: 'intersection.left-turn-crosswalk', title: 'Left turn across a far-side pedestrian crossing', domain: 'intersection',
@@ -143,6 +146,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('pedestrian', 'pedestrian', 'Cross the receiving road while ego completes its turn.')],
     eventSequence: ['Ego waits for opposing traffic.', 'Pedestrian enters the far crosswalk.', 'Ego accelerates into the pedestrian path.'],
     criticality: ['attention-switch timing', 'turn acceleration', 'post-conflict stopping margin'], sourceIds: vruSources,
+    implementationTemplateId: 'intersection.left-turn-crosswalk',
   },
   {
     id: 'intersection.opposing-turn-encroachment', title: 'Opposing turn encroaches into ego lane', domain: 'intersection',
@@ -151,6 +155,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('encroaching-turner', 'vehicle', 'Take an apex that crosses the lane boundary.')],
     eventSequence: ['Both vehicles approach.', 'Other vehicle turns with excessive path cut.', 'Ego must brake or move laterally to preserve clearance.'],
     criticality: ['minimum lateral clearance', 'closing speed', 'available escape width'], sourceIds: vehicleSources,
+    implementationTemplateId: 'intersection.opposing-turn-encroachment',
   },
   {
     id: 'intersection-blocked-box-reveal', title: 'Blocked junction hides crossing traffic', domain: 'intersection',
@@ -159,6 +164,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('occluding-queue', 'vehicle', 'Remain stopped and block the sight line.'), other('cross-traffic', 'vehicle', 'Traverse behind the queue at legal speed.')],
     eventSequence: ['Queue stops near the junction.', 'Ego creeps past the occluder.', 'Cross traffic is revealed at short range.'],
     criticality: ['occlusion duration', 'creep speed', 'reveal time-to-collision'], sourceIds: vehicleSources,
+    implementationTemplateId: 'intersection-blocked-box-reveal',
   },
   {
     id: 'vru.child-dartout-parked-cars', title: 'Child darts from between parked vehicles', domain: 'vulnerable-road-user',
@@ -176,6 +182,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('pedestrian', 'pedestrian', 'Walk continuously from curb to curb.')],
     eventSequence: ['Pedestrian approaches the curb.', 'Pedestrian commits to the crossing.', 'Ego reaches the shared lane segment.'],
     criticality: ['pedestrian walking speed', 'crossing offset', 'braking onset'], sourceIds: vruSources,
+    implementationTemplateId: 'vru.adult-midblock-crossing',
   },
   {
     id: 'vru.multiple-threat-crosswalk', title: 'Stopped vehicle masks a pedestrian in the next lane', domain: 'vulnerable-road-user',
@@ -193,14 +200,16 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('pedestrian', 'pedestrian', 'Walk behind the reversing path without an abrupt change of pace.')],
     eventSequence: ['Pedestrian enters the rear blind zone.', 'Ego begins reversing.', 'Rear path and walking path overlap.'],
     criticality: ['rear visibility', 'reverse speed', 'pedestrian time in blind zone'], sourceIds: vruSources,
+    implementationTemplateId: 'vru.reversing-pedestrian',
   },
   {
     id: 'vru.cyclist-right-hook', title: 'Right hook across a parallel cyclist', domain: 'vulnerable-road-user',
     summary: 'A right-turning vehicle crosses a cyclist continuing straight on its right.',
-    siteTypes: ['driving_corridor', 'junction_movement'], requiredAffordances: ['cyclistSpawn', 'route'], preferredTags: ['TURN_RIGHT'],
+    siteTypes: ['driving_corridor', 'junction_movement'], requiredAffordances: ['route', 'vehicleSpawn'], preferredTags: ['TURN_RIGHT'],
     actors: [ego, other('cyclist', 'cyclist', 'Continue straight alongside ego at cycling speed.')],
     eventSequence: ['Cyclist and ego travel parallel.', 'Ego begins a right turn.', 'Cyclist enters the turning path.'],
     criticality: ['longitudinal overlap', 'turn onset', 'cyclist closing speed'], sourceIds: vruSources,
+    implementationTemplateId: 'vru.cyclist-right-hook',
   },
   {
     id: 'vru.cyclist-crossing-path', title: 'Cyclist crosses the vehicle path', domain: 'vulnerable-road-user',
@@ -209,6 +218,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('cyclist', 'cyclist', 'Ride across the vehicle path without stopping in-lane.')],
     eventSequence: ['Ego approaches steadily.', 'Cyclist enters from the side.', 'Trajectories coincide at the conflict point.'],
     criticality: ['cyclist lateral speed', 'arrival-time offset', 'visibility range'], sourceIds: vruSources,
+    implementationTemplateId: 'vru.cyclist-crossing-path',
   },
   {
     id: 'vru.dooring-cyclist', title: 'Parked-car door opens into cyclist path', domain: 'vulnerable-road-user',
@@ -217,6 +227,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('cyclist', 'cyclist', 'Ride parallel through the door zone.'), other('door', 'object', 'Swing from closed to open after the cyclist commits.')],
     eventSequence: ['Cyclist approaches the parked row.', 'Door begins opening.', 'Cyclist must brake or merge around the door.'],
     criticality: ['door opening time', 'cyclist lateral clearance', 'adjacent traffic escape gap'], sourceIds: vruSources,
+    implementationTemplateId: 'vru.dooring-cyclist',
   },
   {
     id: 'longitudinal.lead-hard-brake', title: 'Lead vehicle brakes sharply in flowing traffic', domain: 'longitudinal',
@@ -225,6 +236,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('lead', 'vehicle', 'Brake hard but within dry-road passenger-car capability.')],
     eventSequence: ['Vehicles travel at a stable headway.', 'Lead vehicle brakes abruptly.', 'Ego must respond before minimum separation is exhausted.'],
     criticality: ['initial headway', 'lead deceleration', 'reaction delay'], sourceIds: vehicleSources,
+    implementationTemplateId: 'longitudinal.lead-hard-brake',
   },
   {
     id: 'longitudinal.queue-tail', title: 'Stopped queue tail beyond a sight restriction', domain: 'longitudinal',
@@ -233,6 +245,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('queue-tail', 'vehicle', 'Remain stopped in lane.'), other('queue-lead', 'vehicle', 'Remain stopped ahead to establish a credible queue.')],
     eventSequence: ['Queue forms downstream.', 'Ego enters the constrained sight segment.', 'Stopped tail becomes visible within the braking envelope.'],
     criticality: ['available sight distance', 'approach speed', 'queue spacing'], sourceIds: vehicleSources,
+    implementationTemplateId: 'longitudinal.queue-tail',
   },
   {
     id: 'longitudinal.cutout-reveals-stopped', title: 'Lead vehicle cuts out and reveals a stopped vehicle', domain: 'longitudinal',
@@ -241,6 +254,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('lead-cutout', 'vehicle', 'Change lanes late while preserving clearance.'), other('stopped', 'vehicle', 'Remain stationary in ego lane.')],
     eventSequence: ['Ego follows the lead vehicle.', 'Lead moves aside near the obstruction.', 'Stopped vehicle is revealed at a short but nonzero stopping margin.'],
     criticality: ['reveal distance', 'lane-change duration', 'ego braking capacity'], sourceIds: vehicleSources,
+    implementationTemplateId: 'longitudinal.cutout-reveals-stopped',
   },
   {
     id: 'longitudinal.cut-in-brake', title: 'Close cut-in followed by braking', domain: 'longitudinal',
@@ -249,6 +263,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('cut-in', 'vehicle', 'Merge into the accepted gap, then brake for downstream traffic.')],
     eventSequence: ['Vehicles travel in adjacent lanes.', 'Other vehicle merges ahead of ego.', 'Other vehicle brakes before headway recovers.'],
     criticality: ['post-merge headway', 'lateral insertion rate', 'cut-in deceleration'], sourceIds: vehicleSources,
+    implementationTemplateId: 'longitudinal.cut-in-brake',
   },
   {
     id: 'longitudinal.slow-vulnerable-lead', title: 'Slow cyclist or mobility user ahead', domain: 'longitudinal',
@@ -257,6 +272,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('slow-road-user', 'cyclist', 'Proceed steadily near the lane edge with small natural lateral variation.')],
     eventSequence: ['Ego enters behind the slower user.', 'Closing gap becomes apparent.', 'Oncoming or adjacent traffic constrains passing.'],
     criticality: ['closing speed', 'minimum following distance', 'passing clearance'], sourceIds: [...vehicleSources, 'euroncap-aeb-vru'],
+    implementationTemplateId: 'longitudinal.slow-vulnerable-lead',
   },
   {
     id: 'lane-change.sideswipe', title: 'Adjacent vehicle drifts into occupied lane', domain: 'lane-change-and-merge',
@@ -265,6 +281,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('drifting-vehicle', 'vehicle', 'Move laterally into ego lane without adequate clearance.')],
     eventSequence: ['Vehicles run parallel.', 'Other vehicle begins an unsignalled drift.', 'Side envelopes overlap unless ego yields.'],
     criticality: ['lateral velocity', 'longitudinal overlap', 'escape-lane availability'], sourceIds: vehicleSources,
+    implementationTemplateId: 'lane-change.sideswipe',
   },
   {
     id: 'lane-change.merge-gap-collapse', title: 'Merge gap collapses under acceleration', domain: 'lane-change-and-merge',
@@ -273,6 +290,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('merging', 'vehicle', 'Accelerate from the entry lane toward ego’s gap.')],
     eventSequence: ['Merging path converges.', 'Both vehicles increase speed.', 'Accepted gap falls below safe headway.'],
     criticality: ['merge-end distance', 'relative acceleration', 'gap at lane crossing'], sourceIds: vehicleSources,
+    implementationTemplateId: 'lane-change.merge-gap-collapse',
   },
   {
     id: 'lane-change.lane-drop-late-merge', title: 'Late merge at a lane drop', domain: 'lane-change-and-merge',
@@ -281,6 +299,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('late-merger', 'vehicle', 'Continue to the taper and merge with limited remaining pavement.')],
     eventSequence: ['Lane begins narrowing.', 'Late merger stays alongside ego.', 'Vehicle crosses the boundary near the lane end.'],
     criticality: ['distance to lane end', 'overlap at merge', 'available shoulder'], sourceIds: vehicleSources,
+    implementationTemplateId: 'lane-change.lane-drop-late-merge',
   },
   {
     id: 'lane-change.oncoming-overtake', title: 'Oncoming vehicle overtakes into ego lane', domain: 'lane-change-and-merge',
@@ -289,6 +308,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('overtaker', 'vehicle', 'Pass a slow vehicle by entering the opposing lane.'), other('slow-vehicle', 'vehicle', 'Maintain a steady low speed.')],
     eventSequence: ['Overtaker moves across centerline.', 'Ego appears in the opposing path.', 'Overtaker attempts to return behind or ahead of the slow vehicle.'],
     criticality: ['closing speed', 'return gap', 'centerline occupancy duration'], sourceIds: vehicleSources,
+    implementationTemplateId: 'lane-change.oncoming-overtake',
   },
   {
     id: 'parking.vehicle-pulls-out', title: 'Parked vehicle pulls into the travel lane', domain: 'parking-and-access',
@@ -297,6 +317,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('departing-vehicle', 'vehicle', 'Pull out with initially restricted visibility.')],
     eventSequence: ['Vehicle waits in the parking position.', 'Front end enters the travel lane.', 'Ego arrives before the vehicle completes its merge.'],
     criticality: ['pullout speed', 'initial visibility', 'lane blockage duration'], sourceIds: vehicleSources,
+    implementationTemplateId: 'parking.vehicle-pulls-out',
   },
   {
     id: 'parking.backing-out-vehicle', title: 'Vehicle backs from an angled space into traffic', domain: 'parking-and-access',
@@ -305,6 +326,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('backing-vehicle', 'vehicle', 'Reverse from the bay across the travel aisle.')],
     eventSequence: ['Ego approaches the parking aisle.', 'Other vehicle begins reversing.', 'Its rear crosses into ego’s path.'],
     criticality: ['reverse speed', 'rear emergence time', 'aisle clearance'], sourceIds: vehicleSources,
+    implementationTemplateId: 'parking.backing-out-vehicle',
   },
   {
     id: 'parking.delivery-double-park', title: 'Double-parked delivery vehicle forces a merge', domain: 'parking-and-access',
@@ -313,6 +335,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('delivery-vehicle', 'vehicle', 'Remain stopped partially in lane.'), other('delivery-worker', 'pedestrian', 'Move between curb and vehicle while occluded.')],
     eventSequence: ['Delivery vehicle blocks part of lane.', 'Ego begins passing.', 'Worker or oncoming traffic constrains the pass.'],
     criticality: ['blocked-lane fraction', 'passing clearance', 'worker reveal distance'], sourceIds: [...vehicleSources, 'euroncap-aeb-vru'],
+    implementationTemplateId: 'parking.delivery-double-park',
   },
   {
     id: 'parking.driveway-emergence', title: 'Vehicle emerges from a driveway or access point', domain: 'parking-and-access',
@@ -321,6 +344,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('emerging-vehicle', 'vehicle', 'Creep from access, then accelerate into traffic.')],
     eventSequence: ['Ego approaches the frontage.', 'Other vehicle noses past the sight obstruction.', 'Other vehicle enters the travel lane.'],
     criticality: ['creep distance', 'sight triangle', 'acceleration into lane'], sourceIds: vehicleSources,
+    implementationTemplateId: 'parking.driveway-emergence',
   },
   {
     id: 'transit.bus-stop-emergence', title: 'Pedestrian emerges from behind a stopped bus', domain: 'transit',
@@ -338,6 +362,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('bus', 'vehicle', 'Depart the stop and merge progressively into the lane.')],
     eventSequence: ['Bus signals departure.', 'Ego reaches the rear quarter.', 'Bus crosses the lane boundary.'],
     criticality: ['merge duration', 'rear-quarter overlap', 'available adjacent space'], sourceIds: vehicleSources,
+    implementationTemplateId: 'transit.bus-pullout',
   },
   {
     id: 'school.child-dartout', title: 'School-zone child dart-out at pickup time', domain: 'work-and-school-zone',
@@ -355,6 +380,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('crossing-guard', 'pedestrian', 'Enter first and hold the crossing.'), other('child-group', 'pedestrian', 'Follow across with varied but bounded spacing.')],
     eventSequence: ['Guard approaches the crossing.', 'Guard enters and signals traffic to stop.', 'Children occupy the crossing behind the guard.'],
     criticality: ['guard entry timing', 'group extent', 'school-zone stopping distance'], sourceIds: vruSources,
+    implementationTemplateId: 'school.crossing-guard-release',
   },
   {
     id: 'workzone.lane-shift', title: 'Temporary work-zone lane shift with a stopped queue', domain: 'work-and-school-zone',
@@ -363,6 +389,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('queue-tail', 'vehicle', 'Stop inside the shifted alignment.'), other('channelizer', 'object', 'Define a narrowing, traversable temporary path.')],
     eventSequence: ['Cones progressively close part of the lane.', 'Ego enters the shifted path.', 'A queue tail appears near the taper exit.'],
     criticality: ['taper rate', 'cone clearance', 'queue sight distance'], sourceIds: vehicleSources,
+    implementationTemplateId: 'workzone.lane-shift',
   },
   {
     id: 'workzone.worker-intrusion', title: 'Worker steps outside the protected work area', domain: 'work-and-school-zone',
@@ -371,6 +398,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('worker', 'pedestrian', 'Step into the lane while attending to the work task.'), other('work-vehicle', 'vehicle', 'Remain static and partially occlude the worker.')],
     eventSequence: ['Ego approaches a marked work activity.', 'Worker moves past the occluder.', 'Worker occupies the lane edge or lane.'],
     criticality: ['worker reveal distance', 'work-zone speed', 'protected escape space'], sourceIds: [...vehicleSources, 'euroncap-aeb-vru'],
+    implementationTemplateId: 'workzone.worker-intrusion',
   },
   {
     id: 'road-departure.curve-loss-control', title: 'Loss of control on a curve', domain: 'road-departure-and-obstacle',
@@ -379,6 +407,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('road-edge', 'object', 'Define the non-traversable edge and recovery boundary.')],
     eventSequence: ['Ego approaches the curve.', 'Required lateral acceleration exceeds the chosen margin.', 'Vehicle departs the intended lane unless speed is reduced.'],
     criticality: ['curve speed', 'surface friction', 'lane-edge excursion'], sourceIds: ['nhtsa-precrash-2007', 'nhtsa-precrash-2019'],
+    implementationTemplateId: 'road-departure.curve-loss-control',
   },
   {
     id: 'obstacle.fallen-cargo', title: 'Fallen cargo blocks part of the lane', domain: 'road-departure-and-obstacle',
@@ -387,6 +416,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('cargo', 'object', 'Remain stationary and physically occupy a bounded lane region.')],
     eventSequence: ['Cargo rests ahead.', 'Sight line reveals the object.', 'Ego brakes or avoids while retaining road boundaries.'],
     criticality: ['object reveal distance', 'occupied lane fraction', 'avoidance clearance'], sourceIds: ['nhtsa-precrash-2007', 'nhtsa-precrash-2019'],
+    implementationTemplateId: 'obstacle.fallen-cargo',
   },
   {
     id: 'obstacle.animal-crossing', title: 'Animal runs into the roadway', domain: 'road-departure-and-obstacle',
@@ -395,6 +425,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('animal', 'object', 'Traverse the lane at a bounded running speed.')],
     eventSequence: ['Ego cruises through the segment.', 'Animal appears from the roadside.', 'Animal crosses the projected ego path.'],
     criticality: ['lateral crossing speed', 'first-visible range', 'avoidance stability'], sourceIds: ['nhtsa-precrash-2007', 'nhtsa-precrash-2019'],
+    implementationTemplateId: 'obstacle.animal-crossing',
   },
   {
     id: 'obstacle.disabled-vehicle', title: 'Disabled vehicle occupies a live lane', domain: 'road-departure-and-obstacle',
@@ -403,6 +434,7 @@ export const INCIDENT_TAXONOMY: readonly IncidentDefinition[] = [
     actors: [ego, other('disabled-vehicle', 'vehicle', 'Remain stationary with a plausible roadside orientation.'), other('stranded-occupant', 'pedestrian', 'Stay near the vehicle but outside ego’s nominal path.')],
     eventSequence: ['Disabled vehicle is stationary.', 'Ego receives limited preview.', 'Ego must stop or pass with safe occupant clearance.'],
     criticality: ['preview distance', 'pass clearance', 'occupant exposure'], sourceIds: vehicleSources,
+    implementationTemplateId: 'obstacle.disabled-vehicle',
   },
 ] as const;
 

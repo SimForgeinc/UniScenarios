@@ -405,17 +405,23 @@
             "atM": {
               "$ref": "#/$defs/__schema6"
             },
-            "side": {
+            "lateralDistanceM": {
               "$ref": "#/$defs/__schema7"
             },
-            "essentiality": {
+            "sameRoad": {
               "$ref": "#/$defs/__schema8"
             },
-            "weight": {
+            "side": {
               "$ref": "#/$defs/__schema9"
             },
-            "label": {
+            "essentiality": {
               "$ref": "#/$defs/__schema10"
+            },
+            "weight": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema12"
             },
             "kind": {
               "type": "string",
@@ -449,7 +455,7 @@
                   "minItems": 1,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema11"
+                    "$ref": "#/$defs/__schema13"
                   }
                 },
                 "essentiality": {
@@ -474,7 +480,7 @@
                   "minItems": 1,
                   "type": "array",
                   "items": {
-                    "$ref": "#/$defs/__schema12"
+                    "$ref": "#/$defs/__schema14"
                   }
                 },
                 "essentiality": {
@@ -509,7 +515,7 @@
                       ]
                     },
                     "turn": {
-                      "$ref": "#/$defs/__schema12"
+                      "$ref": "#/$defs/__schema14"
                     },
                     "crossingAngleDeg": {
                       "$ref": "#/$defs/Range"
@@ -594,17 +600,23 @@
             "atM": {
               "$ref": "#/$defs/__schema6"
             },
-            "side": {
+            "lateralDistanceM": {
               "$ref": "#/$defs/__schema7"
             },
-            "essentiality": {
+            "sameRoad": {
               "$ref": "#/$defs/__schema8"
             },
-            "weight": {
+            "side": {
               "$ref": "#/$defs/__schema9"
             },
-            "label": {
+            "essentiality": {
               "$ref": "#/$defs/__schema10"
+            },
+            "weight": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema12"
             },
             "kind": {
               "type": "string",
@@ -715,17 +727,23 @@
             "atM": {
               "$ref": "#/$defs/__schema6"
             },
-            "side": {
+            "lateralDistanceM": {
               "$ref": "#/$defs/__schema7"
             },
-            "essentiality": {
+            "sameRoad": {
               "$ref": "#/$defs/__schema8"
             },
-            "weight": {
+            "side": {
               "$ref": "#/$defs/__schema9"
             },
-            "label": {
+            "essentiality": {
               "$ref": "#/$defs/__schema10"
+            },
+            "weight": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema12"
             },
             "kind": {
               "type": "string",
@@ -836,17 +854,23 @@
             "atM": {
               "$ref": "#/$defs/__schema6"
             },
-            "side": {
+            "lateralDistanceM": {
               "$ref": "#/$defs/__schema7"
             },
-            "essentiality": {
+            "sameRoad": {
               "$ref": "#/$defs/__schema8"
             },
-            "weight": {
+            "side": {
               "$ref": "#/$defs/__schema9"
             },
-            "label": {
+            "essentiality": {
               "$ref": "#/$defs/__schema10"
+            },
+            "weight": {
+              "$ref": "#/$defs/__schema11"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema12"
             },
             "kind": {
               "type": "string",
@@ -858,6 +882,7 @@
                 "bus_stop",
                 "school_zone",
                 "work_zone_suitable",
+                "occlusion_zone",
                 "crest",
                 "curve",
                 "rail_crossing"
@@ -922,7 +947,7 @@
       "type": "object",
       "properties": {
         "value": {
-          "$ref": "#/$defs/__schema3"
+          "$ref": "#/$defs/Range"
         },
         "essentiality": {
           "default": "required",
@@ -940,6 +965,48 @@
       "additionalProperties": false
     },
     "__schema8": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "boolean"
+        },
+        "essentiality": {
+          "default": "required",
+          "$ref": "#/$defs/Essentiality"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "__schema9": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/__schema3"
+        },
+        "essentiality": {
+          "default": "required",
+          "$ref": "#/$defs/Essentiality"
+        },
+        "weight": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "__schema10": {
       "default": "required",
       "type": "string",
       "enum": [
@@ -948,16 +1015,16 @@
         "cosmetic"
       ]
     },
-    "__schema9": {
+    "__schema11": {
       "type": "number",
       "minimum": 0,
       "maximum": 100
     },
-    "__schema10": {
+    "__schema12": {
       "type": "string",
       "maxLength": 200
     },
-    "__schema11": {
+    "__schema13": {
       "type": "string",
       "enum": [
         "signalized",
@@ -968,7 +1035,7 @@
         "roundabout"
       ]
     },
-    "__schema12": {
+    "__schema14": {
       "type": "string",
       "enum": [
         "left",

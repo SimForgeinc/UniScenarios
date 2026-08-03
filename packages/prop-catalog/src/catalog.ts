@@ -110,6 +110,36 @@ export const CATALOG = [
     tags: ['occlusion:low', 'mobile', 'vru', 'roadway'],
     defaultParams: { color: '#2f4f74' },
   },
+  {
+    id: 'vehicle.ambulance',
+    label: 'Ambulance',
+    class: 'vehicle',
+    description:
+      'Box-body emergency ambulance with a roof light bar. Use lights.emergency and audio.horn timeline state keys for emergency-response conflicts.',
+    dims: { l: 6.1, w: 2.1, h: 2.65 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle'],
+    defaultParams: { color: '#eceff1' },
+  },
+  {
+    id: 'vehicle.tram',
+    label: 'Tram / streetcar',
+    class: 'vehicle',
+    description:
+      'Single articulated urban tram for rail-crossing, mixed-traffic and platform conflicts. Its long fixed-path body is a strong moving occluder.',
+    dims: { l: 30, w: 2.65, h: 3.5 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle'],
+    defaultParams: { color: '#d9e2e8' },
+  },
+  {
+    id: 'vehicle.mobility_scooter',
+    label: 'Mobility scooter',
+    class: 'vehicle',
+    description:
+      'Low-speed powered mobility scooter with a seated rider. Treat as a vulnerable road user for crossing and sidewalk-edge interactions.',
+    dims: { l: 1.35, w: 0.68, h: 1.35 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk'],
+    defaultParams: { color: '#287ba8' },
+  },
 
   // ------------------------------------------------------------- pedestrians
   {
@@ -152,6 +182,16 @@ export const CATALOG = [
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.2, pose: 'walking' },
   },
+  {
+    id: 'pedestrian.traffic_marshal',
+    label: 'Traffic marshal / police director',
+    class: 'pedestrian',
+    description:
+      'High-visibility traffic marshal with a raised directing arm. Use pose.gesture timeline states to halt or wave traffic through.',
+    dims: { l: 0.72, w: 0.68, h: 1.88 },
+    tags: ['vru', 'workzone', 'occlusion:low', 'roadway'],
+    defaultParams: { height: 1.82, pose: 'standing' },
+  },
 
   // ------------------------------------------------------------ construction
   {
@@ -182,6 +222,16 @@ export const CATALOG = [
       'Full 8 ft type-III barricade with three striped rails and a warning light. Used to close a road or a ramp outright.',
     dims: { l: 0.62, w: 2.44, h: 1.66 },
     tags: ['workzone', 'occlusion:medium', 'roadway'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.pedestrian_barrier',
+    label: 'Pedestrian barrier',
+    class: 'construction',
+    description:
+      'Lightweight interlocking crowd-control barrier used to separate pedestrians from a temporary traffic lane or event egress route.',
+    dims: { l: 2, w: 0.55, h: 1.1 },
+    tags: ['workzone', 'occlusion:low', 'roadway'],
     defaultParams: {},
   },
   {
@@ -264,6 +314,36 @@ export const CATALOG = [
     tags: ['workzone', 'occlusion:low', 'roadway'],
     defaultParams: { length: 2.5, height: 0.9, seed: 7 },
   },
+  {
+    id: 'construction.temporary_stop_sign',
+    label: 'Temporary stop sign',
+    class: 'construction',
+    description:
+      'Portable octagonal stop sign on a weighted work-zone stand for temporary right-of-way control and alternating one-lane traffic.',
+    dims: { l: 0.82, w: 0.92, h: 2.16 },
+    tags: ['workzone', 'occlusion:low', 'roadway'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.portable_signal',
+    label: 'Portable traffic signal',
+    class: 'construction',
+    description:
+      'Trailer-mounted temporary red/amber/green signal head used to control alternating traffic through a work zone.',
+    dims: { l: 1.45, w: 1.2, h: 3.25 },
+    tags: ['workzone', 'occlusion:medium', 'roadway'],
+    defaultParams: {},
+  },
+  {
+    id: 'construction.long_pipe',
+    label: 'Long construction pipe',
+    class: 'construction',
+    description:
+      'Eight-metre utility pipe laid beside or partly across a work zone. A rigid collidable obstacle and low sight-line blocker.',
+    dims: { l: 8, w: 0.62, h: 0.62 },
+    tags: ['workzone', 'occlusion:low', 'roadway', 'run'],
+    defaultParams: { length: 8, diameter: 0.62 },
+  },
 
   // --------------------------------------------------------------- occluders
   {
@@ -336,6 +416,16 @@ export const CATALOG = [
       'Sidewalk vending cart with a canopy. Draws a queue of pedestrians onto the kerb and blocks the view down the footway.',
     dims: { l: 1.84, w: 1.0, h: 2.18 },
     tags: ['occlusion:medium', 'sidewalk'],
+    defaultParams: {},
+  },
+  {
+    id: 'street.shopping_cart',
+    label: 'Shopping cart',
+    class: 'street',
+    description:
+      'Small rolling wire shopping cart that can enter a roadway from a kerb or parking area and create a low-mass obstacle conflict.',
+    dims: { l: 1.05, w: 0.65, h: 1.05 },
+    tags: ['debris', 'mobile', 'occlusion:low', 'roadway'],
     defaultParams: {},
   },
 

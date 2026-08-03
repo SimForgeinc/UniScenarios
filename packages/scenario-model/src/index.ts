@@ -104,6 +104,30 @@ export {
 } from './document.js';
 
 export {
+  TemplateDocument,
+  newTemplateId,
+  type CreateTemplateInit,
+  type TemplateChange,
+  type TemplateChangeReason,
+  type TemplateDocumentOptions,
+} from './template-document.js';
+
+export {
+  applyTemplateOp,
+  describeTemplateOp,
+  type TemplateMetaPatch,
+  type TemplateOp,
+} from './template-operations.js';
+
+export {
+  prepareSimulationInput,
+  TemplatePreparationError,
+  type MaterializationProduct,
+  type SemanticLoss,
+  type TemplateMaterializer,
+} from './materialization.js';
+
+export {
   applyOp,
   buildEntity,
   describeOp,
@@ -209,6 +233,12 @@ export {
 } from './json-schema-v2.js';
 
 export { newId, sequentialIds, ULID_PATTERN } from './ids.js';
+
+export {
+  WebTemplateFileStore,
+  type TemplateFileStore,
+  type TemplateLike,
+} from './stores/template-web.js';
 
 export { buildJsonSchema, JSON_SCHEMA_ID, JSON_SCHEMA_PATH } from './json-schema.js';
 

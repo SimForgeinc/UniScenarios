@@ -1,0 +1,95 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Loss of control toward the road edge on a curve",
+    "description": "On a sustained bend with reduced tyre-road friction, ego drifts laterally toward a collidable road-edge barrier before braking to a stable stop.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "road-departure.curve-loss-control",
+    "tags": ["road-departure", "curve", "loss-of-control", "road-edge", "low-friction"],
+    "author": "agent/obstacle-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "frictionScale", "type": "continuous", "description": "Tyre-road friction relative to dry nominal grip.", "unit": "ratio", "tier": 1, "range": [0.45, 0.7], "default": 0.58, "distribution": "uniform" },
+      { "id": "edgeExcursionFrac", "type": "continuous", "description": "Final lateral offset toward the outside road edge, as a fraction of lane width.", "unit": "lane-width", "tier": 1, "range": [0.48, 0.60], "default": 0.54, "distribution": "uniform" },
+      { "id": "lateralRateMps", "type": "continuous", "description": "Bounded lateral drift rate during loss of control.", "unit": "m/s", "tier": 1, "range": [0.35, 0.75], "default": 0.52, "distribution": "uniform" },
+      { "id": "recoveryBrakeS", "type": "continuous", "description": "Duration of the recovery stop after the excursion begins.", "unit": "s", "tier": 2, "range": [2.2, 3.4], "default": 2.8, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "wet_road", "timeOfDay": "afternoon", "frictionScale": "param.frictionScale" },
+  "anchor": {
+    "id": "curve-loss-control",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [35, 80], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0.12, 35], "essentiality": "required", "weight": 4 },
+      "runwayDownstreamM": { "value": [120, null], "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "vehicle entering the bend near the available-grip margin",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 15, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.95 * lane.speedLimitKph, 38, 68)"
+    },
+    {
+      "id": "road-edge",
+      "kind": "relative_to",
+      "label": "collidable non-traversable outside edge and recovery boundary",
+      "actor": {
+        "class": "static_object",
+        "catalogId": "construction.jersey_barrier_run",
+        "dims": { "length": 18, "width": 0.45, "height": 0.8 },
+        "static": true
+      },
+      "ref": "ego",
+      "dLane": 0,
+      "dsM": 145,
+      "tFrac": 0,
+      "headingOffsetRad": 0,
+      "extensions": { "pathSemantics": "parallel_to_reference_actor", "lateralOffsetM": 2.8, "pathLengthM": 60 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 16,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "ego-commits-to-loss-of-control", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      {
+        "id": "ego-drifts-to-edge",
+        "actor": "ego",
+        "verb": "laneOffset",
+        "trigger": { "kind": "at", "t": 2.5 },
+        "target": { "tFrac": "param.edgeExcursionFrac", "reference": "lane_center" },
+        "dynamics": { "shape": "cubic", "constraint": "rate", "value": "param.lateralRateMps" }
+      },
+      {
+        "id": "ego-recovery-stop",
+        "actor": "ego",
+        "verb": "speed",
+        "trigger": { "kind": "at", "t": 5.2 },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": "param.recoveryBrakeS" }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "curve-entry-speed", "kind": "speed_rel_limit", "of": "ego", "rangeFrac": [0.8, 1.1], "window": [0, 3], "essentiality": "required" },
+    { "id": "edge-path-criticality", "kind": "ttc", "of": "ego", "to": "road-edge", "range": [0.4, 5], "window": [3, 12], "essentiality": "required" },
+    { "id": "edge-recovery-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" },
+    { "id": "loss-before-recovery", "kind": "event_order", "events": ["ego-drifts-to-edge", "ego-recovery-stop"], "strict": true, "minSeparationS": 2, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

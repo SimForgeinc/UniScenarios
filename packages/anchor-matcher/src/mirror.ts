@@ -74,6 +74,8 @@ export function mirrorRoleBindings(roles: RoleBinding[]): RoleBinding[] {
     switch (role.kind) {
       case 'lane_offset':
         return { ...role, k: -role.k };
+      case 'at_lane_drop':
+        return role;
       case 'relative_to':
         return { ...role, dLane: -role.dLane };
       case 'conflicting_gate':

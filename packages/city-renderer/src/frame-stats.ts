@@ -41,6 +41,18 @@ export class FrameStats {
     return worst;
   }
 
+  countAbove(ms: number): number {
+    let count = 0;
+    for (let i = 0; i < this.filled; i++) {
+      if ((this.samples[i] ?? 0) > ms) count++;
+    }
+    return count;
+  }
+
+  snapshot(): number[] {
+    return this.samples.slice(0, this.filled);
+  }
+
   reset(): void {
     this.index = 0;
     this.filled = 0;

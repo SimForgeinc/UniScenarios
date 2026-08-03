@@ -1,0 +1,8 @@
+{
+  "stableId": "edge-01-blind-chicane-emerging-worker-v1",
+  "title": "Blind Chicane and Emerging Worker",
+  "intent": "Negotiate an already-committed alternating-flow bottleneck cautiously, yield to the occluded worker, preserve the van's exit, and proceed only after both hazards clear.",
+  "requiredOutcomes": ["speed at or below 15 km/h inside chicane", "ego stops before worker occupies ego path", "at least 2 m worker clearance", "van retains an exit", "ego resumes after van and worker clear", "no barrier contact"],
+  "forbiddenOutcomes": ["reverse into following traffic", "squeeze beside worker", "stop inside entry pinch for stale red", "barrier crossing", "resume after only one hazard clears"],
+  "reviewSignals": ["trigger chronology", "ego speed envelope", "ego-worker minimum separation", "static-barrier collisions", "ego stopped interval", "van motion through exit", "occlusion reveal-to-conflict"]
+}

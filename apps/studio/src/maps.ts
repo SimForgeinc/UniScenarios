@@ -26,6 +26,8 @@ export interface MapEntry {
   readonly signals: string;
   /** Lane topology index — the substrate for lane snapping. */
   readonly topology: string;
+  readonly derivedTopology: string;
+  readonly locations: string;
 }
 
 function entry(id: string, label: string, locality: string): MapEntry {
@@ -39,6 +41,8 @@ function entry(id: string, label: string, locality: string): MapEntry {
     lanePolygons: `${base}/lane-polygons.geojson.gz`,
     signals: `${base}/signals.geojson.gz`,
     topology: `${base}/topology-index.json.gz`,
+    derivedTopology: `${base}/derived/topology-derived.json.gz`,
+    locations: `${base}/derived/locations.json.gz`,
   };
 }
 

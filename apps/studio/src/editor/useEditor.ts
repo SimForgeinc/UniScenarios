@@ -60,66 +60,86 @@ export function useEditor({
   hostRef,
 }: UseEditorOptions): UseEditorResult {
   const [controller, setController] = useState<EditorController | null>(null);
+  const [documentSession, setDocumentSession] = useState<{
+    mapId: string;
+    document: EditorDocument;
+  } | null>(null);
   const [laneStats, setLaneStats] = useState<LaneIndexSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // The editable document belongs to the map session, not the renderer
+  // session. Playback, quality changes, and WebGL recovery may recreate the
+  // viewer; none of those presentation events may replace undo history.
   useEffect(() => {
-    if (!viewer || !sampleHeight) return;
+    let disposed = false;
+    let liveDoc: EditorDocument | null = null;
+    setError(null);
+    void EditorDocument.open(map).then((document) => {
+      if (disposed) {
+        document.dispose();
+        return;
+      }
+      liveDoc = document;
+      setDocumentSession({ mapId: map.id, document });
+    }).catch((err: unknown) => {
+      if (disposed) return;
+      console.error('[editor] could not open document', err);
+      setError(err instanceof Error ? err.message : String(err));
+    });
+    return () => {
+      disposed = true;
+      setDocumentSession((current) => current?.document === liveDoc ? null : current);
+      // Only a map change/unmount parks and disposes the undo-bearing document.
+      void liveDoc?.flush().finally(() => liveDoc?.dispose());
+    };
+  }, [map]);
+
+  const document = documentSession?.mapId === map.id ? documentSession.document : null;
+
+  // Renderer/controller lifetime is deliberately shorter. Rebinding the same
+  // document preserves its TemplateDocument identity and complete history.
+  useEffect(() => {
+    if (!viewer || !sampleHeight || !document) return;
     let disposed = false;
     let live: EditorController | null = null;
-    let liveDoc: EditorDocument | null = null;
     const abort = new AbortController();
-
     setError(null);
-    void (async () => {
-      try {
-        const [laneIndex, doc] = await Promise.all([
-          LaneIndex.load(map.topology, { signal: abort.signal }),
-          EditorDocument.open(map),
-        ]);
-        if (disposed) {
-          doc.dispose();
-          return;
-        }
-        liveDoc = doc;
-        live = new EditorController({ viewer, laneIndex, document: doc, sampleHeight });
-        const host = hostRef.current;
-        if (host) live.attach(host);
-        window.__editor = live;
-        setLaneStats({
-          lanes: laneIndex.stats.lanes,
-          segments: laneIndex.stats.segments,
-          buildMs: laneIndex.stats.buildMs,
-          fetchMs: laneIndex.stats.fetchMs,
-        });
-        setController(live);
-        console.info('[editor] ready', {
-          map: map.id,
-          lanes: laneIndex.stats.lanes,
-          segments: laneIndex.stats.segments,
-          buildMs: Math.round(laneIndex.stats.buildMs),
-          actors: doc.actors.length,
-        });
-      } catch (err) {
-        if (disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
-        console.error('[editor] failed to arm', err);
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    })();
+    void LaneIndex.load(map.topology, { signal: abort.signal }).then((laneIndex) => {
+      if (disposed) return;
+      live = new EditorController({ viewer, laneIndex, document, sampleHeight });
+      const host = hostRef.current;
+      if (host) live.attach(host);
+      window.__editor = live;
+      setLaneStats({
+        lanes: laneIndex.stats.lanes,
+        segments: laneIndex.stats.segments,
+        buildMs: laneIndex.stats.buildMs,
+        fetchMs: laneIndex.stats.fetchMs,
+      });
+      setController(live);
+      console.info('[editor] ready', {
+        map: map.id,
+        lanes: laneIndex.stats.lanes,
+        segments: laneIndex.stats.segments,
+        buildMs: Math.round(laneIndex.stats.buildMs),
+        actors: document.actors.length,
+      });
+    }).catch((err: unknown) => {
+      if (disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
+      console.error('[editor] failed to arm', err);
+      setError(err instanceof Error ? err.message : String(err));
+    });
 
     return () => {
       disposed = true;
       abort.abort();
-      // Park the work before the document goes: a map switch mid-debounce would
-      // otherwise drop the last few edits.
-      void liveDoc?.flush().finally(() => liveDoc?.dispose());
       if (window.__editor === live) delete window.__editor;
       live?.dispose();
       live = null;
       setController(null);
       setLaneStats(null);
     };
-  }, [viewer, map, sampleHeight, hostRef]);
+  }, [viewer, map, sampleHeight, hostRef, document]);
 
   const state = useSyncExternalStore(
     controller ? controller.subscribe : noopSubscribe,

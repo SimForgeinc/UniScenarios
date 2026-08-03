@@ -113,6 +113,7 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
   const interactions = new Map(
     template.choreography.interactions.map((i) => [i.id, i] as const),
   );
+  const trafficControls = new Set(template.trafficControls.map((control) => control.id));
   const params = new Set(template.params.declarations.map((p) => p.id));
 
   const needRole = (ref: string, path: string, allowWorld = false): boolean => {
@@ -241,6 +242,9 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
       case 'on_crossing':
         needFeature(role.feature, joinPath(base, 'feature'), 'crossing');
         break;
+      case 'at_lane_drop':
+        needFeature(role.feature, joinPath(base, 'feature'), 'lane_drop');
+        break;
       case 'in_parking_zone':
         needFeature(role.feature, joinPath(base, 'feature'), 'parking_zone');
         break;
@@ -292,6 +296,17 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
   template.props.forEach((prop, index) => {
     const base = joinPath('props', index);
     if (prop.feature) needFeature(prop.feature, joinPath(base, 'feature'));
+    if (prop.attachment) {
+      needRole(prop.attachment.role, joinPath(base, 'attachment', 'role'));
+      if (prop.repeat) {
+        out.push(issue(
+          'error',
+          'attached_prop_repeat_unsupported',
+          joinPath(base, 'repeat'),
+          'an attached prop is one rigid object; author separate attached props instead of repeat',
+        ));
+      }
+    }
     if (prop.occludes) {
       needRole(prop.occludes.observer, joinPath(base, 'occludes', 'observer'));
       needRole(prop.occludes.target, joinPath(base, 'occludes', 'target'));
@@ -333,15 +348,19 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
     const base = joinPath('choreography', 'interactions', index);
     const setKey = interaction.verb === 'set' ? interaction.target.key : undefined;
     const worldKey =
-      setKey !== undefined && ['env', 'signal'].includes(setKeyNamespace(setKey));
+      setKey !== undefined && ['env', 'signal', 'control'].includes(setKeyNamespace(setKey));
     needRole(interaction.actor, joinPath(base, 'actor'), worldKey);
+    const controlSet = setKey === undefined ? null : /^control:(.+)\.indication$/.exec(setKey);
+    if (controlSet && !trafficControls.has(controlSet[1]!)) {
+      out.push(issue('error', 'control_ref_unknown', joinPath(base, 'target', 'key'), `no traffic control with id "${controlSet[1]}"`));
+    }
     if (interaction.actor === WORLD_ROLE_REF && !worldKey) {
       out.push(
         issue(
           'error',
           'set_actor_mismatch',
           joinPath(base, 'actor'),
-          `"${WORLD_ROLE_REF}" is only the actor for env.* and signal:* sets; everything else is performed by a role`,
+          `"${WORLD_ROLE_REF}" is only the actor for env.*, signal:*, and control:* sets; everything else is performed by a role`,
         ),
       );
     }
@@ -406,6 +425,16 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
           }
         } else if (interaction.target.mode === 'toFeature') {
           needFeature(interaction.target.feature, joinPath(base, 'target', 'feature'));
+        } else if (interaction.target.mode === 'lanePath') {
+          const actor = roles.get(interaction.actor);
+          if (!actor || actor.kind !== 'scene_absolute' || !template.anchor.pin) {
+            out.push(issue(
+              'error',
+              'route_disconnected',
+              joinPath(base, 'target'),
+              'an exact lanePath is map-bound and may only drive a pinned scene_absolute actor',
+            ));
+          }
         }
         break;
       case 'set': {
@@ -517,6 +546,8 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
         case 'signal':
           if ('feature' in leaf.signal) {
             needFeature(leaf.signal.feature, joinPath(leafPath, 'signal', 'feature'), 'junction');
+          } else if ('control' in leaf.signal && !trafficControls.has(leaf.signal.control)) {
+            out.push(issue('error', 'control_ref_unknown', joinPath(leafPath, 'signal', 'control'), `no traffic control with id "${leaf.signal.control}"`));
           }
           break;
       }

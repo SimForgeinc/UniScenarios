@@ -62,6 +62,9 @@ export function scenario(
     warmupSeconds: 5,
     dt: 0.02,
     seed: 'fixture',
+    // Most engine fixtures pin the established choreography semantics. Tests
+    // for the current default remove or override this field explicitly.
+    physics: { mode: 'kinematic-v1' },
     ...partial,
   });
 }

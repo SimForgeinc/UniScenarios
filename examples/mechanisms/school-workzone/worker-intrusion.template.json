@@ -1,0 +1,128 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Work-zone worker intrudes from behind a parked vehicle",
+    "description": "A worker is initially stationary and partially screened by a collidable static work van at the road edge. The worker then commits without yielding, crosses into ego's lane on a bounded path, clears it, and stops in a stable refuge position instead of disappearing or reversing.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "workzone.worker-intrusion",
+    "tags": ["work-zone", "worker", "intrusion", "occlusion", "static-work-vehicle"],
+    "author": "agent/school-workzone-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "intrusionStartS", "type": "continuous", "unit": "s", "tier": 1, "range": [2.4, 4], "default": 3.1, "distribution": "uniform" },
+      { "id": "workerSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [5.5, 8], "default": 6.5, "distribution": "uniform" },
+      { "id": "clearanceHoldS", "type": "continuous", "unit": "s", "tier": 1, "range": [6.5, 7.5], "default": 7, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "workzone-worker-intrusion",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 5], "essentiality": "required" },
+      "speedLimitKph": { "value": [30, 65], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [180, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "work-zone-reservation",
+        "kind": "work_zone_suitable",
+        "atM": { "value": [150, 165], "essentiality": "required" },
+        "sameRoad": { "value": true, "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 16, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "vehicle approaching the active work area",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 26, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.45 * lane.speedLimitKph, 24, 30)"
+    },
+    {
+      "id": "work-vehicle",
+      "kind": "on_reference",
+      "label": "static work van that remains a collision participant and screens the worker",
+      "actor": { "class": "van", "catalogId": "vehicle.van", "static": true, "dims": { "length": 5.3, "width": 2, "height": 2.4 } },
+      "pose": { "laneOffset": 0, "s": 126, "tFrac": -0.78, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0,
+      "extensions": { "occludes": { "observer": "ego", "target": "worker" } }
+    },
+    {
+      "id": "worker",
+      "kind": "on_reference",
+      "label": "worker who steps from the protected edge into ego's lane",
+      "actor": { "class": "pedestrian", "catalogId": "construction.flagger", "dims": { "length": 0.65, "width": 0.65, "height": 1.75 } },
+      "pose": { "laneOffset": 0, "s": 132, "tFrac": -0.78, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [
+    {
+      "id": "shoulder-cones",
+      "catalogId": "construction.traffic_cone",
+      "label": "visible boundary of the active work area",
+      "essentiality": "preferred",
+      "pose": { "laneOffset": 0, "s": 104, "tFrac": -0.82, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0,
+      "scale": 1,
+      "repeat": { "count": 7, "spacingM": 6, "tFracStep": 0 }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 15,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "work-vehicle-hazards", "actor": "work-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "lights.indicator", "value": "hazard" } },
+      { "id": "worker-commits", "actor": "worker", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "worker-looks-away", "actor": "worker", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "pose.headingLookDeg", "value": -90 } },
+      {
+        "id": "worker-crosses",
+        "actor": "worker",
+        "verb": "route",
+        "trigger": { "kind": "at", "t": "param.intrusionStartS" },
+        "target": {
+          "mode": "polyline",
+          "points": [
+            { "laneOffset": 0, "s": 132, "tFrac": -0.78, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 134, "tFrac": -0.3, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 135, "tFrac": 0.35, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 137, "tFrac": 1, "headingOffsetRad": 0 }
+          ]
+        }
+      },
+      {
+        "id": "worker-enters",
+        "actor": "worker",
+        "verb": "speed",
+        "trigger": { "kind": "at", "t": "param.intrusionStartS" },
+        "target": { "mode": "absolute", "valueKph": "param.workerSpeedKph" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 0.25 }
+      },
+      {
+        "id": "worker-clears-and-stops",
+        "actor": "worker",
+        "verb": "speed",
+        "trigger": { "kind": "after", "of": "worker-enters", "event": "start", "delayS": "param.clearanceHoldS" },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 0.4 }
+      },
+      { "id": "worker-faces-work-area", "actor": "worker", "verb": "set", "trigger": { "kind": "after", "of": "worker-clears-and-stops", "event": "start", "delayS": 0.4 }, "target": { "key": "pose.headingLookDeg", "value": 90 } }
+    ]
+  },
+  "invariants": [
+    { "id": "intrusion-sequence", "kind": "event_order", "events": ["worker-crosses", "worker-clears-and-stops", "worker-faces-work-area"], "strict": true, "minSeparationS": 0.3, "essentiality": "required" },
+    { "id": "worker-criticality", "kind": "pet", "of": "ego", "to": "worker", "range": [0.2, 3.5], "window": [2, 12], "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

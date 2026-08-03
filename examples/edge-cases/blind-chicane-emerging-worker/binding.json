@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "scenarioId": "edge-01-blind-chicane-emerging-worker-v1",
+  "mapId": "belmont-research-center",
+  "siteId": "0a4650e5055bf351",
+  "siteVerdict": "degraded",
+  "siteScore": 0.5335,
+  "seed": "edge-01-blind-chicane-emerging-worker-v1",
+  "drawIndex": -1,
+  "locationClaim": "matched transferable two-way corridor; portable work-zone geometry and controls are authored relative to the selected site",
+  "portability": {
+    "templateRelative": true,
+    "physicalTrafficControls": true,
+    "attachedCarrierProps": true,
+    "exactAlternativeLocationsVerified": false
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "manifestVersion": 1,
+  "generatedAt": "2026-08-02T13:00:00.000Z",
+  "owner": "codex/edge-campaign-01-02",
+  "scenarios": [
+    {
+      "ordinal": 1,
+      "projectId": "edge-01-blind-chicane-emerging-worker-v1",
+      "path": "../blind-chicane-emerging-worker",
+      "template": "../blind-chicane-emerging-worker/scenario.template.json",
+      "intent": "../blind-chicane-emerging-worker/intent.json",
+      "rubric": "../blind-chicane-emerging-worker/intent-rubric.json",
+      "binding": "../blind-chicane-emerging-worker/binding.json",
+      "studioProject": "../blind-chicane-emerging-worker/studio.json",
+      "instance": "../blind-chicane-emerging-worker/instance.json",
+      "trace": "../blind-chicane-emerging-worker/trace.json.gz",
+      "evaluation": "../blind-chicane-emerging-worker/intent-evaluation.json",
+      "validation": "../blind-chicane-emerging-worker/validation-report.json",
+      "hashes": "../blind-chicane-emerging-worker/evidence-hashes.json",
+      "ambientMatrix": "../blind-chicane-emerging-worker/ambient-matrix.json",
+      "evidenceStatus": "baseline-and-ambient-verified"
+    },
+    {
+      "ordinal": 2,
+      "projectId": "edge-02-bus-occluded-child-signalized-crossing-v1",
+      "path": "../bus-occluded-child-signalized-crossing",
+      "template": "../bus-occluded-child-signalized-crossing/scenario.template.json",
+      "intent": "../bus-occluded-child-signalized-crossing/intent.json",
+      "rubric": "../bus-occluded-child-signalized-crossing/intent-rubric.json",
+      "binding": "../bus-occluded-child-signalized-crossing/binding.json",
+      "studioProject": "../bus-occluded-child-signalized-crossing/studio.json",
+      "instance": "../bus-occluded-child-signalized-crossing/instance.json",
+      "trace": "../bus-occluded-child-signalized-crossing/trace.json.gz",
+      "evaluation": "../bus-occluded-child-signalized-crossing/intent-evaluation.json",
+      "validation": "../bus-occluded-child-signalized-crossing/validation-report.json",
+      "hashes": "../bus-occluded-child-signalized-crossing/evidence-hashes.json",
+      "ambientMatrix": "../bus-occluded-child-signalized-crossing/ambient-matrix.json",
+      "evidenceStatus": "baseline-and-ambient-intent-verified-platform-braking-blocker"
+    }
+  ]
+}

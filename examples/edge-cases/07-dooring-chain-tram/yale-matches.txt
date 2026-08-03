@@ -1,0 +1,6 @@
+Dooring Chain Reaction Beside Tram Tracks (edge.dooring-chain-tram) — 0 site(s) across 1 map(s)
+
+map                             sites  score min–max   exact/deg   cands   frames
+yale-street                     0      —               0/0         123     246
+    No feasible site. Required clauses that failed most often: corridor.requiresAdjacent (failed at 121/123 sites), roles.tram (failed at 99/123 sites), features.parking.atM (failed at 76/123 sites). Example: Infeasible at this site. missing adjacency at s=0 m (found opposing). no parking_zone on the reference path. roles.parked-car could not be satisfied. roles.tram could not be satisfied. Would have required relaxing a required clause: parked-car could not be bound and is not cosmetic. Would have required relaxing a required clause: tram could not be bound and is not cosmetic. Required clauses this map index cannot answer: features.parking.atM.
+

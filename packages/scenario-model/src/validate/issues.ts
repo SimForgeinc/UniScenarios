@@ -32,6 +32,7 @@ export const ISSUE_CODES = [
   'feature_ref_unknown',
   'interaction_ref_unknown',
   'param_ref_unknown',
+  'control_ref_unknown',
   'feature_kind_mismatch',
   'self_reference',
   // --- timeline structure ---------------------------------------------------
@@ -56,6 +57,8 @@ export const ISSUE_CODES = [
   'anchor_unconstrained',
   'occluder_pair_missing',
   'occluder_dropped',
+  'attached_prop_repeat_unsupported',
+  'attached_prop_repeat_unsupported',
   'non_portable_role',
   'pin_required',
   'pin_site_unresolved',

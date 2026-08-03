@@ -1,0 +1,122 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Wrong-Way Sedan Beyond a Blind Crest",
+    "description": "A wrong-way sedan appears beyond a blind overpass crest in ego's lane while a bus occupies the opposing lane and a motorcycle follows ego, leaving braking and a constrained right-edge refuge as the only safe response.",
+    "createdAt": "2026-08-02T00:00:00.000Z",
+    "modifiedAt": "2026-08-02T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "edge.wrong-way-sedan-blind-crest",
+    "tags": ["edge-case", "wrong-way", "blind-crest", "overpass", "opposing-blockage", "follower-pressure"],
+    "author": "codex/edge-campaign-03-04",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "egoSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [38, 42], "default": 40, "distribution": "uniform" },
+      { "id": "detectionDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [42, 48], "default": 45, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "blind-crest-two-way-corridor",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 2], "essentiality": "required" },
+      "throughLanesOpposing": { "value": [1, 3], "essentiality": "preferred", "weight": 5 },
+      "speedLimitKph": { "value": [30, 55], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [1, 10], "essentiality": "preferred", "weight": 3 },
+      "runwayUpstreamM": { "value": [0, null], "essentiality": "preferred", "weight": 1 },
+      "runwayDownstreamM": { "value": [110, null], "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 12, "diversity": "strict", "minScore": 0.55 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "ego climbing toward the blind crest",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 14, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "param.egoSpeedKph",
+      "extensions": { "laneUse": "legal", "roadContext": "narrow_overpass" }
+    },
+    {
+      "id": "wrong-way-sedan", "kind": "relative_to", "ref": "ego", "dLane": 0, "dsM": 156, "tFrac": 0, "headingOffsetRad": 3.1415926535897927, "label": "wrong-way sedan hidden beyond the crest in ego's lane",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "initialSpeedKph": 28,
+      "extensions": { "laneUse": "wrong_way", "mustRemainInEgoLane": true }
+    },
+    {
+      "id": "opposing-bus", "kind": "opposing", "k": 0, "label": "correct bus blocking a centerline escape",
+      "actor": { "class": "bus", "catalogId": "vehicle.bus" },
+      "pose": { "laneOffset": 0, "s": 100, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 4,
+      "requiredHeadingRelation": { "role": "ego", "relation": "antiparallel", "maxErrorDeg": 10 },
+      "extensions": { "blocksCenterlineEscape": true }
+    },
+    {
+      "id": "following-motorcycle", "kind": "on_reference",
+      "label": "motorcycle applying rear pressure behind ego",
+      "actor": { "class": "motorcycle", "catalogId": "vehicle.motorcycle" },
+      "pose": { "laneOffset": 0, "s": 0, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "param.egoSpeedKph",
+      "requiredHeadingRelation": { "role": "ego", "relation": "parallel", "maxErrorDeg": 6 }
+    }
+  ],
+  "props": [
+    {
+      "id": "right-parapet", "catalogId": "construction.jersey_barrier_run", "label": "right concrete overpass parapet",
+      "pose": { "laneOffset": 0, "s": 30, "tFrac": -1, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0, "scale": 1,
+      "repeat": { "count": 18, "spacingM": 5, "tFracStep": 0 },
+      "essentiality": "required",
+      "extensions": { "semanticType": "overpass_parapet", "minimumClearanceM": 0.4 }
+    },
+    {
+      "id": "crest-occlusion", "catalogId": "construction.jersey_barrier_run", "label": "blind crest visibility proxy",
+      "pose": { "laneOffset": 0, "s": 100, "tFrac": 0, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0, "scale": 1,
+      "occludes": { "observer": "ego", "target": "wrong-way-sedan" },
+      "targetRevealToConflictS": 1.4,
+      "essentiality": "required",
+      "extensions": { "semanticType": "vertical_horizontal_crest_occlusion", "detectionDistanceM": 45, "collidable": false }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "interactions": [
+      { "id": "wrong-way-route", "actor": "wrong-way-sedan", "verb": "route", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "polyline", "points": [
+        { "laneOffset": 0, "s": 170, "tFrac": 0, "headingOffsetRad": 3.1415926535897927 },
+        { "laneOffset": 0, "s": -70, "tFrac": 0, "headingOffsetRad": 3.1415926535897927 }
+      ] } },
+      { "id": "wrong-way-visible", "actor": "wrong-way-sedan", "verb": "set", "trigger": { "kind": "at", "t": 7.6 }, "target": { "key": "lights.brake", "value": true } },
+      { "id": "ego-brakes", "actor": "ego", "verb": "speed", "trigger": { "kind": "at", "t": 9.1 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2.1 } },
+      { "id": "wrong-way-brakes", "actor": "wrong-way-sedan", "verb": "speed", "trigger": { "kind": "at", "t": 9.2 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2.1 } },
+      { "id": "motorcycle-brakes", "actor": "following-motorcycle", "verb": "speed", "trigger": { "kind": "after", "of": "ego-brakes", "event": "start", "delayS": 0.5 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2.4 } },
+      { "id": "ego-edges-right", "actor": "ego", "verb": "laneOffset", "trigger": { "kind": "at", "t": 12 }, "target": { "tFrac": -0.05, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2.5 } },
+      { "id": "wrong-way-offsets", "actor": "wrong-way-sedan", "verb": "laneOffset", "trigger": { "kind": "at", "t": 13 }, "target": { "tFrac": 0.35, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2 } },
+      { "id": "hold-position", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 18 }, "target": { "key": "lights.brake", "value": true } }
+    ]
+  },
+  "invariants": [
+    { "id": "hazard-response-order", "kind": "event_order", "events": ["wrong-way-visible", "ego-brakes", "motorcycle-brakes", "ego-edges-right", "hold-position"], "strict": true, "essentiality": "required" },
+    { "id": "wrong-way-response-order", "kind": "event_order", "events": ["wrong-way-visible", "wrong-way-brakes", "wrong-way-offsets"], "strict": true, "essentiality": "required" },
+    { "id": "rear-gap-positive", "kind": "gap", "of": "following-motorcycle", "to": "ego", "unit": "distance", "range": [0.1, 50], "window": [0, 20], "essentiality": "required" },
+    { "id": "head-on-criticality", "kind": "ttc", "of": "ego", "to": "wrong-way-sedan", "range": [0.2, 5], "mode": "min", "window": [5, 16], "essentiality": "required" },
+    { "id": "ego-deceleration", "kind": "decel_budget", "of": "ego", "maxMps2": 5, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego",
+  "extensions": {
+    "acceptanceContract": {
+      "collisionFreeStop": true,
+      "egoBelow5KphBeforeSeparationM": 8,
+      "minParapetClearanceM": 0.4,
+      "forbidCenterlineCrossingWhileBusAlongside": true,
+      "motorcyclePositiveGap": true
+    },
+    "forbiddenOutcomes": ["pass between sedan and parapet", "enter opposing bus lane", "panic reverse", "lateral oscillation contact"],
+    "transferInvariants": ["blind crest occlusion", "wrong-way actor in ego lane", "opposing-lane blockage", "narrow right margin", "follower pressure", "relative 45m detection distance"]
+  }
+}

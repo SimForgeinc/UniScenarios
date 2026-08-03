@@ -1,0 +1,128 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Late merge at a temporary lane drop",
+    "description": "Scenario-authored cones, channelizers, and a red-X lane control close a real travel lane. A late merger remains in that closing lane beside ego, ignores the advance lane-control indication, and merges into the adjacent surviving lane at the taper.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-02T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "lane-change.lane-drop-late-merge",
+    "tags": ["lane-change", "temporary-lane-drop", "late-merge", "channelizer", "red-x"],
+    "author": "agent/remaining-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "overlapM", "type": "continuous", "unit": "m", "tier": 1, "range": [-5.1, -4.5], "default": -4.8, "distribution": "uniform" },
+      { "id": "lateralRateMps", "type": "continuous", "unit": "m/s", "tier": 1, "range": [1.19, 1.24], "default": 1.215, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "temporary-lane-drop-late-merge",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 5], "essentiality": "required" },
+      "speedLimitKph": { "value": [30, 65], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [165, null], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "right", "sRange": [85, 133] }, "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "temporary-closure-reservation",
+        "kind": "work_zone_suitable",
+        "atM": { "value": [150, 165], "essentiality": "required" },
+        "sameRoad": { "value": true, "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 16, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "lane_offset",
+      "k": -1,
+      "onMissing": "fail",
+      "label": "vehicle in the adjacent surviving lane",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": -1, "s": 68, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.48 * lane.speedLimitKph, 22, 24)"
+    },
+    {
+      "id": "late-merger",
+      "kind": "on_reference",
+      "label": "vehicle remaining in the scenario-authored closing lane",
+      "actor": { "class": "car", "catalogId": "vehicle.suv" },
+      "pose": { "laneOffset": 0, "s": "68 + param.overlapM", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.55 * lane.speedLimitKph, 25, 28)"
+    },
+    {
+      "id": "terminal-channelizer",
+      "kind": "on_reference",
+      "label": "collidable terminal drum closing the lane",
+      "actor": { "class": "static_object", "catalogId": "construction.channelizer_drum", "static": true, "dims": { "length": 0.9, "width": 0.9, "height": 1.15 } },
+      "pose": { "laneOffset": 0, "s": 138, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [
+    {
+      "id": "closing-lane-taper",
+      "catalogId": "construction.traffic_cone",
+      "label": "collidable cone taper closing the merger lane",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 98, "tFrac": 0.78, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0,
+      "scale": 1,
+      "repeat": { "count": 8, "spacingM": 5, "tFracStep": -0.11 },
+      "extensions": { "collidable": true, "controlOwnership": "scenario-authored" }
+    }
+  ],
+  "trafficControls": [
+    {
+      "id": "closing-lane-red-x",
+      "kind": "lane_control",
+      "label": "scenario-authored temporary red-X lane control",
+      "pose": { "laneOffset": 0, "s": 92, "tFrac": 0, "headingOffsetRad": 0 },
+      "stopLines": [
+        { "pose": { "laneOffset": 0, "s": 134, "tFrac": 0, "headingOffsetRad": 0 } }
+      ],
+      "phases": [{ "indication": "red_x", "durationS": 12 }],
+      "offsetS": 0,
+      "loop": false
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 12,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "merger-disregards-red-x", "actor": "late-merger", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.obeySignals", "value": false } },
+      { "id": "merger-avoids-contact", "actor": "late-merger", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": true } },
+      {
+        "id": "merge-at-temporary-taper",
+        "actor": "late-merger",
+        "verb": "changeLane",
+        "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "late-merger", "to": { "role": "terminal-channelizer" }, "measure": "alongLane", "op": "<=", "valueM": 35 }, "byLatest": 7, "ifNever": "fire" },
+        "target": { "mode": "toRole", "role": "ego" },
+        "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": "param.lateralRateMps" }
+      },
+      { "id": "ego-yields-to-late-merger", "actor": "ego", "verb": "speed", "trigger": { "kind": "after", "of": "merge-at-temporary-taper", "event": "start", "delayS": 0.8 }, "target": { "mode": "factor", "factor": 0.78 }, "dynamics": { "shape": "linear", "constraint": "rate", "value": 4.5 } }
+    ]
+  },
+  "invariants": [
+    { "id": "pre-merge-overlap", "kind": "gap", "of": "ego", "to": "late-merger", "unit": "distance", "range": [0, 8], "window": [0, 5], "essentiality": "required" },
+    { "id": "merge-criticality", "kind": "ttc", "of": "ego", "to": "late-merger", "range": [0.2, 3], "mode": "min", "window": [2, 9], "essentiality": "required" },
+    { "id": "stable-aftermath-gap", "kind": "gap", "of": "ego", "to": "late-merger", "unit": "distance", "range": [2, null], "window": [10, 12], "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego",
+  "extensions": {
+    "temporaryControlProvenance": {
+      "ownership": "scenario-authored",
+      "mapOwnedLaneDrop": false,
+      "mechanism": "temporary_lane_drop",
+      "distinguishingConflict": "late-merger gap conflict"
+    }
+  }
+}

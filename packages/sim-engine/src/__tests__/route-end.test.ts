@@ -35,4 +35,33 @@ describe('terminal actor poses', () => {
     expect(track.speedMps.at(-1)).toBe(0);
     expect(trace.events.some((event) => event.kind === 'despawn' && event.actorId === 'ped')).toBe(false);
   });
+
+  it.each(['car', 'bicycle', 'animal'] as const)(
+    'holds a terminal %s without implicit despawn or nonzero frozen speed',
+    (kind) => {
+      const input = parseSimScenarioInput({
+        mapId: 'synthetic-straight',
+        clipSeconds: 3,
+        warmupSeconds: 0,
+        dt: 0.02,
+        seed: `terminal-${kind}`,
+        actors: [{
+          id: kind,
+          kind,
+          initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 3 },
+          behavior: {
+            route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 2, z: 0 }] },
+            cruiseSpeedMps: 3,
+          },
+        }],
+      });
+
+      const { trace } = runSimulation(input, { graph, guards: 'collect' });
+      const track = trace.ticks.actors[kind]!;
+      expect(track.present.every((present) => present === 1)).toBe(true);
+      expect(track.x.at(-1)).toBeCloseTo(2, 4);
+      expect(track.speedMps.at(-1)).toBe(0);
+      expect(trace.events.some((event) => event.kind === 'despawn')).toBe(false);
+    },
+  );
 });

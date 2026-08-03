@@ -1,0 +1,17 @@
+{
+  "algorithm": "sha256",
+  "files": {
+    "scenario.template.json": "9716cb2bc0718d1a4c6cc15213f2d443ec5b9e6939341ff59667790c87c61ad1",
+    "intent.json": "dfdfc360c8a5cf7ea2d0dc5e8445c5c09e46bc5f08a9a347419908e6a9d3ad4f",
+    "intent-rubric.json": "234576c3c46caf2e0ff6610590a79f67ccf99f50353cf8c4459f9844b235613b",
+    "binding.json": "ff522da6d8106b6075628c580e555132ff27c28558884416dd62d36f17bae010",
+    "studio.json": "4efc07f7c49b048db8679e9bb10908283b593b3f518e43ed3787b3ec95e1887f",
+    "instance.json": "8a71886dfe48227888f31e30d0c8eba9cd6e340071d91670718db904b96d982b",
+    "trace.json.gz": "ddee3c14c025dfda0800bb6e233cfcc6b9715f4790e9a6ef7f951d48e3ad5e77",
+    "simulation.json": "fa7eb85516f7db2bf1f82d481aa78aa0f119077e3cec59df6a1b405985f34532",
+    "intent-evaluation.json": "1f9985d3c0ba74c2b88bc33e91b127923ef0ed3c1cfd3fb511365c96abcb29a7",
+    "blind-review.json": "999accd371ed7cbfd4d154b75a36b9f7b9f4eff82541f97d2cdcff0c6166aa2c",
+    "validation-report.json": "0e04b69365888565eb4e1bbf27d144588256f37446b92d84776eaa0d723c7961",
+    "ambient-matrix.json": "ad707755478a10c50637bc766db6e604d20a5d8f1ea7f9bda5f207aaebb82e0a"
+  }
+}

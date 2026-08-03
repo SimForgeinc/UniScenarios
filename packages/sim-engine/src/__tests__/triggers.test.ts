@@ -214,8 +214,12 @@ describe('visible / occluders', () => {
     expect(trace.metrics.triggerNeverFired).toEqual([]);
     const fired = trace.events.find((e) => e.kind === 'trigger_fired');
     expect(fired!.t).toBeGreaterThan(0);
-    expect(trace.metrics.revealToConflict).not.toBeNull();
-    expect(trace.metrics.revealToConflict!.value).toBeGreaterThanOrEqual(0);
+    expect(trace.metrics.declaredOcclusion).toEqual([
+      expect.objectContaining({ status: 'revealed_before_conflict', losOpenT: fired!.t }),
+    ]);
+    // These are parallel lanes with no physical conflict; LOS evidence must
+    // not manufacture a global criticality record.
+    expect(trace.metrics.revealToConflict).toBeNull();
   });
 });
 

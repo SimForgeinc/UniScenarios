@@ -10,11 +10,166 @@ import {
 import {
   AsamExportError,
   type AsamExportIssue,
+  type AsamCapabilityEntry,
+  type AsamCapabilityReport,
   type AsamExportOptions,
+  type AsamExportProfile,
   type AsamExportWarning,
   type ResolvedAsamScenario,
   type ResolvedInteraction,
 } from './types.js';
+
+type CapabilityDecision = Omit<AsamCapabilityEntry, 'path'>;
+
+const decision = (
+  disposition: CapabilityDecision['disposition'],
+  fidelity: CapabilityDecision['fidelity'],
+  reason: string,
+): CapabilityDecision => ({ disposition, fidelity, reason });
+
+/**
+ * The `satisfies` constraint deliberately makes a new SimScenarioInput field a
+ * compile failure until every ASAM profile declares how it is handled.
+ */
+function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenarioInput, CapabilityDecision> {
+  const replay = profile === 'xml-1.4-trajectory-replay' || profile === 'xml-1.3-esmini-trajectory-replay';
+  const xmlActions = profile === 'xml-1.4-actions' || profile === 'xml-1.3-esmini-actions';
+  return {
+    schemaVersion: decision('extension', 'metadata-only', 'recorded as UniScenarios provenance, not an ASAM schema version'),
+    mapId: decision('preserved', 'exact', 'represented by the referenced road-network file'),
+    clipSeconds: decision('preserved', 'exact', 'represented by the storyboard/scenario duration'),
+    warmupSeconds: decision('preserved', 'exact', 'represented by shifting the ASAM clock origin'),
+    dt: replay
+      ? decision('extension', 'metadata-only', 'recorded as replay sampling provenance; vertices use this sampling interval')
+      : decision('omitted', 'none', 'engine integration timestep has no editable ASAM action equivalent'),
+    seed: replay
+      ? decision('extension', 'metadata-only', 'recorded as replay provenance; stochastic outcomes are baked into the trace')
+      : decision('omitted', 'none', 'engine random seed has no portable editable ASAM action equivalent'),
+    physics: decision('extension', 'metadata-only', 'motion/physics mode and solver provenance are retained in UniScenarios Properties; editable ASAM behavior is not claimed to preserve the selected solver'),
+    operationalConditions: replay
+      ? decision('derived', 'approximate', 'effects are baked into sampled motion but weather/time/traffic intent is not editable')
+      : decision('omitted', 'none', 'this profile does not emit environment/weather/traffic declarations'),
+    metricSubject: decision('omitted', 'none', 'UniScenarios metric evaluation is outside the exported execution model'),
+    actors: replay
+      ? decision('derived', 'approximate', 'identity and geometry are preserved; motion is a sampled simulation trace')
+      : decision('preserved', xmlActions ? 'approximate' : 'approximate', 'entities, initial state, route, and supported controller behavior are mapped to standard constructs'),
+    interactions: replay
+      ? decision('derived', 'approximate', 'outcomes are baked into trajectories; causal triggers and authoring intent are flattened')
+      : decision('preserved', 'approximate', 'supported actions and triggers are mapped; unsupported variants reject export'),
+    signalPrograms: replay
+      ? decision('derived', 'approximate', 'sampled signal-head states are replayed; authored cycle semantics are flattened')
+      : xmlActions
+        ? decision('preserved', 'approximate', 'mapped to traffic-signal controller phases after profile validation')
+        : decision('omitted', 'none', 'the concrete DSL profile has no traffic-light program mapping'),
+    roadControls: decision('omitted', 'none', 'road-control declarations are not emitted by the current profiles'),
+    props: decision('omitted', 'none', 'render-catalog props are not emitted by the current profiles'),
+    occluders: decision('preserved', 'approximate', 'exported as stationary bounding-box objects without catalog appearance'),
+    occlusionPairs: decision('omitted', 'none', 'line-of-sight evaluation pairs are not an ASAM execution concept'),
+  } satisfies Record<keyof SimScenarioInput, CapabilityDecision>;
+}
+
+function fieldHasMaterialValue(input: SimScenarioInput, path: keyof SimScenarioInput): boolean {
+  switch (path) {
+    case 'physics': return input.physics !== undefined;
+    case 'metricSubject': return input.metricSubject !== undefined;
+    case 'interactions': return input.interactions.length > 0;
+    case 'signalPrograms': return input.signalPrograms.length > 0;
+    case 'roadControls': return input.roadControls.length > 0;
+    case 'props': return input.props.length > 0;
+    case 'occluders': return input.occluders.length > 0;
+    case 'occlusionPairs': return input.occlusionPairs.length > 0;
+    default: return true;
+  }
+}
+
+export function analyzeAsamCapabilities(
+  input: SimScenarioInput,
+  profile: AsamExportProfile,
+): { report: AsamCapabilityReport; warnings: AsamExportWarning[] } {
+  const decisions = capabilityDecisions(profile);
+  const fields = (Object.keys(decisions) as Array<keyof SimScenarioInput>).map((path) => ({
+    path,
+    ...decisions[path],
+  }));
+  const summary: Record<AsamCapabilityEntry['disposition'], number> = {
+    preserved: 0,
+    derived: 0,
+    extension: 0,
+    omitted: 0,
+  };
+  for (const field of fields) summary[field.disposition] += 1;
+  const replay = profile === 'xml-1.4-trajectory-replay' || profile === 'xml-1.3-esmini-trajectory-replay';
+  const intent = replay ? 'trajectory-replay' : 'editable-semantic';
+  const warnings = fields.flatMap((field): AsamExportWarning[] => {
+    if (!fieldHasMaterialValue(input, field.path)) return [];
+    if (field.disposition === 'omitted') {
+      return [{ code: 'field_omitted', path: field.path, reason: field.reason }];
+    }
+    if (field.disposition === 'derived') {
+      return [{ code: 'semantic_intent_flattened', path: field.path, reason: field.reason }];
+    }
+    return [];
+  });
+  if (!replay) {
+    for (const [index, actor] of input.actors.entries()) {
+      if (actor.initial.laneRef) {
+        warnings.push({
+          code: 'lane_reference_flattened',
+          path: `actors.${index}.initial.laneRef`,
+          reason: 'the resolved world pose/route is exported, but the engine lane reference is not editable in this ASAM profile',
+        });
+      }
+      if (profile === 'dsl-2.2-actions' && actor.tags.length > 0) {
+        warnings.push({
+          code: 'actor_tags_omitted',
+          path: `actors.${index}.tags`,
+          reason: 'free-form UniScenarios actor tags have no field in the concrete DSL entity declaration profile',
+        });
+      }
+    }
+  }
+  for (const [index, actor] of input.actors.entries()) {
+    const catalog = actor.tags.find((tag) => tag.startsWith('catalog:'));
+    if (catalog) {
+      warnings.push({
+        code: 'catalog_appearance_approximate',
+        path: `actors.${index}.tags`,
+        reason: `${catalog.slice('catalog:'.length)} is exported with semantic class and dimensions, but its procedural Studio appearance is not portable OpenSCENARIO catalog geometry`,
+      });
+    }
+  }
+  for (const interaction of input.interactions) {
+    if (interaction.verb !== 'set') continue;
+    if (interaction.target.key === 'lights.emergency' || interaction.target.key === 'audio.horn') {
+      warnings.push({
+        code: 'nonportable_emergency_cue',
+        path: `interactions.${interaction.id}.target.key`,
+        reason: `${interaction.target.key} is retained as a user-defined XML appearance cue where supported; external simulators are not required to render light, siren, or horn output`,
+      });
+    }
+  }
+  return {
+    report: {
+      profile,
+      intent,
+      roundTrip: 'not-supported',
+      fields,
+      summary,
+      externalSimulatorValidation: 'not-verified',
+    },
+    warnings,
+  };
+}
+
+export function mergeAsamWarnings(...groups: ReadonlyArray<readonly AsamExportWarning[]>): AsamExportWarning[] {
+  const seen = new Set<string>();
+  return groups.flatMap((group) => group.filter((warning) => {
+    const key = `${warning.code}\0${warning.path}\0${warning.reason}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }));
+}
 
 const DSL_KEYWORDS = new Set([
   'action', 'actor', 'and', 'as', 'bool', 'call', 'cover', 'default', 'def', 'do',
@@ -59,6 +214,7 @@ function dynamicsDuration(interaction: Interaction): number | null {
 /** Resolve `at`/`after` triggers to absolute time for the DSL profile. */
 export function resolveStaticStartTimes(
   interactions: readonly Interaction[],
+  timelineOffsetS = 0,
 ): { times: Map<string, number>; issues: AsamExportIssue[] } {
   const byId = new Map(interactions.map((interaction) => [interaction.id, interaction]));
   const times = new Map<string, number>();
@@ -76,7 +232,7 @@ export function resolveStaticStartTimes(
     visiting.add(interaction.id);
     let value: number | null = null;
     if (interaction.trigger.kind === 'at') {
-      value = Math.max(0, interaction.trigger.t);
+      value = timelineOffsetS + Math.max(0, interaction.trigger.t);
     } else if (interaction.trigger.kind === 'after') {
       const parent = byId.get(interaction.trigger.interactionId);
       if (!parent) {
@@ -190,7 +346,10 @@ export function resolveScenario(
 
   let staticTimes = new Map<string, number>();
   if (includeStaticTimes) {
-    const resolved = resolveStaticStartTimes(input.interactions);
+    // ASAM execution begins at UniScenarios' unrecorded warm-up origin. This
+    // preserves pre-roll actions and makes the recorded t=0 occur at
+    // ASAM t=warmupSeconds instead of silently dropping the warm-up.
+    const resolved = resolveStaticStartTimes(input.interactions, input.warmupSeconds);
     staticTimes = resolved.times;
     issues.push(...resolved.issues);
   }
@@ -199,21 +358,6 @@ export function resolveScenario(
     name: interactionNames.get(interaction.id)!,
     ...(staticTimes.has(interaction.id) ? { startTimeS: staticTimes.get(interaction.id)! } : {}),
   }));
-
-  if (input.metricSubject) {
-    warnings.push({
-      code: 'evaluation_metadata_omitted',
-      path: 'metricSubject',
-      reason: 'ASAM OpenSCENARIO describes scenario behavior, not UniScenarios metric evaluation',
-    });
-  }
-  if (input.occlusionPairs.length > 0) {
-    warnings.push({
-      code: 'evaluation_metadata_omitted',
-      path: 'occlusionPairs',
-      reason: 'physical occluders are exported, but UniScenarios line-of-sight evaluation pairs are not an ASAM execution concept',
-    });
-  }
 
   if (issues.length > 0) throw new AsamExportError(issues);
   return { input, actors, interactions, actorNames, interactionNames, warnings };
@@ -229,6 +373,8 @@ export function assertDefaultControllerRules(
     const changed: string[] = [];
     if (!rules.obeySignals) changed.push('obeySignals');
     if (!rules.yield) changed.push('yield');
+    if (!rules.yieldToVehicles) changed.push('yieldToVehicles');
+    if (!rules.yieldToPedestrians) changed.push('yieldToPedestrians');
     if (rules.aggression !== 0.5) changed.push('aggression');
     if (rules.speedFactor !== 1) changed.push('speedFactor');
     if (!allowCollisionAvoidance && !rules.collisionAvoidance) changed.push('collisionAvoidance');

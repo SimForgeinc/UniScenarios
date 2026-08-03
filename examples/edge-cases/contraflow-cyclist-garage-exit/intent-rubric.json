@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "intentId": "edge-03-contraflow-cyclist-garage-exit-v1",
+  "title": "Contraflow Cyclist at a Parking-Garage Exit acceptance rubric",
+  "originalIntent": "Ego waits for a pedestrian, creeps at no more than 5 km/h, yields to the legal-direction cyclist, checks again and stops for a hidden 25 km/h contraflow rider, then observes for at least one second after the rider passes before entering. Ego must remain collision-free, preserve at least 1.5 metres cyclist clearance, avoid forcing either rider to brake, and occupy no more than 0.3 metres of the bike lane before final entry.",
+  "criteria": [
+    {
+      "id": "required-event-order",
+      "kind": "event_order",
+      "required": true,
+      "mode": "required",
+      "interactionIds": [
+        "pedestrian-clears",
+        "ego-first-creep",
+        "ego-yields-legal",
+        "legal-rider-passes",
+        "ego-second-creep",
+        "wrong-way-rider-emerges",
+        "ego-stops-for-contraflow",
+        "contraflow-rider-passes",
+        "ego-final-entry-route",
+        "ego-enters-after-bidirectional-check"
+      ]
+    },
+    {
+      "id": "initial-pedestrian-hold",
+      "kind": "stationary_success",
+      "required": true,
+      "actorId": "ego",
+      "window": [0, 4.18],
+      "maxSpeedMps": 0.1,
+      "minPresentSeconds": 4.16
+    },
+    {
+      "id": "first-creep-cap",
+      "kind": "speed_band",
+      "required": true,
+      "actorId": "ego",
+      "window": [4.2, 7.6],
+      "maxMps": 1.388889
+    },
+    {
+      "id": "second-creep-cap",
+      "kind": "speed_band",
+      "required": true,
+      "actorId": "ego",
+      "window": [11.2, 13.6],
+      "maxMps": 1.388889
+    },
+    {
+      "id": "contraflow-stop-hold",
+      "kind": "stationary_success",
+      "required": true,
+      "actorId": "ego",
+      "window": [13.62, 18.68],
+      "maxSpeedMps": 0.1,
+      "minPresentSeconds": 5
+    },
+    {
+      "id": "legal-cyclist-clearance",
+      "kind": "clearance",
+      "required": true,
+      "pair": ["ego", "legal-cyclist"],
+      "measure": "metric_gap",
+      "minM": 1.5
+    },
+    {
+      "id": "contraflow-cyclist-clearance",
+      "kind": "clearance",
+      "required": true,
+      "pair": ["ego", "wrong-way-rider"],
+      "measure": "metric_gap",
+      "minM": 1.5
+    },
+    {
+      "id": "collision-free",
+      "kind": "collision",
+      "required": true,
+      "maxCount": 0
+    },
+    {
+      "id": "post-pass-observation-time",
+      "kind": "unsupported",
+      "required": false,
+      "description": "At least one second elapses between the contraflow pass marker and ego beginning final entry.",
+      "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace."
+    },
+    {
+      "id": "riders-not-forced-to-brake",
+      "kind": "unsupported",
+      "required": false,
+      "description": "Neither the legal cyclist nor the contraflow rider decelerates in response to ego.",
+      "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace."
+    },
+    {
+      "id": "bike-lane-encroachment",
+      "kind": "unsupported",
+      "required": false,
+      "description": "Before final entry, ego occupies no more than 0.3 metres of the protected bike lane.",
+      "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured."
+    }
+  ]
+}

@@ -3,4 +3,8 @@
  * gains, integration order, quantisation, metric definitions. Traces carry it
  * so a cached artefact from an older engine is never silently trusted.
  */
-export const ENGINE_VERSION = '0.1.0';
+// 0.3.0 is the provenance boundary where omitted physics begins a new
+// dynamic-v1 simulation. Earlier recorded traces retain kinematic semantics.
+// 0.4.0 adds deterministic rigid-body contact response and impulse telemetry;
+// immutable 0.3 traces remain readable under trace format v2.
+export const ENGINE_VERSION = '0.4.0';

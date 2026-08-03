@@ -133,6 +133,9 @@ export const FeatureKindSchema = z.enum([
   'parking_zone',
   'bus_stop',
   'driveway',
+  'school_zone',
+  'work_zone_suitable',
+  'occlusion_zone',
 ]);
 export type FeatureKind = z.infer<typeof FeatureKindSchema>;
 
@@ -142,7 +145,11 @@ export const JunctionPredicateSchema = z.strictObject({
   control: clause(z.array(JunctionControlSchema).min(1)).optional(),
   egoTurn: clause(TurnSchema).optional(),
   conflictingApproach: clause(
-    z.strictObject({ from: ApproachRelationSchema, turn: TurnSchema }),
+    z.strictObject({
+      from: ApproachRelationSchema,
+      turn: TurnSchema,
+      crossingAngleDeg: RangeSchema.optional(),
+    }),
   ).optional(),
   sizeM: clause(RangeSchema).optional(),
   hasCrossingOnLeg: clause(z.boolean()).optional(),
@@ -151,9 +158,26 @@ export type JunctionPredicate = {
   arms?: Clause<Range>;
   control?: Clause<JunctionControl[]>;
   egoTurn?: Clause<Turn>;
-  conflictingApproach?: Clause<{ from: ApproachRelation; turn: Turn }>;
+  conflictingApproach?: Clause<{
+    from: ApproachRelation;
+    turn: Turn;
+    crossingAngleDeg?: Range;
+  }>;
   sizeM?: Clause<Range>;
   hasCrossingOnLeg?: Clause<boolean>;
+};
+
+export const CrossingPredicateSchema = z.strictObject({
+  marked: clause(z.boolean()).optional(),
+  controlled: clause(z.boolean()).optional(),
+  lengthM: clause(RangeSchema).optional(),
+  placement: clause(z.enum(['junction_leg', 'midblock', 'either'])).optional(),
+});
+export type CrossingPredicate = {
+  marked?: Clause<boolean>;
+  controlled?: Clause<boolean>;
+  lengthM?: Clause<Range>;
+  placement?: Clause<'junction_leg' | 'midblock' | 'either'>;
 };
 
 export const AnchorFeatureSchema = z.strictObject({
@@ -161,15 +185,23 @@ export const AnchorFeatureSchema = z.strictObject({
   kind: FeatureKindSchema,
   /** Signed distance range along the reference path from the frame origin. */
   atM: clause(RangeSchema),
+  /** Absolute lateral distance from the reference path to a point feature. */
+  lateralDistanceM: clause(RangeSchema).optional(),
+  /** Require semantic road/section association rather than proximity alone. */
+  sameRoad: clause(z.boolean()).optional(),
   side: clause(SideSchema).optional(),
   junction: JunctionPredicateSchema.optional(),
+  crossing: CrossingPredicateSchema.optional(),
 });
 export interface AnchorFeature {
   id: string;
   kind: FeatureKind;
   atM: Clause<Range>;
+  lateralDistanceM?: Clause<Range>;
+  sameRoad?: Clause<boolean>;
   side?: Clause<Side>;
   junction?: JunctionPredicate;
+  crossing?: CrossingPredicate;
 }
 
 export const MatchPolicySchema = z.strictObject({

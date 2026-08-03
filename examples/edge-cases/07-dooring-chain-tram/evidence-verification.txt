@@ -1,0 +1,7 @@
+examples/edge-cases/07-dooring-chain-tram/instance.json ↔ examples/edge-cases/07-dooring-chain-tram/trace.json.gz: OK
+inputHash manifest=43644d6e44bab5c23d437a67b1f7267017e7e5dd94c5de26668d076d82c7663b trace=43644d6e44bab5c23d437a67b1f7267017e7e5dd94c5de26668d076d82c7663b recomputed=43644d6e44bab5c23d437a67b1f7267017e7e5dd94c5de26668d076d82c7663b
+mapId input=yale-street manifest=yale-street trace=yale-street
+matcherIndexDigest 33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e
+engineGraphDigest manifest=fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5 trace=fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5
+input actors 5: ego, lead-cyclist, parked-car, trailing-cyclist, tram
+trace actors 5: ego, lead-cyclist, parked-car, trailing-cyclist, tram

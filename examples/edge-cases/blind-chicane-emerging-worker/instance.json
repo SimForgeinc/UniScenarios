@@ -1,0 +1,1178 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "blind-chicane-two-way-corridor",
+      "templateVersion": 2,
+      "templateDigest": "e19adfb773196dc3",
+      "mapId": "belmont-research-center",
+      "matcherIndexDigest": "f7a0c32a33a8f97daca1d0c24aee8022dc2d6d5221c63ccbdf3e6ae6e7e1518f",
+      "engineGraphDigest": "35cf2b16a1d308c6436089a0edf66f20c87a79da12e79472a03a2f568ba28f63",
+      "siteId": "0a4650e5055bf351",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.2.5",
+      "paramSeed": "edge-01-blind-chicane-emerging-worker-v1",
+      "drawIndex": -1
+    },
+    "instanceId": "0a4650e5055bf351#-1",
+    "archetype": "edge.workzone.blind-chicane-emerging-worker",
+    "negativeControl": false,
+    "metricSubject": "ego",
+    "operationalVariant": null,
+    "site": {
+      "siteId": "0a4650e5055bf351",
+      "score": 0.5335,
+      "verdict": "degraded",
+      "originFeatureId": "seg_9f72bc3e7b10c33b",
+      "entryLaneRsl": "93:0:-1",
+      "egoTurn": null,
+      "degradationSummary": "Degraded match (score 0.53). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=-180 m, wanted [25, 55]. Presentation was relaxed; the scenario still tests what it was written to test.",
+      "matchedReasons": [
+        "corridor.curvatureDegPer10m holds over the whole interval (worst 0.3)",
+        "231.03 m of runway available, 180 m needed",
+        "180 m of runway available, 180 m needed",
+        "corridor.throughLanesOpposing holds over the whole interval (worst 1)",
+        "corridor.throughLanesSameDir holds over the whole interval (worst 1)"
+      ]
+    },
+    "params": {
+      "values": {
+        "chicaneSpeedKph": 14,
+        "workerSpeedKph": 5.2
+      },
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "ego",
+        "actorKind": "car",
+        "roleKind": "on_reference",
+        "laneRsl": "119:0:1",
+        "spawnS": 197.9999464571892,
+        "initialSpeedMps": 7.777777777777779,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "oncoming-van",
+        "actorKind": "van",
+        "roleKind": "opposing",
+        "laneRsl": "124:0:1",
+        "spawnS": 29.27625845159627,
+        "initialSpeedMps": 3.611111111111111,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "worker",
+        "actorKind": "pedestrian",
+        "roleKind": "on_reference",
+        "laneRsl": "402:0:1",
+        "spawnS": 259.9999706755842,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      }
+    ],
+    "props": [
+      {
+        "id": "excavator",
+        "catalogId": "construction.excavator",
+        "pose": {
+          "x": -139.5196074222747,
+          "z": -43.15030205640363,
+          "headingRad": -0.9460018243362232
+        },
+        "dims": {
+          "l": 5.15,
+          "w": 2.24,
+          "h": 2.71
+        },
+        "scale": 0.3,
+        "collidable": true,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "ego",
+          "target": "worker"
+        },
+        "targetRevealToConflictS": 1.2
+      },
+      {
+        "id": "far-portable-signal",
+        "catalogId": "construction.portable_signal",
+        "pose": {
+          "x": -82.1457538007079,
+          "z": -17.00654863158384,
+          "headingRad": 5.607693653952516
+        },
+        "dims": {
+          "l": 1.45,
+          "w": 1.2,
+          "h": 3.25
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-0",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -114.78220188322571,
+          "z": -39.72414137541257,
+          "headingRad": -0.008793205442471641
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-1",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -107.78164511706701,
+          "z": -39.6248845466767,
+          "headingRad": -0.009137761799782977
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-2",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -100.77848826850473,
+          "z": -39.52021028769721,
+          "headingRad": -0.01028672200841169
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-3",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -93.77687046691273,
+          "z": -39.406255180110456,
+          "headingRad": -0.011023003514342433
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "near-portable-signal",
+        "catalogId": "construction.portable_signal",
+        "pose": {
+          "x": -147.4279888606256,
+          "z": -104.72861804908584,
+          "headingRad": -1.5781514716113687
+        },
+        "dims": {
+          "l": 1.45,
+          "w": 1.2,
+          "h": 3.25
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-0",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.67273256354204,
+          "z": -74.72942235739416,
+          "headingRad": -1.5780945517411453
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-1",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.72908934957238,
+          "z": -67.72937922607464,
+          "headingRad": -1.5780119476658205
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-2",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.78477949557802,
+          "z": -60.72924685246429,
+          "headingRad": -1.5779036457718814
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-3",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.83962026699317,
+          "z": -53.729023585144844,
+          "headingRad": -1.577769646056443
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "worker-pipe",
+        "catalogId": "construction.long_pipe",
+        "pose": {
+          "x": -144.12498939349356,
+          "z": -116.70464814855733,
+          "headingRad": -1.578038198275027
+        },
+        "attachment": {
+          "actorId": "worker",
+          "longitudinalM": 0,
+          "lateralM": -4,
+          "heightM": 1.1,
+          "headingOffsetRad": 0
+        },
+        "dims": {
+          "l": 8,
+          "w": 0.62,
+          "h": 0.62
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      }
+    ],
+    "arrival": [],
+    "inputHash": "9a1376114caefdad20bc4e68117b18a86d4cc8773e8796186e5e46e3c60355d5",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "roles.oncoming-van.route",
+        "reason": "lane chain extended upstream by 2 lane(s) to reach the site-evaluated spawn at frame s=95.0 m"
+      },
+      {
+        "path": "props.excavator",
+        "reason": "occlusion declared between ego and worker; reveal-to-conflict is reported by the engine, not solved for"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "belmont-research-center",
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "dt": 0.02,
+    "seed": "edge-01-blind-ch",
+    "operationalConditions": {
+      "weather": "clear",
+      "timeOfDay": "day",
+      "traffic": "moderate",
+      "visibility": "unrestricted",
+      "effects": {
+        "visibilityRangeM": 1000,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 1
+      }
+    },
+    "metricSubject": "ego",
+    "actors": [
+      {
+        "id": "ego",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "119:0:1",
+            "s": 49.595410426467964,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": -144.25692976910082,
+            "z": -98.70518527693282,
+            "headingRad": -1.5781826721229972
+          },
+          "speedMps": 7.777777777777779
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "93:0:-1",
+              "1307:0:-1",
+              "76:0:1",
+              "476:0:1",
+              "75:0:1",
+              "1245:0:1",
+              "119:0:1",
+              "402:0:1",
+              "124:0:-1",
+              "1315:0:-1",
+              "34:0:1",
+              "816:0:1",
+              "67:0:1",
+              "909:0:1",
+              "92:0:1"
+            ]
+          },
+          "cruiseSpeedMps": 7.777777777777779
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:ego",
+          "class:car",
+          "binding:on_reference",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "oncoming-van",
+        "kind": "van",
+        "dims": {
+          "l": 5.5,
+          "w": 2,
+          "h": 2.2
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "124:0:1",
+            "s": 8.61375896645039,
+            "tFrac": 0.7
+          },
+          "pose": {
+            "x": -124.7972032366159,
+            "z": -37.50216071128074,
+            "headingRad": 3.1282423193311484
+          },
+          "speedMps": 3.611111111111111
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "124:0:1",
+              "401:0:1",
+              "119:0:-1",
+              "1244:0:-1",
+              "75:0:-1",
+              "481:0:-1",
+              "10:0:1",
+              "1038:0:1",
+              "21:0:-1",
+              "436:0:-1",
+              "22:0:-1"
+            ]
+          },
+          "cruiseSpeedMps": 3.611111111111111
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:oncoming-van",
+          "class:van",
+          "binding:opposing",
+          "catalog:vehicle.van"
+        ]
+      },
+      {
+        "id": "worker",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.7,
+          "w": 0.65,
+          "h": 1.75
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "402:0:1",
+            "s": 6.389371289480245,
+            "tFrac": 1
+          },
+          "pose": {
+            "x": -137.5796692627199,
+            "z": -41.2223414646753,
+            "headingRad": -0.5759251525722808
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "93:0:-1",
+              "1307:0:-1",
+              "76:0:1",
+              "476:0:1",
+              "75:0:1",
+              "1245:0:1",
+              "119:0:1",
+              "402:0:1",
+              "124:0:-1",
+              "1315:0:-1",
+              "34:0:1",
+              "816:0:1",
+              "67:0:1",
+              "909:0:1"
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:worker",
+          "class:pedestrian",
+          "binding:on_reference",
+          "catalog:construction.flagger"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "ego-enters-cautiously",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 3.8888888888888893
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.5
+        }
+      },
+      {
+        "id": "ego-ignores-stale-red",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "after",
+          "interactionId": "signal-behind-turns-red",
+          "delayS": 0.02
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      },
+      {
+        "id": "ego-keeps-right",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 3
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": -0.35
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 2.5
+        }
+      },
+      {
+        "id": "ego-resumes-after-both-clear",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "after",
+          "interactionId": "worker-clears",
+          "delayS": 0.7
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 3.3333333333333335
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1.5
+        }
+      },
+      {
+        "id": "ego-stops-for-worker",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 10.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2
+        }
+      },
+      {
+        "id": "signal-behind-turns-red",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 4
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:control:near-portal-signal.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "van-clears",
+        "actorId": "oncoming-van",
+        "trigger": {
+          "kind": "at",
+          "t": 16.4
+        },
+        "verb": "set",
+        "target": {
+          "key": "lights.indicator",
+          "value": "right"
+        }
+      },
+      {
+        "id": "van-keeps-clear-of-work-zone",
+        "actorId": "oncoming-van",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": -0.8
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1
+        }
+      },
+      {
+        "id": "van-retains-exit",
+        "actorId": "oncoming-van",
+        "trigger": {
+          "kind": "at",
+          "t": 4
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": true
+        }
+      },
+      {
+        "id": "worker-clears",
+        "actorId": "worker",
+        "trigger": {
+          "kind": "at",
+          "t": 16.8
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        }
+      },
+      {
+        "id": "worker-emerges",
+        "actorId": "worker",
+        "trigger": {
+          "kind": "at",
+          "t": 10
+        },
+        "verb": "route",
+        "target": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": -137.57964443179586,
+              "z": -41.222325859043906
+            },
+            {
+              "x": -137.95040435968858,
+              "z": -40.65136376155387
+            },
+            {
+              "x": -138.50654425152763,
+              "z": -39.794920615318816
+            },
+            {
+              "x": -141.28724371072295,
+              "z": -35.51270488414356
+            }
+          ]
+        }
+      },
+      {
+        "id": "worker-enters-shared-lane",
+        "actorId": "worker",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 1.4444444444444446
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.25
+        }
+      }
+    ],
+    "signalPrograms": [
+      {
+        "id": "control:far-portal-signal",
+        "phases": [
+          {
+            "phase": "red",
+            "durationS": 17
+          },
+          {
+            "phase": "green",
+            "durationS": 3
+          }
+        ],
+        "offsetS": 0,
+        "loop": false,
+        "stopLines": [
+          {
+            "rsl": "119:0:1",
+            "s": 0,
+            "connectingLaneRsls": []
+          }
+        ]
+      },
+      {
+        "id": "control:near-portal-signal",
+        "phases": [
+          {
+            "phase": "green",
+            "durationS": 4
+          },
+          {
+            "phase": "red",
+            "durationS": 16
+          }
+        ],
+        "offsetS": 0,
+        "loop": false,
+        "stopLines": [
+          {
+            "rsl": "119:0:1",
+            "s": 53.59535688365716,
+            "connectingLaneRsls": []
+          }
+        ]
+      }
+    ],
+    "roadControls": [],
+    "props": [
+      {
+        "id": "excavator",
+        "catalogId": "construction.excavator",
+        "pose": {
+          "x": -139.5196074222747,
+          "z": -43.15030205640363,
+          "headingRad": -0.9460018243362232
+        },
+        "dims": {
+          "l": 5.15,
+          "w": 2.24,
+          "h": 2.71
+        },
+        "scale": 0.3,
+        "collidable": true,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "ego",
+          "target": "worker"
+        },
+        "targetRevealToConflictS": 1.2
+      },
+      {
+        "id": "far-portable-signal",
+        "catalogId": "construction.portable_signal",
+        "pose": {
+          "x": -82.1457538007079,
+          "z": -17.00654863158384,
+          "headingRad": 5.607693653952516
+        },
+        "dims": {
+          "l": 1.45,
+          "w": 1.2,
+          "h": 3.25
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-0",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -114.78220188322571,
+          "z": -39.72414137541257,
+          "headingRad": -0.008793205442471641
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-1",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -107.78164511706701,
+          "z": -39.6248845466767,
+          "headingRad": -0.009137761799782977
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-2",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -100.77848826850473,
+          "z": -39.52021028769721,
+          "headingRad": -0.01028672200841169
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "left-barrier-run-3",
+        "groupId": "left-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -93.77687046691273,
+          "z": -39.406255180110456,
+          "headingRad": -0.011023003514342433
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "near-portable-signal",
+        "catalogId": "construction.portable_signal",
+        "pose": {
+          "x": -147.4279888606256,
+          "z": -104.72861804908584,
+          "headingRad": -1.5781514716113687
+        },
+        "dims": {
+          "l": 1.45,
+          "w": 1.2,
+          "h": 3.25
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-0",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.67273256354204,
+          "z": -74.72942235739416,
+          "headingRad": -1.5780945517411453
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-1",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.72908934957238,
+          "z": -67.72937922607464,
+          "headingRad": -1.5780119476658205
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-2",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.78477949557802,
+          "z": -60.72924685246429,
+          "headingRad": -1.5779036457718814
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-barrier-run-3",
+        "groupId": "right-barrier-run",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": -147.83962026699317,
+          "z": -53.729023585144844,
+          "headingRad": -1.577769646056443
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 0.7,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "worker-pipe",
+        "catalogId": "construction.long_pipe",
+        "pose": {
+          "x": -144.12498939349356,
+          "z": -116.70464814855733,
+          "headingRad": -1.578038198275027
+        },
+        "attachment": {
+          "actorId": "worker",
+          "longitudinalM": 0,
+          "lateralM": -4,
+          "heightM": 1.1,
+          "headingOffsetRad": 0
+        },
+        "dims": {
+          "l": 8,
+          "w": 0.62,
+          "h": 0.62
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      }
+    ],
+    "occluders": [
+      {
+        "id": "excavator",
+        "obb": {
+          "center": {
+            "x": -139.5196074222747,
+            "z": -43.15030205640363
+          },
+          "lengthM": 1.5450000000000002,
+          "widthM": 0.672,
+          "headingRad": -0.9460018243362232,
+          "heightM": 0.813
+        }
+      },
+      {
+        "id": "far-portable-signal",
+        "obb": {
+          "center": {
+            "x": -82.1457538007079,
+            "z": -17.00654863158384
+          },
+          "lengthM": 1.45,
+          "widthM": 1.2,
+          "headingRad": 5.607693653952516,
+          "heightM": 3.25
+        }
+      },
+      {
+        "id": "left-barrier-run-0",
+        "groupId": "left-barrier-run",
+        "obb": {
+          "center": {
+            "x": -114.78220188322571,
+            "z": -39.72414137541257
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -0.008793205442471641,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "left-barrier-run-1",
+        "groupId": "left-barrier-run",
+        "obb": {
+          "center": {
+            "x": -107.78164511706701,
+            "z": -39.6248845466767
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -0.009137761799782977,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "left-barrier-run-2",
+        "groupId": "left-barrier-run",
+        "obb": {
+          "center": {
+            "x": -100.77848826850473,
+            "z": -39.52021028769721
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -0.01028672200841169,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "left-barrier-run-3",
+        "groupId": "left-barrier-run",
+        "obb": {
+          "center": {
+            "x": -93.77687046691273,
+            "z": -39.406255180110456
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -0.011023003514342433,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "near-portable-signal",
+        "obb": {
+          "center": {
+            "x": -147.4279888606256,
+            "z": -104.72861804908584
+          },
+          "lengthM": 1.45,
+          "widthM": 1.2,
+          "headingRad": -1.5781514716113687,
+          "heightM": 3.25
+        }
+      },
+      {
+        "id": "right-barrier-run-0",
+        "groupId": "right-barrier-run",
+        "obb": {
+          "center": {
+            "x": -147.67273256354204,
+            "z": -74.72942235739416
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -1.5780945517411453,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "right-barrier-run-1",
+        "groupId": "right-barrier-run",
+        "obb": {
+          "center": {
+            "x": -147.72908934957238,
+            "z": -67.72937922607464
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -1.5780119476658205,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "right-barrier-run-2",
+        "groupId": "right-barrier-run",
+        "obb": {
+          "center": {
+            "x": -147.78477949557802,
+            "z": -60.72924685246429
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -1.5779036457718814,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "right-barrier-run-3",
+        "groupId": "right-barrier-run",
+        "obb": {
+          "center": {
+            "x": -147.83962026699317,
+            "z": -53.729023585144844
+          },
+          "lengthM": 8.54,
+          "widthM": 0.427,
+          "headingRad": -1.577769646056443,
+          "heightM": 0.567
+        }
+      },
+      {
+        "id": "worker-pipe",
+        "obb": {
+          "center": {
+            "x": -144.12498939349356,
+            "z": -116.70464814855733
+          },
+          "lengthM": 8,
+          "widthM": 0.62,
+          "headingRad": -1.578038198275027,
+          "heightM": 0.62
+        }
+      }
+    ],
+    "occlusionPairs": [
+      {
+        "observer": "ego",
+        "target": "worker",
+        "occluderId": "excavator"
+      }
+    ]
+  }
+}

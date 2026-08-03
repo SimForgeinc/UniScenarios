@@ -1,0 +1,16 @@
+{
+  "scenarioOrdinal": 4,
+  "title": "Wrong-Way Sedan Beyond a Blind Crest",
+  "durationSeconds": 20,
+  "requiredTopology": ["two-lane curved urban overpass", "solid center line", "narrow shoulders", "concrete parapets", "blind crest"],
+  "requiredActors": ["ego", "wrong-way-sedan", "opposing-bus", "following-motorcycle"],
+  "acceptance": [
+    { "id": "collision-free", "rule": "no actor collisions" },
+    { "id": "stop-before-close-separation", "rule": "ego is below 5 kph before surface separation falls below 8 m" },
+    { "id": "parapet-clearance", "rule": "ego maintains at least 0.4 m from the parapet" },
+    { "id": "no-centerline-crossing", "rule": "ego does not cross the center line while the bus is alongside" },
+    { "id": "follower-gap", "rule": "motorcycle retains a positive gap" }
+  ],
+  "forbidden": ["pass or squeeze through", "enter the bus lane", "reverse", "oscillate laterally into contact"],
+  "transferSignature": ["blind vertical occlusion", "wrong-way vehicle in ego lane", "opposing-lane blockage", "narrow right margin", "follower pressure", "relative detection distance"]
+}

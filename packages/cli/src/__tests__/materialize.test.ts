@@ -15,20 +15,74 @@ import { ScenarioTemplateV2Schema } from '@uniscenarios/scenario-model';
 import { runSimulation, traceDigest } from '@uniscenarios/sim-engine';
 
 import { DEV_ASSETS, REPO_ROOT, loadMap } from '../maps.js';
-import { materialize } from '../materialize.js';
+import { actorKindForClass, applyCatalogVariant, materializationSemanticLosses, materialize } from '../materialize.js';
 import { findSite, matchOnMap } from '../sites.js';
 import { readTemplate } from '../template-io.js';
 import { cellSeed, paramsVersion, templateId } from '../params.js';
 
 const MAP = 'yale-street';
 const LTAP = path.join(REPO_ROOT, 'examples', 'ltap-opposing.template.json');
+// Junction 303 is structurally signalized but has no physical head bound to
+// the ego movement; the authored phase closure therefore hard-excludes it.
+const LTAP_SITE = 'f21b5a603ce99a14';
 const DARTOUT = path.join(REPO_ROOT, 'examples', 'cpnco-dartout.template.json');
+const PORTABLE_DARTOUT = path.join(REPO_ROOT, 'examples', 'cpnco-parked-row.template.json');
+const BELMONT = 'belmont-research-center';
+const BELMONT_DARTOUT_SITE = '13ada7e7a8cc469f';
+const BELMONT_DARTOUT_LOCATION = 'loc_d166639c05780edf1fc028f5';
 const BUS_STOP = path.join(REPO_ROOT, 'examples', 'bus-stop-emergence.template.json');
+const BLIND_CHICANE = path.join(REPO_ROOT, 'examples', 'edge-cases', 'blind-chicane-emerging-worker', 'scenario.template.json');
+const BLIND_CHICANE_SITE = '0a4650e5055bf351';
 
 const haveArtifacts =
   existsSync(path.join(DEV_ASSETS, MAP, 'derived', 'topology-derived.json.gz')) &&
   existsSync(path.join(DEV_ASSETS, MAP, 'derived', 'locations.json.gz')) &&
   existsSync(LTAP);
+
+describe('materializer semantic actor mapping', () => {
+  it('preserves authoring classes instead of reducing them to motion families', () => {
+    expect([
+      'bicycle',
+      'animal',
+      'bus',
+      'truck',
+      'van',
+      'static_object',
+    ].map((actorClass) => actorKindForClass(actorClass as Parameters<typeof actorKindForClass>[0]))).toEqual([
+      'bicycle',
+      'animal',
+      'bus',
+      'truck',
+      'van',
+      'static_object',
+    ]);
+  });
+});
+
+describe('catalog operational variants', () => {
+  it('turns human catalog labels into executable deterministic conditions', () => {
+    expect(applyCatalogVariant({
+      id: 'wet-night',
+      title: 'Wet night',
+      weather: 'rain',
+      timeOfDay: 'night',
+      traffic: 'light',
+      visibility: 'headlight-limited with wet-road reflections',
+    })).toEqual({
+      weather: 'rain',
+      timeOfDay: 'night',
+      traffic: 'light',
+      visibility: 'headlight-limited',
+      effects: { visibilityRangeM: 75, frictionScale: 0.72, trafficSpeedFactor: 1.05 },
+    });
+  });
+
+  it('refuses an unrecognised label instead of stamping a variant id', () => {
+    expect(() => applyCatalogVariant({
+      id: 'unknown', title: 'Unknown', weather: 'fog', timeOfDay: 'day', traffic: 'moderate', visibility: 'unknown',
+    })).toThrow(/unsupported operational conditions/);
+  });
+});
 
 describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
   it('matches sites deterministically and binds both roles', async () => {
@@ -36,6 +90,9 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
     const first = await matchOnMap(template, MAP);
     expect(first.report.sites.length).toBeGreaterThan(0);
     for (const site of first.report.sites) {
+      expect(site.clauses.find((clause) => clause.path === 'features.jx.junction.control')).toMatchObject({
+        essentiality: 'required', actual: 'signalized', score: 1,
+      });
       expect(site.bindings.map((b) => b.role).sort()).toEqual(['ego', 'oncoming']);
       expect(site.bindings.every((b) => b.status === 'bound')).toBe(true);
       // The whole point of `conflicting_gate`: geometry, not a coordinate.
@@ -48,7 +105,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
   it('turns every bound role into a concrete actor on a real lane', async () => {
     const template = await readTemplate(LTAP);
-    const { bundle, site } = await findSite(template, MAP, (await matchOnMap(template, MAP)).report.sites[0]!.siteId);
+    const { bundle, site } = await findSite(template, MAP, LTAP_SITE);
     const { input, manifest } = materialize(template, bundle, site, { drawIndex: 0 });
 
     expect(input.actors.map((a) => a.id).sort()).toEqual(['ego', 'oncoming']);
@@ -66,6 +123,12 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
     );
     expect(site.frame.referencePath.some((span) => egoLanes.has(span.laneRsl))).toBe(true);
     expect(manifest.metricSubject).toBe('ego');
+    expect(input.interactions.find((interaction) => interaction.id === 'ego-takes-bound-left-turn')).toMatchObject({
+      actorId: 'ego',
+      verb: 'route',
+      target: { kind: 'lanePath' },
+    });
+    expect(input.actors.find((actor) => actor.id === 'ego')?.behavior.rules.collisionAvoidance).toBe(false);
   });
 
   it('materializes sampled role tFrac into a different concrete actor pose', async () => {
@@ -82,7 +145,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
     const parsed = ScenarioTemplateV2Schema.parse(template);
     const match = await matchOnMap(parsed, MAP);
-    const { bundle, site } = await findSite(parsed, MAP, match.report.sites[0]!.siteId);
+    const { bundle, site } = await findSite(parsed, MAP, LTAP_SITE);
     const a = materialize(parsed, bundle, site, { drawIndex: 0 });
     const b = materialize(parsed, bundle, site, { drawIndex: 1 });
     const egoA = a.input.actors.find((actor) => actor.id === 'ego')!;
@@ -98,7 +161,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
   it('spawns ego upstream of the junction even though the spawn is a site-dependent expression', async () => {
     const template = await readTemplate(LTAP);
-    const { bundle, site } = await findSite(template, MAP, (await matchOnMap(template, MAP)).report.sites[0]!.siteId);
+    const { bundle, site } = await findSite(template, MAP, LTAP_SITE);
     const { input } = materialize(template, bundle, site, { drawIndex: 0 });
     const ego = input.actors.find((a) => a.id === 'ego')!;
     const lanes = (ego.behavior.route as { lanes: string[] }).lanes;
@@ -112,7 +175,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
   it('solves the arrival relation to the parameter the cell drew', async () => {
     const template = await readTemplate(LTAP);
-    const { bundle, site } = await findSite(template, MAP, (await matchOnMap(template, MAP)).report.sites[0]!.siteId);
+    const { bundle, site } = await findSite(template, MAP, LTAP_SITE);
     const { manifest } = materialize(template, bundle, site, { drawIndex: 0 });
     const solution = manifest.arrival.find((s) => s.actorId === 'oncoming');
     expect(solution).toBeDefined();
@@ -122,9 +185,36 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
     expect(solution!.achievedDeltaT).toBeCloseTo(solution!.targetDeltaT, 2);
   });
 
+  it('extends a short opposing chain upstream before solving the arrival', async () => {
+    const template = await readTemplate(LTAP);
+    const { bundle, site } = await findSite(template, MAP, LTAP_SITE);
+    const { input, manifest } = materialize(template, bundle, site, { drawIndex: 2 });
+    const oncoming = input.actors.find((actor) => actor.id === 'oncoming')!;
+    const solution = manifest.arrival.find((entry) => entry.actorId === 'oncoming')!;
+
+    expect(oncoming.behavior.route.kind).toBe('lanePath');
+    expect(manifest.notes).toContainEqual(expect.objectContaining({
+      path: 'roles.oncoming.route',
+      reason: expect.stringContaining('extended upstream'),
+    }));
+    expect(solution.converged).toBe(true);
+    expect(solution.achievedDeltaT).toBeCloseTo(solution.targetDeltaT, 3);
+  });
+
+  it('hard-rejects an exact site whose opposing approach has no temporal runway', async () => {
+    const template = await readTemplate(LTAP);
+    const matched = await matchOnMap(template, MAP);
+    expect(matched.report.sites.map((site) => site.siteId)).not.toContain('8f6565796d8840b0');
+    const { site } = await findSite(template, MAP, '8f6565796d8840b0');
+    expect(site.bindings.find((binding) => binding.role === 'oncoming')).toMatchObject({
+      status: 'failed',
+      notes: [expect.stringMatching(/11\.49 m connected upstream runway; 180\.00 m required/)],
+    });
+  });
+
   it('reproduces a cell byte for byte from its replay key alone', async () => {
     const template = await readTemplate(LTAP);
-    const siteId = (await matchOnMap(template, MAP)).report.sites[0]!.siteId;
+    const siteId = LTAP_SITE;
     const { bundle, site } = await findSite(template, MAP, siteId);
 
     const a = materialize(template, bundle, site, { drawIndex: 2 });
@@ -141,7 +231,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
   it('stamps the replay key the batch resumes on', async () => {
     const template = await readTemplate(LTAP);
-    const siteId = (await matchOnMap(template, MAP)).report.sites[0]!.siteId;
+    const siteId = LTAP_SITE;
     const { bundle, site } = await findSite(template, MAP, siteId);
     const { manifest } = materialize(template, bundle, site, { drawIndex: 4 });
     expect(manifest.replayKey.paramSeed).toBe(
@@ -156,9 +246,28 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
     expect(manifest.replayKey.templateDigest).toMatch(/^[0-9a-f]{16}$/);
   });
 
+  it('applies a catalog variant before hashing and closes it in the manifest', async () => {
+    const template = await readTemplate(LTAP);
+    const siteId = LTAP_SITE;
+    const { bundle, site } = await findSite(template, MAP, siteId);
+    const plain = materialize(template, bundle, site, { drawIndex: 4 });
+    const variant = {
+      id: 'wet-night', title: 'Wet night', weather: 'rain', timeOfDay: 'night', traffic: 'light',
+      visibility: 'headlight-limited with wet-road reflections',
+    } as const;
+    const applied = materialize(template, bundle, site, { drawIndex: 4, variant });
+
+    expect(applied.input.operationalConditions).toEqual(applyCatalogVariant(variant));
+    expect(applied.manifest.operationalVariant).toEqual({
+      ...variant,
+      concrete: applied.input.operationalConditions,
+    });
+    expect(applied.manifest.inputHash).not.toBe(plain.manifest.inputHash);
+  });
+
   it('gives different draws different parameters and the same site', async () => {
     const template = await readTemplate(LTAP);
-    const siteId = (await matchOnMap(template, MAP)).report.sites[0]!.siteId;
+    const siteId = LTAP_SITE;
     const { bundle, site } = await findSite(template, MAP, siteId);
     const a = materialize(template, bundle, site, { drawIndex: 0 });
     const b = materialize(template, bundle, site, { drawIndex: 1 });
@@ -169,14 +278,60 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
 
   it('produces a critical episode, not an incidental one', async () => {
     const template = await readTemplate(LTAP);
-    const siteId = (await matchOnMap(template, MAP)).report.sites[0]!.siteId;
+    const siteId = LTAP_SITE;
     const { bundle, site } = await findSite(template, MAP, siteId);
     const { input } = materialize(template, bundle, site, { drawIndex: 0 });
     const { trace } = runSimulation(input, { graph: bundle.graph, guards: 'collect' });
-    expect(trace.metrics.minTTC).not.toBeNull();
-    expect(trace.metrics.minTTC!.value).toBeLessThan(3);
-    expect(trace.metrics.minTTC!.pair.sort()).toEqual(['ego', 'oncoming']);
+    expect(trace.metrics.minPET).not.toBeNull();
+    expect(trace.metrics.minPET!.value).toBeGreaterThanOrEqual(0.2);
+    expect(trace.metrics.minPET!.value).toBeLessThanOrEqual(3);
+    expect(trace.metrics.minPET!.pair.sort()).toEqual(['ego', 'oncoming']);
+    expect(trace.metrics.collisions).toEqual([]);
+    expect(trace.metrics.requiredDecelMax.ego).toBeLessThan(7.85);
   });
+});
+
+describe.skipIf(!haveArtifacts)('materialize — blind chicane authored playback', () => {
+  it('preserves declared occlusion and attached-pipe behavior through a full 20-second run', async () => {
+    const template = await readTemplate(BLIND_CHICANE);
+    const { bundle, site } = await findSite(template, BELMONT, BLIND_CHICANE_SITE);
+    const product = materialize(template, bundle, site, { drawIndex: -1 });
+
+    expect(product.input.actors.map((actor) => actor.id).sort()).toEqual([
+      'ego', 'oncoming-van', 'worker',
+    ]);
+    expect(product.input.props.find((prop) => prop.id === 'worker-pipe')).toMatchObject({
+      catalogId: 'construction.long_pipe',
+      attachment: { actorId: 'worker', longitudinalM: 0, lateralM: -4, heightM: 1.1 },
+      collidable: true,
+    });
+    expect(product.input.occlusionPairs).toContainEqual({
+      observer: 'ego', target: 'worker', occluderId: 'excavator',
+    });
+    expect(product.input.occluders.some((occluder) => occluder.id === 'excavator')).toBe(true);
+    expect(product.manifest.notes).toContainEqual(expect.objectContaining({
+      path: 'props.excavator',
+      reason: expect.stringContaining('reveal-to-conflict is reported by the engine'),
+      impact: 'informational',
+    }));
+    expect(materializationSemanticLosses(product.manifest.notes)).toEqual([]);
+
+    const result = runSimulation(product.input, { graph: bundle.graph, guards: 'throw' });
+    expect(result.trace.ticks.t.at(-1)).toBe(20);
+    expect(result.trace.ticks.t).toHaveLength(1001);
+    expect(result.trace.metrics.collisions).toEqual([]);
+    expect(result.trace.metrics.declaredOcclusion).toContainEqual(expect.objectContaining({
+      observer: 'ego',
+      target: 'worker',
+      occluderId: 'excavator',
+      status: 'revealed_before_conflict',
+    }));
+    expect(result.trace.events
+      .filter((event) => event.kind === 'trigger_fired')
+      .map((event) => event.interactionId)).toEqual(expect.arrayContaining([
+      'worker-emerges', 'worker-clears', 'ego-resumes-after-both-clear',
+    ]));
+  }, 30_000);
 });
 
 describe.skipIf(!haveArtifacts || !existsSync(DARTOUT))('materialize — CPNCO dart-out on yale-street', () => {
@@ -257,6 +412,46 @@ describe.skipIf(!haveArtifacts || !existsSync(DARTOUT))('materialize — CPNCO d
   });
 });
 
+describe.skipIf(!existsSync(path.join(DEV_ASSETS, BELMONT, 'derived', 'topology-derived.json.gz')) || !existsSync(PORTABLE_DARTOUT))(
+  'materialize — portable CPNCO dart-out on Belmont',
+  () => {
+    it('binds the exact mapped occlusion zone and produces a truthful parked-row reveal', async () => {
+      const template = await readTemplate(PORTABLE_DARTOUT);
+      const matched = await matchOnMap(template, BELMONT);
+      const site = matched.report.sites.find((candidate) => candidate.siteId === BELMONT_DARTOUT_SITE);
+
+      expect(site).toBeDefined();
+      expect(site!.featureMatches['parked-vehicle-zone']).toMatchObject({
+        kind: 'occlusion_zone',
+        mapFeatureId: BELMONT_DARTOUT_LOCATION,
+      });
+
+      const { bundle } = await findSite(template, BELMONT, BELMONT_DARTOUT_SITE);
+      const { input, manifest } = materialize(template, bundle, site!, {
+        drawIndex: -1,
+        seed: 'child-dartout-regression',
+      });
+      expect(manifest.feasible).toBe(true);
+      expect(input.actors.find((actor) => actor.id === 'ped')?.kind).toBe('pedestrian');
+      expect(input.occluders).toHaveLength(5);
+      expect(input.occluders.every((occluder) => occluder.groupId === 'parked-row')).toBe(true);
+
+      const { trace } = runSimulation(input, { graph: bundle.graph, guards: 'collect' });
+      expect(trace.metrics.collisions).toEqual([]);
+      expect(trace.metrics.occluderIneffective).toEqual([]);
+      expect(trace.metrics.revealToConflict).toEqual(expect.objectContaining({
+        pair: ['ego', 'ped'],
+        occluderId: 'parked-row',
+      }));
+      expect(trace.metrics.revealToConflict!.firstBlockedT).toBeLessThan(trace.metrics.revealToConflict!.losOpenT);
+      expect(trace.metrics.revealToConflict!.losOpenT).toBeLessThan(trace.metrics.revealToConflict!.conflictT);
+      expect(trace.metrics.revealToConflict!.value).toBeGreaterThan(0);
+      expect(trace.metrics.triggerNeverFired).toEqual([]);
+      expect(trace.metrics.clippedCriticality).toBe(false);
+    }, 180_000);
+  },
+);
+
 describe.skipIf(!haveArtifacts || !existsSync(BUS_STOP))('materialize — real Yale bus-stop emergence', () => {
   it('selects the checked-in Yale stop proof on the requested curb side', async () => {
     const template = await readTemplate(BUS_STOP);
@@ -269,7 +464,7 @@ describe.skipIf(!haveArtifacts || !existsSync(BUS_STOP))('materialize — real Y
     expect(stop.mapFeatureId).toBe('loc_92ea6eb02738f97c3061a3cd');
     expect(side).toMatchObject({ supported: true, actual: 'right', score: 1 });
     expect(site.matchedReasons).toContain('bus_stop loc_92ea6eb02738f97c3061a3cd is on the right side of travel');
-  });
+  }, 30_000);
 
   it('keeps a curbside bus static while the pedestrian clears its nose without crossing its footprint', async () => {
     const template = await readTemplate(BUS_STOP);
@@ -281,8 +476,14 @@ describe.skipIf(!haveArtifacts || !existsSync(BUS_STOP))('materialize — real Y
     const ped = input.actors.find((actor) => actor.id === 'ped')!;
     const stop = bundle.index.pointFeatures.find((feature) => feature.id === 'loc_92ea6eb02738f97c3061a3cd')!;
 
+    expect(bus.kind).toBe('bus');
     expect(bus.static).toBe(true);
     expect(bus.initial.speedMps).toBe(0);
+    expect(input.interactions.find((interaction) => interaction.id === 'bus-curbside-doors-open')).toMatchObject({
+      actorId: 'bus',
+      verb: 'set',
+      target: { key: 'doors.right', value: 'open' },
+    });
     expect(bus.initial.laneRef?.rsl).toBe('87:0:-4');
     expect(ego.behavior.route.kind).toBe('lanePath');
     expect(ego.behavior.route.kind === 'lanePath' && ego.behavior.route.lanes).toContain('87:0:-3');
@@ -314,9 +515,28 @@ describe.skipIf(!haveArtifacts || !existsSync(BUS_STOP))('materialize — real Y
     expect(new Set(busTrack.y).size).toBe(1);
     expect(simulation.trace.metrics.occluderIneffective).toEqual([]);
     expect(simulation.trace.metrics.revealToConflict?.occluderId).toBe('actor:bus');
+    expect(simulation.trace.metrics.declaredOcclusion).toContainEqual(expect.objectContaining({
+      observer: 'ego',
+      target: 'ped',
+      occluderId: 'actor:bus',
+      status: 'revealed_before_conflict',
+    }));
+    expect(simulation.trace.metrics.minPET).toMatchObject({ pair: expect.arrayContaining(['ego', 'ped']) });
+    expect(simulation.trace.metrics.minPET!.value).toBeGreaterThanOrEqual(0.2);
+    expect(simulation.trace.metrics.minPET!.value).toBeLessThanOrEqual(3);
+    expect(simulation.trace.metrics.collisions).toEqual([]);
+    const pedTrack = simulation.trace.ticks.actors.ped!;
+    expect(pedTrack.present.slice(-25)).toEqual(Array(25).fill(1));
+    expect(new Set(pedTrack.x.slice(-25)).size).toBe(1);
+    expect(new Set(pedTrack.y.slice(-25)).size).toBe(1);
     expect(simulation.trace.header.inputHash).toBe(manifest.inputHash);
+    expect(simulation.trace.header.actorMetadata?.bus).toMatchObject({
+      kind: 'bus',
+      static: true,
+      dims: bus.dims,
+    });
     expect(manifest.arrival.find((solution) => solution.actorId === 'ped')?.converged).toBe(true);
-  });
+  }, 30_000);
 });
 
 describe.skipIf(!haveArtifacts)('map bundles', () => {

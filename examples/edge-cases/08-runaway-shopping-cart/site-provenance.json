@@ -1,0 +1,11 @@
+{
+  "exactMatchCount": 0,
+  "exactSearch": "site-matches.json",
+  "reason": "No indexed site jointly proves a divided commercial boulevard, sloped lot access, immediately downstream marked crossing, and median curb.",
+  "selectedRendition": "behavioral-surrogate",
+  "mapId": "el-camino-road",
+  "runtimeTemplate": "runtime-template.json",
+  "materializedInstance": "instance.json",
+  "disclosure": "The cart crossing, stop, and rollback are executed physically; supermarket grade and curb provenance are authored semantics rather than indexed map facts.",
+  "acceptancePolicy": "Behavioral evidence may pass; this rendition must not be accepted as an exact transferable site variation."
+}

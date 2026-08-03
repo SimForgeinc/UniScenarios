@@ -49,6 +49,37 @@ describe('feasibility guards', () => {
     expect(checkFeasibility(input, graph).filter((i) => i.severity === 'error')).toHaveLength(0);
   });
 
+  it('uses future speed actions and bus acceleration limits for a dwelling actor runway', () => {
+    const dwelling = {
+      ...vehicle(graph, { id: 'bus', rsl: LANE_DEAD_END, s: 5, speedMps: 0, cruiseSpeedMps: 0 }),
+      kind: 'bus' as const,
+    };
+    const build = (departureSpeedMps: number) => parseSimScenarioInput({
+      mapId: 'action-aware-runway',
+      clipSeconds: 14,
+      warmupSeconds: 2,
+      dt: 0.02,
+      actors: [dwelling],
+      interactions: [{
+        id: 'bus-accelerates',
+        actorId: 'bus',
+        trigger: { kind: 'at', t: 0.5 },
+        verb: 'speed',
+        target: { mode: 'absolute', value: departureSpeedMps },
+        dynamics: { shape: 'linear', constraint: 'time', value: 3 },
+      }],
+    });
+
+    const fast = checkFeasibility(build(6.67), graph).find((issue) => issue.code === 'runway_insufficient');
+    expect(fast).toBeDefined();
+    expect(fast!.detail!.neededM).toBeGreaterThan(55);
+    // The bound follows the 0→target transition and bus acceleration envelope;
+    // it must not fall back to 14 seconds at the road speed.
+    expect(fast!.detail!.neededM).toBeLessThan(90);
+
+    expect(checkFeasibility(build(3), graph).some((issue) => issue.code === 'runway_insufficient')).toBe(false);
+  });
+
   it('catches overlapping spawn footprints with real dimensions', () => {
     const input = scenario(graph, {
       actors: [

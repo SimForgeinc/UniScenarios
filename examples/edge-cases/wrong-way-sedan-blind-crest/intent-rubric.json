@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "intentId": "edge-04-wrong-way-sedan-blind-crest-v1",
+  "title": "Wrong-Way Sedan Beyond a Blind Crest acceptance rubric",
+  "originalIntent": "Ego climbs a narrow curved overpass at 40 km/h. A wrong-way sedan becomes apparent beyond a blind crest while a correct-direction bus blocks the opposing lane and a motorcycle follows. Ego and the wrong-way car brake rather than passing or reversing; ego stays in its lane, edges right without touching the parapet, reaches below 5 km/h before body separation falls below 8 metres, and holds position collision-free with a positive follower gap.",
+  "criteria": [
+    {
+      "id": "required-event-order",
+      "kind": "event_order",
+      "required": true,
+      "mode": "required",
+      "interactionIds": ["wrong-way-visible", "ego-brakes", "wrong-way-brakes", "motorcycle-brakes", "ego-edges-right", "wrong-way-offsets", "hold-position"]
+    },
+    { "id": "ego-final-hold", "kind": "stationary_success", "required": true, "actorId": "ego", "window": [11.22, 20], "maxSpeedMps": 0.1, "minPresentSeconds": 8.76 },
+    { "id": "wrong-way-criticality", "kind": "criticality", "required": true, "metric": "ttc", "pair": ["ego", "wrong-way-sedan"], "window": [5, 16], "minS": 0.2, "maxS": 5 },
+    { "id": "blind-crest-occlusion", "kind": "occlusion", "required": true, "observer": "ego", "target": "wrong-way-sedan", "occluderId": "crest-occlusion", "outcome": "blocked_at_conflict" },
+    { "id": "ego-remains-in-lane", "kind": "lane_occupancy", "required": true, "actorId": "ego", "laneRsl": "20:0:-1", "mode": "required", "window": [0, 20] },
+    { "id": "wrong-way-positive-clearance", "kind": "clearance", "required": true, "pair": ["ego", "wrong-way-sedan"], "measure": "metric_gap", "minM": 0.1 },
+    { "id": "motorcycle-positive-gap", "kind": "clearance", "required": true, "pair": ["ego", "following-motorcycle"], "measure": "metric_gap", "minM": 0.1 },
+    { "id": "collision-free", "kind": "collision", "required": true, "maxCount": 0 },
+    {
+      "id": "stopped-before-eight-metre-separation",
+      "kind": "unsupported",
+      "required": false,
+      "description": "Ego is below 5 km/h before shape separation to the wrong-way sedan falls below 8 metres.",
+      "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace."
+    },
+    {
+      "id": "parapet-clearance",
+      "kind": "unsupported",
+      "required": false,
+      "description": "Ego preserves at least 0.4 metres clearance from every collidable parapet segment.",
+      "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata."
+    },
+    {
+      "id": "bus-blocks-centerline-escape",
+      "kind": "unsupported",
+      "required": false,
+      "description": "The moving bus is alongside on a native opposing lane during the 8–12 second conflict and ego never enters that lane.",
+      "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route."
+    }
+  ]
+}

@@ -88,6 +88,8 @@ export interface TileStreamLayerOptions {
    * seconds and no tile can ever disappear.
    */
   pinCoarsest: boolean;
+  /** Infrastructure such as the single road/ground asset must load even when its conservative estimate exceeds the quality budget. */
+  essentialCoarsest?: boolean;
   /** Return false to keep a tile unloaded entirely (vegetation range limit). */
   want?: (def: StreamTileDef, distance: number) => boolean;
   /** Called after a new LOD becomes the displayed one. */
@@ -116,10 +118,17 @@ export class TileStreamLayer {
 
   private readonly opts: TileStreamLayerOptions;
   private readonly uploadQueue: { entry: Entry; index: number; asset: PreparedAsset }[] = [];
+  /**
+   * Shader compilation is asynchronous inside Three.js and cannot be aborted.
+   * Keep the promises so the owning viewer can leave its WebGL renderer alive
+   * until Three's readiness poll has finished during a map teardown.
+   */
+  private readonly compilationJobs = new Set<Promise<void>>();
   private readonly compiling = new Set<PreparedAsset>();
   private bytes = 0;
   private pending = 0;
   private disposed = false;
+  private generation = 0;
   private bootstrapped: boolean;
 
   constructor(opts: TileStreamLayerOptions) {
@@ -271,14 +280,16 @@ export class TileStreamLayer {
     const lod = entry.def.lods[index];
     if (!lod) return false;
     const estimate = estimateLodBytes(lod);
-    if (!this.opts.memory.admit(estimate, entry.distance)) return false;
+    const essential = this.opts.essentialCoarsest === true && index === 0;
+    if (!essential && !this.opts.memory.admit(estimate, entry.distance)) return false;
     this.pending += estimate;
     const controller = new AbortController();
+    const generation = this.generation;
     entry.loading = { index, controller };
     this.opts
       .build(entry.def, lod, controller.signal)
       .then((asset) => {
-        entry.loading = null;
+        if (generation === this.generation) entry.loading = null;
         this.pending -= estimate;
         if (this.disposed || controller.signal.aborted) {
           asset.dispose?.();
@@ -289,7 +300,7 @@ export class TileStreamLayer {
         this.uploadQueue.push({ entry, index, asset });
       })
       .catch((err: unknown) => {
-        entry.loading = null;
+        if (generation === this.generation) entry.loading = null;
         this.pending -= estimate;
         if (!controller.signal.aborted && !this.disposed) {
           entry.failures++;
@@ -330,10 +341,15 @@ export class TileStreamLayer {
     asset.object.updateMatrixWorld(true);
     this.compiling.add(asset);
     this.pending += asset.bytes;
-    void this.opts.renderer
+    const job = this.opts.renderer
       .compileAsync(asset.object, camera, this.opts.scene)
-      .catch(() => undefined)
-      .then(() => {
+      .catch((error: unknown) => {
+        // A compile failure is still useful diagnostic information. Disposal is
+        // the only expected cancellation path, and compileAsync itself has no
+        // AbortSignal, so do not turn unrelated failures into silent success.
+        if (!this.disposed) console.error(`[city-renderer] ${entry.def.id} shader compilation failed`, error);
+      })
+      .then((): void => {
         this.compiling.delete(asset);
         this.pending -= asset.bytes;
         if (this.disposed) {
@@ -343,6 +359,49 @@ export class TileStreamLayer {
         }
         this.swapIn(entry, index, asset);
       });
+    this.compilationJobs.add(job);
+    void job.then(
+      () => this.compilationJobs.delete(job),
+      (error: unknown) => {
+        this.compilationJobs.delete(job);
+        console.error(`[city-renderer] ${entry.def.id} compilation finalization failed`, error);
+      },
+    );
+  }
+
+  /** Resolves after all non-cancellable Three.js shader polls have stopped. */
+  whenCompilationIdle(): Promise<void> {
+    return Promise.allSettled([...this.compilationJobs]).then(() => undefined);
+  }
+
+  /** Drop every resident/uploaded asset so a source-variant change can rebuild the layer. */
+  async resetAssets(): Promise<void> {
+    if (this.disposed) return;
+    await this.whenCompilationIdle();
+    if (this.disposed) return;
+    this.generation++;
+    for (const entry of this.entries.values()) {
+      entry.loading?.controller.abort();
+      entry.loading = null;
+      for (const asset of entry.resident.values()) {
+        this.group.remove(asset.object);
+        asset.dispose?.();
+        disposeResources(asset.resources);
+      }
+      entry.resident.clear();
+      entry.displayed = -1;
+      entry.failures = 0;
+      entry.gain = Infinity;
+    }
+    for (const job of this.uploadQueue.splice(0)) {
+      this.pending -= job.asset.bytes;
+      job.asset.dispose?.();
+      disposeResources(job.asset.resources);
+    }
+    this.bytes = 0;
+    this.pending = Math.max(0, this.pending);
+    this.bootstrapped = !this.opts.pinCoarsest;
+    this.group.clear();
   }
 
   private swapIn(entry: Entry, index: number, asset: PreparedAsset): void {

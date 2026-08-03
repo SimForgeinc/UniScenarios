@@ -21,6 +21,7 @@
  *   node scripts/export-render.mjs --url http://127.0.0.1:5199 \
  *     --instance artifacts/qa/golden-yale-bus-stop-20260801-corrected/instance.json \
  *     --trace artifacts/qa/golden-yale-bus-stop-20260801-corrected/trace.json.gz \
+ *     --result artifacts/qa/golden-yale-bus-stop-20260801-corrected/result.json \
  *     --out artifacts/qa/golden-yale-bus-stop-20260801-corrected/studio-render \
  *     --headless --fps 2
  */
@@ -28,7 +29,7 @@ import { chromium } from 'playwright-core';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { mkdir, readFile, readdir, unlink, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rename, rmdir, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { gunzipSync } from 'node:zlib';
@@ -39,11 +40,15 @@ import {
   cameraActorClearance,
   cameraForIncident,
   selectIncidentVideoFrames,
+  renderViewsAtTraceIndex,
   sha256Bytes,
-  tracePose,
   validateScenarioPair,
+  validateScenarioResult,
 } from './export-render-lib.mjs';
-import { createScenarioReviewTemplate } from './scenario-review-ledger-lib.mjs';
+import {
+  SCENARIO_REVIEW_PROVENANCE_FILES,
+  createScenarioReviewTemplate,
+} from './scenario-review-ledger-lib.mjs';
 
 const MAPS = [
   { id: 'yale-street', label: 'Yale Street' },
@@ -81,10 +86,14 @@ const encodeVideo = args.has('video');
 const includeUi = args.has('include-ui');
 const instancePath = args.get('instance');
 const tracePath = args.get('trace');
+const resultPath = args.get('result');
 if (Boolean(instancePath) !== Boolean(tracePath)) {
   throw new Error('--instance and --trace must be provided together');
 }
 const scenarioMode = Boolean(instancePath && tracePath);
+if (scenarioMode && !resultPath) {
+  throw new Error('--result is required for bound scenario evidence');
+}
 const maps = args.has('all-maps')
   ? MAPS
   : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
@@ -256,6 +265,14 @@ async function sha256(file) {
   return createHash('sha256').update(await readFile(file)).digest('hex');
 }
 
+async function writeJsonAtomic(file, value) {
+  const absolute = path.resolve(file);
+  await mkdir(path.dirname(absolute), { recursive: true });
+  const temporary = `${absolute}.tmp-${process.pid}`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`);
+  await rename(temporary, absolute);
+}
+
 async function clearGeneratedFrames(directory, pattern) {
   await mkdir(directory, { recursive: true });
   const entries = await readdir(directory, { withFileTypes: true });
@@ -325,16 +342,27 @@ async function exportScenario(page) {
   const [{ value: instanceDoc, bytes: instanceBytes }, { value: trace, bytes: traceFileBytes, canonicalBytes }] =
     await Promise.all([readJsonMaybeGzip(instanceFile), readJsonMaybeGzip(traceFile)]);
   const evidence = validateScenarioPair(instanceDoc, trace, canonicalBytes);
+  let resultDoc = null;
+  let resultBytes = null;
+  if (resultPath) {
+    const loaded = await readJsonMaybeGzip(path.resolve(resultPath));
+    resultDoc = loaded.value;
+    resultBytes = loaded.bytes;
+    validateScenarioResult(instanceDoc, trace, resultDoc, canonicalBytes, {
+      instanceFileBytes: instanceBytes,
+      traceFileBytes,
+    });
+  }
   const preflight = buildIncidentRenderPreflight(trace, evidence);
   const preflightFile = path.join(outDir, 'preflight.json');
-  await writeFile(preflightFile, `${JSON.stringify({
+  await writeJsonAtomic(preflightFile, {
     ...preflight,
     scenarioId: instanceDoc.manifest.instanceId,
     mapId: evidence.mapId,
     inputHash: evidence.inputHash,
     traceDigest: evidence.traceDigest,
     countsTowardScenarioCoverage: false,
-  }, null, 2)}\n`);
+  });
   if (preflight.verdict !== 'pass') {
     throw new Error(
       `scenario render preflight rejected: ${preflight.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id).join(', ')}`,
@@ -354,9 +382,11 @@ async function exportScenario(page) {
   // source paths while Chrome is rendering the sequence.
   const instanceSnapshot = path.join(sourceDir, 'instance.json');
   const traceSnapshot = path.join(sourceDir, 'trace.json.gz');
+  const resultSnapshot = resultBytes ? path.join(sourceDir, 'result.json') : null;
   await Promise.all([
     writeFile(instanceSnapshot, instanceBytes),
     writeFile(traceSnapshot, traceFileBytes),
+    ...(resultSnapshot ? [writeFile(resultSnapshot, resultBytes)] : []),
   ]);
 
   const pageUrl = withMap(url, evidence.mapId);
@@ -379,46 +409,69 @@ async function exportScenario(page) {
     .filter((id) => id.startsWith('actor:'))
     .map((id) => id.slice('actor:'.length));
   const framingActorIds = [...new Set([...evidence.metricPair, ...occluderActorIds])];
+  const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
+  const framingPropIds = new Set(evidence.props.filter((prop) => {
+    const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
+    const relation = prop.occludes
+      && evidence.metricPair.includes(prop.occludes.observer)
+      && evidence.metricPair.includes(prop.occludes.target);
+    return declared || relation;
+  }).map((prop) => prop.id));
 
   const renderTraceFrame = async (selected, file, settleCount) => {
-    const poses = evidence.actorModels.map((actor) => ({
-      ...tracePose(trace, actor.id, selected.index),
-      catalogId: actor.catalogId,
-      dims: actor.dims,
-      static: actor.static,
-    }));
-    const groundedPoses = await page.evaluate((actorPoses) => {
+    const views = renderViewsAtTraceIndex(instanceDoc, trace, evidence, selected.index);
+    const grounded = await page.evaluate(({ actors, props }) => {
       const overlays = window.__overlays;
       const editor = window.__editor;
       if (!overlays || !editor) throw new Error('Studio renderer is unavailable');
-      const visible = actorPoses.filter((actor) => actor.present).map((actor) => ({
+      const groundedActors = actors.map((actor) => ({
         ...actor,
         y: overlays.sampleHeight(actor.x, actor.z),
       }));
-      editor.renderer.sync(visible);
+      const groundedProps = props.map(({ heightM, ...prop }) => ({
+        ...prop,
+        y: overlays.sampleHeight(prop.x, prop.z) + heightM,
+      }));
+      editor.renderer.sync([
+        ...groundedActors.filter((actor) => actor.present),
+        ...groundedProps,
+      ]);
       editor.renderer.setSelection([]);
-      return actorPoses.map((actor) => ({
-        ...actor,
-        y: overlays.sampleHeight(actor.x, actor.z),
-      }));
-    }, poses);
+      return { actors: groundedActors, props: groundedProps };
+    }, views);
+    const groundedPoses = grounded.actors;
     const pairGround = groundedPoses
       .filter((pose) => evidence.metricPair.includes(pose.id))
       .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
-    const camera = cameraForIncident(trace, evidence.metricPair, selected.index, pairGround, framingActorIds);
-    const cameraClearance = cameraActorClearance(camera, groundedPoses, evidence.actorModels);
+    const framingProps = grounded.props.filter((prop) => framingPropIds.has(prop.id));
+    const camera = cameraForIncident(
+      trace,
+      evidence.metricPair,
+      selected.index,
+      pairGround,
+      framingActorIds,
+      framingProps,
+    );
+    const cameraClearance = cameraActorClearance(
+      camera,
+      [...groundedPoses, ...grounded.props],
+      [...evidence.actorModels, ...grounded.props],
+    );
     if (cameraClearance.clearanceM < 2) {
       throw new Error(
         `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
       );
     }
     await setView(page, camera.eye, camera.target, camera.fovDeg);
-    await waitForStreamIdle(page, 60000).catch(() => undefined);
+    // Catalog evidence must fail closed if the incident view never reaches a
+    // fully resident state. Capturing after a swallowed timeout can make a
+    // missing city tile look like clear line of sight.
+    await waitForStreamIdle(page, 60000);
     await settleFrames(page, settleCount);
     const composition = await inspectIncidentComposition(
       page,
-      groundedPoses,
-      framingActorIds,
+      [...groundedPoses, ...framingProps],
+      [...framingActorIds, ...framingProps.map((prop) => prop.id)],
       trace.metrics.revealToConflict.conflictT,
       selected.t,
     );
@@ -444,7 +497,11 @@ async function exportScenario(page) {
       requestedT: selected.targetT,
       index: selected.index,
       t: selected.t,
-      poses: groundedPoses.map(({ catalogId, dims, static: isStatic, ...pose }) => pose),
+      poses: groundedPoses.map(({
+        catalogId, catalogIdAuthored, kind, dims, static: isStatic, doors, reversing,
+        emergency, hornActive, ...pose
+      }) => pose),
+      props: grounded.props.map(({ catalogId, catalogIdAuthored, dims, static: isStatic, ...prop }) => prop),
       camera,
       cameraActorClearance: cameraClearance,
       composition,
@@ -458,7 +515,12 @@ async function exportScenario(page) {
   const frameRecords = [];
   for (let frameNo = 0; frameNo < selectedFrames.length; frameNo += 1) {
     const selected = selectedFrames[frameNo];
-    const file = path.join(framesDir, `frame-${String(frameNo).padStart(3, '0')}.png`);
+    // The catalog reserves render/frame.png as its primary still. Make the
+    // conflict frame that exact artifact; the other named phases remain in
+    // the deterministic frame sequence.
+    const file = selected.phase === 'conflict'
+      ? path.join(outDir, 'frame.png')
+      : path.join(framesDir, `frame-${String(frameNo).padStart(3, '0')}.png`);
     frameRecords.push({
       phase: selected.phase,
       ...(await renderTraceFrame(selected, file, 16)),
@@ -483,13 +545,14 @@ async function exportScenario(page) {
         requestedT: record.requestedT,
         t: record.t,
         poses: record.poses,
+        props: record.props,
         camera: record.camera,
         cameraActorClearance: record.cameraActorClearance,
         composition: record.composition,
-        artifact: record.artifact,
       });
     }
-    const output = path.join(outDir, 'incident.mp4');
+    // This exact name is reserved in every catalog slot.
+    const output = path.join(outDir, 'video.mp4');
     const ffmpeg = spawnSync('ffmpeg', [
       '-y',
       '-hide_banner',
@@ -530,6 +593,16 @@ async function exportScenario(page) {
           sha256: await sha256(output),
         }
       : { unavailable: true, reason: ffmpeg.stderr || 'ffmpeg not installed or failed' };
+    if (ffmpeg.status === 0 && existsSync(output)) {
+      // The MP4 is the bound motion artifact. Keep failed encoder inputs for
+      // diagnosis, but remove successful temporary PNGs to keep 500-slot
+      // evidence storage bounded.
+      await Promise.all(selection.frames.map((_, frameNo) => unlink(path.join(
+        videoFramesDir,
+        `frame-${String(frameNo).padStart(5, '0')}.png`,
+      ))));
+      await rmdir(videoFramesDir);
+    }
     videoSequence = {
       startT: selection.startT,
       endT: selection.endT,
@@ -565,17 +638,35 @@ async function exportScenario(page) {
         source: path.relative(process.cwd(), traceFile),
         sha256: sha256Bytes(traceFileBytes),
       },
+      ...(resultSnapshot ? {
+        result: {
+          file: path.relative(outDir, resultSnapshot),
+          source: path.relative(process.cwd(), path.resolve(resultPath)),
+          sha256: sha256Bytes(resultBytes),
+        },
+      } : {}),
     },
     rendererStats,
     diagnostics,
   });
   const manifestFile = path.join(outDir, 'manifest.json');
-  await writeFile(manifestFile, `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeJsonAtomic(manifestFile, manifest);
   // Preserve the rejected manifest for diagnosis, but never report a strict
   // scenario export as successful unless every machine gate passes.
   assertScenarioEvidenceAccepted(manifest.machineAssessment);
-  const reviewTemplate = createScenarioReviewTemplate(manifest, 'manifest.json');
-  await writeFile(path.join(outDir, 'review.json'), `${JSON.stringify(reviewTemplate, null, 2)}\n`);
+  const rendererSources = await Promise.all(SCENARIO_REVIEW_PROVENANCE_FILES.map(async (file) => ({
+    file,
+    sha256: sha256Bytes(await readFile(path.resolve(file))),
+  })));
+  const reviewTemplate = createScenarioReviewTemplate(manifest, 'manifest.json', {
+    instanceDoc,
+    trace,
+    instanceSha256: sha256Bytes(instanceBytes),
+    traceFileSha256: sha256Bytes(traceFileBytes),
+    resultSha256: resultBytes ? sha256Bytes(resultBytes) : null,
+    rendererSources,
+  });
+  await writeJsonAtomic(path.join(outDir, 'review.json'), reviewTemplate);
   return manifest;
 }
 
@@ -673,7 +764,7 @@ async function exportMap(page, map) {
     stage,
     stats,
   };
-  await writeFile(path.join(mapDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
+  await writeJsonAtomic(path.join(mapDir, 'manifest.json'), manifest);
   return manifest;
 }
 

@@ -1,0 +1,110 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Blocked junction cross-traffic reveal",
+    "description": "Ego entered a signalized box on the prior permissive interval and is clearing it when its bound phase turns red. A stopped queue van inside the adjacent lane masks map-derived cross traffic. The van remains a static collision actor and declared line-of-sight occluder, the challenger binds to a genuine crossing gate, and all participants remain present through the post-conflict aftermath.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "intersection-blocked-box-reveal",
+    "tags": ["junction", "occlusion", "queue", "cross-traffic-reveal", "stable-aftermath"],
+    "author": "agent/junction-vru",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "arrivalTtc", "type": "continuous", "description": "Seconds between ego and cross traffic reaching their geometric conflict.", "unit": "s", "tier": 1, "range": [1.0, 2.4], "default": 1.6, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "intersection-blocked-box-reveal",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [20, 60], "essentiality": "preferred" },
+      "runwayUpstreamM": { "value": [35, null], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [45, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "jx",
+        "kind": "junction",
+        "label": "the obstructed junction",
+        "essentiality": "required",
+        "atM": { "value": [0, 0], "essentiality": "required" },
+        "arms": { "value": [3, 4], "essentiality": "required" },
+        "control": { "value": ["signalized"], "essentiality": "required" },
+        "egoTurn": { "value": ["straight"], "essentiality": "required" },
+        "conflictingApproach": { "value": { "from": "from_left", "turn": "straight", "crossingAngleDeg": [55, 125] }, "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 10, "diversity": "strict", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "the vehicle creeping past the stopped queue",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": -5, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 12
+    },
+    {
+      "id": "cross-traffic",
+      "kind": "conflicting_gate",
+      "label": "the cross-traffic vehicle hidden behind the queue",
+      "actor": { "class": "car", "catalogId": "vehicle.suv" },
+      "essentiality": "required",
+      "feature": "jx",
+      "from": "from_left",
+      "turn": "straight",
+      "arriveAtConflict": { "relativeTo": "ego", "deltaT": "param.arrivalTtc" },
+      "initialSpeedKph": "clamp(0.75 * lane.speedLimitKph, 20, 45)"
+    },
+    {
+      "id": "stopped-queue",
+      "kind": "lane_offset",
+      "label": "a stopped queue vehicle in the adjacent approach lane",
+      "actor": { "class": "van", "catalogId": "vehicle.van", "static": true },
+      "essentiality": "required",
+      "k": 1,
+      "onMissing": "fail",
+      "pose": { "laneOffset": 1, "s": 9, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0,
+      "extensions": { "occludes": { "observer": "ego", "target": "cross-traffic" } }
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 14,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "ego-phase-red-after-entry",
+        "label": "bind the physical ego controller/head group and explicitly choose the synthetic-default red state after ego has entered the box",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": { "key": "signal:feature:jx:ego.phase", "value": "red" }
+      },
+      {
+        "id": "ego-clears-entered-box",
+        "label": "ego is already beyond its stop line from the prior permissive interval, so it clears instead of treating the new red as an upstream stop",
+        "actor": "ego",
+        "verb": "set",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": { "key": "rules.obeySignals", "value": false }
+      },
+      { "id": "cross-traffic-holds-course", "actor": "cross-traffic", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } }
+    ]
+  },
+  "invariants": [
+    { "id": "criticality", "kind": "pet", "essentiality": "required", "of": "ego", "to": "cross-traffic", "range": [0.2, 3] },
+    { "id": "arrival-band", "kind": "arrival", "essentiality": "required", "of": "cross-traffic", "at": { "feature": "jx", "at": "center" }, "syncWith": "ego", "deltaTRange": [0.8, 2.6] },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "preferred", "of": "ego", "maxMps2": 8 }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

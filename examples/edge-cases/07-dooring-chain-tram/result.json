@@ -1,0 +1,394 @@
+{
+  "traceDigest": "6abfb04d882da152b6e621f52235c93f0d7173116615fdf55e6fb271ea7c4693",
+  "inputHash": "43644d6e44bab5c23d437a67b1f7267017e7e5dd94c5de26668d076d82c7663b",
+  "issues": [],
+  "review": {
+    "pass": true,
+    "observed": {
+      "durationS": 20,
+      "eventTimes": {
+        "door-opens": 5.5,
+        "cyclist-swerves": 5.86,
+        "cyclist-brakes": 6.0200000000000005,
+        "ego-brakes": 6.22,
+        "trailing-cyclist-stops": 6.78
+      },
+      "collisions": [],
+      "preEventHeadwayMinS": 2.192000064225574,
+      "egoLeadMinDistanceM": 10.542534227964076,
+      "finalEgoLeadDistanceM": 28.289999085897957,
+      "peakEgoDecelMps2": 5.341880341880614,
+      "doorStates": [
+        "opening",
+        "open"
+      ],
+      "egoLaneChanges": 0
+    },
+    "limitations": [
+      "selected map has no surveyed embedded-tram-rail evidence; the adjacent rail-bound tram role is a labeled behavioral surrogate"
+    ]
+  },
+  "intentEvaluation": {
+    "version": 1,
+    "intentId": "edge-case-07-dooring-chain-tram",
+    "verdict": "accept",
+    "counts": {
+      "pass": 6,
+      "fail": 0,
+      "unchecked": 0,
+      "unsupported": 3
+    },
+    "criteria": [
+      {
+        "id": "required-event-order",
+        "kind": "event_order",
+        "required": true,
+        "status": "pass",
+        "reason": "required event-order condition held",
+        "evidence": [
+          {
+            "source": "trace_event",
+            "summary": "ordered trigger evidence",
+            "values": {
+              "interactionIds": [
+                "door-opens",
+                "cyclist-swerves",
+                "cyclist-brakes",
+                "ego-brakes",
+                "trailing-cyclist-stops"
+              ],
+              "matchedTimesS": [
+                5.5,
+                5.86,
+                6.02,
+                6.22,
+                6.78
+              ],
+              "complete": true
+            }
+          }
+        ]
+      },
+      {
+        "id": "collision-free",
+        "kind": "collision",
+        "required": true,
+        "status": "pass",
+        "reason": "collision budget held",
+        "evidence": [
+          {
+            "source": "metric",
+            "summary": "collision evidence",
+            "values": {
+              "pair": [],
+              "observedCount": 0,
+              "maxCount": 0,
+              "timesS": []
+            }
+          }
+        ]
+      },
+      {
+        "id": "cyclist-clearance",
+        "kind": "clearance",
+        "required": true,
+        "status": "pass",
+        "reason": "minimum clearance held",
+        "evidence": [
+          {
+            "source": "metric",
+            "summary": "engine minimum shape clearance",
+            "values": {
+              "pair": [
+                "ego",
+                "lead-cyclist"
+              ],
+              "measure": "metric_gap",
+              "minDistanceM": 10.542534,
+              "atS": 6.86,
+              "requiredMinM": 1,
+              "window": [
+                5,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "final-stop-gap",
+        "kind": "clearance",
+        "required": true,
+        "status": "pass",
+        "reason": "minimum clearance held",
+        "evidence": [
+          {
+            "source": "actor_track",
+            "summary": "minimum centre distance",
+            "values": {
+              "pair": [
+                "ego",
+                "lead-cyclist"
+              ],
+              "measure": "centre_distance",
+              "minDistanceM": 28.289999,
+              "atS": 20,
+              "requiredMinM": 2,
+              "window": [
+                20,
+                20
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "ego-avoids-tram-lane",
+        "kind": "lane_occupancy",
+        "required": true,
+        "status": "pass",
+        "reason": "forbidden lane occupancy held",
+        "evidence": [
+          {
+            "source": "actor_track",
+            "summary": "lane occupancy samples",
+            "values": {
+              "actorId": "ego",
+              "laneRsl": "83:0:-3",
+              "sampleCount": 0,
+              "firstTimeS": null,
+              "lastTimeS": null
+            }
+          }
+        ]
+      },
+      {
+        "id": "door-event-fired",
+        "kind": "trigger",
+        "required": true,
+        "status": "pass",
+        "reason": "trigger fired",
+        "evidence": [
+          {
+            "source": "trace_event",
+            "summary": "trigger outcome evidence",
+            "values": {
+              "interactionId": "door-opens",
+              "outcome": "fired",
+              "timesS": [
+                5.5
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "id": "pre-event-headway",
+        "kind": "unsupported",
+        "required": false,
+        "status": "unsupported",
+        "reason": "The typed intent evaluator has no headway criterion; the unchanged scenario-specific gate evaluates this threshold on every trace.",
+        "evidence": [
+          {
+            "source": "rubric",
+            "summary": "criterion is outside the deterministic evaluator vocabulary",
+            "values": {
+              "description": "Headway between ego and the lead cyclist from 0 through 5 seconds remains at least 2 seconds.",
+              "reason": "The typed intent evaluator has no headway criterion; the unchanged scenario-specific gate evaluates this threshold on every trace."
+            }
+          }
+        ]
+      },
+      {
+        "id": "braking-budget",
+        "kind": "unsupported",
+        "required": false,
+        "status": "unsupported",
+        "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates this threshold on every trace.",
+        "evidence": [
+          {
+            "source": "rubric",
+            "summary": "criterion is outside the deterministic evaluator vocabulary",
+            "values": {
+              "description": "Peak ego deceleration does not exceed 7 m/s2.",
+              "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates this threshold on every trace."
+            }
+          }
+        ]
+      },
+      {
+        "id": "door-articulation",
+        "kind": "unsupported",
+        "required": false,
+        "status": "unsupported",
+        "reason": "The typed intent evaluator checks trigger firing but not arbitrary state-transition values; the unchanged scenario-specific gate evaluates both states on every trace.",
+        "evidence": [
+          {
+            "source": "rubric",
+            "summary": "criterion is outside the deterministic evaluator vocabulary",
+            "values": {
+              "description": "The parked car's left door transitions through opening and open.",
+              "reason": "The typed intent evaluator checks trigger firing but not arbitrary state-transition values; the unchanged scenario-specific gate evaluates both states on every trace."
+            }
+          }
+        ]
+      }
+    ],
+    "behaviorSummary": {
+      "version": 1,
+      "trace": {
+        "inputHash": "43644d6e44bab5c23d437a67b1f7267017e7e5dd94c5de26668d076d82c7663b",
+        "mapId": "yale-street",
+        "clipSeconds": 20,
+        "dt": 0.02,
+        "actorCount": 5
+      },
+      "actors": [
+        {
+          "actorId": "ego",
+          "presentFromS": 0,
+          "presentToS": 20,
+          "minSpeedMps": 0,
+          "maxSpeedMps": 6.944444,
+          "finalSpeedMps": 0,
+          "distanceTravelledM": 47.642846,
+          "stationaryIntervals": [
+            [
+              7.52,
+              20
+            ]
+          ],
+          "lanes": [
+            "757:0:-1",
+            "83:0:-2"
+          ]
+        },
+        {
+          "actorId": "lead-cyclist",
+          "presentFromS": 0,
+          "presentToS": 20,
+          "minSpeedMps": 1.105648,
+          "maxSpeedMps": 6.388889,
+          "finalSpeedMps": 1.111111,
+          "distanceTravelledM": 58.950757,
+          "stationaryIntervals": [],
+          "lanes": [
+            "19:0:-3",
+            "757:0:-1",
+            "83:0:-2"
+          ]
+        },
+        {
+          "actorId": "parked-car",
+          "presentFromS": 0,
+          "presentToS": 20,
+          "minSpeedMps": 0,
+          "maxSpeedMps": 0,
+          "finalSpeedMps": 0,
+          "distanceTravelledM": 0,
+          "stationaryIntervals": [
+            [
+              0,
+              20
+            ]
+          ],
+          "lanes": [
+            "757:0:-1"
+          ]
+        },
+        {
+          "actorId": "trailing-cyclist",
+          "presentFromS": 0,
+          "presentToS": 20,
+          "minSpeedMps": 0,
+          "maxSpeedMps": 6.111111,
+          "finalSpeedMps": 0,
+          "distanceTravelledM": 47.000543,
+          "stationaryIntervals": [
+            [
+              8.56,
+              20
+            ]
+          ],
+          "lanes": [
+            "757:0:-1",
+            "83:0:-2"
+          ]
+        },
+        {
+          "actorId": "tram",
+          "presentFromS": 0,
+          "presentToS": 20,
+          "minSpeedMps": 6.111111,
+          "maxSpeedMps": 6.111111,
+          "finalSpeedMps": 6.111111,
+          "distanceTravelledM": 122.222224,
+          "stationaryIntervals": [],
+          "lanes": [
+            "19:0:-4",
+            "755:0:-1",
+            "83:0:-3"
+          ]
+        }
+      ],
+      "events": [
+        {
+          "t": 5.5,
+          "kind": "state_set",
+          "actorId": "parked-car",
+          "detail": "doors.left=opening"
+        },
+        {
+          "t": 5.5,
+          "kind": "trigger_fired",
+          "actorId": "parked-car",
+          "interactionId": "door-opens"
+        },
+        {
+          "t": 5.86,
+          "kind": "trigger_fired",
+          "actorId": "lead-cyclist",
+          "interactionId": "cyclist-swerves"
+        },
+        {
+          "t": 6.02,
+          "kind": "trigger_fired",
+          "actorId": "lead-cyclist",
+          "interactionId": "cyclist-brakes"
+        },
+        {
+          "t": 6.22,
+          "kind": "trigger_fired",
+          "actorId": "ego",
+          "interactionId": "ego-brakes"
+        },
+        {
+          "t": 6.5,
+          "kind": "state_set",
+          "actorId": "parked-car",
+          "detail": "doors.left=open"
+        },
+        {
+          "t": 6.78,
+          "kind": "trigger_fired",
+          "actorId": "trailing-cyclist",
+          "interactionId": "trailing-cyclist-stops"
+        }
+      ],
+      "metrics": {
+        "collisions": 0,
+        "minTTC": 4.817360717957969,
+        "minPathTTC": null,
+        "minPET": null,
+        "triggerNeverFired": [],
+        "declaredOcclusion": []
+      },
+      "truncated": {
+        "actors": false,
+        "events": false,
+        "occlusions": false
+      }
+    }
+  },
+  "accepted": true
+}

@@ -64,7 +64,7 @@ export async function templateValidate(options: TemplateValidateOptions): Promis
       ? match.report.sites.find((s) => s.siteId === options.siteId)
       : match.report.sites[0];
     if (site) {
-      context = createMapContext(match.bundle.index, site);
+      context = createMapContext(match.bundle, site);
       siteId = site.siteId;
       mapChecked = true;
     } else {

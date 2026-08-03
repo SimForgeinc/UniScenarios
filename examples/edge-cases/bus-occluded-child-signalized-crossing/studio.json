@@ -1,0 +1,12 @@
+{
+  "kind": "uniscenarios-studio-record",
+  "version": 1,
+  "title": "02 — Bus-Occluded Child at a Signalized Crossing",
+  "description": "A child emerges from behind a stopped bus into a green marked crossing; ego and the trailing taxi stop without entering the crossing.",
+  "template": "scenario.template.json",
+  "instance": "instance.json",
+  "trace": "trace.json.gz",
+  "rubric": "intent-rubric.json",
+  "evidence": "validation-report.json",
+  "defaultReplay": { "startSeconds": 0, "endSeconds": 20, "autoplay": false, "spaceToPlay": true }
+}

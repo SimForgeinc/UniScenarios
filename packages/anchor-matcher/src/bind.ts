@@ -11,6 +11,7 @@
 
 import { enumerateChains, laneAtS } from './frame.js';
 import { crossSectionAt } from './cross-section.js';
+import { angleDiff, headingAtS, pointAtS, projectPoint, toDeg } from './geometry.js';
 import type { ApproachRelation } from './types/anchor.js';
 import type { ConflictPair, DerivedMapIndex, LaneRsl } from './types/map-index.js';
 import type { RoleBinding } from './types/roles.js';
@@ -65,6 +66,104 @@ function routeFrom(
   return [laneRsl, ...(forward?.lanes ?? [])];
 }
 
+function routeThrough(index: DerivedMapIndex, laneRsl: LaneRsl): LaneRsl[] {
+  const upstream = enumerateChains(index, laneRsl, CONFLICT_RUNUP_M, 'backward', 1)[0];
+  const downstream = enumerateChains(index, laneRsl, CONFLICT_RUNUP_M, 'forward', 1)[0];
+  return [...(upstream?.lanes ?? []), laneRsl, ...(downstream?.lanes ?? [])];
+}
+
+interface LaneDropPair {
+  terminatingRsl: LaneRsl;
+  terminatingK: number;
+  continuingRsl: LaneRsl;
+  continuingK: number;
+  side: 'left' | 'right';
+  stationS: number;
+}
+
+/** Resolve the concrete disappearing lane and the only legal adjacent survivor. */
+function laneDropPair(ctx: BindContext, feature: string): { pair: LaneDropPair | null; notes: string[] } {
+  const notes: string[] = [];
+  const match = ctx.featureMatches[feature];
+  const parsed = match?.mapFeatureId.match(/^lane_drop:([^@]+)@/);
+  const terminatingRsl = parsed?.[1];
+  if (!match || !terminatingRsl || !ctx.index.lanes[terminatingRsl]) {
+    notes.push(`feature "${feature}" has no exact lane_drop:<terminating-rsl> identity`);
+    return { pair: null, notes };
+  }
+
+  // The transition sample is just downstream of the taper. Walk back to the
+  // nearest cross-section where the disappearing lane still physically exists.
+  for (let backM = 0.5; backM <= 30; backM += 0.5) {
+    const stationS = match.s - backM;
+    const at = laneAtS(ctx.frame, stationS);
+    if (!at) continue;
+    const cs = crossSectionAt(ctx.index.lanes, at.span.laneRsl, at.sInLane);
+    if (!cs) continue;
+    const entries = [...cs.sameDirDriving.entries()];
+    const terminating = entries.find(([, rsl]) => rsl === terminatingRsl);
+    if (!terminating) continue;
+    const [terminatingK] = terminating;
+    const termLane = ctx.index.lanes[terminatingRsl]!;
+    const referenceLane = ctx.index.lanes[at.span.laneRsl]!;
+    const point = pointAtS(referenceLane.polyline, at.sInLane);
+    const localS = projectPoint(termLane.polyline, point).s;
+    const downstreamAt = laneAtS(ctx.frame, Math.min(ctx.frame.sRange[1], match.s + 10));
+    const downstreamCs = downstreamAt
+      ? crossSectionAt(ctx.index.lanes, downstreamAt.span.laneRsl, downstreamAt.sInLane)
+      : null;
+    const downstream = new Set(downstreamCs?.sameDirDriving.values() ?? []);
+
+    const candidates = entries
+      .filter(([k, rsl]) => Math.abs(k - terminatingK) === 1 && rsl !== terminatingRsl)
+      .map(([continuingK, continuingRsl]) => {
+        const side: 'left' | 'right' = continuingK > terminatingK ? 'left' : 'right';
+        const continuingLane = ctx.index.lanes[continuingRsl];
+        const termPoint = pointAtS(termLane.polyline, localS);
+        const continuingAt = continuingLane ? projectPoint(continuingLane.polyline, termPoint) : null;
+        const lateralSeparationM = continuingAt?.distance ?? 0;
+        let continuationM = continuingLane && continuingAt
+          ? Math.max(0, continuingLane.lengthM - continuingAt.s)
+          : 0;
+        let continuationCursor = continuingLane;
+        const continuationVisited = new Set(continuingLane ? [continuingLane.rsl] : []);
+        for (let hop = 0; continuationCursor && hop < 4 && continuationM < 20; hop += 1) {
+          const nextRsl = [...continuationCursor.successors].sort()[0];
+          const next = nextRsl ? ctx.index.lanes[nextRsl] : undefined;
+          if (!next || next.isJunction || continuationVisited.has(next.rsl)) break;
+          continuationVisited.add(next.rsl);
+          continuationM += next.lengthM;
+          continuationCursor = next;
+        }
+        const permitted = termLane.laneChangePermissions.some(
+          (permission) => permission.side === side && permission.allowed &&
+            localS >= permission.startS - 1e-6 && localS <= permission.endS + 1e-6,
+        );
+        const continues = continuationM >= 20 && (downstream.has(continuingRsl) || termLane.successors.includes(continuingRsl) ||
+          ctx.index.lanes[continuingRsl]?.successors.some((rsl) => downstream.has(rsl)) === true || downstream.size === 0);
+        return {
+          terminatingRsl, terminatingK, continuingRsl, continuingK, side, stationS,
+          permitted,
+          continues,
+          // Sequential road-section aliases sometimes overlap a cross-section
+          // at a seam and receive adjacent k values. A real sibling remains a
+          // lane-width away immediately upstream of the taper.
+          lateralSeparationM,
+        };
+      })
+      .filter((candidate) => candidate.permitted && candidate.continues && candidate.lateralSeparationM >= 1.5)
+      .sort((a, b) => a.continuingRsl.localeCompare(b.continuingRsl));
+    const chosen = candidates[0];
+    if (chosen) return { pair: chosen, notes };
+    notes.push(
+      `${terminatingRsl} has no immediately adjacent continuing sibling with an explicit allowed lane change at s=${stationS.toFixed(1)} m`,
+    );
+    return { pair: null, notes };
+  }
+  notes.push(`terminating lane ${terminatingRsl} is not present immediately upstream of the matched taper`);
+  return { pair: null, notes };
+}
+
 /** The gate the reference path takes through a given junction, if any. */
 export function egoGateForJunction(
   index: DerivedMapIndex,
@@ -95,6 +194,120 @@ interface BindContext {
   index: DerivedMapIndex;
   frame: AnchorFrame;
   featureMatches: MatchedSite['featureMatches'];
+}
+
+interface LocalRoleGeometry {
+  laneRsl: LaneRsl;
+  segmentId: string | undefined;
+  roadId: number;
+  section: number;
+  headingRad: number;
+}
+
+/** Resolve the lane actually nearest the actor's frame station. This mirrors
+ * materialization's world-point projection and catches route chains that turn
+ * through a junction before reaching an allegedly local lead/oncoming role. */
+function localRoleGeometry(
+  index: DerivedMapIndex,
+  frame: AnchorFrame,
+  binding: FeatureBinding,
+): LocalRoleGeometry | null {
+  if (!binding.pose) return null;
+  const reference = laneAtS(frame, binding.pose.s);
+  if (!reference) return null;
+  const referenceLane = index.lanes[reference.span.laneRsl];
+  if (!referenceLane) return null;
+  const worldPoint = pointAtS(referenceLane.polyline, reference.sInLane);
+  const candidates = binding.routeLaneChain?.length
+    ? binding.routeLaneChain
+    : binding.laneRsl
+      ? [binding.laneRsl]
+      : [];
+  let best: { laneRsl: LaneRsl; s: number; distance: number } | null = null;
+  for (const laneRsl of candidates) {
+    const lane = index.lanes[laneRsl];
+    if (!lane?.polyline.length) continue;
+    const projected = projectPoint(lane.polyline, worldPoint);
+    if (!best || projected.distance < best.distance) {
+      best = { laneRsl, s: projected.s, distance: projected.distance };
+    }
+  }
+  if (!best) return null;
+  const lane = index.lanes[best.laneRsl]!;
+  return {
+    laneRsl: best.laneRsl,
+    segmentId: index.factIndex.segmentIdsByLane[best.laneRsl],
+    roadId: lane.roadId,
+    section: lane.section,
+    headingRad: headingAtS(lane.polyline, best.s),
+  };
+}
+
+function enforceLocalRoleSemantics(
+  index: DerivedMapIndex,
+  frame: AnchorFrame,
+  roles: readonly RoleBinding[],
+  bindings: readonly FeatureBinding[],
+): void {
+  const roleById = new Map(roles.map((role) => [role.role, role]));
+  const bindingById = new Map(bindings.map((binding) => [binding.role, binding]));
+  const geometryById = new Map<string, LocalRoleGeometry | null>();
+  const geometry = (roleId: string): LocalRoleGeometry | null => {
+    if (geometryById.has(roleId)) return geometryById.get(roleId) ?? null;
+    const value = localRoleGeometry(index, frame, bindingById.get(roleId)!);
+    geometryById.set(roleId, value);
+    return value;
+  };
+
+  for (const role of roles) {
+    const binding = bindingById.get(role.role);
+    if (!binding || binding.status === 'failed' || binding.status === 'dropped') continue;
+    if (role.requiredSameSegmentAs) {
+      const own = geometry(role.role);
+      const ref = geometry(role.requiredSameSegmentAs);
+      if (!roleById.has(role.requiredSameSegmentAs) || !own || !ref || !own.segmentId || own.segmentId !== ref.segmentId) {
+        binding.status = 'failed';
+        binding.notes.push(
+          `requires same local segment as ${role.requiredSameSegmentAs}; resolved ${own?.segmentId ?? 'none'} vs ${ref?.segmentId ?? 'none'}`,
+        );
+      }
+    }
+    if (role.requiredSameRoadSectionAs && binding.status !== 'failed') {
+      const own = geometry(role.role);
+      const ref = geometry(role.requiredSameRoadSectionAs);
+      if (
+        !roleById.has(role.requiredSameRoadSectionAs) || !own || !ref ||
+        own.roadId !== ref.roadId || own.section !== ref.section
+      ) {
+        binding.status = 'failed';
+        binding.notes.push(
+          `requires same road section as ${role.requiredSameRoadSectionAs}; resolved ` +
+          `${own ? `${own.roadId}:${own.section}` : 'none'} vs ${ref ? `${ref.roadId}:${ref.section}` : 'none'}`,
+        );
+      }
+    }
+    if (role.requiredHeadingRelation && binding.status !== 'failed') {
+      const own = geometry(role.role);
+      const ref = geometry(role.requiredHeadingRelation.role);
+      if (!roleById.has(role.requiredHeadingRelation.role) || !own || !ref) {
+        binding.status = 'failed';
+        binding.notes.push(`cannot resolve local heading relative to ${role.requiredHeadingRelation.role}`);
+        continue;
+      }
+      const separation = Math.abs(angleDiff(own.headingRad, ref.headingRad));
+      const errorRad = role.requiredHeadingRelation.relation === 'parallel'
+        ? separation
+        : Math.abs(Math.PI - separation);
+      const errorDeg = toDeg(errorRad);
+      if (errorDeg > role.requiredHeadingRelation.maxErrorDeg + 1e-9) {
+        binding.status = 'failed';
+        binding.notes.push(
+          `${role.requiredHeadingRelation.relation} heading error ${errorDeg.toFixed(2)}° exceeds ` +
+          `${role.requiredHeadingRelation.maxErrorDeg.toFixed(2)}° relative to ${role.requiredHeadingRelation.role}`,
+        );
+      }
+    }
+  }
 }
 
 function bindConflictingGate(
@@ -193,6 +406,18 @@ function bindConflictingGate(
   const egoConnectingS = ctx.frame.sOfLane[egoGate.connectingLaneRsl];
   const sOnEgo = (egoConnectingS ?? 0) + sOnA;
 
+  const availableUpstreamM = upstream.lengthM + (approachLane?.lengthM ?? 0);
+  if (
+    role.minUpstreamRunwayM !== undefined &&
+    availableUpstreamM + 1e-6 < role.minUpstreamRunwayM
+  ) {
+    notes.push(
+      `conflicting gate has only ${availableUpstreamM.toFixed(2)} m connected upstream runway; ` +
+      `${role.minUpstreamRunwayM.toFixed(2)} m required`,
+    );
+    return binding;
+  }
+
   // Spawn pose: back up along the actor's own route by the run-up we walked.
   const spawnS = -(upstream.lengthM + (approachLane?.lengthM ?? 0));
   binding.status = 'bound';
@@ -288,6 +513,32 @@ export function bindRoles(
           binding.pose = poseAt(k, role.dsM, role.tFrac);
           binding.laneRsl = laneRsl;
           binding.routeLaneChain = routeFrom(index, frame, laneRsl, k);
+        }
+        break;
+      }
+
+      case 'at_lane_drop': {
+        const resolved = laneDropPair(ctx, role.feature);
+        notes.push(...resolved.notes);
+        const selectedRsl = role.lane === 'terminating'
+          ? resolved.pair?.terminatingRsl
+          : resolved.pair?.continuingRsl;
+        const selectedK = role.lane === 'terminating'
+          ? resolved.pair?.terminatingK
+          : resolved.pair?.continuingK;
+        binding = {
+          role: role.role,
+          kind: role.kind,
+          status: selectedRsl === undefined || selectedK === undefined ? 'failed' : 'bound',
+          notes,
+        };
+        if (selectedRsl !== undefined && selectedK !== undefined && resolved.pair) {
+          binding.pose = poseAt(selectedK, role.dsM, role.tFrac);
+          binding.laneRsl = selectedRsl;
+          binding.routeLaneChain = routeThrough(index, selectedRsl);
+          notes.push(
+            `${role.lane} lane ${selectedRsl} bound at ${role.feature}; legal ${resolved.pair.side} merge to ${resolved.pair.continuingRsl}`,
+          );
         }
         break;
       }
@@ -414,6 +665,8 @@ export function bindRoles(
     bound.set(role.role, binding);
     out.push(binding);
   }
+
+  enforceLocalRoleSemantics(index, frame, roles, out);
 
   return out;
 }

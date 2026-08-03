@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "intentId": "edge-02-bus-occluded-child-signalized-crossing-v1",
+  "title": "Bus-Occluded Child at a Signalized Crossing acceptance rubric",
+  "originalIntent": "Ego discounts its legal green because a stopped city bus hides a child, controls the approach, stops before the crossing, absorbs taxi pressure, and remains stopped while the child hesitates and then clears the whole crossing.",
+  "criteria": [
+    { "id": "required-event-order", "kind": "event_order", "required": true, "mode": "required", "interactionIds": ["ego-controls-approach", "adult-waits-at-curb", "child-ignores-pedestrian-phase", "child-runs-from-bus", "ego-stops-before-crossing", "taxi-brakes-behind", "child-hesitates-at-lane-line", "child-continues", "ego-holds-for-full-clearance"] },
+    { "id": "controlled-bus-approach", "kind": "speed_band", "required": true, "actorId": "ego", "window": [2.5, 8.2], "maxMps": 5.555556 },
+    { "id": "ego-remains-stopped", "kind": "stationary_success", "required": true, "actorId": "ego", "window": [10.56, 20], "maxSpeedMps": 0.1, "minPresentSeconds": 9.4 },
+    { "id": "child-pause-resume", "kind": "stop_hold_resume", "required": true, "actorId": "child", "window": [13.7, 17], "stopSpeedMps": 0.1, "minHoldSeconds": 0.7, "mustResume": true, "resumeMinSpeedMps": 0.5, "resumeByS": 16 },
+    { "id": "child-clearance", "kind": "clearance", "required": true, "pair": ["ego", "child"], "measure": "metric_gap", "minM": 1.5 },
+    { "id": "taxi-clearance", "kind": "clearance", "required": true, "pair": ["ego", "trailing-taxi"], "measure": "metric_gap", "minM": 0.1 },
+    { "id": "child-occlusion", "kind": "occlusion", "required": true, "observer": "ego", "target": "child", "occluderId": "actor:bus", "outcome": "blocked_then_revealed" },
+    { "id": "stopping-margin-challenge", "kind": "criticality", "required": true, "metric": "path_ttc", "pair": ["ego", "child"], "window": [7, 18], "minS": 1, "maxS": 6 },
+    { "id": "ego-green", "kind": "control_indication", "required": true, "signalId": "signal:1477", "window": [0, 5], "mode": "required", "indications": ["green"] },
+    { "id": "collision-free", "kind": "collision", "required": true, "maxCount": 0 }
+  ]
+}

@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "intentId": "edge-05-ambulance-gridlock-v1",
+  "title": "Ambulance through a gridlocked intersection acceptance rubric",
+  "originalIntent": "Ego waits for live cross traffic and a pedestrian, makes a slow bounded relocation to create an emergency corridor, stops again, and does not follow the ambulance through the red signal.",
+  "criteria": [
+    {
+      "id": "required-event-order",
+      "kind": "event_order",
+      "required": true,
+      "mode": "required",
+      "interactionIds": [
+        "ambulance-siren",
+        "ambulance-horn-1-on",
+        "ambulance-horn-1-off",
+        "ambulance-horn-2-on",
+        "ambulance-horn-2-off",
+        "pedestrian-enters",
+        "cross-traffic-clears",
+        "cross-red",
+        "pedestrian-clears",
+        "ego-creeps",
+        "ego-stops-pocket",
+        "ambulance-passes"
+      ]
+    },
+    {
+      "id": "ego-initial-hold",
+      "kind": "stationary_success",
+      "required": true,
+      "actorId": "ego",
+      "window": [0, 13],
+      "maxSpeedMps": 0.1,
+      "minPresentSeconds": 13
+    },
+    {
+      "id": "bounded-ego-relocation",
+      "kind": "speed_band",
+      "required": true,
+      "actorId": "ego",
+      "window": [13.1, 15.1],
+      "maxMps": 2.222222
+    },
+    {
+      "id": "ambulance-corridor",
+      "kind": "clearance",
+      "required": true,
+      "pair": ["ambulance", "ego"],
+      "measure": "metric_gap",
+      "minM": 3
+    },
+    {
+      "id": "pedestrian-clearance",
+      "kind": "clearance",
+      "required": true,
+      "pair": ["ego", "pedestrian"],
+      "measure": "metric_gap",
+      "minM": 2
+    },
+    {
+      "id": "ambulance-pass-fired",
+      "kind": "trigger",
+      "required": true,
+      "interactionId": "ambulance-passes",
+      "outcome": "fired"
+    },
+    {
+      "id": "collision-free",
+      "kind": "collision",
+      "required": true,
+      "maxCount": 0
+    }
+  ]
+}

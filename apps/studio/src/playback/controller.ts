@@ -1,6 +1,14 @@
-import { Vector3 } from 'three';
-import type { CityViewer } from '@uniscenarios/city-renderer';
-import { ActorRenderer, type ActorView } from '../editor/actorRenderer';
+import { Quaternion, Vector3 } from 'three';
+import type { CameraMode, CameraView, CityViewer } from '@uniscenarios/city-renderer';
+import type { DashCameraSensor } from '@uniscenarios/scenario-model';
+import { CONTROL_INDICATIONS, type ControlIndication, type SceneTrace } from '@uniscenarios/sim-engine';
+import {
+  ActorRenderer,
+  type ActorView,
+  type DoorName,
+  type DoorState,
+  type DoorStates,
+} from '../editor/actorRenderer';
 import {
   samplePlaybackActors,
   samplePlaybackSignals,
@@ -8,6 +16,7 @@ import {
   type SampledActor,
   type SampledSignal,
 } from './model';
+import type { CameraPolicy } from '../cameras/model';
 
 export interface PlaybackState {
   readonly time: number;
@@ -16,21 +25,311 @@ export interface PlaybackState {
   readonly playing: boolean;
   readonly actorCount: number;
   readonly visibleActorCount: number;
+  readonly propCount: number;
   readonly signalCount: number;
   readonly signalHeadCount: number;
   readonly renderedSignalHeadCount: number;
-  readonly signalPhases: Readonly<Record<'green' | 'yellow' | 'red', number>>;
+  readonly signalPhases: Readonly<Record<ControlIndication, number>>;
   readonly signalTimingSources: readonly string[];
   readonly instanceId: string;
   readonly inputHash: string;
+  readonly cameraPolicy: CameraPolicy;
+  readonly cameraSelectionId: string;
+  readonly cameraReason?: string;
 }
 
 export interface PlaybackControllerOptions {
   viewer: CityViewer;
   bundle: PlaybackBundle;
   sampleHeight: (x: number, z: number) => number | null;
-  setSignalStates?: (states: Readonly<Record<string, 'green' | 'yellow' | 'red'>>) => number;
+  setSignalStates?: (states: Readonly<Record<string, ControlIndication>>) => number;
   clearSignalStates?: () => void;
+  /** Auto framing is opt-in. Authored/free/editor policies preserve the user's view. */
+  cameraPolicy?: CameraPolicy;
+  /** Fixed presentation camera, used when policy is authored. */
+  cameraView?: CameraView;
+  /** An actor-local physical camera. The actor transform continues to come from the trace. */
+  dashCamera?: { actorId: string; sensor: DashCameraSensor };
+  /** Restore the editor/gallery view when this read-only replay is closed. */
+  restoreCameraOnDispose?: boolean;
+}
+
+export interface DashCameraFrame {
+  readonly position: readonly [number, number, number];
+  readonly target: readonly [number, number, number];
+  readonly up: readonly [number, number, number];
+  readonly verticalFovDeg: number;
+  readonly aspectRatio: number;
+  readonly nearM: number;
+  readonly farM: number;
+}
+
+/** Resolve an actor-local +X-forward/+Y-up/+Z-left sensor into scene space. */
+export function dashCameraFrame(
+  actor: Pick<SampledActor, 'x' | 'z' | 'headingRad'>,
+  groundY: number,
+  sensor: DashCameraSensor,
+): DashCameraFrame {
+  const actorRotation = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), actor.headingRad);
+  const yaw = new Quaternion().setFromAxisAngle(new Vector3(0, 1, 0), sensor.mount.rotation.yawRad);
+  const pitch = new Quaternion().setFromAxisAngle(new Vector3(0, 0, 1), sensor.mount.rotation.pitchRad);
+  const roll = new Quaternion().setFromAxisAngle(new Vector3(1, 0, 0), sensor.mount.rotation.rollRad);
+  const orientation = actorRotation.clone().multiply(yaw).multiply(pitch).multiply(roll);
+  const mount = new Vector3(sensor.mount.position.x, sensor.mount.position.y, sensor.mount.position.z)
+    .applyQuaternion(actorRotation);
+  const position = new Vector3(actor.x, groundY, actor.z).add(mount);
+  const forward = new Vector3(1, 0, 0).applyQuaternion(orientation).normalize();
+  const up = new Vector3(0, 1, 0).applyQuaternion(orientation).normalize();
+  const target = position.clone().addScaledVector(forward, 50);
+  const horizontalRad = sensor.camera.horizontalFovDeg * Math.PI / 180;
+  const verticalFovDeg = 2 * Math.atan(Math.tan(horizontalRad / 2) / sensor.camera.aspectRatio) * 180 / Math.PI;
+  return {
+    position: [position.x, position.y, position.z],
+    target: [target.x, target.y, target.z],
+    up: [up.x, up.y, up.z],
+    verticalFovDeg,
+    aspectRatio: sensor.camera.aspectRatio,
+    nearM: sensor.camera.nearM,
+    farM: sensor.camera.farM,
+  };
+}
+
+/**
+ * Project an exact trace playhead from a monotonic wall clock.
+ *
+ * Render cadence is deliberately absent from this calculation. Slow or
+ * throttled renderers skip intermediate samples instead of slowing the
+ * scenario itself down.
+ */
+export function realtimePlaybackTime(
+  traceStart: number,
+  wallStartMs: number,
+  wallNowMs: number,
+  traceEnd: number,
+): number {
+  const elapsedSeconds = Math.max(0, (wallNowMs - wallStartMs) / 1000);
+  return Math.min(traceEnd, traceStart + elapsedSeconds);
+}
+
+export interface AllActorsCameraPlan {
+  readonly actorIds: readonly string[];
+  readonly centerX: number;
+  readonly centerZ: number;
+  readonly radius: number;
+}
+
+export interface GalleryCameraChoice {
+  readonly policy: 'ego-chase' | 'all-actors';
+  readonly selectionId: string;
+  readonly label: string;
+  readonly reason: string;
+  readonly egoActorId: string | null;
+}
+
+/** Resolve Gallery presentation from explicit scenario metadata, never names or inferred roles. */
+export function galleryCameraChoice(bundle: PlaybackBundle): GalleryCameraChoice {
+  const egoIds = bundle.actors
+    .filter((actor) => actor.tags.includes('role:ego'))
+    .map((actor) => actor.id)
+    .sort();
+  if (egoIds.length === 1) {
+    const egoActorId = egoIds[0]!;
+    return {
+      policy: 'ego-chase',
+      selectionId: `ego-chase:${egoActorId}`,
+      label: `Trailing ego · ${egoActorId}`,
+      reason: `Following the designated ego actor “${egoActorId}”.`,
+      egoActorId,
+    };
+  }
+  const reason = egoIds.length === 0
+    ? 'All actors overview: this scenario has no designated ego.'
+    : `All actors overview: ${egoIds.length} actors are designated as ego (${egoIds.join(', ')}).`;
+  return {
+    policy: 'all-actors',
+    selectionId: 'all-actors',
+    label: 'All actors overview',
+    reason,
+    egoActorId: null,
+  };
+}
+
+/** Full-timeline authored bounds. Ego identity is deliberately irrelevant. */
+export function buildAllActorsCameraPlan(bundle: PlaybackBundle): AllActorsCameraPlan | null {
+  const authored = bundle.actors.filter((actor) => (
+    !actor.id.startsWith('ambient-') && !actor.tags.some((tag) => tag.startsWith('ambient:'))
+  ));
+  const points: Array<{ x: number; z: number; pad: number }> = [];
+  for (const actor of authored) {
+    const track = bundle.trace.ticks.actors[actor.id];
+    if (!track) continue;
+    for (let index = 0; index < track.x.length; index++) {
+      if (!track.present[index]) continue;
+      points.push({ x: track.x[index]!, z: track.z[index]!, pad: Math.max(actor.dims.l, actor.dims.w) / 2 });
+    }
+  }
+  for (const prop of bundle.props) {
+    points.push({ x: prop.pose.x, z: prop.pose.z, pad: Math.max(prop.dims.l, prop.dims.w) * prop.scale / 2 });
+  }
+  if (points.length === 0) return null;
+  const minX = Math.min(...points.map((point) => point.x - point.pad));
+  const maxX = Math.max(...points.map((point) => point.x + point.pad));
+  const minZ = Math.min(...points.map((point) => point.z - point.pad));
+  const maxZ = Math.max(...points.map((point) => point.z + point.pad));
+  return {
+    actorIds: authored.map((actor) => actor.id).sort(),
+    centerX: (minX + maxX) / 2,
+    centerZ: (minZ + maxZ) / 2,
+    radius: Math.max(10, Math.hypot(maxX - minX, maxZ - minZ) / 2),
+  };
+}
+
+export function allActorsCameraView(plan: AllActorsCameraPlan, ground: number): CameraView {
+  const distance = Math.max(24, plan.radius * 1.75);
+  return {
+    position: [plan.centerX + distance * 0.72, ground + Math.max(14, plan.radius * 1.05), plan.centerZ + distance * 0.72],
+    target: [plan.centerX, ground + 1.4, plan.centerZ],
+    fov: 52,
+  };
+}
+
+export interface IncidentCameraPlan {
+  readonly actorIds: readonly string[];
+  readonly radius: number;
+  readonly direction: Readonly<{ x: number; z: number }>;
+  readonly fov: number;
+}
+
+/**
+ * Derive one deterministic composition from the complete verified trace.
+ * Only semantically critical actors participate, so ambient traffic or a remote
+ * static prop cannot shrink the incident to a few pixels.
+ */
+export function buildIncidentCameraPlan(bundle: PlaybackBundle): IncidentCameraPlan | null {
+  const metrics = bundle.trace.metrics;
+  const declaredOcclusion = metrics.declaredOcclusion?.find((item) => (
+    item.status === 'revealed_before_conflict' || item.status === 'blocked_at_conflict'
+  ));
+  const primaryPair = metrics.revealToConflict?.pair
+    ?? declaredOcclusion?.pair
+    ?? metrics.minPathTTC?.pair
+    ?? metrics.minTTC?.pair
+    ?? metrics.minPET?.pair
+    ?? metrics.minDistance[0]?.pair
+    ?? null;
+  const ids = new Set<string>(primaryPair ?? []);
+  if (metrics.revealToConflict) {
+    ids.add(metrics.revealToConflict.observer);
+    ids.add(metrics.revealToConflict.target);
+    for (const id of metrics.revealToConflict.relevantOccluderIds) ids.add(id);
+  }
+  if (declaredOcclusion) {
+    ids.add(declaredOcclusion.observer);
+    ids.add(declaredOcclusion.target);
+    for (const id of declaredOcclusion.relevantOccluderIds) ids.add(id);
+  }
+  if (ids.size === 0 && bundle.trace.header.metricSubject) ids.add(bundle.trace.header.metricSubject);
+  if (ids.size < 2) {
+    const authored = bundle.actors.filter((actor) => !actor.id.startsWith('ambient-'));
+    for (const actor of authored) {
+      ids.add(actor.id);
+      if (ids.size >= 2) break;
+    }
+  }
+  const actorIds = [...ids].filter((id) => bundle.trace.ticks.actors[id]).sort();
+  if (actorIds.length === 0) return null;
+
+  // Maximum simultaneous spread over the whole clip. The camera follows the
+  // incident centroid but never changes zoom, avoiding both jitter and loss at
+  // the reveal/conflict moment.
+  let maxRadius = 0;
+  const tickCount = bundle.trace.ticks.t.length;
+  for (let tick = 0; tick < tickCount; tick++) {
+    const points = actorIds.flatMap((id) => {
+      const track = bundle.trace.ticks.actors[id]!;
+      return track.present[tick] ? [{ x: track.x[tick]!, z: track.z[tick]! }] : [];
+    });
+    if (points.length === 0) continue;
+    const cx = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const cz = points.reduce((sum, point) => sum + point.z, 0) / points.length;
+    for (const point of points) maxRadius = Math.max(maxRadius, Math.hypot(point.x - cx, point.z - cz));
+  }
+
+  const subjectId = bundle.trace.header.metricSubject && ids.has(bundle.trace.header.metricSubject)
+    ? bundle.trace.header.metricSubject
+    : actorIds[0]!;
+  const otherId = actorIds.find((id) => id !== subjectId) ?? subjectId;
+  const criticalT = metrics.revealToConflict?.conflictT
+    ?? declaredOcclusion?.conflictT
+    ?? metrics.minPathTTC?.t
+    ?? metrics.minTTC?.t
+    ?? metrics.minPET?.t
+    ?? bundle.startTime;
+  const criticalTick = bundle.trace.ticks.t.reduce((best, t, index) => (
+    Math.abs(t - criticalT) < Math.abs(bundle.trace.ticks.t[best]! - criticalT) ? index : best
+  ), 0);
+  const subject = bundle.trace.ticks.actors[subjectId]!;
+  const other = bundle.trace.ticks.actors[otherId]!;
+  const dx = subject.x[criticalTick]! - other.x[criticalTick]!;
+  const dz = subject.z[criticalTick]! - other.z[criticalTick]!;
+  const length = Math.hypot(dx, dz);
+  const heading = subject.headingRad[criticalTick] ?? 0;
+  const direction = length > 0.1
+    ? { x: dx / length, z: dz / length }
+    : { x: -Math.cos(heading), z: Math.sin(heading) };
+  const radius = Math.max(7, Math.min(34, maxRadius + 4));
+  return { actorIds, radius, direction, fov: radius > 22 ? 48 : 42 };
+}
+
+const DOOR_NAMES = new Set<DoorName>(['left', 'right', 'rear']);
+const DOOR_STATES = new Set<DoorState>(['closed', 'opening', 'open', 'closing']);
+
+export interface PlaybackVehicleCues {
+  readonly emergency: 'off' | 'flashing' | 'flashing_siren';
+  readonly hornActive: boolean;
+  readonly indicator: 'off' | 'left' | 'right' | 'hazard';
+}
+
+export function samplePlaybackVehicleCues(
+  trace: Pick<SceneTrace, 'events'>,
+  time: number,
+): ReadonlyMap<string, PlaybackVehicleCues> {
+  const sampled = new Map<string, PlaybackVehicleCues>();
+  for (const event of trace.events) {
+    if (event.kind !== 'state_set' || event.t > time) continue;
+    const current = sampled.get(event.actorId) ?? { emergency: 'off', hornActive: false, indicator: 'off' };
+    if (event.key === 'lights.emergency' && typeof event.value === 'string' && ['off', 'flashing', 'flashing_siren'].includes(event.value)) {
+      sampled.set(event.actorId, { ...current, emergency: event.value as PlaybackVehicleCues['emergency'] });
+    } else if (event.key === 'audio.horn' && typeof event.value === 'boolean') {
+      sampled.set(event.actorId, { ...current, hornActive: event.value });
+    } else if (event.key === 'lights.indicator' && typeof event.value === 'string' && ['off', 'left', 'right', 'hazard'].includes(event.value)) {
+      sampled.set(event.actorId, { ...current, indicator: event.value as PlaybackVehicleCues['indicator'] });
+    }
+  }
+  return sampled;
+}
+
+/** Sample the last recorded doors.* value at or before time; absent state is closed. */
+export function samplePlaybackDoors(
+  trace: Pick<SceneTrace, 'events'>,
+  time: number,
+): ReadonlyMap<string, DoorStates> {
+  const sampled = new Map<string, Partial<Record<DoorName, DoorState>>>();
+  for (const event of trace.events) {
+    if (event.kind !== 'state_set' || !event.key.startsWith('doors.')) continue;
+    const name = event.key.slice('doors.'.length) as DoorName;
+    if (!DOOR_NAMES.has(name) || typeof event.value !== 'string' || !DOOR_STATES.has(event.value as DoorState)) {
+      continue;
+    }
+    let actor = sampled.get(event.actorId);
+    if (!actor) {
+      actor = {};
+      sampled.set(event.actorId, actor);
+    }
+    if (actor[name] === undefined) actor[name] = 'closed';
+    if (event.t <= time) actor[name] = event.value as DoorState;
+  }
+  return sampled;
 }
 
 /** Drives the real Studio actor renderer from trace time, independent of React render cadence. */
@@ -44,21 +343,59 @@ export class PlaybackController {
   private time: number;
   private playing = false;
   private raf = 0;
-  private previousNow = 0;
+  private playbackWallStart = 0;
+  private playbackTraceStart = 0;
   private sampled: readonly SampledActor[] = [];
   private sampledSignals: readonly SampledSignal[] = [];
   private renderedSignalHeadCount = 0;
+  private cameraPolicy: CameraPolicy;
+  private cameraSelectionId: string;
+  private readonly allActorsCameraPlan: AllActorsCameraPlan | null;
+  private readonly incidentCameraPlan: IncidentCameraPlan | null;
+  private readonly galleryCameraChoice: GalleryCameraChoice;
+  private readonly previousCameraView: CameraView | null;
+  private readonly previousCameraMode: CameraMode | null;
+  private readonly previousCameraUp: Vector3 | null;
+  private readonly previousCameraProjection: { near: number; far: number; aspect: number } | null;
   private snapshot: PlaybackState;
 
   constructor(private readonly options: PlaybackControllerOptions) {
     this.viewer = options.viewer;
     this.bundle = options.bundle;
     this.sampleHeight = options.sampleHeight;
+    this.cameraPolicy = options.cameraPolicy ?? 'free';
+    this.galleryCameraChoice = galleryCameraChoice(this.bundle);
+    this.cameraSelectionId = this.cameraPolicy === 'ego-chase'
+      ? this.galleryCameraChoice.selectionId
+      : this.cameraPolicy;
+    this.allActorsCameraPlan = buildAllActorsCameraPlan(this.bundle);
+    this.incidentCameraPlan = buildIncidentCameraPlan(this.bundle);
+    this.previousCameraView = options.restoreCameraOnDispose
+      ? this.viewer.controls.getView()
+      : null;
+    this.previousCameraMode = options.restoreCameraOnDispose
+      ? ((this.viewer.controls as typeof this.viewer.controls & { mode?: CameraMode }).mode ?? 'orbit')
+      : null;
+    this.previousCameraUp = options.restoreCameraOnDispose ? this.viewer.camera.up.clone() : null;
+    this.previousCameraProjection = options.restoreCameraOnDispose
+      ? { near: this.viewer.camera.near, far: this.viewer.camera.far, aspect: this.viewer.camera.aspect }
+      : null;
     this.time = this.bundle.startTime;
     this.renderer.group.name = 'playback-actors';
     this.viewer.scene.add(this.renderer.group);
+    if (this.cameraPolicy === 'dash-camera') this.viewer.setCameraPoseConstraintsEnabled(false);
     this.syncScene();
-    this.frameActors();
+    if (this.cameraPolicy === 'all-actors') {
+      this.frameAllActors();
+    } else if (this.cameraPolicy === 'ego-chase') {
+      this.frameEgoChase();
+    } else if (this.cameraPolicy === 'authored' && options.cameraView) {
+      this.viewer.controls.applyView(options.cameraView);
+    } else if (this.cameraPolicy === 'auto-incident') {
+      this.frameActors();
+    } else if (this.cameraPolicy === 'dash-camera') {
+      this.frameDashCamera();
+    }
     this.snapshot = this.buildState();
   }
 
@@ -87,7 +424,8 @@ export class PlaybackController {
     if (this.playing) return;
     if (this.time >= this.bundle.endTime) this.time = this.bundle.startTime;
     this.playing = true;
-    this.previousNow = performance.now();
+    this.playbackWallStart = performance.now();
+    this.playbackTraceStart = this.time;
     this.publish();
     this.raf = requestAnimationFrame(this.tick);
   }
@@ -105,13 +443,35 @@ export class PlaybackController {
     else this.play();
   }
 
+  setCameraPolicy(policy: CameraPolicy): void {
+    this.selectCamera(policy, policy);
+  }
+
+  selectCamera(selectionId: string, policy: CameraPolicy, view?: CameraView): void {
+    const wasDashCamera = this.cameraPolicy === 'dash-camera';
+    this.cameraPolicy = policy;
+    this.cameraSelectionId = selectionId;
+    if (wasDashCamera !== (policy === 'dash-camera')) {
+      this.viewer.setCameraPoseConstraintsEnabled(policy !== 'dash-camera');
+    }
+    if (this.cameraPolicy === 'all-actors') this.frameAllActors();
+    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
+    else if (this.cameraPolicy === 'auto-incident') this.frameActors();
+    else if (this.cameraPolicy === 'authored' && view) this.viewer.controls.applyView(view);
+    else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
+    this.publish();
+  }
+
   seek(time: number): void {
     this.time = Math.max(this.bundle.startTime, Math.min(this.bundle.endTime, time));
     this.syncScene();
     // A scrub is an explicit request to inspect this moment. Reframe the real
     // present actors rather than leaving them as sub-pixel dots in the map-wide
     // import view (the exact failure mode of the rejected map-only evidence).
-    this.frameActors();
+    if (this.cameraPolicy === 'all-actors') this.frameAllActors();
+    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
+    else if (this.cameraPolicy === 'auto-incident') this.frameActors();
+    else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
     this.publish();
   }
 
@@ -121,18 +481,41 @@ export class PlaybackController {
     this.raf = 0;
     this.renderer.dispose();
     this.options.clearSignalStates?.();
+    if (this.cameraPolicy === 'dash-camera') this.viewer.setCameraPoseConstraintsEnabled(true);
+    if (this.previousCameraView) {
+      const controls = this.viewer.controls as typeof this.viewer.controls & { setMode?: (mode: CameraMode) => void };
+      controls.setMode?.('orbit');
+      if (this.previousCameraUp) this.viewer.camera.up.copy(this.previousCameraUp);
+      if (this.previousCameraProjection) {
+        this.viewer.camera.near = this.previousCameraProjection.near;
+        this.viewer.camera.far = this.previousCameraProjection.far;
+        this.viewer.camera.aspect = this.previousCameraProjection.aspect;
+        this.viewer.camera.updateProjectionMatrix();
+      }
+      this.viewer.controls.applyView(this.previousCameraView);
+      if (this.previousCameraMode) controls.setMode?.(this.previousCameraMode);
+    }
     this.listeners.clear();
   }
 
   private tick = (now: number): void => {
     if (!this.playing) return;
-    const elapsed = Math.max(0, Math.min(0.25, (now - this.previousNow) / 1000));
-    this.previousNow = now;
-    this.time = Math.min(this.bundle.endTime, this.time + elapsed);
+    // Trace time is anchored to the monotonic wall clock, not accumulated from
+    // rendered frames. A software renderer may deliver RAF only a few times per
+    // second; in that case we intentionally drop visual frames while preserving
+    // exact trace sampling and real-time completion.
+    this.time = realtimePlaybackTime(
+      this.playbackTraceStart,
+      this.playbackWallStart,
+      now,
+      this.bundle.endTime,
+    );
     this.syncScene();
     // Follow the incident while playing. Actor transforms still come solely
     // from the trace; this only keeps those actors visibly inspectable.
-    this.frameActors();
+    if (this.cameraPolicy === 'auto-incident') this.frameActors();
+    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
+    else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
     if (this.time >= this.bundle.endTime) {
       this.playing = false;
       this.raf = 0;
@@ -146,7 +529,10 @@ export class PlaybackController {
   private syncScene(): void {
     this.sampled = samplePlaybackActors(this.bundle, this.time);
     this.sampledSignals = samplePlaybackSignals(this.bundle, this.time);
-    const headStates: Record<string, 'green' | 'yellow' | 'red'> = {};
+    const doorsByActor = samplePlaybackDoors(this.bundle.trace, this.time);
+    const cuesByActor = samplePlaybackVehicleCues(this.bundle.trace, this.time);
+    const metadataByActor = new Map(this.bundle.actors.map((actor) => [actor.id, actor]));
+    const headStates: Record<string, ControlIndication> = {};
     for (const signal of this.sampledSignals) {
       for (const headId of signal.headIds) headStates[headId] = signal.phase;
     }
@@ -158,30 +544,71 @@ export class PlaybackController {
     }
     const views: ActorView[] = this.sampled
       .filter((actor) => actor.present)
-      .map((actor) => ({
-        id: actor.id,
-        catalogId: actor.catalogId,
-        dims: actor.dims,
-        x: actor.x,
-        y: this.sampleHeight(actor.x, actor.z) ?? 0,
-        z: actor.z,
-        headingRad: actor.headingRad,
-      }));
-    this.renderer.sync(views);
+      .map((actor) => {
+        const metadata = metadataByActor.get(actor.id);
+        const cues = cuesByActor.get(actor.id);
+        return {
+          id: actor.id,
+          catalogId: actor.catalogId,
+          dims: actor.dims,
+          x: actor.x,
+          y: this.sampleHeight(actor.x, actor.z) ?? 0,
+          z: actor.z,
+          headingRad: actor.headingRad,
+          reversing: actor.motionDirection === -1,
+          ...(metadata ? { kind: metadata.kind } : {}),
+          ...(metadata?.modelBasis === 'input-tag' ? { catalogIdAuthored: true } : {}),
+          ...(doorsByActor.has(actor.id) ? { doors: doorsByActor.get(actor.id) } : {}),
+          ...(cues ? { emergency: cues.emergency, hornActive: cues.hornActive, indicator: cues.indicator } : {}),
+        } satisfies ActorView;
+      });
+    const sampledById = new Map(this.sampled.map((actor) => [actor.id, actor] as const));
+    const propViews: ActorView[] = this.bundle.props.flatMap((prop) => {
+      let x = prop.pose.x;
+      let z = prop.pose.z;
+      let headingRad = prop.pose.headingRad;
+      let heightM = 0;
+      if (prop.attachment) {
+        const carrier = sampledById.get(prop.attachment.actorId);
+        if (!carrier?.present) return [];
+        const cos = Math.cos(carrier.headingRad);
+        const sin = Math.sin(carrier.headingRad);
+        x = carrier.x + cos * prop.attachment.longitudinalM - sin * prop.attachment.lateralM;
+        z = carrier.z - sin * prop.attachment.longitudinalM - cos * prop.attachment.lateralM;
+        headingRad = carrier.headingRad + prop.attachment.headingOffsetRad;
+        heightM = prop.attachment.heightM;
+      }
+      return [{
+        id: prop.id,
+        catalogId: prop.catalogId,
+        catalogIdAuthored: true,
+        dims: {
+          l: prop.dims.l * prop.scale,
+          w: prop.dims.w * prop.scale,
+          h: prop.dims.h * prop.scale,
+        },
+        x,
+        y: (this.sampleHeight(x, z) ?? 0) + heightM,
+        z,
+        headingRad,
+      }];
+    });
+    this.renderer.sync([...views, ...propViews]);
     this.renderer.setSelection([]);
   }
 
   private frameActors(): void {
-    const visible = this.sampled.filter((actor) => actor.present);
-    const actors = visible.length > 0 ? visible : this.sampled;
+    const plan = this.incidentCameraPlan;
+    const criticalIds = new Set(plan?.actorIds ?? []);
+    const visible = this.sampled.filter((actor) => actor.present && criticalIds.has(actor.id));
+    const actors = visible.length > 0
+      ? visible
+      : this.sampled.filter((actor) => criticalIds.has(actor.id));
     if (actors.length === 0) return;
     const centerX = actors.reduce((sum, actor) => sum + actor.x, 0) / actors.length;
     const centerZ = actors.reduce((sum, actor) => sum + actor.z, 0) / actors.length;
     const ground = this.sampleHeight(centerX, centerZ) ?? 0;
-    const radius = Math.max(
-      8,
-      ...actors.map((actor) => Math.hypot(actor.x - centerX, actor.z - centerZ)),
-    );
+    const radius = plan?.radius ?? Math.max(8, ...actors.map((actor) => Math.hypot(actor.x - centerX, actor.z - centerZ)));
 
     // Prefer the incident pair's sightline over an arbitrary map diagonal. A
     // high top-down camera repeatedly landed behind Yale's roofs: technically
@@ -189,40 +616,76 @@ export class PlaybackController {
     // trace already declares the metric pair and subject, so use that semantic
     // geometry to place a low, trailing observer. This is the same composition
     // basis used by the accepted still exporter, now inside the real Studio.
-    const pair: readonly string[] = this.bundle.trace.metrics.revealToConflict?.pair
-      ?? this.bundle.trace.metrics.minTTC?.pair
-      ?? [];
-    const subjectId = pair.includes(this.bundle.trace.header.metricSubject ?? '')
-      ? this.bundle.trace.header.metricSubject
-      : pair[0];
-    const otherId = pair.find((id) => id !== subjectId);
-    const subject = actors.find((actor) => actor.id === subjectId) ?? actors[0]!;
-    const other = actors.find((actor) => actor.id === otherId) ?? actors.at(-1)!;
-    const sightline = Math.hypot(subject.x - other.x, subject.z - other.z);
-    const away = sightline > 1e-6
-      ? { x: (subject.x - other.x) / sightline, z: (subject.z - other.z) / sightline }
-      : { x: -Math.cos(subject.headingRad), z: Math.sin(subject.headingRad) };
+    const away = plan?.direction ?? { x: -Math.cos(actors[0]!.headingRad), z: Math.sin(actors[0]!.headingRad) };
     const side = { x: -away.z, z: away.x };
-    const revealT = this.bundle.trace.metrics.revealToConflict?.losOpenT ?? this.time;
-    const conflictT = this.bundle.trace.metrics.revealToConflict?.conflictT
-      ?? this.bundle.trace.metrics.minTTC?.t
-      ?? this.time;
-    const progress = conflictT > revealT
-      ? Math.max(0, Math.min(1, (this.time - revealT) / (conflictT - revealT)))
-      : 1;
-    const baseDistance = Math.max(11, Math.min(15, radius * 0.45 + 8));
-    const distance = baseDistance + 11 * progress;
-    const sideOffset = 0.25 + 4.75 * progress;
-    const eyeX = subject.x + away.x * distance + side.x * sideOffset;
-    const eyeZ = subject.z + away.z * distance + side.z * sideOffset;
+    const distance = Math.max(15, radius * 1.9);
+    const sideOffset = Math.max(2.5, radius * 0.32);
+    const eyeX = centerX + away.x * distance + side.x * sideOffset;
+    const eyeZ = centerZ + away.z * distance + side.z * sideOffset;
     const camera = this.viewer.camera;
     if (camera.isPerspectiveCamera) {
-      camera.fov = Math.max(24, Math.min(52, 52 - (radius - 8) * 1.1));
+      camera.fov = plan?.fov ?? 46;
       camera.updateProjectionMatrix();
     }
     this.viewer.controls.setView(
-      new Vector3(eyeX, ground + 3.3 + 1.5 * progress, eyeZ),
+      new Vector3(eyeX, ground + Math.max(5, radius * 0.72), eyeZ),
       new Vector3(centerX, ground + 1.35, centerZ),
+    );
+  }
+
+  private frameAllActors(): void {
+    const plan = this.allActorsCameraPlan;
+    if (!plan) return;
+    this.viewer.controls.applyView(allActorsCameraView(plan, this.sampleHeight(plan.centerX, plan.centerZ) ?? 0));
+  }
+
+  private frameEgoChase(): void {
+    const egoId = this.galleryCameraChoice.egoActorId;
+    if (!egoId) {
+      this.frameAllActors();
+      return;
+    }
+    const ego = this.sampled.find((actor) => actor.id === egoId && actor.present);
+    const metadata = this.bundle.actors.find((actor) => actor.id === egoId);
+    if (!ego || !metadata) return;
+    const forwardX = Math.cos(ego.headingRad);
+    const forwardZ = -Math.sin(ego.headingRad);
+    const distance = Math.max(7.5, metadata.dims.l * 1.7);
+    const ground = this.sampleHeight(ego.x, ego.z) ?? 0;
+    const eyeX = ego.x - forwardX * distance;
+    const eyeZ = ego.z - forwardZ * distance;
+    const eyeGround = this.sampleHeight(eyeX, eyeZ) ?? ground;
+    const camera = this.viewer.camera;
+    if (camera.isPerspectiveCamera) {
+      camera.fov = 58;
+      camera.updateProjectionMatrix();
+    }
+    this.viewer.controls.setView(
+      new Vector3(eyeX, eyeGround + Math.max(3.2, metadata.dims.h + 1.7), eyeZ),
+      new Vector3(
+        ego.x + forwardX * Math.max(5, metadata.dims.l),
+        ground + Math.max(1.2, metadata.dims.h * 0.65),
+        ego.z + forwardZ * Math.max(5, metadata.dims.l),
+      ),
+    );
+  }
+
+  private frameDashCamera(): void {
+    const selection = this.options.dashCamera;
+    if (!selection) return;
+    const actor = this.sampled.find((sample) => sample.id === selection.actorId && sample.present);
+    if (!actor) return;
+    const frame = dashCameraFrame(actor, this.sampleHeight(actor.x, actor.z) ?? 0, selection.sensor);
+    const camera = this.viewer.camera;
+    camera.up.set(frame.up[0], frame.up[1], frame.up[2]);
+    camera.fov = frame.verticalFovDeg;
+    camera.aspect = frame.aspectRatio;
+    camera.near = frame.nearM;
+    camera.far = frame.farM;
+    camera.updateProjectionMatrix();
+    this.viewer.controls.setView(
+      new Vector3(frame.position[0], frame.position[1], frame.position[2]),
+      new Vector3(frame.target[0], frame.target[1], frame.target[2]),
     );
   }
 
@@ -232,7 +695,7 @@ export class PlaybackController {
   }
 
   private buildState(): PlaybackState {
-    const signalPhases = { green: 0, yellow: 0, red: 0 };
+    const signalPhases = Object.fromEntries(CONTROL_INDICATIONS.map((phase) => [phase, 0])) as Record<ControlIndication, number>;
     let signalHeadCount = 0;
     for (const signal of this.sampledSignals) {
       signalPhases[signal.phase] += 1;
@@ -245,6 +708,7 @@ export class PlaybackController {
       playing: this.playing,
       actorCount: this.bundle.actors.length,
       visibleActorCount: this.sampled.filter((actor) => actor.present).length,
+      propCount: this.bundle.props.length,
       signalCount: this.sampledSignals.length,
       signalHeadCount,
       renderedSignalHeadCount: this.renderedSignalHeadCount,
@@ -252,6 +716,11 @@ export class PlaybackController {
       signalTimingSources: [...new Set(this.sampledSignals.map((signal) => signal.timingSource))].sort(),
       instanceId: this.bundle.instance.manifest.instanceId,
       inputHash: this.bundle.instance.manifest.inputHash,
+      cameraPolicy: this.cameraPolicy,
+      cameraSelectionId: this.cameraSelectionId,
+      cameraReason: this.cameraPolicy === 'ego-chase' || this.cameraPolicy === 'all-actors'
+        ? this.galleryCameraChoice.reason
+        : '',
     };
   }
 }

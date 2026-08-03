@@ -60,6 +60,11 @@ export const SIGNAL_PHASES = [
   'flashing_yellow',
   'flashing_red',
   'off',
+  'green_arrow',
+  'yellow_arrow',
+  'red_x',
+  'proceed',
+  'stop',
 ] as const;
 /** A signal phase. */
 export const SignalPhaseSchema = z.enum(SIGNAL_PHASES);
@@ -68,6 +73,7 @@ export const SignalPhaseSchema = z.enum(SIGNAL_PHASES);
 export const SignalRefSchema = z.union([
   z.strictObject({ handle: z.string().min(1).max(200) }),
   z.strictObject({ feature: FeatureRefSchema, approach: z.enum(['ego', 'opposing', 'left', 'right']) }),
+  z.strictObject({ control: z.string().min(1).max(128) }),
 ]);
 
 /** A point a condition can be measured against. */
@@ -326,6 +332,12 @@ export const RouteTargetSchema = z.discriminatedUnion('mode', [
   }),
   /** Frame-relative polyline: jaywalking, work-zone weaves, parking manoeuvres. */
   z.strictObject({ mode: z.literal('polyline'), points: z.array(FramePoseSchema).min(2).max(32) }),
+  /**
+   * Exact map-bound lane chain authored by Studio placement. This target is
+   * only portable together with scene_absolute roles and deliberately retains
+   * the concrete directed-road choice for deterministic save/reopen playback.
+   */
+  z.strictObject({ mode: z.literal('lanePath'), lanes: z.array(z.string().min(1)).min(1).max(128) }),
   /** Drive to a specific pose and stop being routed. */
   z.strictObject({ mode: z.literal('acquire'), pose: FramePoseSchema }),
 ]);
@@ -453,12 +465,13 @@ export function interactionAxis(interaction: Interaction): Axis {
 /** The clip timeline block. */
 export const ChoreographySchema = z.strictObject({
   /**
-   * Recorded clip length in seconds. 20 s is the research default: [0,3] settle,
-   * [3,6] precipitating event, [6,14] critical window, [14,20] outcome tail,
-   * with an unrecorded warm-up at t ∈ [−5, 0) so actors reach speed instead of
-   * appearing at 60 kph from a standstill.
+   * Recorded clip length in seconds. 20 s is the research default, not a
+   * quality floor: compact mechanisms may use a three-second clip when they
+   * still carry pre-event, reveal/conflict, and stable-aftermath evidence.
+   * The unrecorded warm-up lets actors reach speed instead of appearing at
+   * 60 kph from a standstill.
    */
-  clipSeconds: z.number().min(5).max(120).default(20),
+  clipSeconds: z.number().min(3).max(120).default(20),
   /** Unrecorded warm-up length, seconds. Triggers may fire from `-warmupSeconds`. */
   warmupSeconds: z.number().min(0).max(30).default(5),
   interactions: z.array(InteractionSchema).max(256).default([]),

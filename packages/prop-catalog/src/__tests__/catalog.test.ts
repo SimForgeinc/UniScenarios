@@ -53,7 +53,7 @@ describe('catalog', () => {
   });
 
   it('queries by class and by tag', () => {
-    expect(queryCatalog({ class: 'vehicle' })).toHaveLength(10);
+    expect(queryCatalog({ class: 'vehicle' })).toHaveLength(13);
     expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(8);
 
     const vru = queryCatalog({ tags: ['vru'] });
@@ -65,9 +65,31 @@ describe('catalog', () => {
     expect(blockers.map((entry) => entry.id)).not.toContain('hazard.cardboard_box');
 
     const workzoneRuns = queryCatalog({ class: 'construction', tags: ['workzone', 'run'] });
-    expect(workzoneRuns.map((entry) => entry.id)).toEqual(['construction.jersey_barrier_run']);
+    expect(workzoneRuns.map((entry) => entry.id)).toEqual([
+      'construction.jersey_barrier_run',
+      'construction.long_pipe',
+    ]);
 
     expect(queryCatalog()).toHaveLength(CATALOG.length);
+  });
+
+  it('exposes stable ids for emergency, rail, work-zone and vulnerable-road-user campaigns', () => {
+    const required = [
+      'vehicle.ambulance',
+      'vehicle.tram',
+      'vehicle.mobility_scooter',
+      'pedestrian.traffic_marshal',
+      'construction.temporary_stop_sign',
+      'construction.portable_signal',
+      'construction.long_pipe',
+      'street.shopping_cart',
+      'construction.excavator',
+      'construction.barricade_type3',
+      'construction.pedestrian_barrier',
+    ];
+    for (const id of required) expect(isCatalogId(id), id).toBe(true);
+    expect(queryCatalog({ tags: ['workzone'] }).map((entry) => entry.id)).toContain('construction.portable_signal');
+    expect(queryCatalog({ tags: ['vru'] }).map((entry) => entry.id)).toContain('vehicle.mobility_scooter');
   });
 });
 

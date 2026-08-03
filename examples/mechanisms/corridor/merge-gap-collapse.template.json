@@ -1,0 +1,90 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Merge gap collapses under acceleration",
+    "description": "Ego and a vehicle in the adjacent entry lane accelerate toward a merge. The merging vehicle closes from behind and enters ego's lane at low headway.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "lane-change.merge-gap-collapse",
+    "tags": ["corridor", "merge", "lane-change", "acceleration", "gap-collapse"],
+    "author": "agent/corridor-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "arrivalDeltaS", "type": "continuous", "unit": "s", "tier": 1, "range": [0.5, 0.9], "default": 0.7, "distribution": "uniform" },
+      { "id": "mergerSpeedAdvantageKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [6.5, 8], "default": 7.2, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "merge-gap-collapse",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 8], "essentiality": "required" },
+      "speedLimitKph": { "value": [35, 85], "essentiality": "preferred", "weight": 2 },
+      "runwayUpstreamM": { "value": [10, null], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [140, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "merge-point", "kind": "junction", "label": "the junction movement where the entry lane converges",
+        "atM": { "value": [0, 0], "essentiality": "required" },
+        "conflictingApproach": {
+          "value": { "from": "merge", "turn": "right", "crossingAngleDeg": [0, 10] },
+          "essentiality": "required"
+        }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": -8, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.58 * lane.speedLimitKph, 22, 42)"
+    },
+    {
+      "id": "merging", "kind": "conflicting_gate", "label": "entry-lane vehicle accelerating into ego's gap",
+      "actor": { "class": "car", "catalogId": "vehicle.hatchback" },
+      "feature": "merge-point", "from": "merge", "turn": "right",
+      "arriveAtConflict": { "relativeTo": "ego", "deltaT": "param.arrivalDeltaS" },
+      "requiredUpstreamRunwayM": 40,
+      "initialSpeedKph": "clamp(0.58 * lane.speedLimitKph, 22, 42)"
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 13,
+    "warmupSeconds": 0,
+    "interactions": [
+      { "id": "merger-commits", "actor": "merging", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      {
+        "id": "ego-accelerates", "actor": "ego", "verb": "speed", "trigger": { "kind": "at", "t": 1 },
+        "target": { "mode": "absolute", "valueKph": "clamp(0.86 * lane.speedLimitKph, 35, 62)" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 2.1 }
+      },
+      {
+        "id": "merger-accelerates", "actor": "merging", "verb": "speed", "trigger": { "kind": "at", "t": 1.2 },
+        "target": { "mode": "absolute", "valueKph": "clamp(0.86 * lane.speedLimitKph + param.mergerSpeedAdvantageKph, 40, 72)" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 2.8 }
+      },
+      { "id": "merger-restores-avoidance", "actor": "merging", "verb": "set", "trigger": { "kind": "at", "t": 2.4 }, "target": { "key": "rules.collisionAvoidance", "value": true } },
+      {
+        "id": "merger-yields-gap", "actor": "merging", "verb": "speed", "trigger": { "kind": "at", "t": 2.5 },
+        "target": { "mode": "absolute", "valueKph": "clamp(0.70 * lane.speedLimitKph, 28, 48)" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 3.2 }
+      },
+      { "id": "merging-enters", "actor": "merging", "verb": "set", "trigger": { "kind": "at", "t": 2 }, "target": { "key": "lights.indicator", "value": "left" } }
+    ]
+  },
+  "invariants": [
+    { "id": "gap-collapse", "kind": "headway", "of": "merging", "to": "ego", "range": [0.25, 1.9], "window": [0.5, 6], "essentiality": "required" },
+    { "id": "merge-clearance", "kind": "gap", "of": "ego", "to": "merging", "unit": "distance", "range": [0.8, 3], "essentiality": "required" },
+    { "id": "merge-arrival-band", "kind": "arrival", "of": "merging", "at": { "feature": "merge-point", "at": "center" }, "syncWith": "ego", "deltaTRange": [0.5, 0.9], "essentiality": "required" },
+    { "id": "merge-sequence", "kind": "event_order", "events": ["merger-accelerates", "merging-enters", "merger-restores-avoidance", "merger-yields-gap"], "strict": true, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

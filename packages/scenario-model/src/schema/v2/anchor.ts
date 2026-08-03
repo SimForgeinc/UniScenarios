@@ -112,6 +112,10 @@ const featureBase = {
    * at least 20 m ahead".
    */
   atM: clause(RangeSchema).optional(),
+  /** Absolute lateral distance from the reference path to a point feature. */
+  lateralDistanceM: clause(RangeSchema).optional(),
+  /** Require the feature's source lane to share the reference road and section. */
+  sameRoad: clause(z.boolean()).optional(),
   /** Which side of the corridor the feature is on, where that is meaningful. */
   side: clause(SideSchema).optional(),
   /** How badly the feature's *presence* is wanted. Its predicates carry their own. */
@@ -186,6 +190,7 @@ export const SIMPLE_FEATURE_KINDS = [
   'bus_stop',
   'school_zone',
   'work_zone_suitable',
+  'occlusion_zone',
   'crest',
   'curve',
   'rail_crossing',

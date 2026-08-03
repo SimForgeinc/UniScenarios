@@ -24,6 +24,60 @@ function inputWithStaticQueue(staticFlag: boolean) {
 }
 
 describe('static actors', () => {
+  it('can resume after reaching a route end when an explicit route action supplies a new path', () => {
+    const cart = vehicle(graph, { id: 'cart', rsl: LANE_LEFT, s: 790, speedMps: 12, cruiseSpeedMps: 12, dims: { l: 1.05, w: 0.65, h: 1.05 } });
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02, seed: 'reroute-retired',
+      actors: [{ ...cart, kind: 'scooter', behavior: { ...cart.behavior, rules: { ...cart.behavior.rules, yield: false, collisionAvoidance: false } } }],
+      interactions: [
+        { id: 'rollback-path', actorId: 'cart', trigger: { kind: 'at', t: 1.5 }, verb: 'route', target: { kind: 'polyline', points: [{ x: 800, z: 0 }, { x: 790, z: 0 }] } },
+        { id: 'rollback-speed', actorId: 'cart', trigger: { kind: 'at', t: 1.5 }, verb: 'speed', target: { mode: 'absolute', value: 2 }, dynamics: { shape: 'linear', constraint: 'time', value: 0.5 } },
+      ],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    const tr = trace.ticks.actors.cart!;
+    const atReroute = trace.ticks.t.findIndex((t) => t >= 1.5);
+    expect(tr.speedMps.slice(atReroute).some((speed) => speed > 0.5)).toBe(true);
+    expect(Math.hypot(tr.x.at(-1)! - tr.x[atReroute]!, tr.y.at(-1)! - tr.y[atReroute]!)).toBeGreaterThan(1);
+  });
+
+  it('records physical spacing for a scored static-static queue pair', () => {
+    const tail = vehicle(graph, { id: 'queue-tail', rsl: LANE_LEFT, s: 20, speedMps: 0, cruiseSpeedMps: 0 });
+    const lead = vehicle(graph, { id: 'queue-lead', rsl: LANE_LEFT, s: 28, speedMps: 0, cruiseSpeedMps: 0 });
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 1, warmupSeconds: 0, dt: 0.02,
+      seed: 'static-queue-spacing', actors: [
+        { ...tail, static: true },
+        { ...lead, static: true },
+      ], interactions: [], occluders: [],
+    });
+
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.metrics.minDistance).toContainEqual(expect.objectContaining({
+      pair: ['queue-lead', 'queue-tail'],
+      t: 0,
+    }));
+    expect(trace.metrics.minTTC).toBeNull();
+  });
+
+  it('uses an explicitly declared moving actor as a tick-updated occluder', () => {
+    const ego = vehicle(graph, { id: 'ego', rsl: LANE_LEFT, s: 0, speedMps: 10, cruiseSpeedMps: 10 });
+    const van = vehicle(graph, { id: 'moving-van', rsl: LANE_LEFT, s: 25, speedMps: 10, cruiseSpeedMps: 10 });
+    const target = vehicle(graph, { id: 'target', rsl: LANE_LEFT, s: 55, speedMps: 0, cruiseSpeedMps: 0 });
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 2, warmupSeconds: 0, dt: 0.02,
+      seed: 'moving-actor-occluder', metricSubject: 'ego', actors: [ego, van, target], interactions: [],
+      occlusionPairs: [{ observer: 'ego', target: 'target', occluderId: 'actor:moving-van' }],
+    });
+
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.metrics.declaredOcclusion).toContainEqual(expect.objectContaining({
+      observer: 'ego', target: 'target', occluderId: 'actor:moving-van',
+      relevantOccluderIds: ['actor:moving-van'],
+      firstBlockedT: 0,
+    }));
+  });
+
   it('remain immobile even when authored with nonzero speed and cruise', () => {
     const parked = vehicle(graph, { id: 'parked', rsl: LANE_LEFT, s: 790, speedMps: 12, cruiseSpeedMps: 12 });
     const input = parseSimScenarioInput({
@@ -45,10 +99,10 @@ describe('static actors', () => {
     expect(tr.speedMps.every((v) => v === 0)).toBe(true);
   });
 
-  it('do not steal minTTC from the incident pair', () => {
+  it('does not let adjacent-lane corner radii steal minTTC from the incident pair', () => {
     const dynamic = runSimulation(inputWithStaticQueue(false), { graph, guards: 'collect' }).trace;
-    expect(dynamic.metrics.minTTC?.pair).toEqual(['ego', 'parked']);
-    expect(dynamic.metrics.minTTC?.value).toBe(0);
+    expect(dynamic.metrics.minTTC?.pair).toEqual(['ego', 'target']);
+    expect(dynamic.metrics.minDistance.some((d) => d.pair.includes('parked'))).toBe(true);
 
     const fixed = runSimulation(inputWithStaticQueue(true), { graph, guards: 'collect' }).trace;
     expect(fixed.metrics.minTTC?.pair).toEqual(['ego', 'target']);
@@ -84,7 +138,7 @@ describe('static actors', () => {
         observer: 'ego',
         target: 'target',
         pair: ['ego', 'target'],
-        conflictT: trace.metrics.minTTC!.t,
+        conflictT: trace.metrics.minTTC!.t + trace.metrics.minTTC!.value,
         occluderId: 'off-axis-wall',
         relevantOccluderIds: ['off-axis-wall'],
         reason: 'never_blocked_before_conflict',
@@ -127,7 +181,7 @@ describe('static actors', () => {
         observer: 'ego',
         target: 'target',
         pair: ['ego', 'target'],
-        conflictT: trace.metrics.minTTC!.t,
+        conflictT: trace.metrics.minTTC!.t + trace.metrics.minTTC!.value,
         occluderId: 'off-axis-wall',
         relevantOccluderIds: ['off-axis-wall'],
         reason: 'never_blocked_before_conflict',

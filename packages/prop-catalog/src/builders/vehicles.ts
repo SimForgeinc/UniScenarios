@@ -23,6 +23,50 @@ export interface VehicleParams {
   color: string;
 }
 
+/** Ambulance silhouette built from the existing van primitives plus a light bar. */
+export function buildAmbulance(params: VehicleParams = { color: '#eceff1' }): Group {
+  const group = new Group();
+  const body = buildVan(params);
+  body.scale.set(6.1 / 5.3, 2.48 / 2.4, 2.1 / 2.0);
+  group.add(body);
+  group.add(box([0.62, 0.12, 1.28], material('chrome'), { at: [0.25, 2.50, 0] }));
+  group.add(box([0.58, 0.12, 0.58], material('taillight'), { at: [0.25, 2.59, -0.34] }));
+  group.add(box([0.58, 0.12, 0.58], material('headlight'), { at: [0.25, 2.59, 0.34] }));
+  return group;
+}
+
+/** Lightweight fixed-path streetcar; semantic length matters more than detail. */
+export function buildTram(params: VehicleParams = { color: '#d9e2e8' }): Group {
+  const group = new Group();
+  const paint = material('paint', params.color);
+  const dark = material('plastic');
+  const glass = material('glass');
+  group.add(box([29.9, 2.95, 2.65], paint, { at: [0, 1.72, 0] }));
+  group.add(box([29.55, 0.88, 2.69], glass, { at: [0, 2.55, 0] }));
+  group.add(box([30, 0.14, 2.65], paint, { at: [0, 3.43, 0] }));
+  for (const x of [-11, -4, 4, 11]) {
+    group.add(...mirrored(1.24, (z) => cyl(0.33, 0.17, dark, { axis: 'z', at: [x, 0.33, z], segments: 12 })));
+  }
+  for (const x of [-7.5, 0, 7.5]) group.add(box([0.10, 2.72, 2.69], dark, { at: [x, 1.64, 0] }));
+  return group;
+}
+
+/** Powered mobility scooter with a seated rider, deliberately low-poly. */
+export function buildMobilityScooter(params: VehicleParams = { color: '#287ba8' }): Group {
+  const group = new Group();
+  const frame = material('paint', params.color);
+  const tire = material('tire');
+  group.add(box([1.25, 0.18, 0.55], frame, { at: [0, 0.28, 0] }));
+  for (const x of [-0.55, 0.55]) {
+    group.add(...mirrored(0.25, (z) => cyl(0.16, 0.10, tire, { axis: 'z', at: [x, 0.16, z], segments: 10 })));
+  }
+  group.add(box([0.38, 0.48, 0.56], material('fabric'), { at: [-0.18, 0.62, 0] }));
+  group.add(cyl(0.025, 0.72, material('steel'), { at: [0.40, 0.72, 0], segments: 8 }));
+  group.add(box([0.12, 0.06, 0.62], frame, { at: [0.40, 1.08, 0] }));
+  group.add(sphere(0.15, material('skin'), { at: [-0.08, 1.20, 0], segments: 10 }));
+  return group;
+}
+
 /** Flat glass panel spanning the segment `a -> b` in the XY (side) plane. */
 function panelAlong(
   a: Point2,

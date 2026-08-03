@@ -24,6 +24,13 @@ const finite = z.number().finite();
 const nonNeg = finite.min(0);
 const positive = finite.gt(0);
 
+export const CONTROL_INDICATIONS = [
+  'green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off',
+  'green_arrow', 'yellow_arrow', 'red_x', 'proceed', 'stop',
+] as const;
+export const controlIndicationSchema = z.enum(CONTROL_INDICATIONS);
+export type ControlIndication = z.infer<typeof controlIndicationSchema>;
+
 /** An `id` used to reference actors, interactions, signals and occluders. */
 export const idSchema = z
   .string()
@@ -118,7 +125,12 @@ export type RouteSpec = z.infer<typeof routeSpecSchema>;
  */
 export const actorRulesSchema = z.object({
   obeySignals: z.boolean().default(true),
+  /** Legacy master switch retained for input compatibility. */
   yield: z.boolean().default(true),
+  /** Yield to conflicting road users other than pedestrians/animals. */
+  yieldToVehicles: z.boolean().default(true),
+  /** Yield to pedestrians and animals in crossing conflicts. */
+  yieldToPedestrians: z.boolean().default(true),
   collisionAvoidance: z.boolean().default(true),
   /** 0 = timid, 1 = aggressive. Scales accepted gaps and comfort decel. */
   aggression: finite.min(0).max(1).default(0.5),
@@ -129,13 +141,59 @@ export type ActorRules = z.infer<typeof actorRulesSchema>;
 
 /* ------------------------------------------------------------------ actors */
 
-export const actorKindSchema = z.enum(['vehicle', 'pedestrian']);
+/**
+ * Semantic actor identity used by simulation, traces, and renderers.
+ *
+ * `vehicle` is retained as the backwards-compatible generic kind. New
+ * materializers should prefer the concrete class whenever it is known.
+ */
+export const ACTOR_KINDS = [
+  'vehicle',
+  'car',
+  'truck',
+  'bus',
+  'van',
+  'motorcycle',
+  'bicycle',
+  'pedestrian',
+  'scooter',
+  'animal',
+  'static_object',
+] as const;
+export const actorKindSchema = z.enum(ACTOR_KINDS);
 export type ActorKind = z.infer<typeof actorKindSchema>;
+
+/** Engine-owned defaults allow direct inputs to omit dimensions without
+ * depending on the authoring-layer scenario-model package. */
+export const DEFAULT_ACTOR_DIMS: Readonly<Record<ActorKind, Dims>> = {
+  vehicle: { l: 4.8, w: 1.9, h: 1.5 },
+  car: { l: 4.8, w: 1.9, h: 1.5 },
+  truck: { l: 9.5, w: 2.5, h: 3.5 },
+  bus: { l: 12, w: 2.55, h: 3.2 },
+  van: { l: 5.5, w: 2, h: 2.2 },
+  motorcycle: { l: 2.2, w: 0.8, h: 1.5 },
+  bicycle: { l: 1.8, w: 0.6, h: 1.7 },
+  pedestrian: { l: 0.6, w: 0.6, h: 1.75 },
+  scooter: { l: 1.2, w: 0.6, h: 1.7 },
+  animal: { l: 1.2, w: 0.5, h: 1 },
+  static_object: { l: 1, w: 1, h: 1 },
+};
+
+/** Motion-family helpers preserve the legacy vehicle/pedestrian behaviour
+ * while keeping the concrete semantic identity available end to end. */
+export function isPedestrianLikeKind(kind: ActorKind): boolean {
+  return kind === 'pedestrian' || kind === 'animal';
+}
+
+export function isRoadActorKind(kind: ActorKind): boolean {
+  return !isPedestrianLikeKind(kind) && kind !== 'static_object';
+}
 
 export const actorSchema = z.object({
   id: idSchema,
   kind: actorKindSchema,
-  dims: dimsSchema,
+  /** Defaults by semantic kind; explicit legacy dimensions remain unchanged. */
+  dims: dimsSchema.optional(),
   initial: z.object({
     /**
      * Where on the lane graph the actor starts. Optional: without it the engine
@@ -151,6 +209,8 @@ export const actorSchema = z.object({
     rules: actorRulesSchema.default({
       obeySignals: true,
       yield: true,
+      yieldToVehicles: true,
+      yieldToPedestrians: true,
       collisionAvoidance: true,
       aggression: 0.5,
       speedFactor: 1,
@@ -170,10 +230,14 @@ export const actorSchema = z.object({
    * from episode pair metrics so they cannot steal `minTTC` from the incident
    * pair they are only meant to reveal or hide.
    */
-  static: z.boolean().default(false),
+  static: z.boolean().optional(),
   /** Free-form tags carried through to the trace header (role, class, …). */
   tags: z.array(z.string()).default([]),
-});
+}).transform((actor) => ({
+  ...actor,
+  dims: actor.dims ?? DEFAULT_ACTOR_DIMS[actor.kind],
+  static: actor.kind === 'static_object' || (actor.static ?? false),
+}));
 export type SimActor = z.infer<typeof actorSchema>;
 
 /* ------------------------------------------------------------------- verbs */
@@ -200,7 +264,7 @@ export type LaneChangeTarget = z.infer<typeof laneChangeTargetSchema>;
  * are recorded state only (they exist so the renderer and the exporter can read
  * them back out of the trace). */
 export const setKeySchema = z.string().regex(
-  /^(rules\.(obeySignals|yield|collisionAvoidance|aggression|speedFactor)|lights\.[A-Za-z0-9_]+|doors\.[A-Za-z0-9_]+|pose\.[A-Za-z0-9_]+|env\.[A-Za-z0-9_]+|signal:[A-Za-z0-9._:@/-]+\.phase)$/,
+  /^(rules\.(obeySignals|yield|yieldToVehicles|yieldToPedestrians|collisionAvoidance|aggression|speedFactor)|lights\.[A-Za-z0-9_]+|audio\.[A-Za-z0-9_]+|doors\.[A-Za-z0-9_]+|pose\.[A-Za-z0-9_]+|env\.[A-Za-z0-9_]+|signal:[A-Za-z0-9._:@/-]+\.phase|control:[A-Za-z0-9._:@/-]+\.indication)$/,
   'unknown set() key — see the typed key registry',
 );
 
@@ -258,7 +322,7 @@ export type Condition =
   | { kind: 'reaches'; actorId: string; region: Region }
   | { kind: 'speed'; actorId: string; cmp: 'lte' | 'gte'; value: number }
   | { kind: 'standstill'; actorId: string; durationS: number }
-  | { kind: 'signal'; signalId: string; phase: 'green' | 'yellow' | 'red' }
+  | { kind: 'signal'; signalId: string; phase: ControlIndication }
   | { kind: 'collision'; a?: string; b?: string }
   | { kind: 'visible'; a: string; to: string; value: boolean }
   | { kind: 'and'; of: Condition[] }
@@ -287,7 +351,7 @@ const leafConditionSchema = z.discriminatedUnion('kind', [
   z.object({
     kind: z.literal('signal'),
     signalId: idSchema,
-    phase: z.enum(['green', 'yellow', 'red']),
+    phase: controlIndicationSchema,
   }),
   z.object({ kind: z.literal('collision'), a: idSchema.optional(), b: idSchema.optional() }),
   z.object({ kind: z.literal('visible'), a: idSchema, to: idSchema, value: z.boolean() }),
@@ -384,7 +448,7 @@ export const signalProgramSchema = z.object({
    * repeat when `loop` (the default).
    */
   phases: z
-    .array(z.object({ phase: z.enum(['green', 'yellow', 'red']), durationS: positive }))
+    .array(z.object({ phase: controlIndicationSchema, durationS: positive }))
     .min(1),
   offsetS: finite.default(0),
   loop: z.boolean().default(true),
@@ -410,11 +474,95 @@ export const signalProgramSchema = z.object({
     junctionId: z.string().min(1),
     controllerIds: z.array(z.string().min(1)).default([]),
     headIds: z.array(z.string().min(1)).min(1),
+    /**
+     * Authoritative OpenDRIVE controller-sequence membership. A physical head
+     * may occur in more than one ordered controller stage; flattening that
+     * relation to `controllerIds` loses the information an exporter needs to
+     * reconstruct the junction program. Programs materialized from maps always
+     * populate this field. It remains optional for authored/legacy inputs.
+     */
+    controllerHeadGroups: z.array(z.object({
+      controllerId: z.string().min(1),
+      headIds: z.array(z.string().min(1)).min(1),
+    })).optional(),
     /** Honest provenance for programs derived without authoritative timing. */
     timingSource: z.enum(['map', 'synthetic-default', 'authored']),
+  }).superRefine((binding, ctx) => {
+    if (!binding.controllerHeadGroups) return;
+    const groupControllerIds = binding.controllerHeadGroups.map((group) => group.controllerId);
+    if (new Set(groupControllerIds).size !== groupControllerIds.length) {
+      ctx.addIssue({ code: 'custom', path: ['controllerHeadGroups'], message: 'duplicate controllerHeadGroups controllerId' });
+    }
+    for (let i = 0; i < binding.controllerHeadGroups.length; i += 1) {
+      const ids = binding.controllerHeadGroups[i]!.headIds;
+      if (new Set(ids).size !== ids.length) {
+        ctx.addIssue({ code: 'custom', path: ['controllerHeadGroups', i, 'headIds'], message: 'duplicate controller head id' });
+      }
+    }
+    const flattenedControllers = [...new Set(groupControllerIds)].sort();
+    const flattenedHeads = [...new Set(binding.controllerHeadGroups.flatMap((group) => group.headIds))].sort();
+    if (JSON.stringify([...binding.controllerIds].sort()) !== JSON.stringify(flattenedControllers)) {
+      ctx.addIssue({ code: 'custom', path: ['controllerIds'], message: 'controllerIds must equal controllerHeadGroups controller ids' });
+    }
+    if (JSON.stringify([...binding.headIds].sort()) !== JSON.stringify(flattenedHeads)) {
+      ctx.addIssue({ code: 'custom', path: ['headIds'], message: 'headIds must equal controllerHeadGroups head ids' });
+    }
   }).optional(),
 });
 export type SignalProgram = z.infer<typeof signalProgramSchema>;
+
+/** A deterministic static right-of-way control. Unlike a traffic signal this
+ * has per-actor memory: an actor must stop, dwell, then is released. */
+export const roadControlSchema = z.object({
+  id: idSchema,
+  kind: z.literal('stop'),
+  /** Minimum continuous standstill before this actor may proceed. */
+  dwellS: positive.default(1),
+  stopLines: z.array(z.object({
+    rsl: z.string().min(1),
+    s: nonNeg,
+    connectingLaneRsls: z.array(z.string().min(1)).default([]),
+  })).min(1),
+  mapBinding: z.object({
+    junctionId: z.string().min(1),
+    controlIds: z.array(z.string().min(1)).min(1),
+    source: z.enum(['map', 'authored']),
+  }).optional(),
+});
+export type RoadControl = z.infer<typeof roadControlSchema>;
+
+/**
+ * One concrete, fixed catalog prop in the scene frame.
+ *
+ * The authoring v2 adapter expands repeated placements before this seam, so
+ * every member has its own `id` and retains the author-level `groupId`. `dims`
+ * are the unscaled catalog/override dimensions; consumers apply the uniform
+ * `scale` exactly once. Props are fixed geometry rather than actor tracks.
+ */
+export const staticPropSchema = z.object({
+  id: idSchema,
+  groupId: idSchema.optional(),
+  catalogId: z.string().min(1).max(200),
+  pose: poseSchema,
+  /** Rigid transform in an actor-local frame: +longitudinal forward, +lateral left. */
+  attachment: z.object({
+    actorId: idSchema,
+    longitudinalM: finite.default(0),
+    lateralM: finite.default(0),
+    heightM: nonNeg.default(0),
+    headingOffsetRad: finite.default(0),
+  }).optional(),
+  dims: dimsSchema,
+  scale: positive.max(10).default(1),
+  collidable: z.boolean().default(false),
+  essentiality: z.enum(['required', 'preferred', 'cosmetic']).default('preferred'),
+  occludes: z.object({ observer: idSchema, target: idSchema }).optional(),
+  targetRevealToConflictS: nonNeg.optional(),
+}).refine(
+  (prop) => prop.targetRevealToConflictS === undefined || prop.occludes !== undefined,
+  { message: 'targetRevealToConflictS requires occludes', path: ['targetRevealToConflictS'] },
+);
+export type StaticProp = z.infer<typeof staticPropSchema>;
 
 /** Static line-of-sight blockers, in the scene frame. */
 export const occluderSchema = z.object({
@@ -436,10 +584,110 @@ export type Occluder = z.infer<typeof occluderSchema>;
 export const occlusionPairSchema = z.object({
   observer: idSchema,
   target: idSchema,
-  /** Concrete occluder id, occluder groupId, or static actor ref (`actor:<id>`). */
+  /** Concrete occluder id, groupId, or explicitly monitored actor ref (`actor:<id>`). */
   occluderId: idSchema.optional(),
 });
 export type OcclusionPair = z.infer<typeof occlusionPairSchema>;
+
+/* ------------------------------------------------ operational conditions */
+
+/**
+ * Hash-covered ambient conditions with explicit executable effects.
+ *
+ * The descriptive classes are retained for render/export provenance, while
+ * the numeric effects prevent a catalog variant from being a metadata-only
+ * claim. Adapters must choose these values deterministically.
+ */
+export const operationalConditionsSchema = z.object({
+  weather: z.enum(['clear', 'rain', 'overcast']).default('clear'),
+  timeOfDay: z.enum(['day', 'dusk', 'night', 'dawn']).default('day'),
+  traffic: z.enum(['light', 'moderate', 'heavy']).default('moderate'),
+  visibility: z.enum([
+    'unrestricted',
+    'reduced-contrast',
+    'headlight-limited',
+    'directional-glare',
+    'dense-occlusion',
+  ]).default('unrestricted'),
+  effects: z.object({
+    /** Maximum actor-to-actor LOS range used by visible() and reveal metrics. */
+    visibilityRangeM: positive.max(10_000).default(10_000),
+    /** Multiplier on physical braking capacity and hard-eligibility ceiling. */
+    frictionScale: positive.min(0.1).max(1.2).default(1),
+    /** Multiplier on ambient cruise speeds and lane speed limits. */
+    trafficSpeedFactor: positive.min(0.1).max(1.5).default(1),
+  }).default({ visibilityRangeM: 10_000, frictionScale: 1, trafficSpeedFactor: 1 }),
+}).default({
+  weather: 'clear',
+  timeOfDay: 'day',
+  traffic: 'moderate',
+  visibility: 'unrestricted',
+  effects: { visibilityRangeM: 10_000, frictionScale: 1, trafficSpeedFactor: 1 },
+});
+export type OperationalConditions = z.infer<typeof operationalConditionsSchema>;
+
+/* -------------------------------------------------------------- physics */
+
+/**
+ * Motion semantics are named and versioned independently of the engine build.
+ * `kinematic-v1` is the established route-following/choreography model.
+ * `dynamic-v1` is the default for new/regenerated simulation. Immutable trace
+ * replay uses the mode recorded in the trace rather than resolving this input.
+ */
+export const MOTION_PHYSICS_MODES = ['kinematic-v1', 'dynamic-v1'] as const;
+export const motionPhysicsModeSchema = z.enum(MOTION_PHYSICS_MODES);
+export type MotionPhysicsMode = z.infer<typeof motionPhysicsModeSchema>;
+export const DEFAULT_MOTION_PHYSICS_MODE: MotionPhysicsMode = 'dynamic-v1';
+
+/**
+ * Phase-0 selection envelope. The field is optional on SimScenarioInput on
+ * purpose: parsing an older document must not materialize a new property and
+ * thereby change its input hash. A new simulation of that document uses the
+ * current default; immutable trace replay instead honors recorded provenance.
+ *
+ * Vehicle-profile payloads are versioned by the selected solver. Keeping the
+ * envelope JSON-shaped permits dynamic-v1 to evolve its profile contract while
+ * still binding the exact payload into trace provenance by content digest.
+ */
+export const vehiclePhysicsProfileSchema = z.object({
+  massKg: positive.optional(),
+  yawInertiaKgM2: positive.optional(),
+  wheelbaseM: positive.optional(),
+  cgToFrontM: positive.optional(),
+  cgHeightM: nonNeg.optional(),
+  wheelRadiusM: positive.optional(),
+  corneringStiffnessFrontNPerRad: positive.optional(),
+  corneringStiffnessRearNPerRad: positive.optional(),
+  dragCoefficientNPerMps2: nonNeg.optional(),
+  rollingResistanceCoefficient: nonNeg.optional(),
+  maxDriveForceN: positive.optional(),
+  maxBrakeForceN: positive.optional(),
+  maxSteerRad: positive.optional(),
+  steerRateRadPerS: positive.optional(),
+  steerTimeConstantS: positive.optional(),
+  tireMu: positive.optional(),
+});
+export type VehiclePhysicsProfile = z.infer<typeof vehiclePhysicsProfileSchema>;
+
+export const physicsConfigSchema = z.object({
+  mode: motionPhysicsModeSchema,
+  /** Dynamic solver substep. Kinematic-v1 uses the scenario dt. */
+  substepS: positive.max(0.2).optional(),
+  /** Per-actor physical-parameter overrides; omitted values use solver defaults. */
+  vehicleProfiles: z.record(idSchema, vehiclePhysicsProfileSchema).optional(),
+});
+export type PhysicsConfig = z.infer<typeof physicsConfigSchema>;
+
+export interface ResolvedPhysicsConfig {
+  readonly mode: MotionPhysicsMode;
+  readonly substepS?: number;
+  readonly vehicleProfiles?: PhysicsConfig['vehicleProfiles'];
+}
+
+/** Resolve the current simulation default without mutating hash-covered input. */
+export function resolvePhysicsConfig(input: Pick<SimScenarioInput, 'physics'>): ResolvedPhysicsConfig {
+  return input.physics ?? { mode: DEFAULT_MOTION_PHYSICS_MODE };
+}
 
 /* ------------------------------------------------------------- the document */
 
@@ -455,11 +703,17 @@ export const simScenarioInputSchema = z
     /** Fixed integration step, seconds. */
     dt: positive.max(0.2).default(0.02),
     seed: z.union([z.number().int(), z.string()]).default(0),
+    /** Omitted means the current simulation default and stays hash-stable. */
+    physics: physicsConfigSchema.optional(),
+    operationalConditions: operationalConditionsSchema,
     /** Which actor the criticality metrics are reported against. */
     metricSubject: idSchema.optional(),
     actors: z.array(actorSchema).min(1),
     interactions: z.array(interactionSchema).default([]),
     signalPrograms: z.array(signalProgramSchema).default([]),
+    roadControls: z.array(roadControlSchema).default([]),
+    /** Fixed renderable catalog props, expanded to one record per concrete member. */
+    props: z.array(staticPropSchema).default([]),
     occluders: z.array(occluderSchema).default([]),
     occlusionPairs: z.array(occlusionPairSchema).default([]),
   })
@@ -503,6 +757,36 @@ export const simScenarioInputSchema = z
     if (doc.metricSubject !== undefined && !actorIds.has(doc.metricSubject)) {
       ctx.addIssue({ code: 'custom', path: ['metricSubject'], message: 'unknown actor' });
     }
+    const propIds = new Set<string>();
+    for (let i = 0; i < doc.props.length; i++) {
+      const prop = doc.props[i]!;
+      if (propIds.has(prop.id)) {
+        ctx.addIssue({ code: 'custom', path: ['props', i, 'id'], message: `duplicate prop id ${prop.id}` });
+      }
+      propIds.add(prop.id);
+      if (actorIds.has(prop.id)) {
+        ctx.addIssue({ code: 'custom', path: ['props', i, 'id'], message: `prop id ${prop.id} collides with an actor id` });
+      }
+      if (prop.occludes && !actorIds.has(prop.occludes.observer)) {
+        ctx.addIssue({ code: 'custom', path: ['props', i, 'occludes', 'observer'], message: `unknown actor ${prop.occludes.observer}` });
+      }
+      if (prop.occludes && !actorIds.has(prop.occludes.target)) {
+        ctx.addIssue({ code: 'custom', path: ['props', i, 'occludes', 'target'], message: `unknown actor ${prop.occludes.target}` });
+      }
+      if (prop.attachment && !actorIds.has(prop.attachment.actorId)) {
+        ctx.addIssue({ code: 'custom', path: ['props', i, 'attachment', 'actorId'], message: `unknown carrier actor ${prop.attachment.actorId}` });
+      }
+    }
+    for (let i = 0; i < doc.props.length; i++) {
+      const groupId = doc.props[i]!.groupId;
+      if (groupId && propIds.has(groupId)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['props', i, 'groupId'],
+          message: `prop group ${groupId} collides with a concrete prop id`,
+        });
+      }
+    }
     const occluderIds = new Set<string>();
     const occluderGroupIds = new Set<string>();
     for (let i = 0; i < doc.occluders.length; i++) {
@@ -523,7 +807,10 @@ export const simScenarioInputSchema = z
         });
       }
     }
-    const staticActorOccluderIds = new Set(doc.actors.filter((a) => a.static).map((a) => `actor:${a.id}`));
+    // Actor occluders are explicit declarations, so both parked and moving
+    // actors are valid. The runtime evaluates their current OBB every tick;
+    // undeclared traffic is never silently promoted to an occluder.
+    const actorOccluderIds = new Set(doc.actors.map((a) => `actor:${a.id}`));
     for (let i = 0; i < doc.occlusionPairs.length; i++) {
       const pair = doc.occlusionPairs[i]!;
       if (!actorIds.has(pair.observer)) {
@@ -544,7 +831,7 @@ export const simScenarioInputSchema = z
         pair.occluderId !== undefined &&
         !occluderIds.has(pair.occluderId) &&
         !occluderGroupIds.has(pair.occluderId) &&
-        !staticActorOccluderIds.has(pair.occluderId)
+        !actorOccluderIds.has(pair.occluderId)
       ) {
         ctx.addIssue({
           code: 'custom',
@@ -561,6 +848,16 @@ export const simScenarioInputSchema = z
           code: 'custom',
           path: ['signalPrograms', i, 'id'],
           message: `duplicate signal program ${p.id}`,
+        });
+      }
+    }
+    for (let i = 0; i < doc.roadControls.length; i++) {
+      const control = doc.roadControls[i]!;
+      if (doc.roadControls.findIndex((candidate) => candidate.id === control.id) !== i) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['roadControls', i, 'id'],
+          message: `duplicate road control ${control.id}`,
         });
       }
     }
@@ -597,6 +894,8 @@ export function normalizeSimScenarioInput(input: SimScenarioInput): SimScenarioI
     actors: byId(input.actors),
     interactions: byId(input.interactions),
     signalPrograms: byId(input.signalPrograms),
+    roadControls: byId(input.roadControls),
+    props: byId(input.props),
     occluders: byId(input.occluders),
     occlusionPairs: [...input.occlusionPairs].sort(
       (a, b) =>

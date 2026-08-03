@@ -156,7 +156,7 @@ export interface Segment {
  */
 export interface PointFeature {
   id: string;
-  kind: 'crossing' | 'parking_zone' | 'bus_stop' | 'driveway';
+  kind: 'crossing' | 'parking_zone' | 'bus_stop' | 'driveway' | 'school_zone' | 'work_zone_suitable' | 'occlusion_zone';
   laneRsl: LaneRsl;
   s: number;
   /** Feature world point in xodr-local metres, when the source catalog carries it. */
@@ -208,6 +208,10 @@ export interface IndexCapabilities {
   crossings: boolean;
   /** Parking-zone layer present (`in_parking_zone`). */
   parkingZones: boolean;
+  /** Pre-derived stretches where a lane closure/taper can physically fit. */
+  workZones: boolean;
+  /** Catalog evidence for a sight-line obstruction/occluder placement. */
+  occlusionZones: boolean;
   /** Junction control is real rather than assumed. */
   junctionControl: boolean;
 }

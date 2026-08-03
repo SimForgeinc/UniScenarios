@@ -15,8 +15,21 @@
 
 import { quantize } from '../core/math.js';
 import { toSceneXZ } from '../frames.js';
+import type { ActorKind, ControlIndication, Dims, MotionPhysicsMode, OperationalConditions, StaticProp } from '../schema/input.js';
 
-export const TRACE_FORMAT_VERSION = 1;
+/** v2 adds mandatory, truthful motion/physics provenance to the header. */
+export const TRACE_FORMAT_VERSION = 3;
+/**
+ * Read compatibility is explicit and append-only. v1 is the pre-physics
+ * Gallery/evidence envelope; v2 adds physics provenance; v3 is the current
+ * collision-impulse envelope. Unknown versions must fail closed.
+ */
+export const READABLE_TRACE_FORMAT_VERSIONS = [1, 2, TRACE_FORMAT_VERSION] as const;
+
+export function isReadableTraceFormatVersion(value: unknown): value is typeof READABLE_TRACE_FORMAT_VERSIONS[number] {
+  return typeof value === 'number'
+    && (READABLE_TRACE_FORMAT_VERSIONS as readonly number[]).includes(value);
+}
 
 /** Decimal places each channel is quantised to before serialisation. */
 export const TRACE_PRECISION = {
@@ -25,6 +38,8 @@ export const TRACE_PRECISION = {
   heading: 6,
   speed: 4,
   s: 4,
+  event: 6,
+  metric: 6,
 } as const;
 
 export interface ActorTrack {
@@ -32,16 +47,35 @@ export interface ActorTrack {
   readonly y: number[];
   readonly headingRad: number[];
   readonly speedMps: number[];
+  /** `-1` for authored rear-first motion, `1` for forward motion. */
+  readonly motionDirection?: Array<-1 | 1>;
   readonly laneRsl: Array<string | null>;
   /** Route arc length, metres. */
   readonly s: number[];
   /** 1 while the actor exists in the world, 0 before spawn / after despawn. */
   readonly present: number[];
+  /** Optional force-based backend telemetry; absent for kinematic-v1. */
+  readonly physics?: ActorPhysicsTrack;
+}
+
+export interface ActorPhysicsTrack {
+  readonly vxBodyMps: number[];
+  readonly vyBodyMps: number[];
+  readonly yawRateRadps: number[];
+  readonly steerRad: number[];
+  readonly wheelAngularSpeedRadps: number[];
+  /** Peak axle/tire force as a fraction of the friction-circle limit. */
+  readonly tireUtilization: number[];
+  readonly frontNormalForceN: number[];
+  readonly rearNormalForceN: number[];
+  /** Sum of normal collision impulses applied during the preceding tick. */
+  readonly collisionImpulseNs: number[];
+  readonly collisionCount: number[];
 }
 
 /** Export/render-ready phase channel for one concrete signal program. */
 export interface SignalTrack {
-  readonly phase: Array<'green' | 'yellow' | 'red'>;
+  readonly phase: ControlIndication[];
 }
 
 export type SimEvent =
@@ -58,7 +92,7 @@ export type SimEvent =
   | { t: number; kind: 'released'; actorId: string; axis: string; interactionId: string; reason: 'until' | 'complete' }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
-  | { t: number; kind: 'collision'; a: string; b: string }
+  | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }
   | { t: number; kind: 'spawn'; actorId: string }
   | { t: number; kind: 'despawn'; actorId: string; reason: 'route_end' | 'interaction' | 'clip_end' }
   | { t: number; kind: 'state_set'; actorId: string; key: string; value: boolean | number | string };
@@ -73,6 +107,52 @@ export interface MinTtcRecord {
   readonly value: number;
   readonly t: number;
   readonly pair: [string, string];
+}
+
+/** Route-aware TTC for a crossing whose conflict-zone occupancies overlap. */
+export interface MinPathTtcRecord extends MinTtcRecord {
+  readonly conflictPoint: { readonly x: number; readonly y: number };
+}
+
+/** Minimum predicted post-encroachment time at a future route intersection. */
+export interface MinPetRecord {
+  readonly value: number;
+  /** Simulation sample at which this prediction was made. */
+  readonly t: number;
+  readonly pair: [string, string];
+  readonly conflictPoint: { readonly x: number; readonly y: number };
+  /** Predicted order through the conflict zone. */
+  readonly firstActor: string;
+  readonly secondActor: string;
+}
+
+/**
+ * Finite pair-metric observations retained so consumers can select a truthful
+ * minimum inside an authored time window. Episode-wide `min*` records remain
+ * the canonical global summaries and are not replaced by this evidence.
+ */
+export interface CriticalitySamples {
+  readonly ttc: Array<{
+    readonly pair: [string, string];
+    readonly t: number[];
+    readonly value: number[];
+  }>;
+  readonly pathTTC: Array<{
+    readonly pair: [string, string];
+    readonly t: number[];
+    readonly value: number[];
+    readonly conflictX: number[];
+    readonly conflictY: number[];
+  }>;
+  readonly pet: Array<{
+    readonly pair: [string, string];
+    readonly t: number[];
+    readonly value: number[];
+    readonly conflictX: number[];
+    readonly conflictY: number[];
+    readonly firstActor: string[];
+    readonly secondActor: string[];
+  }>;
 }
 
 export interface RevealToConflict {
@@ -125,6 +205,7 @@ export interface DeclaredOcclusionMetric {
   readonly status: DeclaredOcclusionStatus;
   readonly firstBlockedT: number | null;
   readonly losOpenT: number | null;
+  /** Predicted physical conflict instant (`observation t + TTC`), not TTC sample time. */
   readonly conflictT: number | null;
   readonly revealToConflictS: number | null;
 }
@@ -139,6 +220,12 @@ export interface InvariantResidual {
 
 export interface EpisodeMetrics {
   readonly minTTC: MinTtcRecord | null;
+  /** Crossing-route TTC; null when no future occupancy overlap was observed. */
+  readonly minPathTTC?: MinPathTtcRecord | null;
+  /** Predicted PET at the nearest crossing-route conflict. */
+  readonly minPET?: MinPetRecord | null;
+  /** Window-selectable observations; absent on legacy traces. */
+  readonly criticalitySamples?: CriticalitySamples;
   readonly minDistance: PairMinDistance[];
   readonly requiredDecelMax: Record<string, number>;
   readonly invariantResiduals?: InvariantResidual[];
@@ -147,11 +234,18 @@ export interface EpisodeMetrics {
   readonly declaredOcclusion?: DeclaredOcclusionMetric[];
   /** Declared occlusion pairs that were never hidden before their closest criticality sample. */
   readonly occluderIneffective?: OccluderIneffective[];
-  readonly collisions: Array<{ t: number; a: string; b: string }>;
+  readonly collisions: Array<{
+    t: number;
+    a: string;
+    b: string;
+    /** `body` or `door:<left|right|rear>` when articulated geometry caused contact. */
+    colliderA?: string;
+    colliderB?: string;
+  }>;
   readonly triggerNeverFired: string[];
   /**
-   * `true` when the criticality peak falls outside `t ∈ [4, clipSeconds - 4]` —
-   * the research doc's "clipped criticality" reject filter.
+   * `true` when the criticality peak falls outside the proportional edge-safe
+   * recorded window — the clipped-criticality reject filter.
    */
   readonly clippedCriticality: boolean;
   /** Wall-clock-free performance counter: integration steps executed. */
@@ -174,7 +268,50 @@ export interface TraceHeader {
   readonly warmupSeconds: number;
   readonly frame: 'xodr-local';
   readonly actorIds: string[];
+  /**
+   * Render-facing identity keyed by actor id. Optional so v1 traces written by
+   * older engines remain readable; current engines always emit it.
+   */
+  readonly actorMetadata?: Record<string, TraceActorMetadata>;
+  /**
+   * Complete fixed-prop closure copied from the parsed input. Prop poses remain
+   * in the input's scene frame; unlike actor tracks they do not need sampling.
+   */
+  readonly propMetadata?: Record<string, StaticProp>;
+  /** Optional catalog-cell provenance attached by batch/materialization layers. */
+  readonly catalogSlot?: unknown;
   readonly metricSubject: string | null;
+  /** Exact hash-covered ambient conditions executed by this trace. */
+  readonly operationalConditions?: OperationalConditions;
+  /**
+   * Executed motion semantics. This distinguishes route choreography from a
+   * force-based vehicle solver; consumers must not infer fidelity from tracks.
+   */
+  readonly physics: PhysicsTraceProvenance;
+}
+
+export interface PhysicsTraceProvenance {
+  readonly mode: MotionPhysicsMode;
+  readonly solver: 'uniscenarios-sim-engine';
+  readonly solverVersion: string;
+  /** Actual integration/substep interval used by the selected solver. */
+  readonly substepS: number;
+  /** sha256 of vehicleProfiles, or null when no profiles were supplied. */
+  readonly vehicleProfileDigest: string | null;
+  /** Executed backend per actor; dynamic-v1 fallbacks are explicit and reasoned. */
+  readonly actorBackends?: Record<string, ActorPhysicsBackendProvenance>;
+}
+
+export interface ActorPhysicsBackendProvenance {
+  readonly mode: MotionPhysicsMode;
+  readonly reason: 'selected' | 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | 'ambient-background';
+}
+
+export interface TraceActorMetadata {
+  readonly kind: ActorKind;
+  readonly dims: Dims;
+  readonly static: boolean;
+  readonly tags: readonly string[];
 }
 
 export interface SimTrace {
@@ -189,6 +326,22 @@ export interface SimTrace {
   readonly metrics: EpisodeMetrics;
 }
 
+function quantizeMetricValue(value: unknown): unknown {
+  if (typeof value === 'number') return quantize(value, TRACE_PRECISION.metric);
+  if (Array.isArray(value)) return value.map(quantizeMetricValue);
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [key, quantizeMetricValue(entry)]),
+    );
+  }
+  return value;
+}
+
+/** Quantise derived floats so trace digests do not encode insignificant ULPs. */
+export function quantizeMetrics(metrics: EpisodeMetrics): EpisodeMetrics {
+  return quantizeMetricValue(metrics) as EpisodeMetrics;
+}
+
 /** Quantise every channel — the last step before a trace is compared or hashed. */
 export function quantizeTrace(trace: SimTrace): SimTrace {
   const actors: Record<string, ActorTrack> = {};
@@ -199,9 +352,15 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
       y: tr.y.map((v) => quantize(v, TRACE_PRECISION.position)),
       headingRad: tr.headingRad.map((v) => quantize(v, TRACE_PRECISION.heading)),
       speedMps: tr.speedMps.map((v) => quantize(v, TRACE_PRECISION.speed)),
+      ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: tr.s.map((v) => quantize(v, TRACE_PRECISION.s)),
       present: [...tr.present],
+      ...(tr.physics ? {
+        physics: Object.fromEntries(
+          Object.entries(tr.physics).map(([key, values]: [string, number[]]) => [key, values.map((v: number) => quantize(v, TRACE_PRECISION.speed))]),
+        ) as unknown as ActorPhysicsTrack,
+      } : {}),
     };
   }
   return {
@@ -219,6 +378,8 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
           }
         : {}),
     },
+    events: trace.events.map((event) => ({ ...event, t: quantize(event.t, TRACE_PRECISION.event) })),
+    metrics: quantizeMetrics(trace.metrics),
   };
 }
 
@@ -251,9 +412,15 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
       z,
       headingRad: [...tr.headingRad],
       speedMps: [...tr.speedMps],
+      ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: [...tr.s],
       present: [...tr.present],
+      ...(tr.physics ? {
+        physics: Object.fromEntries(
+          Object.entries(tr.physics).map(([key, values]: [string, number[]]) => [key, [...values]]),
+        ) as unknown as ActorPhysicsTrack,
+      } : {}),
     };
   }
   return {

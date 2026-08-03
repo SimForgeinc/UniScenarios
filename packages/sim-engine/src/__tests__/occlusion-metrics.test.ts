@@ -14,7 +14,15 @@ function actor(id: string, x: number, speedMps = 0): ActorRuntime {
     dims: { l: 4, w: 2, h: 1.5 },
     tags: [],
     static: false,
-    rules: { obeySignals: true, yield: true, collisionAvoidance: true, aggression: 0.5, speedFactor: 1 },
+    rules: {
+      obeySignals: true,
+      yield: true,
+      yieldToVehicles: true,
+      yieldToPedestrians: true,
+      collisionAvoidance: true,
+      aggression: 0.5,
+      speedFactor: 1,
+    },
     cruiseSpeedMps: speedMps,
     cruiseOverrideMps: speedMps,
     route: {} as ActorRuntime['route'],
@@ -32,6 +40,7 @@ function actor(id: string, x: number, speedMps = 0): ActorRuntime {
     latCmd: null,
     untilByAxis: new Map(),
     stateKeys: new Map(),
+    roadControlStates: new Map(),
     standstillSinceS: null,
     requiredDecelMax: 0,
   };
@@ -56,6 +65,17 @@ function observe(acc: ReturnType<typeof newMetricAccumulator>, t: number, egoX: 
 }
 
 describe('declared occlusion metrics', () => {
+  it('treats actors beyond the operational visibility range as not visible', () => {
+    const acc = newMetricAccumulator(['ego', 'target'], [
+      { observer: 'ego', target: 'target', occluderId: 'off-axis-wall' },
+    ]);
+    observeTick(acc, 0, [actor('ego', 0, 5), actor('target', 40, 0)], new Set(), offAxis, 20);
+    observeTick(acc, 1, [actor('ego', 25, 5), actor('target', 40, 0)], new Set(), offAxis, 20);
+    const metric = computeMetrics(acc, 4).declaredOcclusion?.[0];
+    expect(metric?.firstBlockedT).toBe(0);
+    expect(metric?.losOpenT).toBe(1);
+  });
+
   it('rejects an occlusion pair whose observer/target actor references are unknown', () => {
     const graph = syntheticGraph();
     const ego = vehicle(graph, { id: 'ego', rsl: LANE_LEFT, s: 0, speedMps: 10 });
@@ -141,6 +161,7 @@ describe('declared occlusion metrics', () => {
     observe(acc, 3.4, 34, 40, group); // closest criticality sample
 
     const metrics = computeMetrics(acc, 4);
+    const predictedConflictT = metrics.minTTC!.t + metrics.minTTC!.value;
     expect(metrics.occluderIneffective).toEqual([]);
     expect(metrics.declaredOcclusion).toEqual([
       expect.objectContaining({
@@ -150,8 +171,8 @@ describe('declared occlusion metrics', () => {
         status: 'revealed_before_conflict',
         firstBlockedT: 0,
         losOpenT: 2.6,
-        conflictT: 3.4,
-        revealToConflictS: expect.closeTo(0.8, 6),
+        conflictT: predictedConflictT,
+        revealToConflictS: expect.closeTo(predictedConflictT - 2.6, 6),
       }),
     ]);
     expect(metrics.revealToConflict).toEqual(
@@ -163,7 +184,7 @@ describe('declared occlusion metrics', () => {
         relevantOccluderIds: ['parked-row-0', 'parked-row-1'],
         firstBlockedT: 0,
         losOpenT: 2.6,
-        conflictT: 3.4,
+        conflictT: predictedConflictT,
       }),
     );
   });
@@ -176,13 +197,14 @@ describe('declared occlusion metrics', () => {
     observe(acc, 2, 20, 40, offAxis);
 
     const metrics = computeMetrics(acc, 3);
+    const predictedConflictT = metrics.minTTC!.t + metrics.minTTC!.value;
     expect(metrics.revealToConflict).toBeNull();
     expect(metrics.declaredOcclusion).toEqual([
       expect.objectContaining({
         observer: 'ego',
         target: 'target',
         status: 'never_blocked_before_conflict',
-        conflictT: 2,
+        conflictT: predictedConflictT,
       }),
     ]);
     expect(metrics.occluderIneffective).toEqual([
@@ -190,7 +212,7 @@ describe('declared occlusion metrics', () => {
         observer: 'ego',
         target: 'target',
         pair: ['ego', 'target'],
-        conflictT: 2,
+        conflictT: predictedConflictT,
         occluderId: 'off-axis-wall',
         relevantOccluderIds: ['off-axis-wall'],
         reason: 'never_blocked_before_conflict',
@@ -242,6 +264,7 @@ describe('declared occlusion metrics', () => {
     observe(acc, 3.4, 34, 40);
 
     const metrics = computeMetrics(acc, 4);
+    const predictedConflictT = metrics.minTTC!.t + metrics.minTTC!.value;
     expect(metrics.occluderIneffective).toEqual([]);
     expect(metrics.revealToConflict).toEqual(
       expect.objectContaining({
@@ -252,10 +275,10 @@ describe('declared occlusion metrics', () => {
         relevantOccluderIds: ['wall'],
         firstBlockedT: 0,
         losOpenT: 2.6,
-        conflictT: 3.4,
+        conflictT: predictedConflictT,
       }),
     );
-    expect(metrics.revealToConflict!.value).toBeCloseTo(0.8, 6);
+    expect(metrics.revealToConflict!.value).toBeCloseTo(predictedConflictT - 2.6, 6);
     expect(evaluateMetrics(metrics, 4).findings.map((finding) => finding.code)).not.toContain('occlusion_unproven');
   });
 
@@ -284,8 +307,12 @@ describe('declared occlusion metrics', () => {
       { observer: 'ego', target: 'target', occluderId: 'wall' },
     ]);
     observe(missingOccluder, 0, 0, 40, []);
-    expect(computeMetrics(missingOccluder, 4).declaredOcclusion).toEqual([
-      expect.objectContaining({ status: 'occluder_unobserved', conflictT: 0 }),
+    const missingOccluderMetrics = computeMetrics(missingOccluder, 4);
+    expect(missingOccluderMetrics.declaredOcclusion).toEqual([
+      expect.objectContaining({
+        status: 'occluder_unobserved',
+        conflictT: missingOccluderMetrics.minTTC!.t + missingOccluderMetrics.minTTC!.value,
+      }),
     ]);
 
     const missingPair = newMetricAccumulator(['ego', 'target'], [

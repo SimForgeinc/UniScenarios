@@ -213,7 +213,7 @@ function SingleInspector({
         <span style={styles.k}>kind</span>
         <span style={styles.v}>
           {actor.kind}
-          {actor.source === 'prop' ? ' (propsV0)' : ''}
+          {actor.source === 'prop' ? ' (prop)' : ''}
         </span>
       </div>
       <div style={styles.kv}>
@@ -400,10 +400,12 @@ export interface StatusBarProps {
   state: EditorState;
   mapLabel: string;
   loading: boolean;
+  /** Includes materialized portable actors that are not editable scene records. */
+  actorCount?: number;
 }
 
 /** One line: what mode you are in, what the modifiers do, what just happened. */
-export function StatusBar({ state, mapLabel, loading }: StatusBarProps): JSX.Element {
+export function StatusBar({ state, mapLabel, loading, actorCount = state.actors.length }: StatusBarProps): JSX.Element {
   const chip =
     state.mode === 'placing'
       ? 'PLACE'
@@ -441,7 +443,7 @@ export function StatusBar({ state, mapLabel, loading }: StatusBarProps): JSX.Ele
       )}
       <span style={styles.spacer} />
       <span style={styles.readout} data-testid="status-count">
-        {state.actors.length} actor{state.actors.length === 1 ? '' : 's'}
+        {actorCount} actor{actorCount === 1 ? '' : 's'}
       </span>
       <span style={styles.readout} data-testid="status-save">
         {loading ? `loading ${mapLabel}…` : state.dirty ? 'saving…' : 'saved'}

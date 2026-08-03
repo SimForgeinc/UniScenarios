@@ -105,6 +105,26 @@ describe('adaptTemplate — features', () => {
     ],
   };
 
+  it('preserves required point-feature lateral proximity as a matcher clause', () => {
+    const { anchor } = adaptTemplate(parse({
+      anchor: {
+        id: 'bus-stop-proximity',
+        features: [{
+          id: 'stop',
+          kind: 'bus_stop',
+          atM: { value: [40, 120], essentiality: 'required' },
+          lateralDistanceM: { value: [0, 7], essentiality: 'required' },
+          sameRoad: { value: true, essentiality: 'required' },
+        }],
+      },
+    }));
+
+    expect(anchor.features[0]?.lateralDistanceM).toEqual({
+      value: [0, 7], essentiality: 'required',
+    });
+    expect(anchor.features[0]?.sameRoad).toEqual({ value: true, essentiality: 'required' });
+  });
+
   it('re-nests the junction predicates the v2 union hoists', () => {
     const { anchor } = adaptTemplate(parse({ anchor: junctionAnchor }));
     const feature = anchor.features[0]!;
@@ -144,12 +164,50 @@ describe('adaptTemplate — features', () => {
     expect(anchor.features[1]!.atM.essentiality).toBe('cosmetic');
   });
 
-  it('drops a feature kind the matcher cannot look for, loudly', () => {
+  it('preserves every authored crossing predicate for strict map evaluation', () => {
+    const { anchor, notes } = adaptTemplate(parse({
+      anchor: {
+        id: 'strict-crossing',
+        features: [{
+          id: 'xw', kind: 'crossing',
+          marked: { value: true, essentiality: 'required' },
+          controlled: { value: true, essentiality: 'required' },
+          lengthM: { value: [12, 32], essentiality: 'preferred' },
+          placement: { value: 'junction_leg', essentiality: 'required' },
+        }],
+      },
+    }));
+    expect(anchor.features[0]?.crossing).toEqual({
+      marked: { value: true, essentiality: 'required' },
+      controlled: { value: true, essentiality: 'required' },
+      lengthM: { value: [12, 32], essentiality: 'preferred' },
+      placement: { value: 'junction_leg', essentiality: 'required' },
+    });
+    expect(notes).toEqual([]);
+  });
+
+  it('preserves work-zone suitability now that the matcher supports it', () => {
     const { anchor, notes } = adaptTemplate(
-      parse({ anchor: { id: 'a', features: [{ id: 'sz', kind: 'school_zone' }] } }),
+      parse({ anchor: { id: 'a', features: [{ id: 'wz', kind: 'work_zone_suitable' }] } }),
     );
-    expect(anchor.features).toHaveLength(0);
-    expect(notes.some((n) => n.reason.includes('not matchable'))).toBe(true);
+    expect(anchor.features).toEqual([
+      expect.objectContaining({
+        id: 'wz',
+        kind: 'work_zone_suitable',
+        atM: expect.objectContaining({ value: [0, 0] }),
+      }),
+    ]);
+    expect(notes.some((n) => n.reason.includes('not matchable'))).toBe(false);
+  });
+
+  it('preserves school zones as exact matcher features', () => {
+    const { anchor, notes } = adaptTemplate(
+      parse({ anchor: { id: 'a', features: [{ id: 'sz', kind: 'school_zone', essentiality: 'required' }] } }),
+    );
+    expect(anchor.features).toEqual([
+      expect.objectContaining({ id: 'sz', kind: 'school_zone', atM: expect.objectContaining({ value: [0, 0] }) }),
+    ]);
+    expect(notes.some((note) => note.path.includes('features.sz'))).toBe(false);
   });
 });
 
@@ -201,6 +259,7 @@ describe('adaptTemplate — policy and roles', () => {
             from: 'same',
             turn: 'left',
             arriveAtConflict: { relativeTo: 'ego', deltaT: 1.5 },
+            requiredUpstreamRunwayM: 180,
           },
           { id: 'ghost', kind: 'scene_absolute', actor: { class: 'car' }, pose: { position: { x: 1, y: 0, z: 2 }, headingRad: 0 } },
         ],
@@ -214,7 +273,9 @@ describe('adaptTemplate — policy and roles', () => {
     ]);
     expect(roles[0]).toMatchObject({ role: 'ego', dsM: -40, tFrac: 0.1 });
     expect(roles[2]).toMatchObject({ role: 'opp', index: 0, dsM: 25 });
-    expect(roles[3]).toMatchObject({ from: 'merge', arriveAtConflict: { deltaT: 1.5 } });
+    expect(roles[3]).toMatchObject({
+      from: 'merge', arriveAtConflict: { deltaT: 1.5 }, minUpstreamRunwayM: 180,
+    });
     expect(notes.some((n) => n.reason.includes("'same' has no matcher equivalent"))).toBe(true);
     expect(notes.some((n) => n.reason.includes('not portable'))).toBe(true);
   });

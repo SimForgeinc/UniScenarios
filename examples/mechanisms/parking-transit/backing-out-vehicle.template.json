@@ -1,0 +1,81 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Vehicle reverses from a parking bay into traffic",
+    "description": "A perpendicular parking-zone occupant illuminates its reverse lamps and follows a low-speed backing path from the bay across ego's travel aisle.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "parking.backing-out-vehicle",
+    "tags": ["parking", "backing", "reversing", "parking-zone", "reverse-lamps"],
+    "author": "agent/parking-transit-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "reverseSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [3, 8], "default": 5, "distribution": "uniform" },
+      { "id": "reverseTriggerDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [18, 28], "default": 23, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "backing-out-vehicle",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [15, 50], "essentiality": "preferred" },
+      "curvatureDegPer10m": { "value": [0, 8], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [100, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "parking",
+        "kind": "parking_zone",
+        "label": "angled or perpendicular parking bay beside the travel aisle",
+        "essentiality": "required",
+        "atM": { "value": [30, 100], "essentiality": "required" },
+        "side": { "value": "right", "essentiality": "preferred" }
+      }
+    ],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "vehicle approaching through the parking aisle",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": "-clamp(0.65 * lane.speedLimitKph, 18, 35) / 3.6 * 5", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.65 * lane.speedLimitKph, 18, 35)",
+      "extensions": { "placementFeature": "parking" }
+    },
+    {
+      "id": "backing-vehicle", "kind": "in_parking_zone", "label": "perpendicularly parked vehicle reversing rear-first into ego's aisle",
+      "actor": { "class": "car", "catalogId": "vehicle.suv" },
+      "feature": "parking", "slot": "any", "facing": "perpendicular",
+      "initialSpeedKph": 0,
+      "extensions": { "placementFeature": "parking", "motionSemantics": "reverse" }
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 12,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "backing-path", "actor": "backing-vehicle", "verb": "route", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "polyline", "points": [
+        { "laneOffset": 0, "s": 0, "tFrac": -1, "headingOffsetRad": 1.5707963267948966 },
+        { "laneOffset": 0, "s": -2, "tFrac": -0.55, "headingOffsetRad": 2.2 },
+        { "laneOffset": 0, "s": -5, "tFrac": 0, "headingOffsetRad": 3.141592653589793 }
+      ] } },
+      { "id": "reverse-lamps-on", "actor": "backing-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "lights.reverse", "value": true } },
+      { "id": "backing-disables-avoidance", "actor": "backing-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0.5 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "ego-brakes-for-reversing-vehicle", "actor": "ego", "verb": "speed", "trigger": { "kind": "after", "of": "reverse-lamps-on", "event": "start", "delayS": 0.35 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "rate", "value": 6 } },
+      { "id": "backing-begins", "actor": "backing-vehicle", "verb": "speed", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "backing-vehicle" }, "measure": "euclidean", "op": "<=", "valueM": "param.reverseTriggerDistanceM" }, "byLatest": 8, "ifNever": "fire" }, "target": { "mode": "absolute", "valueKph": "param.reverseSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1.2 } }
+    ]
+  },
+  "invariants": [
+    { "id": "backing-order", "kind": "event_order", "events": ["reverse-lamps-on", "backing-begins"], "strict": true, "essentiality": "required" },
+    { "id": "backing-criticality", "kind": "ttc", "of": "ego", "to": "backing-vehicle", "range": [0.4, 3.2], "mode": "min", "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

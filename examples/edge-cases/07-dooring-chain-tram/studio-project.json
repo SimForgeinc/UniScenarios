@@ -1,0 +1,19 @@
+{
+  "projectId": "edge-case-07-dooring-chain-tram",
+  "displayName": "07 · Dooring Chain Reaction Beside Tram Tracks",
+  "template": "template.json",
+  "preferredMapId": "yale-street",
+  "durationS": 20,
+  "playShortcut": "Space",
+  "rendererPreset": "ultra-low-3d",
+  "openMode": "authoring",
+  "provenance": { "author": "codex/edge-campaign-07-08", "intentSource": "independent_edge_cases", "schemaVersion": 2 },
+  "runtimeTemplate": "runtime-template.json",
+  "instance": "instance.json",
+  "trace": "trace.json.gz",
+  "result": "result.json",
+  "ambientSweep": "ambient-sweep.json",
+  "intentRubric": "intent-rubric.json",
+  "status": "behavior-verified-surrogate",
+  "ambientStatus": "combined-gate-verified-off-light-moderate"
+}

@@ -1,0 +1,2469 @@
+{
+  "version": 2,
+  "evaluationPolicy": "Combined gate: evaluateAmbientRobustness AND evaluateIntentRubric AND the original scenario-specific rubric; no thresholds relaxed.",
+  "unsupportedCriteriaPolicy": "Unsupported typed criteria are not treated as measured passes. The scenario-specific gate enforces the compound stop/separation condition, actor-to-prop parapet clearance, and moving native-lane bus blockage from trace evidence.",
+  "baseline": {
+    "inputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+    "traceDigest": "4a16b0036a0bec405c6809502fd6a46b694b60ad855315aa8be24bcc0cf2e362",
+    "robustnessEvaluation": {
+      "verdict": "reject",
+      "findings": [
+        {
+          "code": "occlusion_unproven",
+          "reason": "1 declared occlusion relation(s) did not produce a blocked-to-clear reveal before conflict",
+          "detail": {
+            "declarations": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-sedan",
+                "occluderId": "crest-occlusion",
+                "status": "blocked_at_conflict"
+              }
+            ]
+          }
+        }
+      ],
+      "tags": [],
+      "summary": {
+        "minTTC": 1.953712005673864,
+        "minTTCt": 9.26,
+        "criticalityKind": "ttc",
+        "criticality": 1.953712005673864,
+        "criticalityT": 9.26,
+        "requiredDecelMax": 1.0815266469243592,
+        "collisions": 0,
+        "neverFired": 0,
+        "occlusionUnproven": 1
+      }
+    },
+    "intentEvaluation": {
+      "version": 1,
+      "intentId": "edge-04-wrong-way-sedan-blind-crest-v1",
+      "verdict": "accept",
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "unchecked": 0,
+        "unsupported": 3
+      },
+      "criteria": [
+        {
+          "id": "required-event-order",
+          "kind": "event_order",
+          "required": true,
+          "status": "pass",
+          "reason": "required event-order condition held",
+          "evidence": [
+            {
+              "source": "trace_event",
+              "summary": "ordered trigger evidence",
+              "values": {
+                "interactionIds": [
+                  "wrong-way-visible",
+                  "ego-brakes",
+                  "wrong-way-brakes",
+                  "motorcycle-brakes",
+                  "ego-edges-right",
+                  "wrong-way-offsets",
+                  "hold-position"
+                ],
+                "matchedTimesS": [
+                  7.6,
+                  9.1,
+                  9.2,
+                  9.6,
+                  12,
+                  13,
+                  18
+                ],
+                "complete": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "ego-final-hold",
+          "kind": "stationary_success",
+          "required": true,
+          "status": "pass",
+          "reason": "stationary compliance succeeded",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stationary actor evidence",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  11.22,
+                  20
+                ],
+                "observedMaxSpeedMps": 0,
+                "allowedMaxSpeedMps": 0.1,
+                "presentSeconds": 8.78,
+                "requiredPresentSeconds": 8.76
+              }
+            }
+          ]
+        },
+        {
+          "id": "wrong-way-criticality",
+          "kind": "criticality",
+          "required": true,
+          "status": "pass",
+          "reason": "ttc remained inside the authored band",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "criticality minimum",
+              "values": {
+                "metric": "ttc",
+                "valueS": 1.953712,
+                "atS": 9.26,
+                "pair": [
+                  "ego",
+                  "wrong-way-sedan"
+                ],
+                "requiredMinS": 0.2,
+                "requiredMaxS": 5
+              }
+            }
+          ]
+        },
+        {
+          "id": "blind-crest-occlusion",
+          "kind": "occlusion",
+          "required": true,
+          "status": "pass",
+          "reason": "occlusion outcome held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "declared occlusion result",
+              "values": {
+                "observer": "ego",
+                "target": "wrong-way-sedan",
+                "expectedStatus": "blocked_at_conflict",
+                "observedStatuses": [
+                  "blocked_at_conflict"
+                ],
+                "firstBlockedT": 5.94,
+                "losOpenT": null
+              }
+            }
+          ]
+        },
+        {
+          "id": "ego-remains-in-lane",
+          "kind": "lane_occupancy",
+          "required": true,
+          "status": "pass",
+          "reason": "required lane occupancy held",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "lane occupancy samples",
+              "values": {
+                "actorId": "ego",
+                "laneRsl": "20:0:-1",
+                "sampleCount": 150,
+                "firstTimeS": 0,
+                "lastTimeS": 2.98
+              }
+            }
+          ]
+        },
+        {
+          "id": "wrong-way-positive-clearance",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "wrong-way-sedan"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 7.118741,
+                "atS": 13.1,
+                "requiredMinM": 0.1,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "motorcycle-positive-gap",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "following-motorcycle"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 2.864941,
+                "atS": 12.6,
+                "requiredMinM": 0.1,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "collision-free",
+          "kind": "collision",
+          "required": true,
+          "status": "pass",
+          "reason": "collision budget held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "collision evidence",
+              "values": {
+                "pair": [],
+                "observedCount": 0,
+                "maxCount": 0,
+                "timesS": []
+              }
+            }
+          ]
+        },
+        {
+          "id": "stopped-before-eight-metre-separation",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "Ego is below 5 km/h before shape separation to the wrong-way sedan falls below 8 metres.",
+                "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace."
+              }
+            }
+          ]
+        },
+        {
+          "id": "parapet-clearance",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "Ego preserves at least 0.4 metres clearance from every collidable parapet segment.",
+                "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bus-blocks-centerline-escape",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "The moving bus is alongside on a native opposing lane during the 8–12 second conflict and ego never enters that lane.",
+                "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route."
+              }
+            }
+          ]
+        }
+      ],
+      "behaviorSummary": {
+        "version": 1,
+        "trace": {
+          "inputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+          "mapId": "easterbrook-discovery-school",
+          "clipSeconds": 20,
+          "dt": 0.02,
+          "actorCount": 4
+        },
+        "actors": [
+          {
+            "actorId": "ego",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 11.111111,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 86.7874,
+            "stationaryIntervals": [
+              [
+                11.16,
+                20
+              ]
+            ],
+            "lanes": [
+              "11295:0:-1",
+              "11662:0:-1",
+              "20:0:-1",
+              "21:0:-1"
+            ]
+          },
+          {
+            "actorId": "following-motorcycle",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 11.111111,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 93.895862,
+            "stationaryIntervals": [
+              [
+                11.96,
+                20
+              ]
+            ],
+            "lanes": [
+              "11295:0:-1",
+              "20:0:-1",
+              "21:0:-1"
+            ]
+          },
+          {
+            "actorId": "opposing-bus",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 1.111111,
+            "maxSpeedMps": 1.111111,
+            "finalSpeedMps": 1.111111,
+            "distanceTravelledM": 22.222222,
+            "stationaryIntervals": [],
+            "lanes": [
+              "11296:0:1",
+              "11633:0:1",
+              "21:0:1"
+            ]
+          },
+          {
+            "actorId": "wrong-way-sedan",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 7.777778,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 58.431903,
+            "stationaryIntervals": [
+              [
+                11.24,
+                20
+              ]
+            ],
+            "lanes": []
+          }
+        ],
+        "events": [
+          {
+            "t": 7.6,
+            "kind": "state_set",
+            "actorId": "wrong-way-sedan",
+            "detail": "lights.brake=true"
+          },
+          {
+            "t": 7.6,
+            "kind": "trigger_fired",
+            "actorId": "wrong-way-sedan",
+            "interactionId": "wrong-way-visible"
+          },
+          {
+            "t": 9.1,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-brakes"
+          },
+          {
+            "t": 9.2,
+            "kind": "trigger_fired",
+            "actorId": "wrong-way-sedan",
+            "interactionId": "wrong-way-brakes"
+          },
+          {
+            "t": 9.6,
+            "kind": "trigger_fired",
+            "actorId": "following-motorcycle",
+            "interactionId": "motorcycle-brakes"
+          },
+          {
+            "t": 12,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-edges-right"
+          },
+          {
+            "t": 13,
+            "kind": "trigger_fired",
+            "actorId": "wrong-way-sedan",
+            "interactionId": "wrong-way-offsets"
+          },
+          {
+            "t": 18,
+            "kind": "state_set",
+            "actorId": "ego",
+            "detail": "lights.brake=true"
+          },
+          {
+            "t": 18,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "hold-position"
+          }
+        ],
+        "metrics": {
+          "collisions": 0,
+          "minTTC": 1.953712005673864,
+          "minPathTTC": null,
+          "minPET": null,
+          "triggerNeverFired": [],
+          "declaredOcclusion": [
+            {
+              "observer": "ego",
+              "target": "wrong-way-sedan",
+              "status": "blocked_at_conflict",
+              "firstBlockedT": 5.94,
+              "losOpenT": null
+            }
+          ]
+        },
+        "truncated": {
+          "actors": false,
+          "events": false,
+          "occlusions": false
+        }
+      }
+    },
+    "review": {
+      "pass": true,
+      "observed": {
+        "durationS": 20,
+        "eventTimes": {
+          "wrong-way-visible": 7.6000000000000005,
+          "ego-brakes": 9.1,
+          "wrong-way-brakes": 9.200000000000001,
+          "motorcycle-brakes": 9.6,
+          "ego-edges-right": 12,
+          "wrong-way-offsets": 13,
+          "hold-position": 18
+        },
+        "collisions": [],
+        "triggerNeverFired": [],
+        "wrongWayShapeClearanceM": 7.118741265385334,
+        "wrongWayClearanceAtS": 13.1,
+        "egoSpeedAtMinimumWrongWayClearanceKph": 0,
+        "motorcycleShapeGapM": 2.86494051026797,
+        "parapetClearanceM": 2.1881874921834625,
+        "parapetClearanceAtS": 4.0600000000000005,
+        "nearestParapetId": "right-parapet-4",
+        "busMinCentreDistance8To12M": 5.043026676976367,
+        "busMinSpeed8To12Kph": 4,
+        "egoInitialLane": "20:0:-1",
+        "busInitialLane": "11633:0:1",
+        "egoDirection": "-1",
+        "busDirection": "1",
+        "lanesRemainDistinct8To12": true,
+        "egoStayedInAuthoredDirection8To12": true,
+        "occlusionStatus": "blocked_at_conflict"
+      }
+    },
+    "accepted": true
+  },
+  "robustnessAccepted": true,
+  "accepted": true,
+  "modes": [
+    {
+      "mode": "off",
+      "profile": {
+        "version": 1,
+        "preset": "off",
+        "seed": "edge-case-04-ambient-off-pinned",
+        "maxActors": 0
+      },
+      "pinnedSeed": "edge-case-04-ambient-off-pinned",
+      "inputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+      "traceDigest": "4a16b0036a0bec405c6809502fd6a46b694b60ad855315aa8be24bcc0cf2e362",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "off",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-04-ambient-off-pinned",
+          "maxActors": 0,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 0
+        },
+        "profileHash": "6083f79fcbcd0e4eb421222acf5bebfe78595b65fb7e56e0024a20900c34260a",
+        "baseInputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+        "generatedInputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+        "actors": [],
+        "rejectedSpawnCount": 0,
+        "eligibleLaneKm": 0,
+        "screening": {
+          "count": 0,
+          "actorIds": [],
+          "reasons": []
+        },
+        "warnings": []
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "occlusion_unproven",
+            "reason": "1 declared occlusion relation(s) did not produce a blocked-to-clear reveal before conflict",
+            "detail": {
+              "declarations": [
+                {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "occluderId": "crest-occlusion",
+                  "status": "blocked_at_conflict"
+                }
+              ]
+            }
+          }
+        ],
+        "tags": [],
+        "summary": {
+          "minTTC": 1.953712005673864,
+          "minTTCt": 9.26,
+          "criticalityKind": "ttc",
+          "criticality": 1.953712005673864,
+          "criticalityT": 9.26,
+          "requiredDecelMax": 1.0815266469243592,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 1
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-04-wrong-way-sedan-blind-crest-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "wrong-way-visible",
+                    "ego-brakes",
+                    "wrong-way-brakes",
+                    "motorcycle-brakes",
+                    "ego-edges-right",
+                    "wrong-way-offsets",
+                    "hold-position"
+                  ],
+                  "matchedTimesS": [
+                    7.6,
+                    9.1,
+                    9.2,
+                    9.6,
+                    12,
+                    13,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-final-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.22,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 8.78,
+                  "requiredPresentSeconds": 8.76
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-criticality",
+            "kind": "criticality",
+            "required": true,
+            "status": "pass",
+            "reason": "ttc remained inside the authored band",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "criticality minimum",
+                "values": {
+                  "metric": "ttc",
+                  "valueS": 1.953712,
+                  "atS": 9.26,
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "requiredMinS": 0.2,
+                  "requiredMaxS": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "blind-crest-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "expectedStatus": "blocked_at_conflict",
+                  "observedStatuses": [
+                    "blocked_at_conflict"
+                  ],
+                  "firstBlockedT": 5.94,
+                  "losOpenT": null
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-remains-in-lane",
+            "kind": "lane_occupancy",
+            "required": true,
+            "status": "pass",
+            "reason": "required lane occupancy held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "lane occupancy samples",
+                "values": {
+                  "actorId": "ego",
+                  "laneRsl": "20:0:-1",
+                  "sampleCount": 150,
+                  "firstTimeS": 0,
+                  "lastTimeS": 2.98
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-positive-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 7.118741,
+                  "atS": 13.1,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "motorcycle-positive-gap",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "following-motorcycle"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.864941,
+                  "atS": 12.6,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "stopped-before-eight-metre-separation",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego is below 5 km/h before shape separation to the wrong-way sedan falls below 8 metres.",
+                  "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "parapet-clearance",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego preserves at least 0.4 metres clearance from every collidable parapet segment.",
+                  "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bus-blocks-centerline-escape",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "The moving bus is alongside on a native opposing lane during the 8–12 second conflict and ego never enters that lane.",
+                  "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+            "mapId": "easterbrook-discovery-school",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 4
+          },
+          "actors": [
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 86.7874,
+              "stationaryIntervals": [
+                [
+                  11.16,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "11662:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "following-motorcycle",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 93.895862,
+              "stationaryIntervals": [
+                [
+                  11.96,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "opposing-bus",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.111111,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 22.222222,
+              "stationaryIntervals": [],
+              "lanes": [
+                "11296:0:1",
+                "11633:0:1",
+                "21:0:1"
+              ]
+            },
+            {
+              "actorId": "wrong-way-sedan",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.777778,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 58.431903,
+              "stationaryIntervals": [
+                [
+                  11.24,
+                  20
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 7.6,
+              "kind": "state_set",
+              "actorId": "wrong-way-sedan",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-visible"
+            },
+            {
+              "t": 9.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-brakes"
+            },
+            {
+              "t": 9.2,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-brakes"
+            },
+            {
+              "t": 9.6,
+              "kind": "trigger_fired",
+              "actorId": "following-motorcycle",
+              "interactionId": "motorcycle-brakes"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-edges-right"
+            },
+            {
+              "t": 13,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-offsets"
+            },
+            {
+              "t": 18,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "hold-position"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 1.953712005673864,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-sedan",
+                "status": "blocked_at_conflict",
+                "firstBlockedT": 5.94,
+                "losOpenT": null
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "wrong-way-visible": 7.6000000000000005,
+            "ego-brakes": 9.1,
+            "wrong-way-brakes": 9.200000000000001,
+            "motorcycle-brakes": 9.6,
+            "ego-edges-right": 12,
+            "wrong-way-offsets": 13,
+            "hold-position": 18
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "wrongWayShapeClearanceM": 7.118741265385334,
+          "wrongWayClearanceAtS": 13.1,
+          "egoSpeedAtMinimumWrongWayClearanceKph": 0,
+          "motorcycleShapeGapM": 2.86494051026797,
+          "parapetClearanceM": 2.1881874921834625,
+          "parapetClearanceAtS": 4.0600000000000005,
+          "nearestParapetId": "right-parapet-4",
+          "busMinCentreDistance8To12M": 5.043026676976367,
+          "busMinSpeed8To12Kph": 4,
+          "egoInitialLane": "20:0:-1",
+          "busInitialLane": "11633:0:1",
+          "egoDirection": "-1",
+          "busDirection": "1",
+          "lanesRemainDistinct8To12": true,
+          "egoStayedInAuthoredDirection8To12": true,
+          "occlusionStatus": "blocked_at_conflict"
+        }
+      },
+      "accepted": true,
+      "failures": []
+    },
+    {
+      "mode": "light",
+      "profile": {
+        "version": 1,
+        "preset": "light",
+        "seed": "edge-case-04-ambient-light-pinned",
+        "maxActors": 24
+      },
+      "pinnedSeed": "edge-case-04-ambient-light-pinned",
+      "inputHash": "7cd5f27477e7c8a7929db88a60c2cae22b482d66bc8582e28484b0f78f19b083",
+      "traceDigest": "4cec0f50ec5b0e3a8fe5adbebfb2b59d0d72876f17661f74c9ab46edb31570eb",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "light",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-04-ambient-light-pinned",
+          "maxActors": 24,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 3
+        },
+        "profileHash": "7bb9c0b3e9b88b72de0d6e554c1b00ee8a504719e2c1075cb33412a9ee6d71fd",
+        "baseInputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+        "generatedInputHash": "7cd5f27477e7c8a7929db88a60c2cae22b482d66bc8582e28484b0f78f19b083",
+        "actors": [
+          {
+            "id": "ambient:v1:15f0b04c5c5dde12:000",
+            "kind": "car",
+            "routeLaneRsls": [
+              "43:0:1",
+              "1045:0:1",
+              "12:0:2",
+              "11272:0:2",
+              "11:0:2",
+              "11777:0:2",
+              "10:0:2",
+              "11352:0:1",
+              "8:0:2"
+            ],
+            "seedKey": "15f0b04c5c5dde12"
+          },
+          {
+            "id": "ambient:v1:cc4e2d341fed506f:003",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "13:0:-1",
+              "6598:0:-1",
+              "14:0:-1"
+            ],
+            "seedKey": "cc4e2d341fed506f"
+          }
+        ],
+        "rejectedSpawnCount": 84,
+        "eligibleLaneKm": 1.332197034510308,
+        "screening": {
+          "count": 2,
+          "actorIds": [
+            "ambient:v1:7bd623a688eb18a3:002",
+            "ambient:v1:de28028e3b8b8de6:001"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:7bd623a688eb18a3:002",
+              "reason": "required_decel",
+              "requiredDecelMps2": 19.446104922853007,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "19.446 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:de28028e3b8b8de6:001",
+              "reason": "collision",
+              "detail": "collision with prop:right-parapet-6"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 2 ambient actor(s) during full-clip safety screening (1 collision, 1 required-deceleration)."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "occlusion_unproven",
+            "reason": "1 declared occlusion relation(s) did not produce a blocked-to-clear reveal before conflict",
+            "detail": {
+              "declarations": [
+                {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "occluderId": "crest-occlusion",
+                  "status": "blocked_at_conflict"
+                }
+              ]
+            }
+          }
+        ],
+        "tags": [],
+        "summary": {
+          "minTTC": 1.953712005673864,
+          "minTTCt": 9.26,
+          "criticalityKind": "ttc",
+          "criticality": 1.953712005673864,
+          "criticalityT": 9.26,
+          "requiredDecelMax": 1.0815266469243592,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 1
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-04-wrong-way-sedan-blind-crest-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "wrong-way-visible",
+                    "ego-brakes",
+                    "wrong-way-brakes",
+                    "motorcycle-brakes",
+                    "ego-edges-right",
+                    "wrong-way-offsets",
+                    "hold-position"
+                  ],
+                  "matchedTimesS": [
+                    7.6,
+                    9.1,
+                    9.2,
+                    9.6,
+                    12,
+                    13,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-final-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.22,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 8.78,
+                  "requiredPresentSeconds": 8.76
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-criticality",
+            "kind": "criticality",
+            "required": true,
+            "status": "pass",
+            "reason": "ttc remained inside the authored band",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "criticality minimum",
+                "values": {
+                  "metric": "ttc",
+                  "valueS": 1.953712,
+                  "atS": 9.26,
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "requiredMinS": 0.2,
+                  "requiredMaxS": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "blind-crest-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "expectedStatus": "blocked_at_conflict",
+                  "observedStatuses": [
+                    "blocked_at_conflict"
+                  ],
+                  "firstBlockedT": 5.94,
+                  "losOpenT": null
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-remains-in-lane",
+            "kind": "lane_occupancy",
+            "required": true,
+            "status": "pass",
+            "reason": "required lane occupancy held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "lane occupancy samples",
+                "values": {
+                  "actorId": "ego",
+                  "laneRsl": "20:0:-1",
+                  "sampleCount": 150,
+                  "firstTimeS": 0,
+                  "lastTimeS": 2.98
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-positive-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 7.118741,
+                  "atS": 13.1,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "motorcycle-positive-gap",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "following-motorcycle"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.864941,
+                  "atS": 12.6,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "stopped-before-eight-metre-separation",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego is below 5 km/h before shape separation to the wrong-way sedan falls below 8 metres.",
+                  "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "parapet-clearance",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego preserves at least 0.4 metres clearance from every collidable parapet segment.",
+                  "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bus-blocks-centerline-escape",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "The moving bus is alongside on a native opposing lane during the 8–12 second conflict and ego never enters that lane.",
+                  "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "7cd5f27477e7c8a7929db88a60c2cae22b482d66bc8582e28484b0f78f19b083",
+            "mapId": "easterbrook-discovery-school",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 6
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:15f0b04c5c5dde12:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.180282,
+              "maxSpeedMps": 17.180282,
+              "finalSpeedMps": 17.180282,
+              "distanceTravelledM": 343.603196,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1045:0:1",
+                "10:0:2",
+                "11272:0:2",
+                "11352:0:1",
+                "11777:0:2",
+                "11:0:2",
+                "12:0:2",
+                "43:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:cc4e2d341fed506f:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.597658,
+              "maxSpeedMps": 5.597658,
+              "finalSpeedMps": 5.597658,
+              "distanceTravelledM": 111.953153,
+              "stationaryIntervals": [],
+              "lanes": [
+                "13:0:-1",
+                "6598:0:-1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 86.7874,
+              "stationaryIntervals": [
+                [
+                  11.16,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "11662:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "following-motorcycle",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 93.895862,
+              "stationaryIntervals": [
+                [
+                  11.96,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "opposing-bus",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.111111,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 22.222222,
+              "stationaryIntervals": [],
+              "lanes": [
+                "11296:0:1",
+                "11633:0:1",
+                "21:0:1"
+              ]
+            },
+            {
+              "actorId": "wrong-way-sedan",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.777778,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 58.431903,
+              "stationaryIntervals": [
+                [
+                  11.24,
+                  20
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 7.6,
+              "kind": "state_set",
+              "actorId": "wrong-way-sedan",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-visible"
+            },
+            {
+              "t": 9.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-brakes"
+            },
+            {
+              "t": 9.2,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-brakes"
+            },
+            {
+              "t": 9.6,
+              "kind": "trigger_fired",
+              "actorId": "following-motorcycle",
+              "interactionId": "motorcycle-brakes"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-edges-right"
+            },
+            {
+              "t": 13,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-offsets"
+            },
+            {
+              "t": 18,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "hold-position"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 1.953712005673864,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-sedan",
+                "status": "blocked_at_conflict",
+                "firstBlockedT": 5.94,
+                "losOpenT": null
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "wrong-way-visible": 7.6000000000000005,
+            "ego-brakes": 9.1,
+            "wrong-way-brakes": 9.200000000000001,
+            "motorcycle-brakes": 9.6,
+            "ego-edges-right": 12,
+            "wrong-way-offsets": 13,
+            "hold-position": 18
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "wrongWayShapeClearanceM": 7.118741265385334,
+          "wrongWayClearanceAtS": 13.1,
+          "egoSpeedAtMinimumWrongWayClearanceKph": 0,
+          "motorcycleShapeGapM": 2.86494051026797,
+          "parapetClearanceM": 2.1881874921834625,
+          "parapetClearanceAtS": 4.0600000000000005,
+          "nearestParapetId": "right-parapet-4",
+          "busMinCentreDistance8To12M": 5.043026676976367,
+          "busMinSpeed8To12Kph": 4,
+          "egoInitialLane": "20:0:-1",
+          "busInitialLane": "11633:0:1",
+          "egoDirection": "-1",
+          "busDirection": "1",
+          "lanesRemainDistinct8To12": true,
+          "egoStayedInAuthoredDirection8To12": true,
+          "occlusionStatus": "blocked_at_conflict"
+        }
+      },
+      "accepted": true,
+      "failures": []
+    },
+    {
+      "mode": "moderate",
+      "profile": {
+        "version": 1,
+        "preset": "moderate",
+        "seed": "edge-case-04-ambient-moderate-pinned",
+        "maxActors": 40
+      },
+      "pinnedSeed": "edge-case-04-ambient-moderate-pinned",
+      "inputHash": "97096f0b598d1e0c9429d72251fcfdc3c2a949a719eed2d38191626ce409064f",
+      "traceDigest": "6e5a7105714e362bd99f8f34b7b417c23c6eaaaf615f1948d65390076d76a8a7",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "moderate",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-04-ambient-moderate-pinned",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 8
+        },
+        "profileHash": "080b3d9af43470c5e6750a0176f98e15d93d8ba6361875f1f019533f9e966591",
+        "baseInputHash": "4d64c1dcd08d20adf7dbae417ab75130b44aa3e5f5e1a9a97b364e32c29f8d46",
+        "generatedInputHash": "97096f0b598d1e0c9429d72251fcfdc3c2a949a719eed2d38191626ce409064f",
+        "actors": [
+          {
+            "id": "ambient:v1:afcf58372822ef51:000",
+            "kind": "car",
+            "routeLaneRsls": [
+              "0:0:1",
+              "1224:0:1",
+              "24:0:1",
+              "11716:0:1",
+              "23:0:1",
+              "11913:0:1",
+              "22:0:1",
+              "11661:0:1",
+              "21:0:1",
+              "11296:0:1",
+              "20:0:1",
+              "11200:0:1",
+              "13:0:2",
+              "354:0:-1",
+              "354:1:-1",
+              "354:2:-1"
+            ],
+            "seedKey": "afcf58372822ef51"
+          },
+          {
+            "id": "ambient:v1:030915b12265d131:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "9:0:-2",
+              "12134:0:-1",
+              "40:0:-2",
+              "40:1:-2",
+              "11281:0:-1",
+              "11:0:2",
+              "11777:0:2",
+              "10:0:2",
+              "11494:2:1",
+              "11494:1:1",
+              "11494:0:1",
+              "18:0:-1",
+              "12142:0:-1",
+              "19:0:-1"
+            ],
+            "seedKey": "030915b12265d131"
+          },
+          {
+            "id": "ambient:v1:f9805ebf2a874094:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "40:0:-2",
+              "40:1:-2",
+              "11281:0:-1",
+              "11:0:2",
+              "11748:1:1",
+              "11748:0:1",
+              "10:0:1",
+              "11420:0:-1",
+              "11420:1:-1",
+              "5:0:-1",
+              "11907:0:-1",
+              "6:0:-1"
+            ],
+            "seedKey": "f9805ebf2a874094"
+          },
+          {
+            "id": "ambient:v1:59731d7869a3f310:005",
+            "kind": "car",
+            "routeLaneRsls": [
+              "12:0:-1",
+              "914:0:-1",
+              "914:1:-1",
+              "914:2:-1",
+              "9:0:-1",
+              "12136:0:-1",
+              "40:0:-1",
+              "40:1:-1",
+              "11280:0:-1",
+              "11:0:2",
+              "11748:1:1",
+              "11748:0:1"
+            ],
+            "seedKey": "59731d7869a3f310"
+          },
+          {
+            "id": "ambient:v1:727d28e292d01981:010",
+            "kind": "car",
+            "routeLaneRsls": [
+              "43:0:1",
+              "1045:0:1",
+              "12:0:2",
+              "11272:0:2",
+              "11:0:2",
+              "11748:1:1",
+              "11748:0:1",
+              "10:0:1",
+              "11522:0:-1",
+              "11522:1:-1",
+              "18:0:-1",
+              "12142:0:-1",
+              "19:0:-1"
+            ],
+            "seedKey": "727d28e292d01981"
+          }
+        ],
+        "rejectedSpawnCount": 164,
+        "eligibleLaneKm": 1.332197034510308,
+        "screening": {
+          "count": 6,
+          "actorIds": [
+            "ambient:v1:019bc0ff8c83e140:007",
+            "ambient:v1:154ca9fbd91254a6:009",
+            "ambient:v1:338f0771881aad3c:008",
+            "ambient:v1:77eb7a7672397b73:001",
+            "ambient:v1:d3d2695b1bec5e61:006",
+            "ambient:v1:daee6e8affef3962:004"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:019bc0ff8c83e140:007",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:338f0771881aad3c:008"
+            },
+            {
+              "actorId": "ambient:v1:154ca9fbd91254a6:009",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:338f0771881aad3c:008"
+            },
+            {
+              "actorId": "ambient:v1:338f0771881aad3c:008",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:019bc0ff8c83e140:007"
+            },
+            {
+              "actorId": "ambient:v1:77eb7a7672397b73:001",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:daee6e8affef3962:004"
+            },
+            {
+              "actorId": "ambient:v1:d3d2695b1bec5e61:006",
+              "reason": "collision",
+              "detail": "collision with prop:right-parapet-6"
+            },
+            {
+              "actorId": "ambient:v1:daee6e8affef3962:004",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:77eb7a7672397b73:001"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 6 ambient actor(s) during full-clip safety screening (6 collision, 0 required-deceleration)."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "occlusion_unproven",
+            "reason": "1 declared occlusion relation(s) did not produce a blocked-to-clear reveal before conflict",
+            "detail": {
+              "declarations": [
+                {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "occluderId": "crest-occlusion",
+                  "status": "blocked_at_conflict"
+                }
+              ]
+            }
+          }
+        ],
+        "tags": [],
+        "summary": {
+          "minTTC": 1.953712005673864,
+          "minTTCt": 9.26,
+          "criticalityKind": "ttc",
+          "criticality": 1.953712005673864,
+          "criticalityT": 9.26,
+          "requiredDecelMax": 6.291650412598107,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 1
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-04-wrong-way-sedan-blind-crest-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "wrong-way-visible",
+                    "ego-brakes",
+                    "wrong-way-brakes",
+                    "motorcycle-brakes",
+                    "ego-edges-right",
+                    "wrong-way-offsets",
+                    "hold-position"
+                  ],
+                  "matchedTimesS": [
+                    7.6,
+                    9.1,
+                    9.2,
+                    9.6,
+                    12,
+                    13,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-final-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.22,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 8.78,
+                  "requiredPresentSeconds": 8.76
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-criticality",
+            "kind": "criticality",
+            "required": true,
+            "status": "pass",
+            "reason": "ttc remained inside the authored band",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "criticality minimum",
+                "values": {
+                  "metric": "ttc",
+                  "valueS": 1.953712,
+                  "atS": 9.26,
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "requiredMinS": 0.2,
+                  "requiredMaxS": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "blind-crest-occlusion",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "wrong-way-sedan",
+                  "expectedStatus": "blocked_at_conflict",
+                  "observedStatuses": [
+                    "blocked_at_conflict"
+                  ],
+                  "firstBlockedT": 5.94,
+                  "losOpenT": null
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-remains-in-lane",
+            "kind": "lane_occupancy",
+            "required": true,
+            "status": "pass",
+            "reason": "required lane occupancy held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "lane occupancy samples",
+                "values": {
+                  "actorId": "ego",
+                  "laneRsl": "20:0:-1",
+                  "sampleCount": 150,
+                  "firstTimeS": 0,
+                  "lastTimeS": 2.98
+                }
+              }
+            ]
+          },
+          {
+            "id": "wrong-way-positive-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-sedan"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 7.118741,
+                  "atS": 13.1,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "motorcycle-positive-gap",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "following-motorcycle"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.864941,
+                  "atS": 12.6,
+                  "requiredMinM": 0.1,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "stopped-before-eight-metre-separation",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego is below 5 km/h before shape separation to the wrong-way sedan falls below 8 metres.",
+                  "reason": "The typed evaluator cannot combine a time-varying pair clearance threshold with actor speed; the scenario-specific gate checks the engine minimum-clearance timestamp and ego speed from the same trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "parapet-clearance",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Ego preserves at least 0.4 metres clearance from every collidable parapet segment.",
+                  "reason": "The typed evaluator has no actor-to-prop clearance criterion; the scenario-specific gate computes oriented-rectangle clearance from the actor track and trace prop metadata."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bus-blocks-centerline-escape",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "The moving bus is alongside on a native opposing lane during the 8–12 second conflict and ego never enters that lane.",
+                  "reason": "The typed evaluator cannot combine relative distance, actor motion, and distinct-lane occupancy; the scenario-specific gate checks all three from the trace and materialized route."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "97096f0b598d1e0c9429d72251fcfdc3c2a949a719eed2d38191626ce409064f",
+            "mapId": "easterbrook-discovery-school",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 9
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:030915b12265d131:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 10.219734,
+              "maxSpeedMps": 18.202229,
+              "finalSpeedMps": 18.202228,
+              "distanceTravelledM": 322.623009,
+              "stationaryIntervals": [],
+              "lanes": [
+                "11281:0:-1",
+                "11777:0:2",
+                "11:0:2",
+                "12134:0:-1",
+                "40:0:-2",
+                "40:1:-2",
+                "9:0:-2"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:59731d7869a3f310:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.683136,
+              "maxSpeedMps": 15.683136,
+              "finalSpeedMps": 15.683136,
+              "distanceTravelledM": 313.652206,
+              "stationaryIntervals": [],
+              "lanes": [
+                "11280:0:-1",
+                "12136:0:-1",
+                "12:0:-1",
+                "40:0:-1",
+                "40:1:-1",
+                "914:0:-1",
+                "914:1:-1",
+                "914:2:-1",
+                "9:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:727d28e292d01981:010",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.471716,
+              "maxSpeedMps": 18.471716,
+              "finalSpeedMps": 18.471716,
+              "distanceTravelledM": 369.431456,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1045:0:1",
+                "10:0:1",
+                "11272:0:2",
+                "11522:0:-1",
+                "11522:1:-1",
+                "11748:0:1",
+                "11748:1:1",
+                "11:0:2",
+                "12:0:2",
+                "43:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:afcf58372822ef51:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 2.341282,
+              "maxSpeedMps": 16.823709,
+              "finalSpeedMps": 2.341282,
+              "distanceTravelledM": 247.2405,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:1",
+                "11661:0:1",
+                "11716:0:1",
+                "11913:0:1",
+                "1224:0:1",
+                "21:0:1",
+                "22:0:1",
+                "23:0:1",
+                "24:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f9805ebf2a874094:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.963004,
+              "maxSpeedMps": 15.861089,
+              "finalSpeedMps": 15.861089,
+              "distanceTravelledM": 313.925178,
+              "stationaryIntervals": [],
+              "lanes": [
+                "10:0:1",
+                "11281:0:-1",
+                "11748:0:1",
+                "11748:1:1",
+                "11:0:2",
+                "40:0:-2",
+                "40:1:-2"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 86.7874,
+              "stationaryIntervals": [
+                [
+                  11.16,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "11662:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "following-motorcycle",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 11.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 93.895862,
+              "stationaryIntervals": [
+                [
+                  11.96,
+                  20
+                ]
+              ],
+              "lanes": [
+                "11295:0:-1",
+                "20:0:-1",
+                "21:0:-1"
+              ]
+            },
+            {
+              "actorId": "opposing-bus",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.111111,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 22.222222,
+              "stationaryIntervals": [],
+              "lanes": [
+                "11296:0:1",
+                "11633:0:1",
+                "21:0:1"
+              ]
+            },
+            {
+              "actorId": "wrong-way-sedan",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 7.777778,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 58.431903,
+              "stationaryIntervals": [
+                [
+                  11.24,
+                  20
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 7.6,
+              "kind": "state_set",
+              "actorId": "wrong-way-sedan",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-visible"
+            },
+            {
+              "t": 9.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-brakes"
+            },
+            {
+              "t": 9.2,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-brakes"
+            },
+            {
+              "t": 9.6,
+              "kind": "trigger_fired",
+              "actorId": "following-motorcycle",
+              "interactionId": "motorcycle-brakes"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-edges-right"
+            },
+            {
+              "t": 13,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-sedan",
+              "interactionId": "wrong-way-offsets"
+            },
+            {
+              "t": 18,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "lights.brake=true"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "hold-position"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 1.953712005673864,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-sedan",
+                "status": "blocked_at_conflict",
+                "firstBlockedT": 5.94,
+                "losOpenT": null
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "wrong-way-visible": 7.6000000000000005,
+            "ego-brakes": 9.1,
+            "wrong-way-brakes": 9.200000000000001,
+            "motorcycle-brakes": 9.6,
+            "ego-edges-right": 12,
+            "wrong-way-offsets": 13,
+            "hold-position": 18
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "wrongWayShapeClearanceM": 7.118741265385334,
+          "wrongWayClearanceAtS": 13.1,
+          "egoSpeedAtMinimumWrongWayClearanceKph": 0,
+          "motorcycleShapeGapM": 2.86494051026797,
+          "parapetClearanceM": 2.1881874921834625,
+          "parapetClearanceAtS": 4.0600000000000005,
+          "nearestParapetId": "right-parapet-4",
+          "busMinCentreDistance8To12M": 5.043026676976367,
+          "busMinSpeed8To12Kph": 4,
+          "egoInitialLane": "20:0:-1",
+          "busInitialLane": "11633:0:1",
+          "egoDirection": "-1",
+          "busDirection": "1",
+          "lanesRemainDistinct8To12": true,
+          "egoStayedInAuthoredDirection8To12": true,
+          "occlusionStatus": "blocked_at_conflict"
+        }
+      },
+      "accepted": true,
+      "failures": []
+    }
+  ]
+}

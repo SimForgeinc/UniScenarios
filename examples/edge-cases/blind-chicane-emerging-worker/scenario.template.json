@@ -1,0 +1,142 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Blind Chicane and Emerging Worker",
+    "description": "Ego enters an alternating-flow construction chicane while an oncoming van is still clearing it. A worker carrying a long pipe emerges from behind an excavator after ego is committed. Ego slows below the work-zone cap, keeps right, stops clear of the worker without obstructing the van, and resumes only after both hazards clear.",
+    "createdAt": "2026-08-02T07:00:00.000Z",
+    "modifiedAt": "2026-08-02T07:00:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "edge.workzone.blind-chicane-emerging-worker",
+    "tags": ["edge-case", "work-zone", "chicane", "alternating-flow", "occluded-worker", "excavator", "portable-signal"],
+    "author": "codex/edge_campaign_01_02",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "chicaneSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [12, 15], "default": 14, "distribution": "uniform" },
+      { "id": "workerSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [4.5, 6], "default": 5.2, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon", "extensions": { "workZone": "active", "portableAlternatingControl": true } },
+  "anchor": {
+    "id": "blind-chicane-two-way-corridor",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 1], "essentiality": "required" },
+      "throughLanesOpposing": { "value": [1, 2], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 55], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 8], "essentiality": "preferred", "weight": 2 },
+      "runwayUpstreamM": { "value": [180, null], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [180, null], "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 16, "diversity": "strict", "minScore": 0.5 }
+  },
+  "trafficControls": [
+    {
+      "id": "near-portal-signal", "kind": "temporary_signal", "label": "near portal alternating-flow signal that turns red after ego commits",
+      "pose": { "laneOffset": 0, "s": 12, "tFrac": -1, "headingOffsetRad": 0 },
+      "stopLines": [{ "pose": { "laneOffset": 0, "s": 14, "tFrac": 0, "headingOffsetRad": 0 } }],
+      "phases": [{ "indication": "green", "durationS": 4 }, { "indication": "red", "durationS": 16 }],
+      "offsetS": 0, "loop": false
+    },
+    {
+      "id": "far-portal-signal", "kind": "temporary_signal", "label": "far portal signal holding new opposing entries while the committed van clears",
+      "pose": { "laneOffset": 0, "s": 153, "tFrac": 1, "headingOffsetRad": 3.14159 },
+      "stopLines": [{ "pose": { "laneOffset": 0, "s": 151, "tFrac": 0, "headingOffsetRad": 0 } }],
+      "phases": [{ "indication": "red", "durationS": 17 }, { "indication": "green", "durationS": 3 }],
+      "offsetS": 0, "loop": false
+    }
+  ],
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "ego already authorized into the alternating-flow bottleneck",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 18, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 28
+    },
+    {
+      "id": "oncoming-van", "kind": "opposing", "k": 0, "label": "van still clearing the far portal when ego enters",
+      "actor": { "class": "van", "catalogId": "vehicle.van" },
+      "pose": { "laneOffset": 0, "s": 95, "tFrac": 0.7, "headingOffsetRad": 0 },
+      "initialSpeedKph": 13,
+      "requiredHeadingRelation": { "role": "ego", "relation": "antiparallel", "maxErrorDeg": 12 }
+    },
+    {
+      "id": "worker", "kind": "on_reference", "label": "worker carrying a long pipe, initially hidden by the excavator",
+      "actor": { "class": "pedestrian", "catalogId": "construction.flagger", "dims": { "length": 0.7, "width": 0.65, "height": 1.75 } },
+      "pose": { "laneOffset": 0, "s": 80, "tFrac": 1, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [
+    {
+      "id": "excavator", "catalogId": "construction.excavator", "label": "opaque excavator masking the worker and forming the blind S-bend",
+      "pose": { "laneOffset": 0, "s": 76, "tFrac": 1, "headingOffsetRad": 0 }, "headingOffsetRad": 0, "scale": 0.3,
+      "occludes": { "observer": "ego", "target": "worker" }, "targetRevealToConflictS": 1.2, "essentiality": "required"
+    },
+    {
+      "id": "left-barrier-run", "catalogId": "construction.jersey_barrier_run", "label": "hard left boundary of narrowed corridor",
+      "pose": { "laneOffset": 0, "s": 105, "tFrac": 1, "headingOffsetRad": 0 }, "scale": 0.7, "repeat": { "count": 4, "spacingM": 7, "tFracStep": 0 }, "essentiality": "required"
+    },
+    {
+      "id": "right-barrier-run", "catalogId": "construction.jersey_barrier_run", "label": "hard right boundary of narrowed corridor",
+      "pose": { "laneOffset": 0, "s": 42, "tFrac": -1, "headingOffsetRad": 0 }, "scale": 0.7, "repeat": { "count": 4, "spacingM": 7, "tFracStep": 0 }, "essentiality": "required"
+    },
+    {
+      "id": "near-portable-signal", "catalogId": "construction.portable_signal", "label": "near portal portable alternating-flow signal, initially green then red behind ego",
+      "pose": { "laneOffset": 0, "s": 12, "tFrac": -1, "headingOffsetRad": 0 }, "essentiality": "required",
+      "extensions": { "semanticType": "portable_signal", "initialPhase": "green", "phaseAt4S": "red" }
+    },
+    {
+      "id": "far-portable-signal", "catalogId": "construction.portable_signal", "label": "far portal portable alternating-flow signal holding new opposing entries",
+      "pose": { "laneOffset": 0, "s": 153, "tFrac": 1, "headingOffsetRad": 3.14159 }, "headingOffsetRad": 3.14159, "essentiality": "required",
+      "extensions": { "semanticType": "portable_signal", "initialPhase": "red" }
+    },
+    {
+      "id": "worker-pipe", "catalogId": "construction.long_pipe", "label": "eight-metre pipe carried crosswise by the emerging worker",
+      "pose": { "laneOffset": 0, "s": 0, "tFrac": 0, "headingOffsetRad": 0 },
+      "attachment": { "role": "worker", "longitudinalM": 0, "lateralM": -4, "heightM": 1.1, "headingOffsetRad": 0 },
+      "essentiality": "required", "extensions": { "collidable": true }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "ego-enters-cautiously", "actor": "ego", "verb": "speed", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "absolute", "valueKph": "param.chicaneSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2.5 } },
+      { "id": "van-keeps-clear-of-work-zone", "actor": "oncoming-van", "verb": "laneOffset", "trigger": { "kind": "at", "t": 0 }, "target": { "tFrac": -0.8, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 1 } },
+      { "id": "ego-keeps-right", "actor": "ego", "verb": "laneOffset", "trigger": { "kind": "at", "t": 3 }, "target": { "tFrac": -0.35, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2.5 } },
+      { "id": "signal-behind-turns-red", "actor": "@world", "verb": "set", "trigger": { "kind": "at", "t": 4 }, "target": { "key": "control:near-portal-signal.indication", "value": "red" }, "label": "The portal behind ego turns red; ego is already beyond its stop line and must not stop inside the entry pinch" },
+      { "id": "ego-ignores-stale-red", "actor": "ego", "verb": "set", "trigger": { "kind": "after", "of": "signal-behind-turns-red", "event": "start", "delayS": 0.02 }, "target": { "key": "rules.obeySignals", "value": false }, "label": "The red is behind the committed ego and must not command a stop inside the bottleneck" },
+      { "id": "van-retains-exit", "actor": "oncoming-van", "verb": "set", "trigger": { "kind": "at", "t": 4 }, "target": { "key": "rules.collisionAvoidance", "value": true } },
+      { "id": "worker-emerges", "actor": "worker", "verb": "route", "trigger": { "kind": "at", "t": 10 }, "target": { "mode": "polyline", "points": [
+        { "laneOffset": 0, "s": 80, "tFrac": 1, "headingOffsetRad": 0 },
+        { "laneOffset": 0, "s": 80, "tFrac": 0.8, "headingOffsetRad": 0 },
+        { "laneOffset": 0, "s": 80, "tFrac": 0.5, "headingOffsetRad": 0 },
+        { "laneOffset": 0, "s": 80, "tFrac": -1, "headingOffsetRad": 0 }
+      ] } },
+      { "id": "ego-stops-for-worker", "actor": "ego", "verb": "speed", "trigger": { "kind": "at", "t": 10.2 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2 } },
+      { "id": "worker-enters-shared-lane", "actor": "worker", "verb": "speed", "trigger": { "kind": "at", "t": 12.5 }, "target": { "mode": "absolute", "valueKph": "param.workerSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 0.25 } },
+      { "id": "van-clears", "actor": "oncoming-van", "verb": "set", "trigger": { "kind": "at", "t": 16.4 }, "target": { "key": "lights.indicator", "value": "right" }, "label": "Van tail clears the shared bottleneck" },
+      { "id": "worker-clears", "actor": "worker", "verb": "speed", "trigger": { "kind": "at", "t": 16.8 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 0.4 } },
+      { "id": "ego-resumes-after-both-clear", "actor": "ego", "verb": "speed", "trigger": { "kind": "after", "of": "worker-clears", "event": "start", "delayS": 0.7 }, "target": { "mode": "absolute", "valueKph": 12 }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1.5 } }
+    ]
+  },
+  "invariants": [
+    { "id": "commitment-hazard-order", "kind": "event_order", "events": ["ego-enters-cautiously", "signal-behind-turns-red", "ego-ignores-stale-red", "worker-emerges", "ego-stops-for-worker", "worker-enters-shared-lane", "van-clears", "worker-clears", "ego-resumes-after-both-clear"], "strict": true, "essentiality": "required" },
+    { "id": "worker-clearance-band", "kind": "gap", "of": "ego", "to": "worker", "unit": "distance", "range": [2, 10], "window": [10, 17], "essentiality": "required" },
+    { "id": "ego-deceleration", "kind": "decel_budget", "of": "ego", "maxMps2": 6, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego",
+  "extensions": {
+    "x-uniscenarios.stableId": "edge-01-blind-chicane-emerging-worker-v1",
+    "x-uniscenarios.intent": {
+      "must": ["ego enters on green before the portal behind turns red", "ego stays at or below 15 km/h in the chicane", "worker remains occluded by excavator until after ego commits", "ego stops for worker while preserving oncoming van exit", "ego resumes only after worker and van clear"],
+      "mustNot": ["reverse", "cross a barrier", "squeeze beside worker", "stop in response to stale red inside the bottleneck", "resume on only one hazard clearing"]
+    },
+    "acceptanceContract": { "maxChicaneSpeedKph": 15, "minWorkerClearanceM": 2, "maxPeakDecelMps2": 6, "collisionFree": true, "resumeAfter": ["van-clears", "worker-clears"] },
+    "transferInvariants": ["one lane each direction", "hard asymmetric S-bend boundaries", "opaque excavator hides worker", "already-committed oncoming van", "separate controlled portals"]
+  }
+}

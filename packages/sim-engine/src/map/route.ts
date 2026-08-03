@@ -53,6 +53,24 @@ export interface RouteBuildError {
   detail?: Record<string, unknown>;
 }
 
+export interface SeededPlacementRouteOptions {
+  readonly startRsl: LaneRsl;
+  /** Lane-local s in topology storage direction. */
+  readonly startStorageS: number;
+  readonly requiredDownstreamM: number;
+  readonly seed: string;
+  readonly actorId: string;
+  readonly maxLegs?: number;
+}
+
+export type SeededPlacementRouteResult =
+  | { ok: true; route: Route; lanes: readonly LaneRsl[]; downstreamM: number }
+  | { ok: false; error: RouteBuildError };
+
+function routeDirectedKey(lane: DirectedLane): string {
+  return `${lane.rsl}${lane.reversed ? '#r' : '#f'}`;
+}
+
 export class Route {
   readonly legs: readonly RouteLeg[];
   readonly lengthM: number;
@@ -312,6 +330,83 @@ export function buildLanePathRoute(
     legs.push(legFrom(graph, oriented, prev.sStart + prev.lengthM));
   }
   return { ok: true, route: Route.fromLegs(graph, legs) };
+}
+
+/**
+ * Choose a connected, legal-direction lane path for a newly placed road actor.
+ * Candidate order is pseudo-random but entirely derived from document seed and
+ * stable actor id; the exact chosen lane chain is intended to be persisted.
+ */
+export function buildSeededPlacementRoute(
+  graph: LaneGraph,
+  options: SeededPlacementRouteOptions,
+): SeededPlacementRouteResult {
+  const geometry = graph.geometry(options.startRsl);
+  if (!geometry || geometry.lane.laneType !== 'driving') {
+    return { ok: false, error: { code: 'route_lane_missing', reason: `no driving lane ${options.startRsl} in topology`, detail: { rsl: options.startRsl } } };
+  }
+  const required = Math.max(1, options.requiredDownstreamM);
+  const maxLegs = Math.max(1, Math.min(128, options.maxLegs ?? 64));
+  const nominal = graph.nominalReversed(options.startRsl);
+  const orientations = nominal === null ? [false, true] : [nominal];
+
+  const search = (
+    current: DirectedLane,
+    lanes: LaneRsl[],
+    downstreamM: number,
+    visited: ReadonlySet<string>,
+  ): { lanes: LaneRsl[]; downstreamM: number } | null => {
+    if (downstreamM >= required) return { lanes, downstreamM };
+    if (lanes.length >= maxLegs) return null;
+    const candidates = graph.successors(current)
+      .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === 'driving')
+      .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
+      .sort((a, b) => {
+        const ah = stableRouteHash(`${options.seed}|${options.actorId}|${routeDirectedKey(current)}|${routeDirectedKey(a)}`);
+        const bh = stableRouteHash(`${options.seed}|${options.actorId}|${routeDirectedKey(current)}|${routeDirectedKey(b)}`);
+        return ah - bh || routeDirectedKey(a).localeCompare(routeDirectedKey(b));
+      });
+    for (const next of candidates) {
+      const nextVisited = new Set(visited);
+      nextVisited.add(routeDirectedKey(next));
+      const found = search(next, [...lanes, next.rsl], downstreamM + graph.lengthOf(next.rsl), nextVisited);
+      if (found) return found;
+    }
+    return null;
+  };
+
+  for (const reversed of orientations) {
+    const start: DirectedLane = { rsl: options.startRsl, reversed };
+    const startAhead = reversed
+      ? Math.max(0, Math.min(geometry.lengthM, options.startStorageS))
+      : Math.max(0, geometry.lengthM - Math.max(0, Math.min(geometry.lengthM, options.startStorageS)));
+    const found = search(start, [options.startRsl], startAhead, new Set([routeDirectedKey(start)]));
+    if (!found) continue;
+    const built = buildLanePathRoute(graph, found.lanes);
+    if (!built.ok) continue;
+    const spawnS = built.route.sOfLaneStorage(options.startRsl, options.startStorageS);
+    if (spawnS === null) continue;
+    const downstreamM = built.route.lengthM - spawnS;
+    if (downstreamM + 1e-6 < required) continue;
+    return { ok: true, route: built.route, lanes: found.lanes, downstreamM };
+  }
+  return {
+    ok: false,
+    error: {
+      code: 'route_disconnected',
+      reason: `no connected driving route from ${options.startRsl} provides ${required.toFixed(1)} m downstream`,
+      detail: { startRsl: options.startRsl, requiredDownstreamM: required, maxLegs },
+    },
+  };
+}
+
+function stableRouteHash(value: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
 }
 
 const TURN_FALLBACK_ORDER: TurnRelation[] = ['Straight', 'Right', 'Left', 'UTurnRight', 'UTurnLeft'];

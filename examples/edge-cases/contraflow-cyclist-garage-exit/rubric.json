@@ -1,0 +1,17 @@
+{
+  "scenarioOrdinal": 3,
+  "title": "Contraflow Cyclist at a Parking-Garage Exit",
+  "durationSeconds": 20,
+  "requiredTopology": ["one-way downtown street", "protected curb bike lane", "garage ramp crossing sidewalk and bike lane", "opaque garage wall"],
+  "requiredActors": ["ego", "legal-cyclist", "wrong-way-rider", "pedestrian", "delivery-truck"],
+  "acceptance": [
+    { "id": "full-stop", "rule": "ego starts stopped and stops again for the contraflow rider" },
+    { "id": "controlled-creep", "rule": "ego creep speed is at most 5 kph" },
+    { "id": "bike-lane-encroachment", "rule": "ego occupies no more than 0.3 m of the bike lane before final entry" },
+    { "id": "observation-time", "rule": "ego observes for at least 1 second after the contraflow rider passes" },
+    { "id": "cyclist-clearance", "rule": "minimum cyclist clearance is at least 1.5 m" },
+    { "id": "collision-free", "rule": "no actor collisions" }
+  ],
+  "forbidden": ["assume first cyclist exhausts conflict", "look only in the legal direction", "force either rider to brake", "hit pedestrian"],
+  "transferSignature": ["occluded garage ramp", "sidewalk and bike lane", "opposite-direction cyclists in sequence", "pedestrian first", "similar arrival timing"]
+}

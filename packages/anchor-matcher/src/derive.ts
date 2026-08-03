@@ -698,6 +698,8 @@ export function deriveMapIndexFromTopology(
       grade: false,
       crossings: false,
       parkingZones: false,
+      workZones: false,
+      occlusionZones: false,
       junctionControl: hasControl,
     },
     provenance: {

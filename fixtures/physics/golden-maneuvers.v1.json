@@ -1,0 +1,17 @@
+{
+  "schema": "uniscenarios.physics-golden-suite/v1",
+  "description": "Backend-neutral maneuvers for the dynamic-v1 default. Reference values must be supplied by a versioned vehicle profile or external measurement, never fitted from the run under test. Legacy kinematic-v1 traces are replayed under their recorded provenance and are not relabeled.",
+  "cases": [
+    { "id": "straight-line-acceleration", "family": "longitudinal", "assertions": ["reference-within-10-percent", "deterministic-10-repeats"] },
+    { "id": "straight-line-coast", "family": "longitudinal", "assertions": ["reference-within-10-percent"] },
+    { "id": "braking-100-to-0", "family": "longitudinal", "assertions": ["reference-within-10-percent", "friction-circle"] },
+    { "id": "constant-radius-skidpad", "family": "lateral", "assertions": ["steady-state-within-5-percent", "bounded-sideslip", "friction-circle"] },
+    { "id": "step-steer", "family": "lateral", "assertions": ["yaw-gain-within-10-percent", "bounded-sideslip"] },
+    { "id": "timestep-convergence-non-contact", "family": "numerics", "substepsS": [0.005, 0.0025], "assertions": ["final-position-2cm", "final-speed-0.05mps", "final-yaw-0.1deg"] },
+    { "id": "actor-permutation", "family": "determinism", "assertions": ["byte-identical", "deterministic-10-repeats"] },
+    { "id": "friction-sweep", "family": "tire", "assertions": ["friction-circle-plus-2-percent", "stopping-distance-monotonic"] },
+    { "id": "split-mu-braking", "family": "tire", "assertions": ["per-tire-friction-circle-plus-2-percent", "stable-yaw"] },
+    { "id": "rigid-collision-onset", "family": "collision", "assertions": ["onset-within-5ms"], "deferred": ["impulse-magnitude", "restitution", "damage"] },
+    { "id": "offline-throughput", "family": "performance", "actors": 10, "durationS": 20, "assertions": ["wall-clock-at-most-1s", "at-least-20x-realtime"] }
+  ]
+}

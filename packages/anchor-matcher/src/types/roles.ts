@@ -22,6 +22,13 @@ const base = {
    * clamped without the site becoming infeasible.
    */
   essentiality: EssentialitySchema.default('required'),
+  requiredSameSegmentAs: z.string().min(1).optional(),
+  requiredSameRoadSectionAs: z.string().min(1).optional(),
+  requiredHeadingRelation: z.strictObject({
+    role: z.string().min(1),
+    relation: z.enum(['parallel', 'antiparallel']),
+    maxErrorDeg: z.number().min(0).max(45),
+  }).optional(),
 };
 
 export const RoleBindingSchema = z.discriminatedUnion('kind', [
@@ -37,6 +44,15 @@ export const RoleBindingSchema = z.discriminatedUnion('kind', [
     /** Signed same-direction lane index; +1 is one lane to the left of travel. */
     k: z.number().int(),
     onMissing: OnMissingSchema.default('clamp'),
+    dsM: z.number().default(0),
+    tFrac: z.number().default(0),
+  }),
+  z.strictObject({
+    ...base,
+    kind: z.literal('at_lane_drop'),
+    /** Anchor feature whose concrete identity is `lane_drop:<terminating-rsl>@<s>`. */
+    feature: z.string().min(1),
+    lane: z.enum(['terminating', 'continuing_sibling']),
     dsM: z.number().default(0),
     tFrac: z.number().default(0),
   }),
@@ -60,6 +76,8 @@ export const RoleBindingSchema = z.discriminatedUnion('kind', [
     arriveAtConflict: z
       .strictObject({ relativeTo: z.string().min(1), deltaT: z.number() })
       .optional(),
+    /** Hard minimum connected route before the conflicting gate. */
+    minUpstreamRunwayM: z.number().min(0).optional(),
   }),
   z.strictObject({
     ...base,

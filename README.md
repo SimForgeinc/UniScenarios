@@ -8,10 +8,10 @@ agent-oriented CLI and reusable TypeScript packages.
 ## Current state
 
 - Five supported development maps with map intelligence and 3D assets
-- 500 authored, map-grounded incident designs (100 per map)
+- 500 authored, map-grounded incident occurrences (100 per map)
 - Deterministic materialization, simulation, trace, and evidence pipelines
 - Interactive actor placement and concrete trace playback
-- Machine-verifiable visual evidence and digest-bound human review records
+- Machine-verifiable visual evidence and digest-bound named review records
 - One compatibility CLI alias: `scen`; new automation should use `uniscenarios`
 
 The 500 designs are authored and structurally validated. They are not yet all
@@ -56,5 +56,8 @@ failures.
 See `docs/scenario-visual-qa.md` for the evidence acceptance contract and
 `docs/repository-transition.md` for the standalone repository provenance and
 naming policy.
+
+Run `pnpm verify:naming` to check the standalone root name, package scope, CLI
+surface, and public documentation naming policy.
 
 Licensed under Apache-2.0.

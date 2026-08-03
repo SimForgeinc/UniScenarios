@@ -8,7 +8,7 @@
  * | `trivially_safe` | `minTTC > 3 s` (tag as negative control instead of dropping) |
  * | `physically_unavoidable` | required decel exceeds `μg` — RSS-style |
  * | `never_fired` | any trigger never fired |
- * | `out_of_window` | the criticality peak falls outside `t ∈ [4, clip−4]` |
+ * | `out_of_window` | the criticality peak falls inside the proportional edge guard |
  * | `collision` | opt-in; off by default because some archetypes want contact |
  *
  * A scenario tagged `negative-control` keeps its `trivially_safe` finding but
@@ -16,15 +16,17 @@
  * and phantom-brake bait whose whole point is that nothing happens.
  */
 
-import type { EpisodeMetrics, SimTrace } from './trace.js';
+import type { CriticalitySamples, EpisodeMetrics, MinPetRecord, MinPathTtcRecord, MinTtcRecord, SimTrace } from './trace.js';
 import { criticalityWindow } from './metrics.js';
 
 export interface EvaluateFilters {
   /** `minTTC` above this is trivially safe. Default 3 s. */
   readonly trivialTtcS?: number;
+  /** PET above this is a trivially separated crossing. Default 1.5 s. */
+  readonly trivialPetS?: number;
   /** Road-friction decel ceiling, m/s². Default `0.8 × 9.81 = 7.85`. */
   readonly maxAchievableDecelMps2?: number;
-  /** Criticality window. Defaults to `[4, clipSeconds − 4]`. */
+  /** Criticality window. Defaults to the proportional, edge-safe clip window. */
   readonly window?: [number, number];
   /** Treat any collision as a rejection. Default `false`. */
   readonly rejectCollisions?: boolean;
@@ -57,6 +59,10 @@ export interface TraceEvaluation {
   readonly summary: {
     readonly minTTC: number | null;
     readonly minTTCt: number | null;
+    /** Mechanism-aware minimum selected from circle TTC and crossing path-TTC. */
+    readonly criticalityKind: 'ttc' | 'path-ttc' | 'pet' | null;
+    readonly criticality: number | null;
+    readonly criticalityT: number | null;
     readonly requiredDecelMax: number;
     readonly collisions: number;
     readonly neverFired: number;
@@ -65,7 +71,77 @@ export interface TraceEvaluation {
 }
 
 export const DEFAULT_TRIVIAL_TTC_S = 3;
+export const DEFAULT_TRIVIAL_PET_S = 1.5;
 export const DEFAULT_MAX_DECEL_MPS2 = 0.8 * 9.81;
+
+function seriesPairMatches(actual: readonly string[], expected?: readonly [string, string]): boolean {
+  return expected === undefined || (actual[0] === expected[0] && actual[1] === expected[1]) ||
+    (actual[0] === expected[1] && actual[1] === expected[0]);
+}
+
+function minimumTtcInWindow(
+  series: CriticalitySamples['ttc'] | undefined,
+  window: readonly [number, number],
+  pair?: readonly [string, string],
+): MinTtcRecord | null {
+  let best: MinTtcRecord | null = null;
+  for (const item of series ?? []) {
+    if (!seriesPairMatches(item.pair, pair)) continue;
+    for (let i = 0; i < item.t.length; i++) {
+      const t = item.t[i]!;
+      const value = item.value[i]!;
+      if (t < window[0] || t > window[1]) continue;
+      if (best === null || value < best.value || (value === best.value && t < best.t)) best = { value, t, pair: item.pair };
+    }
+  }
+  return best;
+}
+
+/** Select metric minima from retained samples without changing global summaries. */
+export function criticalityMetricsInWindow(
+  metrics: EpisodeMetrics,
+  window: readonly [number, number],
+  pair?: readonly [string, string],
+): { minTTC: MinTtcRecord | null; minPathTTC: MinPathTtcRecord | null; minPET: MinPetRecord | null } {
+  const samples = metrics.criticalitySamples;
+  const minTTC = minimumTtcInWindow(samples?.ttc, window, pair);
+  let minPathTTC: MinPathTtcRecord | null = null;
+  for (const item of samples?.pathTTC ?? []) {
+    if (!seriesPairMatches(item.pair, pair)) continue;
+    for (let i = 0; i < item.t.length; i++) {
+      const t = item.t[i]!;
+      const value = item.value[i]!;
+      if (t < window[0] || t > window[1]) continue;
+      if (minPathTTC === null || value < minPathTTC.value || (value === minPathTTC.value && t < minPathTTC.t)) {
+        minPathTTC = { value, t, pair: item.pair, conflictPoint: { x: item.conflictX[i]!, y: item.conflictY[i]! } };
+      }
+    }
+  }
+  let minPET: MinPetRecord | null = null;
+  for (const item of samples?.pet ?? []) {
+    if (!seriesPairMatches(item.pair, pair)) continue;
+    for (let i = 0; i < item.t.length; i++) {
+      const t = item.t[i]!;
+      const value = item.value[i]!;
+      if (t < window[0] || t > window[1]) continue;
+      // PET is only defined for separated conflict-zone occupancy. Legacy or
+      // externally supplied traces can still contain the overlap sentinel 0;
+      // leave that state to path-TTC rather than treating it as a PET minimum.
+      if (!Number.isFinite(value) || value <= 0) continue;
+      if (minPET === null || value < minPET.value || (value === minPET.value && t < minPET.t)) {
+        minPET = {
+          value, t, pair: item.pair, conflictPoint: { x: item.conflictX[i]!, y: item.conflictY[i]! },
+          firstActor: item.firstActor[i]!, secondActor: item.secondActor[i]!,
+        };
+      }
+    }
+  }
+  return {
+    minTTC,
+    minPathTTC,
+    minPET,
+  };
+}
 
 export function evaluateMetrics(
   metrics: EpisodeMetrics,
@@ -75,21 +151,53 @@ export function evaluateMetrics(
   const findings: RejectFinding[] = [];
   const tags: string[] = [];
   const trivialTtc = filters.trivialTtcS ?? DEFAULT_TRIVIAL_TTC_S;
+  const trivialPet = filters.trivialPetS ?? DEFAULT_TRIVIAL_PET_S;
   const maxDecel = filters.maxAchievableDecelMps2 ?? DEFAULT_MAX_DECEL_MPS2;
   const [lo, hi] = filters.window ?? criticalityWindow(clipSeconds);
 
-  const minTtc = metrics.minTTC;
-  if (minTtc === null) {
+  const windowMetrics = criticalityMetricsInWindow(metrics, [lo, hi]);
+  const hasWindowSamples = metrics.criticalitySamples !== undefined;
+  const minTtc = hasWindowSamples ? windowMetrics.minTTC : metrics.minTTC;
+  const minPathTtc = hasWindowSamples ? windowMetrics.minPathTTC : (metrics.minPathTTC ?? null);
+  const pathWins = minPathTtc !== null && (
+    minTtc === null ||
+    minPathTtc.value < minTtc.value ||
+    (minPathTtc.value === minTtc.value && minPathTtc.t < minTtc.t)
+  );
+  const ttcCriticality = pathWins ? minPathTtc : minTtc;
+  const minPet = hasWindowSamples ? windowMetrics.minPET : (metrics.minPET ?? null);
+  // PET is the faithful severity measure for a separated crossing. PET=0 is
+  // overlapping occupancy and remains owned by finite path-TTC; do not let a
+  // zero PET move the criticality timestamp to an earlier prediction sample.
+  const petWins = minPet !== null && minPet.value > 0 &&
+    (ttcCriticality === null || ttcCriticality.value > trivialTtc);
+  const criticality = petWins ? minPet : ttcCriticality;
+  const criticalityKind = criticality === null
+    ? null
+    : petWins
+      ? 'pet' as const
+      : pathWins
+        ? 'path-ttc' as const
+        : 'ttc' as const;
+  const trivialThreshold = criticalityKind === 'pet' ? trivialPet : trivialTtc;
+  const globalHasInteraction = metrics.minTTC !== null || (metrics.minPathTTC ?? null) !== null || (metrics.minPET ?? null) !== null;
+  if (criticality === null && globalHasInteraction && hasWindowSamples) {
+    findings.push({
+      code: 'out_of_window',
+      reason: `no finite criticality observation falls inside [${lo}, ${hi}] s`,
+      detail: { window: [lo, hi] },
+    });
+  } else if (criticality === null) {
     findings.push({
       code: 'no_interaction',
-      reason: 'no pair ever closed on another — the episode has no interaction at all',
+      reason: 'no pair produced finite TTC or crossing path-TTC — the episode has no interaction at all',
     });
-  } else if (minTtc.value > trivialTtc) {
+  } else if (criticality.value > trivialThreshold) {
     tags.push('negative-control');
     findings.push({
       code: 'trivially_safe',
-      reason: `min TTC ${minTtc.value.toFixed(2)} s exceeds the ${trivialTtc} s triviality threshold`,
-      detail: { minTTC: minTtc.value, pair: minTtc.pair },
+      reason: `min ${criticalityKind} ${criticality.value.toFixed(2)} s exceeds the ${trivialThreshold} s triviality threshold`,
+      detail: { criticality: criticality.value, kind: criticalityKind, pair: criticality.pair },
     });
   }
 
@@ -122,11 +230,11 @@ export function evaluateMetrics(
     });
   }
 
-  if (minTtc !== null && (minTtc.t < lo || minTtc.t > hi)) {
+  if (!hasWindowSamples && criticality !== null && (criticality.t < lo || criticality.t > hi)) {
     findings.push({
       code: 'out_of_window',
-      reason: `criticality peak at t=${minTtc.t.toFixed(2)} s falls outside [${lo}, ${hi}] s`,
-      detail: { t: minTtc.t, window: [lo, hi] },
+      reason: `criticality peak at t=${criticality.t.toFixed(2)} s falls outside [${lo}, ${hi}] s`,
+      detail: { t: criticality.t, kind: criticalityKind, window: [lo, hi] },
     });
   }
 
@@ -170,6 +278,9 @@ export function evaluateMetrics(
     summary: {
       minTTC: minTtc?.value ?? null,
       minTTCt: minTtc?.t ?? null,
+      criticalityKind,
+      criticality: criticality?.value ?? null,
+      criticalityT: criticality?.t ?? null,
       requiredDecelMax: worstDecel,
       collisions: metrics.collisions.length,
       neverFired: neverFired.length,
@@ -180,5 +291,10 @@ export function evaluateMetrics(
 
 /** Apply the reject filters to a trace. */
 export function evaluateTrace(trace: SimTrace, filters: EvaluateFilters = {}): TraceEvaluation {
-  return evaluateMetrics(trace.metrics, trace.header.clipSeconds, filters);
+  const frictionScale = trace.header.operationalConditions?.effects.frictionScale ?? 1;
+  return evaluateMetrics(trace.metrics, trace.header.clipSeconds, {
+    ...filters,
+    maxAchievableDecelMps2:
+      filters.maxAchievableDecelMps2 ?? DEFAULT_MAX_DECEL_MPS2 * frictionScale,
+  });
 }

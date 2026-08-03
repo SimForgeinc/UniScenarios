@@ -1,0 +1,81 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Adjacent vehicle drifts into occupied lane",
+    "description": "A near-parallel adjacent vehicle begins a slow unsignalled lane incursion while ego occupies its blind spot.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "lane-change.sideswipe",
+    "tags": ["corridor", "lane-change", "sideswipe", "blind-spot", "lateral-conflict"],
+    "author": "agent/corridor-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "longitudinalOverlapM", "type": "continuous", "unit": "m", "tier": 1, "range": [-0.5, 0], "default": -0.25, "distribution": "uniform" },
+      { "id": "driftRateMps", "type": "continuous", "unit": "m/s", "tier": 1, "range": [0.65, 0.67], "default": 0.66, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "sideswipe",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 8], "essentiality": "required" },
+      "speedLimitKph": { "value": [30, 80], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [220, null], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "either", "sRange": [20, 140] }, "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 30, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 28, 55)"
+    },
+    {
+      "id": "drifting-vehicle", "kind": "relative_to", "label": "vehicle beside ego that crosses the lane boundary",
+      "actor": { "class": "car", "catalogId": "vehicle.suv" },
+      "ref": "ego", "dLane": -1, "dsM": "param.longitudinalOverlapM", "tFrac": 0, "headingOffsetRad": 0,
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 28, 55)",
+      "requiredSameRoadSectionAs": "ego",
+      "requiredHeadingRelation": { "role": "ego", "relation": "parallel", "maxErrorDeg": 8 }
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 10,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "ego-holds-course", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "drifter-ignores-ego", "actor": "drifting-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      {
+        "id": "unsignalled-drift", "actor": "drifting-vehicle", "verb": "changeLane", "trigger": { "kind": "at", "t": 1 },
+        "target": { "mode": "toRole", "role": "ego" },
+        "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": "param.driftRateMps" }
+      },
+      {
+        "id": "ego-yields-after-incursion", "actor": "ego", "verb": "speed", "trigger": { "kind": "after", "of": "unsignalled-drift", "event": "start", "delayS": 2.8 },
+        "target": { "mode": "factor", "factor": 0.45 },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 5.5 }
+      },
+      {
+        "id": "drifter-aborts-incursion", "actor": "drifting-vehicle", "verb": "changeLane", "trigger": { "kind": "at", "t": 4.1 },
+        "target": { "mode": "absolute", "k": 1 },
+        "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": "param.driftRateMps" }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "parallel-overlap", "kind": "gap", "of": "ego", "to": "drifting-vehicle", "unit": "distance", "range": [0, 4], "window": [0, 3], "essentiality": "required" },
+    { "id": "side-envelope-conflict", "kind": "gap", "of": "ego", "to": "drifting-vehicle", "unit": "distance", "range": [0, 2.2], "window": [2, 9], "essentiality": "required" },
+    { "id": "drift-before-yield", "kind": "event_order", "events": ["unsignalled-drift", "ego-yields-after-incursion"], "strict": true, "minSeparationS": 2.8, "essentiality": "required" },
+    { "id": "ego-yield-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

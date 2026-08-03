@@ -23,8 +23,8 @@
  *
  * ## Kinds
  *
- * `on_reference`, `lane_offset`, `opposing`, `conflicting_gate`, `on_crossing`,
- * `in_parking_zone`, `relative_to`. The interesting one is `conflicting_gate`:
+ * `on_reference`, `lane_offset`, `at_lane_drop`, `opposing`, `conflicting_gate`,
+ * `on_crossing`, `in_parking_zone`, `relative_to`. The interesting one is `conflicting_gate`:
  * it names a junction movement (`from`, `turn`) rather than a position, and the
  * solver places the actor by backing up from the precomputed conflict point —
  * which is how arrival criticality is preserved across maps.
@@ -36,6 +36,11 @@ import { ExprSchema, NumberOrExprSchema } from '../../expr/index.js';
 import { LaneRefSchema as V1LaneRefSchema, PoseSchema as V1PoseSchema } from '../v1.js';
 import { ApproachRelationSchema, TurnDirectionSchema } from './anchor.js';
 import { FeatureRefSchema, RoleIdSchema, RoleRefSchema, V2ExtensionsSchema } from './common.js';
+import {
+  ActorSensorSchema,
+  supportsDashCamera,
+  type ActorSensor,
+} from './sensors.js';
 
 /** Actor classes. Drives dynamics limits, footprint, and occluder height. */
 export const ACTOR_CLASSES = [
@@ -98,6 +103,29 @@ export const ActorSpecSchema = z.strictObject({
    * is to reveal/hide the incident actor, not to become the incident pair.
    */
   static: z.boolean().default(false),
+  /** Physical sensors mounted to this actor. Empty for legacy templates. */
+  sensors: z.array(ActorSensorSchema).max(32).default([]),
+}).check((ctx) => {
+  const ids = new Set<string>();
+  ctx.value.sensors.forEach((sensor: ActorSensor, index: number) => {
+    if (ids.has(sensor.id)) {
+      ctx.issues.push({
+        code: 'custom',
+        message: `duplicate sensor id "${sensor.id}"`,
+        path: ['sensors', index, 'id'],
+        input: sensor.id,
+      });
+    }
+    ids.add(sensor.id);
+    if (sensor.type === 'dash_camera' && !supportsDashCamera(ctx.value)) {
+      ctx.issues.push({
+        code: 'custom',
+        message: `dash cameras are not supported on actor class "${ctx.value.class}"`,
+        path: ['sensors', index, 'type'],
+        input: sensor.type,
+      });
+    }
+  });
 });
 
 /** A pose in the AnchorFrame. See the module docs for the convention. */
@@ -129,6 +157,22 @@ const roleBase = {
    * `clamp(0.9 * lane.speedLimitKph, 25, 65)`.
    */
   initialSpeedKph: NumberOrExprSchema.optional(),
+  /** Physical movement-control requirement resolved against the concrete gate.
+   * `uncontrolled` means this movement has priority at a minor-stop junction;
+   * it must not silently inherit a stop sign from another arm. */
+  requiredMovementControl: z.enum(['stop', 'uncontrolled']).optional(),
+  /** Require this actor and the referenced role to resolve onto the same
+   * junction-free local corridor segment. */
+  requiredSameSegmentAs: RoleRefSchema.optional(),
+  /** Require the concrete lanes to share one OpenDRIVE road and lane section;
+   * useful for opposite directions whose directional segment ids differ. */
+  requiredSameRoadSectionAs: RoleRefSchema.optional(),
+  /** Hard local travel-heading relation after both roles bind. */
+  requiredHeadingRelation: z.strictObject({
+    role: RoleRefSchema,
+    relation: z.enum(['parallel', 'antiparallel']),
+    maxErrorDeg: z.number().min(0).max(45),
+  }).optional(),
   /**
    * `cosmetic` roles may be dropped by degradation when a site cannot hold
    * them; `required` roles failing to bind makes the site infeasible.
@@ -153,6 +197,21 @@ export const LaneOffsetRoleSchema = z.strictObject({
   /** What to do when the site has no such lane. */
   onMissing: z.enum(['clamp', 'drop', 'fail']).default('fail'),
   /** `pose.laneOffset` is ignored for this kind; `k` wins. */
+  pose: FramePoseSchema,
+});
+
+/**
+ * On one of the two lanes that define a matched lane-drop taper.
+ *
+ * Unlike `lane_offset`, this binding is structural rather than positional: the
+ * matcher resolves the exact lane named by the `lane_drop:<rsl>` feature and
+ * its immediately adjacent, legally reachable continuing sibling.
+ */
+export const AtLaneDropRoleSchema = z.strictObject({
+  ...roleBase,
+  kind: z.literal('at_lane_drop'),
+  feature: FeatureRefSchema,
+  lane: z.enum(['terminating', 'continuing_sibling']),
   pose: FramePoseSchema,
 });
 
@@ -190,6 +249,8 @@ export const ConflictingGateRoleSchema = z.strictObject({
       deltaT: NumberOrExprSchema,
     })
     .optional(),
+  /** Minimum connected approach distance required before the conflict gate. */
+  requiredUpstreamRunwayM: NumberOrExprSchema.optional(),
   /** Used when `arriveAtConflict` is absent, or as the solver's starting guess. */
   fallbackPose: FramePoseSchema.optional(),
 });
@@ -266,6 +327,7 @@ export const SceneAbsoluteRoleSchema = z.strictObject({
 export const RoleBindingSchema = z.discriminatedUnion('kind', [
   OnReferenceRoleSchema,
   LaneOffsetRoleSchema,
+  AtLaneDropRoleSchema,
   OpposingRoleSchema,
   ConflictingGateRoleSchema,
   OnCrossingRoleSchema,
@@ -278,6 +340,7 @@ export const RoleBindingSchema = z.discriminatedUnion('kind', [
 export const PORTABLE_ROLE_KINDS = [
   'on_reference',
   'lane_offset',
+  'at_lane_drop',
   'opposing',
   'conflicting_gate',
   'on_crossing',
@@ -302,6 +365,8 @@ export function rolePose(role: RoleBinding): FramePose | undefined {
       return role.pose;
     case 'lane_offset':
       return { ...role.pose, laneOffset: role.k };
+    case 'at_lane_drop':
+      return role.pose;
     case 'conflicting_gate':
       return role.fallbackPose;
     case 'on_crossing':

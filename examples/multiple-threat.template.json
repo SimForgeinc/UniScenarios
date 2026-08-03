@@ -27,10 +27,10 @@
         "unit": "s",
         "tier": 1,
         "range": [
-          0.8,
-          2.5
+          1.65,
+          1.9
         ],
-        "default": 1.6,
+        "default": 1.775,
         "distribution": "uniform"
       },
       {
@@ -40,10 +40,10 @@
         "unit": "kph",
         "tier": 1,
         "range": [
-          4.0,
-          8.5
+          4.5,
+          6.0
         ],
-        "default": 5.4,
+        "default": 5.25,
         "distribution": "uniform"
       },
       {
@@ -53,23 +53,20 @@
         "unit": "m",
         "tier": 1,
         "range": [
-          3.5,
-          9.0
+          10.5,
+          13.0
         ],
-        "default": 5.5,
+        "default": 11.75,
         "distribution": "uniform"
       },
       {
         "id": "dartLeadM",
         "type": "continuous",
-        "description": "Metres upstream of the conflict point at which the pedestrian leaves the kerb line. Together with `pedSpeedKph` this is the reveal-to-conflict lever — the occluder's longitudinal position is not.",
+        "description": "Short kerbside approach before the pedestrian enters the stopped lane.",
         "unit": "m",
         "tier": 1,
-        "range": [
-          2.0,
-          6.0
-        ],
-        "default": 3.5,
+        "range": [8, 14],
+        "default": 11,
         "distribution": "uniform"
       }
     ],
@@ -119,7 +116,26 @@
         "essentiality": "required"
       }
     },
-    "features": [],
+    "features": [
+      {
+        "id": "masked-crosswalk",
+        "kind": "crossing",
+        "label": "the exact marked crossing occupied by the hidden pedestrian",
+        "essentiality": "required",
+        "atM": {
+          "value": [100, 150],
+          "essentiality": "required"
+        },
+        "marked": {
+          "value": true,
+          "essentiality": "preferred"
+        },
+        "placement": {
+          "value": "either",
+          "essentiality": "preferred"
+        }
+      }
+    ],
     "policy": {
       "allowMirror": false,
       "maxSitesPerMap": 8,
@@ -141,27 +157,26 @@
       "onMissing": "fail",
       "pose": {
         "laneOffset": 1,
-        "s": "125 - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
+        "s": "-clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
         "tFrac": 0,
         "headingOffsetRad": 0
       },
-      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)"
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 50)",
+      "extensions": { "placementFeature": "masked-crosswalk" }
     },
     {
       "id": "ped",
-      "kind": "on_reference",
+      "kind": "on_crossing",
       "label": "the pedestrian crossing in front of the stopped queue",
       "actor": {
         "class": "pedestrian"
       },
       "essentiality": "required",
-      "pose": {
-        "laneOffset": 0,
-        "s": 60,
-        "tFrac": -1,
-        "headingOffsetRad": 0
-      },
-      "initialSpeedKph": "param.pedSpeedKph"
+      "feature": "masked-crosswalk",
+      "startFrac": 0,
+      "direction": "near_to_far",
+      "initialSpeedKph": "param.pedSpeedKph",
+      "extensions": { "placementFeature": "masked-crosswalk" }
     }
   ],
   "props": [
@@ -170,9 +185,10 @@
       "catalogId": "vehicle.van",
       "label": "the halted kerb-lane queue the pedestrian steps out of; the lead vehicle sits `queueGapM` upstream of the crossing line",
       "essentiality": "required",
+      "feature": "masked-crosswalk",
       "pose": {
         "laneOffset": 0,
-        "s": "107 - param.queueGapM",
+        "s": "-18 - param.queueGapM",
         "tFrac": 0,
         "headingOffsetRad": 0
       },
@@ -223,34 +239,17 @@
       },
       {
         "id": "ped-crosses",
-        "label": "along the kerb, then across the stopped lane and into the ego lane",
+        "label": "walks briefly along the kerb, then crosses the stopped lane into the adjacent ego lane",
         "actor": "ped",
         "verb": "route",
-        "trigger": {
-          "kind": "at",
-          "t": 0
-        },
+        "trigger": { "kind": "at", "t": 0 },
         "target": {
           "mode": "polyline",
           "points": [
-            {
-              "laneOffset": 0,
-              "s": 60,
-              "tFrac": -1,
-              "headingOffsetRad": 0
-            },
-            {
-              "laneOffset": 0,
-              "s": "125 - param.dartLeadM",
-              "tFrac": -1,
-              "headingOffsetRad": 0
-            },
-            {
-              "laneOffset": 0,
-              "s": 126,
-              "tFrac": 1,
-              "headingOffsetRad": 0
-            }
+            { "laneOffset": 0, "s": "-param.dartLeadM", "tFrac": -1, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 0, "tFrac": -1, "headingOffsetRad": 0 },
+            { "laneOffset": 1, "s": 0, "tFrac": 0, "headingOffsetRad": 0 },
+            { "laneOffset": 1, "s": 0, "tFrac": 1, "headingOffsetRad": 0 }
           ]
         }
       },
@@ -262,16 +261,9 @@
         "trigger": {
           "kind": "arrival",
           "of": "ped",
-          "at": {
-            "pose": {
-              "laneOffset": 0,
-              "s": 125,
-              "tFrac": 0,
-              "headingOffsetRad": 0
-            }
-          },
+          "at": { "feature": "masked-crosswalk", "at": "center" },
           "syncWith": "ego",
-          "ttc": "param.arrivalTtc + 3.6 * lane.widthM / param.pedSpeedKph"
+          "ttc": "param.arrivalTtc"
         },
         "target": {
           "mode": "absolute",
@@ -288,35 +280,27 @@
   "invariants": [
     {
       "id": "criticality",
-      "kind": "ttc",
+      "kind": "pet",
       "label": "the ego must actually be threatened by the pedestrian",
       "essentiality": "required",
       "of": "ego",
       "to": "ped",
       "range": [
-        null,
+        0.2,
         3.0
-      ],
-      "mode": "min"
+      ]
     },
     {
       "id": "arrival-band",
       "kind": "arrival",
-      "label": "the solved arrival offset must survive the run, measured at the reference centreline one lane short of the conflict",
+      "label": "the solved arrival offset must survive at the mapped crossing centre",
       "essentiality": "required",
       "of": "ped",
-      "at": {
-        "pose": {
-          "laneOffset": 0,
-          "s": 125,
-          "tFrac": 0,
-          "headingOffsetRad": 0
-        }
-      },
+      "at": { "feature": "masked-crosswalk", "at": "center" },
       "syncWith": "ego",
       "deltaTRange": [
-        -6.5,
-        -1.4
+        -2.7,
+        -0.6
       ]
     },
     {

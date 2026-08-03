@@ -1,0 +1,119 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Work-zone lane shift around a closed lane",
+    "description": "A cone taper directs ego left around a collidable channelizer and a static work vehicle occupying the original lane. The stopped queue is revealed beyond the work vehicle, requiring a prompt stop in the shifted alignment with a stable aftermath.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "workzone.lane-shift",
+    "tags": ["work-zone", "lane-shift", "channelizer", "static-work-vehicle", "taper"],
+    "author": "agent/school-workzone-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "shiftTriggerM", "type": "continuous", "unit": "m", "tier": 1, "range": [24, 28], "default": 26, "distribution": "uniform" },
+      { "id": "lateralRateMps", "type": "continuous", "unit": "m/s", "tier": 1, "range": [0.55, 0.65], "default": 0.6, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "workzone-lane-shift",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 5], "essentiality": "required" },
+      "speedLimitKph": { "value": [30, 65], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [180, null], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "left", "sRange": [50, 180] }, "essentiality": "preferred" }
+    },
+    "features": [
+      {
+        "id": "work-zone-reservation",
+        "kind": "work_zone_suitable",
+        "atM": { "value": [150, 165], "essentiality": "required" },
+        "sameRoad": { "value": true, "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 16, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "vehicle following the signed temporary alignment",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 24, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.4 * lane.speedLimitKph, 24, 28)"
+    },
+    {
+      "id": "channelizer",
+      "kind": "on_reference",
+      "label": "terminal channelizer that physically closes the original lane",
+      "actor": { "class": "static_object", "catalogId": "construction.channelizer_drum", "static": true, "dims": { "length": 0.9, "width": 0.9, "height": 1.15 } },
+      "pose": { "laneOffset": 0, "s": 75, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "work-vehicle",
+      "kind": "on_reference",
+      "label": "parked work pickup protecting the closed-lane activity area",
+      "actor": { "class": "truck", "catalogId": "vehicle.pickup", "static": true, "dims": { "length": 5.9, "width": 2.03, "height": 1.95 } },
+      "pose": { "laneOffset": 0, "s": 90, "tFrac": -0.5, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "queue-tail",
+      "kind": "on_reference",
+      "label": "stopped queue tail occupying the shifted temporary alignment",
+      "actor": { "class": "car", "catalogId": "vehicle.suv", "static": true, "dims": { "length": 4.8, "width": 1.9, "height": 1.7 } },
+      "pose": { "laneOffset": 0, "s": 118, "tFrac": 0.82, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [
+    {
+      "id": "cone-taper",
+      "catalogId": "construction.traffic_cone",
+      "label": "visual taper leading to the collidable terminal channelizer",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 40, "tFrac": -0.78, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0,
+      "scale": 1,
+      "repeat": { "count": 8, "spacingM": 5, "tFracStep": 0.11 }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 19,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "ego-uses-short-work-zone-headway", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.aggression", "value": 0.8 } },
+      { "id": "work-vehicle-hazards", "actor": "work-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "lights.indicator", "value": "hazard" } },
+      {
+        "id": "ego-shifts-left",
+        "actor": "ego",
+        "verb": "laneOffset",
+        "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "channelizer" }, "measure": "alongLane", "op": "<=", "valueM": "param.shiftTriggerM" }, "byLatest": 8, "ifNever": "fire" },
+        "target": { "tFrac": 0.82, "reference": "lane_center" },
+        "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": "param.lateralRateMps" }
+      },
+      {
+        "id": "ego-brakes-for-queue",
+        "actor": "ego",
+        "verb": "speed",
+        "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "queue-tail" }, "measure": "euclidean", "op": "<=", "valueM": 8 }, "byLatest": 14, "ifNever": "fire" },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 5.5 }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "shift-sequence", "kind": "event_order", "events": ["ego-shifts-left", "ego-brakes-for-queue"], "strict": true, "minSeparationS": 2.5, "essentiality": "required" },
+    { "id": "queue-criticality", "kind": "ttc", "of": "ego", "to": "queue-tail", "range": [0.5, 3], "mode": "min", "window": [2, 15], "essentiality": "required" },
+    { "id": "queue-aftermath-clearance", "kind": "gap", "of": "ego", "to": "queue-tail", "unit": "distance", "range": [3, null], "window": [16, 19], "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

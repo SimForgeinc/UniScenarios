@@ -27,11 +27,13 @@ import {
 } from '@uniscenarios/sim-engine';
 
 import { CliError, EXIT } from './errors.js';
+import type { CatalogArtifactProvenance } from './batch-cell.js';
 import type { InstanceManifest } from './materialize.js';
 
 export interface InstanceFile {
   readonly kind: 'scenario-instance';
   readonly version: 1;
+  readonly catalogSlot?: CatalogArtifactProvenance;
   readonly manifest: InstanceManifest;
   readonly input: SimScenarioInput;
 }
@@ -81,6 +83,7 @@ export async function readInstance(file: string): Promise<InstanceFile> {
     return {
       kind: 'scenario-instance',
       version: 1,
+      ...(json['catalogSlot'] === undefined ? {} : { catalogSlot: json['catalogSlot'] as CatalogArtifactProvenance }),
       manifest: json['manifest'] as InstanceManifest,
       input: parsed.value,
     };

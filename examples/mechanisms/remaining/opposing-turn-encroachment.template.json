@@ -1,0 +1,26 @@
+{
+  "scenarioVersion": 2,
+  "meta": { "name": "Opposing turn cuts into ego lane", "description": "An opposing left-turn movement binds at a real junction conflict, cuts its apex laterally into ego's receiving path, and then recentres on its receiving lane for a stable aftermath.", "createdAt": "2026-08-01T00:00:00.000Z", "modifiedAt": "2026-08-01T00:00:00.000Z", "appVersion": "uniscenarios/0.0.1", "archetype": "intersection.opposing-turn-encroachment", "tags": ["intersection", "opposing", "turn", "encroachment", "stable-aftermath"], "author": "agent/remaining-mechanisms", "negativeControl": false },
+  "params": { "declarations": [
+    { "id": "arrivalDeltaS", "type": "continuous", "unit": "s", "tier": 1, "range": [0.5, 1.8], "default": 1.0, "distribution": "uniform" },
+    { "id": "encroachmentFrac", "type": "continuous", "unit": "ratio", "tier": 1, "range": [0.35, 0.7], "default": 0.5, "distribution": "uniform" }
+  ], "constraints": [] },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": { "id": "opposing-turn-encroachment", "corridor": { "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" }, "throughLanesOpposing": { "value": [1, 4], "essentiality": "required" }, "runwayUpstreamM": { "value": [45, null], "essentiality": "required" }, "runwayDownstreamM": { "value": [65, null], "essentiality": "required" } }, "features": [
+    { "id": "turn-junction", "kind": "junction", "essentiality": "required", "atM": { "value": [0, 0], "essentiality": "required" }, "arms": { "value": [3, 4], "essentiality": "required" }, "egoTurn": { "value": ["straight"], "essentiality": "required" }, "conflictingApproach": { "value": { "from": "opposing", "turn": "left", "crossingAngleDeg": [25, 155] }, "essentiality": "required" } }
+  ], "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "strict", "minScore": 0.45 } },
+  "roles": [
+    { "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" }, "pose": { "laneOffset": 0, "s": -40, "tFrac": 0, "headingOffsetRad": 0 }, "initialSpeedKph": "clamp(0.62 * lane.speedLimitKph, 20, 40)" },
+    { "id": "encroaching-turner", "kind": "conflicting_gate", "feature": "turn-junction", "from": "opposing", "turn": "left", "actor": { "class": "car", "catalogId": "vehicle.suv" }, "arriveAtConflict": { "relativeTo": "ego", "deltaT": "param.arrivalDeltaS" }, "initialSpeedKph": "clamp(0.45 * lane.speedLimitKph, 14, 28)" }
+  ], "props": [],
+  "choreography": { "clipSeconds": 10, "warmupSeconds": 2, "interactions": [
+    { "id": "turner-commits", "actor": "encroaching-turner", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+    { "id": "cuts-apex", "actor": "encroaching-turner", "verb": "laneOffset", "trigger": { "kind": "when", "condition": { "kind": "reaches", "of": "encroaching-turner", "region": { "feature": "turn-junction", "at": "center" }, "toleranceM": 10 }, "byLatest": 9, "ifNever": "fire" }, "target": { "tFrac": "param.encroachmentFrac", "reference": "lane_edge_right" }, "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": 0.8 } },
+    { "id": "turner-recentres", "actor": "encroaching-turner", "verb": "laneOffset", "trigger": { "kind": "after", "of": "cuts-apex", "event": "start", "delayS": 1.8 }, "target": { "tFrac": 0, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 1.2 } }
+  ] },
+  "invariants": [
+    { "id": "encroachment-arrival", "kind": "arrival", "of": "encroaching-turner", "at": { "feature": "turn-junction", "at": "center" }, "syncWith": "ego", "deltaTRange": [0.3, 2], "essentiality": "required" },
+    { "id": "encroachment-criticality", "kind": "pet", "of": "ego", "to": "encroaching-turner", "range": [0.2, 3], "essentiality": "required" },
+    { "id": "encroachment-before-recovery", "kind": "event_order", "events": ["cuts-apex", "turner-recentres"], "strict": true, "minSeparationS": 1.5, "essentiality": "required" }
+  ], "variants": [], "metricSubject": "ego"
+}

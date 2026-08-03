@@ -1,0 +1,373 @@
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
+import { mapById } from '../maps';
+import type { PlaybackBundle } from '../playback/model';
+import { CAMERA_EXTENSION_KEY, parseCameraPresentation, type CameraPresentation } from '../cameras/model';
+import { GENERATED_CAMPAIGN_DIAGNOSTICS, GENERATED_CAMPAIGN_ENTRIES } from './generated';
+import { filterGalleryEntries, galleryDetails, hasVerifiedVariation, type GalleryFilter } from './gallery';
+import {
+  campaignImports,
+  importAllCampaignEntries,
+  importCampaignEntry,
+  isCampaignReady,
+  loadCampaignEvidence,
+  loadCampaignTemplate,
+  loadSavedCampaign,
+} from './catalog';
+import type { CampaignImportRecord, GeneratedCampaignEntry } from './types';
+
+export interface CampaignOpenRequest {
+  entry: GeneratedCampaignEntry;
+  template: ScenarioTemplateV2;
+  savedName: string;
+  evidence: PlaybackBundle;
+  reuseVerifiedEvidence: boolean;
+}
+
+export interface CampaignEvidenceRequest {
+  entry: GeneratedCampaignEntry;
+  evidence: PlaybackBundle;
+  /** Presentation-only view; never written into the verified evidence. */
+  cameraPresentation: CameraPresentation;
+}
+
+interface RuntimeDetails {
+  actors: number;
+  duration: number;
+}
+
+const FILTERS: readonly { id: GalleryFilter; label: string }[] = [
+  { id: 'all', label: 'All scenarios' },
+  { id: 'ambient', label: 'Ambient verified' },
+  { id: 'variations', label: 'Transfer verified' },
+  { id: 'saved', label: 'My saved copies' },
+];
+
+export function CampaignDrawer({
+  authoringEnabled,
+  onOpen,
+  onPlayEvidence,
+  onClose,
+}: {
+  authoringEnabled: boolean;
+  onOpen: (request: CampaignOpenRequest) => void;
+  onPlayEvidence: (request: CampaignEvidenceRequest) => void;
+  onClose: () => void;
+}): JSX.Element {
+  const [imports, setImports] = useState<CampaignImportRecord[]>(() => campaignImports());
+  const [busy, setBusy] = useState<string | 'all' | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [verified, setVerified] = useState<Set<string>>(() => new Set());
+  const [query, setQuery] = useState('');
+  const [filter, setFilter] = useState<GalleryFilter>('all');
+  const [mapFilter, setMapFilter] = useState('all');
+  const [runtimeDetails, setRuntimeDetails] = useState<Map<string, RuntimeDetails>>(() => new Map());
+  const [detailsLoading, setDetailsLoading] = useState(true);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const importedByStableId = useMemo(() => new Map(imports.map((item) => [item.stableId, item])), [imports]);
+  const allReady = GENERATED_CAMPAIGN_ENTRIES.length === 10
+    && GENERATED_CAMPAIGN_ENTRIES.every(isCampaignReady);
+  const visibleEntries = useMemo(
+    () => filterGalleryEntries(GENERATED_CAMPAIGN_ENTRIES, query, filter, mapFilter, imports),
+    [filter, imports, mapFilter, query],
+  );
+  const locations = useMemo(() => [...new Set(GENERATED_CAMPAIGN_ENTRIES.map((entry) => entry.mapId).filter((id): id is string => !!id))], []);
+
+  useEffect(() => {
+    if (!authoringEnabled) onClose();
+  }, [authoringEnabled, onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setDetailsLoading(true);
+    void Promise.allSettled(GENERATED_CAMPAIGN_ENTRIES.map(async (entry) => {
+      const template = await loadCampaignTemplate(entry);
+      return [entry.stableId, { actors: template.roles.length, duration: template.choreography.clipSeconds }] as const;
+    })).then((results) => {
+      if (cancelled) return;
+      const next = new Map<string, RuntimeDetails>();
+      for (const result of results) if (result.status === 'fulfilled') next.set(...result.value);
+      setRuntimeDetails(next);
+      setDetailsLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === '/' && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        const target = event.target as HTMLElement | null;
+        if (target?.tagName.toLowerCase() !== 'input') {
+          event.preventDefault();
+          searchRef.current?.focus();
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const openEntry = async (entry: GeneratedCampaignEntry): Promise<void> => {
+    setBusy(entry.stableId);
+    setError(null);
+    try {
+      const { template, evidence, record } = await importCampaignEntry(entry);
+      setVerified((current) => new Set(current).add(entry.stableId));
+      setImports(campaignImports());
+      onOpen({ entry, template, savedName: record.savedName, evidence, reuseVerifiedEvidence: true });
+      onClose();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setBusy(null); }
+  };
+
+  const reopen = async (expected: GeneratedCampaignEntry, record: CampaignImportRecord): Promise<void> => {
+    setBusy(expected.stableId);
+    setError(null);
+    try {
+      if (record.stableId !== expected.stableId) throw new Error(`Saved scenario mapping is corrupt for ${expected.title}`);
+      const evidence = await loadCampaignEvidence(expected);
+      const { entry, template } = await loadSavedCampaign(record, expected);
+      setVerified((current) => new Set(current).add(entry.stableId));
+      onOpen({ entry, template, savedName: record.savedName, evidence, reuseVerifiedEvidence: false });
+      onClose();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setBusy(null); }
+  };
+
+  const playEvidence = async (entry: GeneratedCampaignEntry): Promise<void> => {
+    setBusy(entry.stableId);
+    setError(null);
+    try {
+      const [evidence, template] = await Promise.all([
+        loadCampaignEvidence(entry),
+        loadCampaignTemplate(entry),
+      ]);
+      setVerified((current) => new Set(current).add(entry.stableId));
+      onPlayEvidence({
+        entry,
+        evidence,
+        cameraPresentation: parseCameraPresentation(template.extensions?.[CAMERA_EXTENSION_KEY]),
+      });
+      onClose();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally { setBusy(null); }
+  };
+
+  return (
+    <section style={styles.gallery} aria-label="Scenario Gallery" data-testid="campaign-drawer">
+      <header style={styles.header}>
+        <div>
+          <div style={styles.eyebrow}>UniScenarios library</div>
+          <h1 style={styles.title}>Scenario Gallery</h1>
+          <div style={styles.subtitle}>Choose a verified replay to watch, or open an editable copy in the Studio.</div>
+        </div>
+        <button type="button" aria-label="Close Scenario Gallery" style={styles.close} onClick={onClose}>×</button>
+      </header>
+
+      <div style={styles.toolbar}>
+        <label style={styles.searchWrap}>
+          <span aria-hidden="true" style={styles.searchIcon}>⌕</span>
+          <input
+            ref={searchRef}
+            type="search"
+            value={query}
+            placeholder="Search scenarios, actors, or hazards…  /"
+            aria-label="Search scenarios"
+            style={styles.search}
+            onChange={(event) => setQuery(event.target.value)}
+          />
+        </label>
+        <label style={styles.locationLabel}>
+          <span>Location</span>
+          <select value={mapFilter} aria-label="Filter by location" style={styles.select} onChange={(event) => setMapFilter(event.target.value)}>
+            <option value="all">All locations</option>
+            {locations.map((id) => <option key={id} value={id}>{mapById(id)?.label ?? id}</option>)}
+          </select>
+        </label>
+      </div>
+
+      <div style={styles.filterRow} role="group" aria-label="Scenario filters">
+        {FILTERS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={filter === item.id}
+            style={{ ...styles.filter, ...(filter === item.id ? styles.filterActive : null) }}
+            onClick={() => setFilter(item.id)}
+          >{item.label}</button>
+        ))}
+        <span style={styles.resultCount} aria-live="polite">{visibleEntries.length} scenario{visibleEntries.length === 1 ? '' : 's'}</span>
+      </div>
+
+      {GENERATED_CAMPAIGN_DIAGNOSTICS.length ? (
+        <div style={styles.diagnostics} data-testid="campaign-diagnostics">
+          <strong>Some scenarios are unavailable</strong>
+          {GENERATED_CAMPAIGN_DIAGNOSTICS.map((item) => <div key={item}>⚠ {item}</div>)}
+        </div>
+      ) : null}
+      {error ? <div role="alert" style={styles.error} data-testid="campaign-error">{error}</div> : null}
+      {detailsLoading ? <div style={styles.loading} aria-live="polite">Loading scenario details…</div> : null}
+
+      <div style={styles.content}>
+        {visibleEntries.length ? (
+          <div style={styles.grid} data-testid="scenario-gallery-grid">
+            {visibleEntries.map((entry) => {
+              const ready = isCampaignReady(entry);
+              const imported = importedByStableId.get(entry.stableId);
+              const details = galleryDetails(entry);
+              const runtime = runtimeDetails.get(entry.stableId);
+              const location = entry.mapId ? mapById(entry.mapId)?.label ?? entry.mapId : 'Location unavailable';
+              return (
+                <article key={entry.stableId} style={styles.card} data-testid={`campaign-scenario-${entry.ordinal}`}>
+                  <div style={styles.cardHeading}>
+                    <span style={styles.number}>{String(entry.ordinal).padStart(2, '0')}</span>
+                    <div>
+                      <h2 style={styles.cardTitle}>{entry.title.replace(/^\d+\s*[·.:~-]\s*/, '')}</h2>
+                      <div style={styles.location}>{location}</div>
+                    </div>
+                  </div>
+                  <p style={styles.summary}>{details.summary}</p>
+                  <div style={styles.facts}>
+                    <span>{runtime?.duration ?? 20}s</span>
+                    <span>{runtime ? `${runtime.actors} actors` : 'actors loading…'}</span>
+                    <span>{entry.binding === 'exact-matched-site' ? 'Exact site' : 'Behavioral site'}</span>
+                  </div>
+                  <div style={styles.tags} aria-label="Scenario tags">
+                    {details.tags.map((tag) => <span key={tag} style={styles.tag}>{tag}</span>)}
+                  </div>
+                  <div style={styles.statuses}>
+                    <Status label="Simulation" value={verified.has(entry.stableId) ? 'Runtime verified' : 'Verified evidence'} good={ready} />
+                    <Status label="Ambient traffic" value={entry.ambient === 'verified-evidence' ? 'Verified' : 'Not verified'} good={entry.ambient === 'verified-evidence'} />
+                    <Status label="Variations" value={variationLabel(entry)} good={hasVerifiedVariation(entry)} />
+                  </div>
+                  {entry.diagnostics.length ? <div style={styles.entryDiagnostics}>{entry.diagnostics.join(' · ')}</div> : null}
+                  <div style={styles.actions}>
+                    <button
+                      type="button"
+                      data-testid={`campaign-play-evidence-${entry.ordinal}`}
+                      disabled={!ready || busy !== null}
+                      style={styles.play}
+                      onClick={() => void playEvidence(entry)}
+                    >{busy === entry.stableId ? 'Loading…' : '▶ Play verified 20s'}</button>
+                    <div style={styles.editActions}>
+                      <button
+                        type="button"
+                        data-testid={`campaign-open-${entry.ordinal}`}
+                        disabled={!authoringEnabled || !ready || busy !== null}
+                        style={styles.edit}
+                        onClick={() => void openEntry(entry)}
+                      >Open editable copy</button>
+                      {imported ? (
+                        <button type="button" data-testid={`campaign-reopen-${entry.ordinal}`} disabled={busy !== null} style={styles.reopen} onClick={() => void reopen(entry, imported)}>Reopen saved</button>
+                      ) : null}
+                    </div>
+                    <div style={styles.modeHint}>
+                      <span style={styles.verifiedDot}>●</span> Replay is read-only and preserves the exact verified trace.
+                    </div>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        ) : (
+          <div style={styles.empty} data-testid="scenario-gallery-empty">
+            <strong>No scenarios match these filters.</strong>
+            <span>Try another location, clear the search, or show all scenarios.</span>
+            <button type="button" style={styles.clearFilters} onClick={() => { setQuery(''); setFilter('all'); setMapFilter('all'); }}>Clear filters</button>
+          </div>
+        )}
+      </div>
+
+      <footer style={styles.footer}>
+        <div><strong>{GENERATED_CAMPAIGN_ENTRIES.length}/10</strong> canonical scenarios · <strong>{imports.length}</strong> saved locally</div>
+        <details>
+          <summary style={styles.importSummary}>Library setup</summary>
+          <div style={styles.importPopover}>
+            <div>Save editable copies of the complete campaign in this browser.</div>
+            <button
+              type="button"
+              data-testid="campaign-import-all"
+              disabled={!authoringEnabled || !allReady || busy !== null}
+              style={styles.importAll}
+              onClick={() => {
+                setBusy('all'); setError(null);
+                void importAllCampaignEntries().then(() => setImports(campaignImports()), (reason: unknown) => {
+                  setError(reason instanceof Error ? reason.message : String(reason));
+                }).finally(() => setBusy(null));
+              }}
+            >{busy === 'all' ? 'Importing…' : 'Import all editable copies'}</button>
+          </div>
+        </details>
+      </footer>
+    </section>
+  );
+}
+
+function variationLabel(entry: GeneratedCampaignEntry): string {
+  if (hasVerifiedVariation(entry)) return entry.matchCount ? `${entry.matchCount} verified site${entry.matchCount === 1 ? '' : 's'}` : 'Verified';
+  if (entry.transfer === 'zero-transferable-sites') return 'No compatible sites';
+  return 'Not verified';
+}
+
+function Status({ label, value, good }: { label: string; value: string; good: boolean }): JSX.Element {
+  return (
+    <div style={styles.status} title={`${label}: ${value}`}>
+      <span style={{ ...styles.statusDot, background: good ? '#56c28b' : '#77818f' }} />
+      <span><small>{label}</small><strong>{value}</strong></span>
+    </div>
+  );
+}
+
+const styles: Record<string, CSSProperties> = {
+  gallery: { height: '100%', display: 'flex', flexDirection: 'column', boxSizing: 'border-box', border: '1px solid #3a3d44', borderRadius: 12, background: 'rgba(22,24,28,.985)', boxShadow: '0 24px 80px rgba(0,0,0,.68)', overflow: 'hidden' },
+  header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 20, padding: '20px 22px 16px', borderBottom: '1px solid #353941' },
+  eyebrow: { color: '#f07f2f', fontSize: 10, fontWeight: 750, textTransform: 'uppercase', letterSpacing: 1.2 },
+  title: { margin: '3px 0 0', color: '#f4f6f9', fontSize: 24, lineHeight: 1.2, fontWeight: 720 },
+  subtitle: { marginTop: 4, color: '#929ba8', fontSize: 12 },
+  close: { width: 34, height: 34, border: '1px solid #444a54', borderRadius: 8, background: '#2b2f35', color: '#c8ced7', fontSize: 21, cursor: 'pointer' },
+  toolbar: { display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'end', padding: '14px 18px 9px' },
+  searchWrap: { position: 'relative', flex: '1 1 340px' },
+  searchIcon: { position: 'absolute', left: 11, top: 8, color: '#747e8c', fontSize: 17 },
+  search: { width: '100%', boxSizing: 'border-box', padding: '9px 12px 9px 34px', border: '1px solid #464c56', borderRadius: 8, outline: 'none', background: '#111419', color: '#edf0f5', font: 'inherit' },
+  locationLabel: { display: 'flex', flexDirection: 'column', gap: 3, color: '#858f9d', fontSize: 9, textTransform: 'uppercase', letterSpacing: .6 },
+  select: { minWidth: 190, padding: '8px 10px', border: '1px solid #464c56', borderRadius: 8, background: '#262a30', color: '#dbe0e7', font: 'inherit', fontSize: 11, textTransform: 'none' },
+  filterRow: { display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', padding: '0 18px 12px' },
+  filter: { padding: '5px 9px', borderWidth: 1, borderStyle: 'solid', borderColor: '#3e444d', borderRadius: 999, background: '#25292f', color: '#aeb6c2', font: 'inherit', fontSize: 10, cursor: 'pointer' },
+  filterActive: { borderColor: '#c96526', background: '#57331f', color: '#ffc59c' },
+  resultCount: { marginLeft: 'auto', color: '#77818f', fontSize: 10 },
+  diagnostics: { margin: '0 18px 9px', padding: 9, borderRadius: 7, background: '#3d321e', color: '#efc379', fontSize: 10 },
+  error: { margin: '0 18px 9px', padding: 9, borderRadius: 7, background: '#492426', color: '#ffb5b8', fontSize: 10, whiteSpace: 'pre-wrap' },
+  loading: { padding: '0 18px 8px', color: '#7f8997', fontSize: 10 },
+  content: { flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 18px 18px' },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(100%, 310px), 1fr))', gap: 12 },
+  card: { display: 'flex', flexDirection: 'column', minHeight: 370, padding: 14, borderRadius: 10, border: '1px solid #393f48', background: 'linear-gradient(145deg, #292d33, #22262b)' },
+  cardHeading: { display: 'flex', gap: 10, alignItems: 'flex-start' },
+  number: { flex: '0 0 auto', padding: '3px 6px', borderRadius: 5, background: '#59341f', color: '#ffad72', fontWeight: 800, fontSize: 10 },
+  cardTitle: { margin: 0, color: '#edf0f4', fontWeight: 680, fontSize: 14, lineHeight: 1.3 },
+  location: { marginTop: 3, color: '#86909d', fontSize: 10 },
+  summary: { minHeight: 49, margin: '11px 0 9px', color: '#bec5cf', fontSize: 11, lineHeight: 1.5 },
+  facts: { display: 'flex', flexWrap: 'wrap', gap: 5, color: '#949eab', fontSize: 9.5 },
+  tags: { display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 9 },
+  tag: { padding: '2px 6px', borderRadius: 999, background: '#303741', color: '#b8c3d1', fontSize: 8.5 },
+  statuses: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 5, marginTop: 12, paddingTop: 10, borderTop: '1px solid #3a3f47' },
+  status: { display: 'flex', gap: 5, minWidth: 0, alignItems: 'flex-start', color: '#c8ced6' },
+  statusDot: { flex: '0 0 auto', width: 6, height: 6, borderRadius: 999, marginTop: 4 },
+  entryDiagnostics: { marginTop: 8, color: '#ef9b9f', fontSize: 9.5 },
+  actions: { marginTop: 'auto', paddingTop: 13 },
+  play: { width: '100%', padding: '8px 10px', borderRadius: 7, border: '1px solid #d36d29', background: '#b9521d', color: '#fff7f0', font: 'inherit', fontWeight: 650, cursor: 'pointer' },
+  editActions: { display: 'flex', gap: 6, marginTop: 7 },
+  edit: { flex: 1, padding: '6px 7px', borderRadius: 6, border: '1px solid #516b96', background: '#304c73', color: '#eef4ff', font: 'inherit', fontSize: 10, cursor: 'pointer' },
+  reopen: { padding: '6px 7px', borderRadius: 6, border: '1px solid #4a505a', background: '#30343a', color: '#d0d6df', font: 'inherit', fontSize: 10, cursor: 'pointer' },
+  modeHint: { marginTop: 7, color: '#7f8996', fontSize: 8.5 },
+  verifiedDot: { color: '#56c28b', marginRight: 3 },
+  empty: { minHeight: 240, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6, border: '1px dashed #3f454e', borderRadius: 10, color: '#8c96a3' },
+  clearFilters: { marginTop: 7, padding: '6px 10px', border: '1px solid #515865', borderRadius: 6, background: '#2c3036', color: '#dde2e9', cursor: 'pointer' },
+  footer: { position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, padding: '10px 18px', borderTop: '1px solid #353941', color: '#8d97a4', fontSize: 10 },
+  importSummary: { cursor: 'pointer', color: '#aeb7c3' },
+  importPopover: { position: 'absolute', right: 14, bottom: 40, width: 230, padding: 10, border: '1px solid #464c55', borderRadius: 8, background: '#292d33', boxShadow: '0 12px 28px rgba(0,0,0,.45)' },
+  importAll: { width: '100%', marginTop: 8, padding: '7px 9px', borderRadius: 6, border: '1px solid #5d78a6', background: '#29446d', color: '#eaf1ff', font: 'inherit', cursor: 'pointer' },
+};

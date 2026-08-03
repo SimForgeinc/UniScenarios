@@ -73,6 +73,13 @@ export interface LateralCommand {
   done: boolean;
 }
 
+/** Per-actor memory for a static stop control. Each actor stops once, dwells,
+ * then remains released for that control id. */
+export interface RoadControlRuntimeState {
+  stoppedSinceS: number | null;
+  released: boolean;
+}
+
 export interface ActorRuntime {
   readonly id: string;
   readonly kind: ActorKind;
@@ -109,6 +116,9 @@ export interface ActorRuntime {
 
   /** `set()` registry — the authoritative store for `lights.*`, `doors.*`, … */
   stateKeys: Map<string, boolean | number | string>;
+
+  /** Static stop-sign progress keyed by RoadControl.id. */
+  roadControlStates: Map<string, RoadControlRuntimeState>;
 
   standstillSinceS: number | null;
   /** Running max of the decel that would have been required to stay safe. */

@@ -1,0 +1,628 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "instanceId": "edge-06-dark-signal-human-control-v1:verified-baseline",
+    "inputHash": "3df95119687447703d34da3ec150169a3e5a203a26b49773d6a885cfad015cb1",
+    "replayKey": {
+      "mapId": "yale-street",
+      "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+      "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5"
+    },
+    "actors": [
+      {
+        "id": "cross-suv"
+      },
+      {
+        "id": "ego"
+      },
+      {
+        "id": "officer"
+      },
+      {
+        "id": "pedestrian-group"
+      },
+      {
+        "id": "turning-bus"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "yale-street",
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "dt": 0.02,
+    "seed": "edge-06-baseline",
+    "operationalConditions": {
+      "weather": "overcast",
+      "timeOfDay": "dusk",
+      "traffic": "moderate",
+      "visibility": "dense-occlusion",
+      "effects": {
+        "visibilityRangeM": 300,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 0.8
+      }
+    },
+    "metricSubject": "ego",
+    "actors": [
+      {
+        "id": "cross-suv",
+        "kind": "car",
+        "dims": {
+          "l": 4.85,
+          "w": 1.95,
+          "h": 1.78
+        },
+        "initial": {
+          "pose": {
+            "x": 343,
+            "z": -1782,
+            "headingRad": -0.36
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": false,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.45,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 343,
+                "z": -1782
+              },
+              {
+                "x": 375,
+                "z": -1793
+              },
+              {
+                "x": 420,
+                "z": -1809
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:cross-suv",
+          "catalog:vehicle.suv"
+        ]
+      },
+      {
+        "id": "ego",
+        "kind": "car",
+        "dims": {
+          "l": 4.7,
+          "w": 1.82,
+          "h": 1.45
+        },
+        "initial": {
+          "pose": {
+            "x": 385,
+            "z": -1808,
+            "headingRad": 2.14
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.3,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 385,
+                "z": -1808
+              },
+              {
+                "x": 375,
+                "z": -1793
+              },
+              {
+                "x": 360,
+                "z": -1769
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:ego",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "officer",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.65,
+          "w": 0.65,
+          "h": 1.78
+        },
+        "initial": {
+          "pose": {
+            "x": 369,
+            "z": -1784,
+            "headingRad": 0
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 369,
+                "z": -1784
+              },
+              {
+                "x": 369.1,
+                "z": -1784
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:officer",
+          "authority:police",
+          "catalog:construction.flagger"
+        ]
+      },
+      {
+        "id": "pedestrian-group",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.8,
+          "w": 1.4,
+          "h": 1.75
+        },
+        "initial": {
+          "pose": {
+            "x": 367,
+            "z": -1778,
+            "headingRad": 1.03
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.2,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 367,
+                "z": -1778
+              },
+              {
+                "x": 388,
+                "z": -1810
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:pedestrian-group",
+          "catalog:pedestrian.adult_standing"
+        ]
+      },
+      {
+        "id": "turning-bus",
+        "kind": "bus",
+        "dims": {
+          "l": 12.2,
+          "w": 2.55,
+          "h": 3.2
+        },
+        "initial": {
+          "pose": {
+            "x": 364,
+            "z": -1804,
+            "headingRad": 0.5
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": false,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.35,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 364,
+                "z": -1804
+              },
+              {
+                "x": 382,
+                "z": -1794
+              },
+              {
+                "x": 420,
+                "z": -1772
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:turning-bus",
+          "occluder:officer",
+          "catalog:vehicle.bus"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "bus-clears-officer",
+        "actorId": "turning-bus",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "bus-turns",
+        "actorId": "turning-bus",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "ego-crosses",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 15.65
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 3.333333
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "ego-full-stop",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "ego-holds-ambiguous",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 9
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "ego-ignores-dark-heads",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 15.65
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      },
+      {
+        "id": "officer-ambiguous-point",
+        "actorId": "officer",
+        "trigger": {
+          "kind": "at",
+          "t": 9
+        },
+        "verb": "set",
+        "target": {
+          "key": "pose.gesture",
+          "value": "point"
+        }
+      },
+      {
+        "id": "officer-beckons-ego",
+        "actorId": "officer",
+        "trigger": {
+          "kind": "at",
+          "t": 14.55
+        },
+        "verb": "set",
+        "target": {
+          "key": "pose.gesture",
+          "value": "wave_through"
+        }
+      },
+      {
+        "id": "officer-stops-suv",
+        "actorId": "officer",
+        "trigger": {
+          "kind": "at",
+          "t": 14
+        },
+        "verb": "set",
+        "target": {
+          "key": "pose.gesture",
+          "value": "halt"
+        }
+      },
+      {
+        "id": "officer-waves-cross",
+        "actorId": "officer",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "verb": "set",
+        "target": {
+          "key": "pose.gesture",
+          "value": "wave_through"
+        }
+      },
+      {
+        "id": "pedestrians-held",
+        "actorId": "pedestrian-group",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "signal-ego-dark",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:dark-junction:ego.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-left-dark",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:dark-junction:left.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-opposing-dark",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:dark-junction:opposing.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-right-dark",
+        "actorId": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:dark-junction:right.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "suv-false-start",
+        "actorId": "cross-suv",
+        "trigger": {
+          "kind": "at",
+          "t": 9.4
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 2.222222
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "suv-yields",
+        "actorId": "cross-suv",
+        "trigger": {
+          "kind": "at",
+          "t": 14.15
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      }
+    ],
+    "signalPrograms": [],
+    "roadControls": [],
+    "props": [
+      {
+        "id": "temporary-control-1",
+        "catalogId": "construction.temporary_stop_sign",
+        "pose": {
+          "x": 387,
+          "z": -1811,
+          "headingRad": 2.14
+        },
+        "dims": {
+          "l": 0.82,
+          "w": 0.92,
+          "h": 2.16
+        },
+        "scale": 1,
+        "collidable": false,
+        "essentiality": "preferred"
+      },
+      {
+        "id": "temporary-control-2",
+        "catalogId": "construction.temporary_stop_sign",
+        "pose": {
+          "x": 340,
+          "z": -1784,
+          "headingRad": -0.36
+        },
+        "dims": {
+          "l": 0.82,
+          "w": 0.92,
+          "h": 2.16
+        },
+        "scale": 1,
+        "collidable": false,
+        "essentiality": "preferred"
+      },
+      {
+        "id": "temporary-control-turned-away",
+        "catalogId": "construction.temporary_stop_sign",
+        "pose": {
+          "x": 403,
+          "z": -1804,
+          "headingRad": 2.78
+        },
+        "dims": {
+          "l": 0.82,
+          "w": 0.92,
+          "h": 2.16
+        },
+        "scale": 1,
+        "collidable": false,
+        "essentiality": "preferred"
+      }
+    ],
+    "occluders": [],
+    "occlusionPairs": [
+      {
+        "observer": "ego",
+        "target": "officer",
+        "occluderId": "actor:turning-bus"
+      }
+    ]
+  }
+}

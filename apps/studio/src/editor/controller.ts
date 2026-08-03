@@ -21,9 +21,10 @@
  *
  * | gesture | owner |
  * |---|---|
- * | left drag on empty space | camera (orbit) |
- * | left click, no drag | editor (select / place) |
- * | right drag, middle drag | camera (pan) always |
+ * | left click, no drag | editor (select or place) |
+ * | left drag on empty map | camera (orbit) |
+ * | middle drag | camera (ground-plane pan) |
+ * | right drag | camera (pan), or cancel while editing |
  * | wheel | camera, except lateral nudge while lane-snapped |
  * | any pointer while in a modal mode (`G`/`R`/placing) | editor |
  *
@@ -37,10 +38,12 @@
 
 import { Raycaster, Vector2, Vector3, type Intersection } from 'three';
 import type { CityViewer } from '@uniscenarios/city-renderer';
-import { getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
+import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
+import { buildSeededPlacementRoute } from '@uniscenarios/sim-engine';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
 import {
   actorKindFor,
+  DEFAULT_AUTHORED_VEHICLE_SPEED_KPH,
   type ActorKind,
   type ActorRecord,
   type ActorUpdate,
@@ -61,6 +64,7 @@ export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate';
 
 /** Everything the panels render from. Replaced wholesale on every change. */
 export interface EditorState {
+  readonly name: string;
   readonly mode: EditorMode;
   readonly actors: readonly ActorRecord[];
   readonly selection: readonly string[];
@@ -165,6 +169,8 @@ export class EditorController {
   private mode: EditorMode = 'idle';
   private selection: string[] = [];
   private placing: CatalogId | null = null;
+  private placingKind: 'vehicle' | 'pedestrian' | null = null;
+  private pendingActorId: string | null = null;
   private lateral = 0;
   private flipped = false;
   private ghostPose: GhostPose | null = null;
@@ -185,6 +191,10 @@ export class EditorController {
   private shiftDown = false;
   private lastGroundY = 0;
   private notifyHandle = 0;
+  private frameHandle = 0;
+  /** False for every non-authoring session state. This is the capability gate,
+   * not a cosmetic UI flag: all document-changing commands return at this boundary. */
+  private authoringEnabled = true;
 
   private snapshot: EditorState;
 
@@ -217,6 +227,20 @@ export class EditorController {
   };
 
   getSnapshot = (): EditorState => this.snapshot;
+
+  setAuthoringEnabled(enabled: boolean): void {
+    if (this.authoringEnabled === enabled) return;
+    this.authoringEnabled = enabled;
+    if (!enabled) {
+      this.cancelModal();
+      this.placing = null;
+    }
+    this.notify();
+  }
+
+  get canAuthor(): boolean {
+    return this.authoringEnabled;
+  }
 
   // ------------------------------------------------------------- lifecycle
 
@@ -255,6 +279,7 @@ export class EditorController {
     this.detach();
     if (this.messageTimer !== null) clearTimeout(this.messageTimer);
     if (this.notifyHandle) cancelAnimationFrame(this.notifyHandle);
+    if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
     this.unbindDoc?.();
     this.unbindDoc = null;
     this.ghost.dispose();
@@ -266,11 +291,14 @@ export class EditorController {
 
   /** Enter placement mode with a catalog item, or leave it if it is already active. */
   togglePlacement(catalogId: CatalogId): void {
+    if (!this.authoringEnabled) return;
     if (this.mode === 'placing' && this.placing === catalogId) {
       this.cancel();
       return;
     }
     this.cancelModal();
+    this.placingKind = null;
+    this.pendingActorId = null;
     this.mode = 'placing';
     this.placing = catalogId;
     this.lateral = 0;
@@ -278,6 +306,31 @@ export class EditorController {
     this.ghost.show(catalogId);
     this.ghost.hide(); // stays hidden until the cursor is over the map
     this.notify();
+  }
+
+  /** Arm one human-level actor tool; the concrete appearance is stable per actor. */
+  togglePlacementKind(kind: 'vehicle' | 'pedestrian'): void {
+    if (!this.authoringEnabled) return;
+    if (this.mode === 'placing' && this.placingKind === kind) {
+      this.cancel();
+      return;
+    }
+    this.cancelModal();
+    this.mode = 'placing';
+    this.placingKind = kind;
+    this.prepareRandomActorAppearance(kind);
+    this.lateral = 0;
+    this.flipped = false;
+    this.notify();
+  }
+
+  /** Change only appearance in one undoable document gesture. */
+  updateActorAppearance(id: string, patch: { catalogId?: CatalogId; bodyColor?: string }): void {
+    if (!this.authoringEnabled) return;
+    const actor = this.doc.actor(id);
+    if (!actor) return;
+    if (patch.catalogId && actorKindFor(patch.catalogId) !== actor.kind) return;
+    this.doc.update([{ id, ...patch }]);
   }
 
   /** Leave whatever mode is active; from idle, clear the selection. */
@@ -296,11 +349,39 @@ export class EditorController {
     this.notify();
   }
 
+  /** Deliberate, name-click-only camera framing. Timeline row controls never call this. */
+  frameActor(id: string, materializedActor?: ActorView): void {
+    const actor = this.doc.actor(id) ?? (materializedActor?.id === id ? materializedActor : undefined);
+    if (!actor) return;
+    if (this.frameHandle) cancelAnimationFrame(this.frameHandle);
+    const from = this.viewer.controls.getView();
+    const startPosition = new Vector3(...from.position);
+    const startTarget = new Vector3(...from.target);
+    const target = new Vector3(actor.x, actor.y + actor.dims.h * 0.5, actor.z);
+    const direction = startPosition.clone().sub(startTarget);
+    if (direction.lengthSq() < 0.001) direction.set(1, 0.8, 1);
+    const distance = Math.max(14, Math.min(42, Math.max(actor.dims.l, actor.dims.h) * 4.5));
+    const destination = target.clone().add(direction.normalize().multiplyScalar(distance));
+    const startedAt = performance.now();
+    const tick = (now: number): void => {
+      const linear = Math.min(1, (now - startedAt) / 320);
+      const eased = 1 - Math.pow(1 - linear, 3);
+      this.viewer.controls.setView(
+        startPosition.clone().lerp(destination, eased),
+        startTarget.clone().lerp(target, eased),
+      );
+      if (linear < 1) this.frameHandle = requestAnimationFrame(tick);
+      else this.frameHandle = 0;
+    };
+    this.frameHandle = requestAnimationFrame(tick);
+  }
+
   selectAll(): void {
     this.setSelection(this.doc.actors.map((a) => a.id));
   }
 
   deleteSelection(): void {
+    if (!this.authoringEnabled) return;
     if (this.selection.length === 0) return;
     const n = this.selection.length;
     this.doc.remove(this.selection);
@@ -317,6 +398,7 @@ export class EditorController {
    * body length is not a meaningful spacing.
    */
   duplicateSelection(): void {
+    if (!this.authoringEnabled) return;
     if (this.selection.length === 0) return;
     const inputs: NewActor[] = [];
     for (const id of this.selection) {
@@ -353,6 +435,7 @@ export class EditorController {
   }
 
   undo(): void {
+    if (!this.authoringEnabled) return;
     if (!this.doc.undo()) return;
     this.selection = this.selection.filter((id) => this.doc.actor(id));
     this.syncScene();
@@ -360,6 +443,7 @@ export class EditorController {
   }
 
   redo(): void {
+    if (!this.authoringEnabled) return;
     if (!this.doc.redo()) return;
     this.selection = this.selection.filter((id) => this.doc.actor(id));
     this.syncScene();
@@ -368,6 +452,7 @@ export class EditorController {
 
   /** Start a move gesture on the current selection (the `G` key, or a button). */
   beginGrab(): void {
+    if (!this.authoringEnabled) return;
     if (this.selection.length === 0) {
       this.flash('select something first');
       return;
@@ -386,6 +471,7 @@ export class EditorController {
 
   /** Start a rotate gesture on the current selection (the `R` key). */
   beginRotate(): void {
+    if (!this.authoringEnabled) return;
     if (this.selection.length === 0) {
       this.flash('select something first');
       return;
@@ -416,6 +502,7 @@ export class EditorController {
   // ------------------------------------------------------- inspector edits
 
   setLabel(id: string, label: string): void {
+    if (!this.authoringEnabled) return;
     this.doc.update([{ id, label }]);
   }
 
@@ -428,6 +515,7 @@ export class EditorController {
    * dropped (with a message) when it does not.
    */
   setWorldPose(id: string, patch: { x?: number; z?: number; headingDeg?: number }): void {
+    if (!this.authoringEnabled) return;
     const actor = this.doc.actor(id);
     if (!actor) return;
     const x = patch.x ?? actor.x;
@@ -462,6 +550,7 @@ export class EditorController {
 
   /** Edit the lane anchor numerically; the world pose is re-derived from it. */
   setLanePose(id: string, patch: { s?: number; t?: number }): void {
+    if (!this.authoringEnabled) return;
     const actor = this.doc.actor(id);
     if (!actor?.laneRef) return;
     const lane = this.laneFor(actor.laneRef);
@@ -492,6 +581,7 @@ export class EditorController {
     if (event.key === 'Alt') this.setAlt(true);
     if (event.key === 'Shift') this.setShift(true);
     if (isTypingTarget(event.target)) return;
+    if (!this.authoringEnabled) return;
 
     const meta = event.metaKey || event.ctrlKey;
     if (meta && event.key.toLowerCase() === 'z') {
@@ -601,6 +691,7 @@ export class EditorController {
 
   private onPointerDown = (event: PointerEvent): void => {
     if (!this.isCanvasEvent(event)) return;
+    if (!this.authoringEnabled) return;
     this.altDown = event.altKey;
     this.shiftDown = event.shiftKey;
 
@@ -629,6 +720,7 @@ export class EditorController {
 
   private onPointerMove = (event: PointerEvent): void => {
     if (!this.isCanvasEvent(event)) return;
+    if (!this.authoringEnabled) return;
     this.altDown = event.altKey;
     this.shiftDown = event.shiftKey;
     if (
@@ -670,6 +762,7 @@ export class EditorController {
 
   private onPointerUp = (event: PointerEvent): void => {
     if (!this.isCanvasEvent(event)) return;
+    if (!this.authoringEnabled) return;
     const wasPlacing = this.mode === 'placing';
     const button = this.pressButton;
     const moved = this.pressMoved;
@@ -692,7 +785,7 @@ export class EditorController {
   private onWheel = (event: WheelEvent): void => {
     // Only steal the wheel when it has a lane to nudge along; otherwise it is
     // the camera's zoom and must stay that way.
-    if (!this.isCanvasEvent(event)) return;
+    if (!this.isCanvasEvent(event) || !this.authoringEnabled) return;
     if (this.mode !== 'placing' || !this.ghostPose?.laneRef) return;
     event.preventDefault();
     event.stopPropagation();
@@ -808,21 +901,61 @@ export class EditorController {
       this.flash(pose.reason ?? 'cannot place here');
       return;
     }
-    const ids = this.doc.add([
-      {
-        catalogId,
-        x: pose.x,
-        y: pose.y,
-        z: pose.z,
-        headingRad: pose.headingRad,
-        ...(pose.laneRef ? { laneRef: pose.laneRef } : {}),
-      },
-    ]);
+    const actorId = this.pendingActorId ?? this.doc.allocateActorId(catalogId);
+    const drivingSpeedKph = defaultDrivingSpeedKph(catalogId);
+    let routeLaneRsls: readonly string[] | undefined;
+    if (drivingSpeedKph !== null) {
+      if (!pose.laneRef) {
+        this.flash('Place road vehicles on a valid driving lane so a route can be created');
+        return;
+      }
+      const startRsl = `${pose.laneRef.roadId}:${pose.laneRef.section}:${pose.laneRef.laneId}`;
+      const duration = this.doc.data.choreography.clipSeconds + this.doc.data.choreography.warmupSeconds;
+      // Cover warm-up plus every recorded frame at exactly 30 mph. A small
+      // runway margin prevents the actor from landing on the terminal sample.
+      const requiredDownstreamM = Math.max(100, (drivingSpeedKph / 3.6) * duration + 10);
+      const planned = buildSeededPlacementRoute(this.laneIndex.graph, {
+        startRsl,
+        startStorageS: pose.laneRef.s,
+        requiredDownstreamM,
+        seed: this.doc.routeSeed,
+        actorId,
+      });
+      if (!planned.ok) {
+        this.flash(`No usable road route here — ${planned.error.reason}`);
+        return;
+      }
+      routeLaneRsls = planned.lanes;
+    }
+    const ids = this.doc.add([{
+      id: actorId,
+      catalogId,
+      x: pose.x,
+      y: pose.y,
+      z: pose.z,
+      headingRad: pose.headingRad,
+      ...(pose.laneRef ? { laneRef: pose.laneRef } : {}),
+      ...(routeLaneRsls ? { routeLaneRsls, initialSpeedKph: drivingSpeedKph as number } : {}),
+      ...(actorKindFor(catalogId) === 'vehicle'
+        ? { bodyColor: defaultBodyColor(catalogId) }
+        : {}),
+    }]);
     if (!pose.valid) this.flash('placed with ⌥ override');
     // Stay in placement mode: filling a street means placing ten of these.
     this.selection = ids;
+    if (this.placingKind) this.prepareRandomActorAppearance(this.placingKind);
     this.syncScene();
     this.notify();
+  }
+
+  private prepareRandomActorAppearance(kind: 'vehicle' | 'pedestrian'): void {
+    const placeholder = kind === 'vehicle' ? 'vehicle.sedan' : 'pedestrian.adult_standing';
+    const actorId = this.doc.allocateActorId(placeholder as CatalogId);
+    const catalogId = deterministicActorCatalog(kind, this.doc.routeSeed, actorId);
+    this.pendingActorId = actorId;
+    this.placing = catalogId;
+    this.ghost.show(catalogId);
+    this.ghost.hide();
   }
 
   // ------------------------------------------------------------ grab/rotate
@@ -953,6 +1086,8 @@ export class EditorController {
     this.grab = null;
     this.rotate = null;
     this.placing = null;
+    this.placingKind = null;
+    this.pendingActorId = null;
     this.ghost.hide();
     this.ghostPose = null;
     this.mode = 'idle';
@@ -985,6 +1120,11 @@ export class EditorController {
       this.setSelection(next);
     } else {
       this.setSelection([id]);
+      // A direct scene click has the same camera contract as clicking the
+      // actor's name in the timeline: smoothly frame that actor.  Keep this
+      // out of `setSelection` so Speed/Actions controls, box selection, and
+      // playback-driven selection remain completely camera-neutral.
+      this.frameActor(id);
     }
   }
 
@@ -1074,6 +1214,7 @@ export class EditorController {
         z: patch?.z ?? actor.z,
         headingRad: patch?.headingRad ?? actor.headingRad,
         dims: actor.dims,
+        bodyColor: actor.bodyColor,
       };
     });
     this.renderer.sync(views);
@@ -1112,6 +1253,7 @@ export class EditorController {
           ? anchorLabel(selectedRecord.laneRef)
           : null;
     return {
+      name: this.doc.name,
       mode: this.mode,
       actors: this.doc.actors,
       selection: this.selection,
@@ -1138,19 +1280,19 @@ export class EditorController {
         const kind: ActorKind = this.placing ? actorKindFor(this.placing) : 'prop';
         if (kind === 'vehicle') {
           return this.ghostPose?.laneRef
-            ? `click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · ⌥ free · Esc cancel`
-            : 'free placement (⌥) · click place · drag set heading · Esc cancel';
+            ? `click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · ⌥ free · right-click cancel`
+            : 'free placement (⌥) · click place · drag set heading · right-click cancel';
         }
-        return 'click place · click-drag set heading · Esc cancel';
+        return 'click place · click-drag set heading · right-click cancel';
       }
       case 'grab':
-        return 'move · click confirm · ⌥ break lane anchor · Esc cancel';
+        return 'move · click confirm · ⌥ break lane anchor · right-click cancel';
       case 'rotate':
-        return 'rotate · ⇧ 15° snap · click confirm · Esc cancel';
+        return 'rotate · ⇧ 15° snap · click confirm · right-click cancel';
       default:
         return this.selection.length > 0
           ? `${this.selection.length} selected · G move · R rotate · ⌘D duplicate · ⌫ delete · ⇧click add`
-          : 'pick from the palette to place · click select · drag orbit · 1-5 switch map';
+          : 'choose a build tool · click select · left-drag rotate · middle-drag / WASD pan';
     }
   }
 }
@@ -1171,6 +1313,41 @@ function describe(actor: { catalogId: CatalogId }): string {
   } catch {
     return 'another actor';
   }
+}
+
+/** Exact authored cruise speed for newly placed motor vehicles; null stays static. */
+export function defaultDrivingSpeedKph(catalogId: CatalogId): number | null {
+  const entry = getEntry(catalogId);
+  if (entry.class !== 'vehicle' || !entry.tags.includes('roadway')) return null;
+  // A cyclist is a VRU, not a default motor-traffic actor. Sidewalk mobility
+  // devices are already excluded by the roadway requirement above.
+  if (catalogId === 'vehicle.bicycle') return null;
+  return DEFAULT_AUTHORED_VEHICLE_SPEED_KPH;
+}
+
+/** Stable catalog choice: save/reopen never rerolls an actor's appearance. */
+export function deterministicActorCatalog(
+  kind: 'vehicle' | 'pedestrian',
+  scenarioSeed: string,
+  actorId: string,
+): CatalogId {
+  const compatible = CATALOG.filter((entry) => kind === 'pedestrian'
+    ? entry.class === 'pedestrian'
+    : entry.class === 'vehicle' && (entry.tags as readonly string[]).includes('roadway') && entry.id !== 'vehicle.bicycle')
+    .map((entry) => entry.id as CatalogId)
+    .sort();
+  if (compatible.length === 0) throw new Error(`No compatible ${kind} models are installed`);
+  let hash = 2166136261;
+  for (const char of `${scenarioSeed}|${actorId}|${kind}`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return compatible[(hash >>> 0) % compatible.length] as CatalogId;
+}
+
+function defaultBodyColor(catalogId: CatalogId): string {
+  const color = getEntry(catalogId).defaultParams['color'];
+  return typeof color === 'string' ? color : '#59748f';
 }
 
 /** Keyboard shortcuts must not fire while the user is typing in the inspector. */

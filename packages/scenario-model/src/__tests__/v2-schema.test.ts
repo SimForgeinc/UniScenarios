@@ -23,6 +23,7 @@ import { InvariantSchema } from '../schema/v2/invariants.js';
 import { ParamDeclSchema, paramDefault } from '../schema/v2/params.js';
 import { PropPlacementSchema } from '../schema/v2/props.js';
 import { RoleBindingSchema, roleDims } from '../schema/v2/roles.js';
+import { TrafficControlSchema } from '../schema/v2/traffic-controls.js';
 import {
   SET_KEY_REGISTRY,
   SetKeyRegistrySchema,
@@ -32,9 +33,43 @@ import {
 import { ScenarioTemplateV2Schema } from '../schema/v2/template.js';
 import { VariantSchema } from '../schema/v2/variants.js';
 import { parseTemplate, serializeTemplate } from '../serialize.js';
+import { validateTemplate } from '../validate/index.js';
 import { interaction, ltapTemplate, ltapTemplateInput } from './v2-fixtures.js';
 
 describe('ScenarioTemplate v2', () => {
+  it('accepts portable executable controls and rejects indication/kind mismatches', () => {
+    const laneControl = {
+      id: 'reversible-west', kind: 'lane_control' as const,
+      pose: { s: 0, laneOffset: 0, tFrac: 0 },
+      stopLines: [{ pose: { s: -5, laneOffset: 0, tFrac: 0 } }],
+      phases: [
+        { indication: 'red_x' as const, durationS: 5 },
+        { indication: 'green_arrow' as const, durationS: 15 },
+      ],
+      loop: false,
+    };
+    expect(TrafficControlSchema.parse(laneControl).phases).toHaveLength(2);
+    expect(() => TrafficControlSchema.parse({
+      ...laneControl,
+      kind: 'human_director',
+    })).toThrow(/not valid for human_director/);
+
+    const base = ltapTemplateInput();
+    const parsed = parseTemplate({
+      ...base,
+      trafficControls: [laneControl],
+      choreography: {
+        ...base.choreography,
+        interactions: [
+          ...base.choreography!.interactions!,
+          { id: 'open-lane', actor: '@world', trigger: { kind: 'at', t: 5 }, verb: 'set', target: { key: 'control:reversible-west.indication', value: 'green_arrow' } },
+        ],
+      },
+    });
+    expect(parsed.trafficControls[0]?.id).toBe('reversible-west');
+    expect(validateTemplate(parsed).issues.filter((issue) => issue.path.endsWith('.actor'))).toEqual([]);
+  });
+
   it('accepts the LTAP/OD fixture and materialises defaults', () => {
     const template = ltapTemplate();
     expect(template.scenarioVersion).toBe(2);
@@ -84,13 +119,13 @@ describe('ScenarioTemplate v2', () => {
     ).toThrow(/modifiedAt precedes/);
   });
 
-  it('bounds clipSeconds to 5..120 (parameterised per the architecture decision)', () => {
+  it('allows compact three-second clips while bounding clipSeconds to 3..120', () => {
     const base = ltapTemplateInput();
     const withClip = (clipSeconds: number) =>
       parseTemplate({ ...base, choreography: { ...base.choreography, clipSeconds } });
-    expect(withClip(5).choreography.clipSeconds).toBe(5);
+    expect(withClip(3).choreography.clipSeconds).toBe(3);
     expect(withClip(120).choreography.clipSeconds).toBe(120);
-    expect(() => withClip(4)).toThrow(ScenarioValidationError);
+    expect(() => withClip(2.99)).toThrow(ScenarioValidationError);
     expect(() => withClip(121)).toThrow(ScenarioValidationError);
   });
 
@@ -160,10 +195,11 @@ describe('ranges and clauses', () => {
 describe('role bindings', () => {
   const actor = { class: 'car' as const };
 
-  it('accepts all eight kinds', () => {
+  it('accepts all ten kinds, including route-aware crossing criticality', () => {
     const roles = [
       { id: 'a', kind: 'on_reference', actor, pose: { s: 0 } },
       { id: 'b', kind: 'lane_offset', actor, k: -1, pose: { s: 10 }, onMissing: 'clamp' },
+      { id: 'drop', kind: 'at_lane_drop', actor, feature: 'ld', lane: 'terminating', pose: { s: -20 } },
       { id: 'c', kind: 'opposing', actor, k: 0, pose: { s: 40 } },
       { id: 'd', kind: 'conflicting_gate', actor, feature: 'jx', from: 'opposing', turn: 'left' },
       { id: 'e', kind: 'on_crossing', actor: { class: 'pedestrian' }, feature: 'cx', startFrac: 0.1 },
@@ -403,11 +439,11 @@ describe('the set-key registry', () => {
     expect(SetKeyRegistrySchema.safeParse(SET_KEY_REGISTRY).success).toBe(true);
   });
 
-  it('covers all six namespaces', () => {
+  it('covers every typed state namespace', () => {
     const namespaces = new Set(
-      SET_KEY_REGISTRY.map((d) => (d.key.startsWith('signal:') ? 'signal' : d.key.split('.')[0])),
+      SET_KEY_REGISTRY.map((d) => d.key.startsWith('signal:') ? 'signal' : d.key.startsWith('control:') ? 'control' : d.key.split('.')[0]),
     );
-    expect([...namespaces].sort()).toEqual(['doors', 'env', 'lights', 'pose', 'rules', 'signal']);
+    expect([...namespaces].sort()).toEqual(['audio', 'control', 'doors', 'env', 'lights', 'pose', 'rules', 'signal']);
   });
 
   it('ships the make-or-break switch', () => {
@@ -435,6 +471,8 @@ describe('the set-key registry', () => {
     expect(checkSetValue('rules.aggression', 1.7)).toMatchObject({ code: 'set_value_range' });
     expect(checkSetValue('rules.aggression', 'high')).toMatchObject({ code: 'set_value_type' });
     expect(checkSetValue('lights.indicator', 'left')).toEqual({ ok: true });
+    expect(checkSetValue('audio.horn', true)).toEqual({ ok: true });
+    expect(checkSetValue('audio.horn', 'loud')).toMatchObject({ code: 'set_value_type' });
     expect(checkSetValue('lights.indicator', 'sideways')).toMatchObject({ code: 'set_value_type' });
     expect(checkSetValue('doors.left', 'opening')).toEqual({ ok: true });
     expect(checkSetValue('pose.stopArm', 'extended')).toEqual({ ok: true });
@@ -448,6 +486,8 @@ describe('invariants', () => {
       { id: 'a', kind: 'headway', of: 'x', to: 'y', range: [0.6, 4] },
       { id: 'b', kind: 'gap', of: 'x', to: 'y', unit: 'distance', range: [5, null] },
       { id: 'c', kind: 'ttc', of: 'x', to: 'y', range: [1.2, 2.5], mode: 'min' },
+      { id: 'pt', kind: 'path_ttc', of: 'x', to: 'y', range: [0.2, 2.5] },
+      { id: 'p', kind: 'pet', of: 'x', to: 'y', range: [0.2, 3] },
       { id: 'd', kind: 'arrival', of: 'x', at: { feature: 'jx' }, syncWith: 'y', deltaTRange: [-1, 1] },
       { id: 'e', kind: 'closing_speed', of: 'x', to: 'y', rangeKph: [20, 60] },
       { id: 'f', kind: 'speed_rel_limit', of: 'x', rangeFrac: [0.85, 1.05] },
@@ -518,6 +558,18 @@ describe('props and variants', () => {
     });
     expect(prop.essentiality).toBe('preferred');
     expect(prop.scale).toBe(1);
+  });
+
+  it('accepts a rigid actor-local carried prop attachment', () => {
+    const prop = PropPlacementSchema.parse({
+      id: 'worker-pipe',
+      catalogId: 'construction.long_pipe',
+      pose: { s: 0, tFrac: 0 },
+      attachment: { role: 'worker', lateralM: 0.2, heightM: 1.1 },
+    });
+    expect(prop.attachment).toEqual({
+      role: 'worker', longitudinalM: 0, lateralM: 0.2, heightM: 1.1, headingOffsetRad: 0,
+    });
   });
 
   it('accepts a variant keyed on a site fact', () => {

@@ -1,8 +1,31 @@
-import { Euler, MathUtils, PerspectiveCamera, Spherical, Vector2, Vector3 } from 'three';
+import { Euler, MathUtils, PerspectiveCamera, Vector2, Vector3 } from 'three';
+import {
+  applyEyeOrbit,
+  cameraLookDrag,
+  cameraKeyboardMagnitude,
+  cameraPanDrag,
+  cameraSensitivityMultiplier,
+  cameraWheelDollyScale,
+  crossedCameraDragThreshold,
+  DEFAULT_CAMERA_CONTROL_PREFERENCES,
+  dampedEyeOrbitStep,
+  type CameraControlPreferences,
+} from './camera-drag';
 
 export type CameraMode = 'orbit' | 'fly';
 
-const EPS = 1e-4;
+/** Framework-neutral camera pose used by Studio viewpoints and capture tools. */
+export interface CameraView {
+  position: readonly [number, number, number];
+  target: readonly [number, number, number];
+  fov: number;
+}
+
+export type CameraPoseConstraint = (
+  camera: PerspectiveCamera,
+  target: Vector3,
+) => void;
+
 const _euler = new Euler();
 const _dir = new Vector3();
 const _right = new Vector3();
@@ -12,8 +35,9 @@ const UP = new Vector3(0, 1, 0);
 /**
  * One rig, two modes.
  *
- * Orbit: LMB drag rotates around `target`, RMB/2-finger pans it, wheel dollies.
- * Fly: pointer-lock mouse look with WASD/QE, shift to sprint. Both modes share
+ * City: WASD/arrow keys pan, Q/E rotates, LMB drag orbits,
+ * MMB/RMB drag pans, and the wheel zooms. Fly: pointer-lock mouse look with WASD/QE,
+ * shift to sprint. Both modes share
  * the same camera and hand over the pose on toggle, so switching never jumps.
  */
 export class CameraRig {
@@ -22,17 +46,23 @@ export class CameraRig {
 
   minDistance = 2;
   maxDistance = 4000;
-  orbitSpeed = 0.0045;
+  // Deliberately restrained for large city maps: a full-width drag should
+  // reframe the city, not spin past the intended heading.
+  orbitSpeed = 0.001125;
   panSpeed = 1;
+  /** RMB is a precision pan; MMB keeps the faster city-navigation rate. */
+  rightPanScale = 0.25;
   zoomSpeed = 0.9;
   flySpeed = 40;
   lookSpeed = 0.0022;
   damping = 0.12;
+  /** Ground-plane travel as a fraction of camera distance per second. */
+  cityPanSpeed = 0.72;
+  /** Keyboard rotation speed, radians per second. */
+  cityRotateSpeed = 1.35;
 
   private readonly camera: PerspectiveCamera;
   private readonly dom: HTMLElement;
-  private readonly spherical = new Spherical();
-  private readonly sphericalDelta = new Spherical(0, 0, 0);
   private readonly panOffset = new Vector3();
   private readonly pointers = new Map<number, Vector2>();
   private readonly keys = new Set<string>();
@@ -41,8 +71,15 @@ export class CameraRig {
   private dollyScale = 1;
   private dragButton = -1;
   private pointerLocked = false;
+  private poseConstraint: CameraPoseConstraint | null = null;
+  private dragPress: Vector2 | null = null;
+  private cameraDragging = false;
+  private suppressNextContextMenu = false;
+  private stableYawRemaining = 0;
+  private stablePitchRemaining = 0;
   private enabled = true;
   private disposed = false;
+  private controlPreferences: CameraControlPreferences = { ...DEFAULT_CAMERA_CONTROL_PREFERENCES };
 
   constructor(camera: PerspectiveCamera, dom: HTMLElement) {
     this.camera = camera;
@@ -66,8 +103,37 @@ export class CameraRig {
       this.keys.clear();
       this.pointers.clear();
       this.velocity.set(0, 0, 0);
+      this.dragPress = null;
+      this.cameraDragging = false;
+      this.stableYawRemaining = 0;
+      this.stablePitchRemaining = 0;
       if (this.pointerLocked) document.exitPointerLock();
     }
+  }
+
+  /** Changes future input signs only; the current pose and queued motion stay untouched. */
+  setControlPreferences(preferences: CameraControlPreferences): void {
+    const sensitivity = (value: number): number => cameraSensitivityMultiplier(value) * 100;
+    this.controlPreferences = {
+      ...preferences,
+      horizontalLookSensitivity: sensitivity(preferences.horizontalLookSensitivity),
+      verticalLookSensitivity: sensitivity(preferences.verticalLookSensitivity),
+      middlePanSensitivity: sensitivity(preferences.middlePanSensitivity),
+      rightPanSensitivity: sensitivity(preferences.rightPanSensitivity),
+      wheelZoomSensitivity: sensitivity(preferences.wheelZoomSensitivity),
+      keyboardMoveSensitivity: sensitivity(preferences.keyboardMoveSensitivity),
+      keyboardTurnSensitivity: sensitivity(preferences.keyboardTurnSensitivity),
+    };
+  }
+
+  getControlPreferences(): CameraControlPreferences {
+    return { ...this.controlPreferences };
+  }
+
+  /** Install map-derived eye/target limits applied after every camera mutation. */
+  setPoseConstraint(constraint: CameraPoseConstraint | null): void {
+    this.poseConstraint = constraint;
+    this.applyPoseConstraint();
   }
 
   setMode(mode: CameraMode): void {
@@ -96,41 +162,122 @@ export class CameraRig {
   setView(position: Vector3, target: Vector3): void {
     this.camera.position.copy(position);
     this.target.copy(target);
+    this.applyPoseConstraint();
     this.camera.lookAt(this.target);
     this.syncFromCamera();
   }
 
+  /** Capture the exact editable view without exposing mutable Three.js objects. */
+  getView(): CameraView {
+    return {
+      position: [this.camera.position.x, this.camera.position.y, this.camera.position.z],
+      target: [this.target.x, this.target.y, this.target.z],
+      fov: this.camera.fov,
+    };
+  }
+
+  /** Restore a captured view, including its perspective field of view. */
+  applyView(view: CameraView): void {
+    this.camera.fov = MathUtils.clamp(view.fov, 10, 120);
+    this.camera.updateProjectionMatrix();
+    this.setView(
+      new Vector3(view.position[0], view.position[1], view.position[2]),
+      new Vector3(view.target[0], view.target[1], view.target[2]),
+    );
+  }
+
   private syncFromCamera(): void {
-    _dir.copy(this.camera.position).sub(this.target);
-    this.spherical.setFromVector3(_dir);
-    this.sphericalDelta.set(0, 0, 0);
     this.panOffset.set(0, 0, 0);
     this.dollyScale = 1;
+    this.stableYawRemaining = 0;
+    this.stablePitchRemaining = 0;
   }
 
   update(dt: number): void {
     if (this.mode === 'orbit') this.updateOrbit(dt);
     else this.updateFly(dt);
+    this.applyPoseConstraint();
+    if (this.mode === 'orbit') this.camera.lookAt(this.target);
+    this.camera.updateMatrixWorld(true);
   }
 
-  private updateOrbit(_dt: number): void {
-    this.spherical.theta += this.sphericalDelta.theta;
-    this.spherical.phi += this.sphericalDelta.phi;
-    this.spherical.phi = MathUtils.clamp(this.spherical.phi, EPS, Math.PI / 2 - 0.02);
-    this.spherical.radius = MathUtils.clamp(
-      this.spherical.radius * this.dollyScale,
-      this.minDistance,
-      this.maxDistance,
-    );
-    this.target.add(this.panOffset);
-    this.camera.position.setFromSpherical(this.spherical).add(this.target);
-    this.camera.lookAt(this.target);
+  private applyPoseConstraint(): void {
+    this.poseConstraint?.(this.camera, this.target);
+  }
 
-    const decay = 1 - this.damping;
-    this.sphericalDelta.theta *= decay;
-    this.sphericalDelta.phi *= decay;
-    this.panOffset.multiplyScalar(decay);
-    this.dollyScale = 1;
+  private updateOrbit(dt: number): void {
+    // A click remains byte-for-byte camera neutral until it becomes a drag.
+    if (this.dragPress && !this.cameraDragging) return;
+    this.updateCityNavigation(dt);
+
+    const yaw = dampedEyeOrbitStep(this.stableYawRemaining, dt);
+    const pitch = dampedEyeOrbitStep(this.stablePitchRemaining, dt);
+    this.stableYawRemaining -= yaw;
+    this.stablePitchRemaining -= pitch;
+    if (Math.abs(this.stableYawRemaining) < 1e-7) this.stableYawRemaining = 0;
+    if (Math.abs(this.stablePitchRemaining) < 1e-7) this.stablePitchRemaining = 0;
+    applyEyeOrbit(this.camera, this.target, { yaw, pitch });
+
+    if (this.dollyScale !== 1) {
+      _dir.copy(this.camera.position).sub(this.target);
+      const radius = MathUtils.clamp(
+        _dir.length() * this.dollyScale,
+        this.minDistance,
+        this.maxDistance,
+      );
+      if (_dir.lengthSq() > 1e-12) {
+        _dir.setLength(radius);
+        this.camera.position.copy(this.target).add(_dir);
+      }
+      this.dollyScale = 1;
+    }
+
+    if (this.panOffset.lengthSq() > 1e-12) {
+      this.target.add(this.panOffset);
+      this.camera.position.add(this.panOffset);
+      this.panOffset.multiplyScalar(1 - this.damping);
+    }
+    this.camera.updateMatrixWorld(true);
+  }
+
+  private updateCityNavigation(dt: number): void {
+    const keys = this.keys;
+    const rotate = (keys.has('KeyE') ? 1 : 0) - (keys.has('KeyQ') ? 1 : 0);
+    const tilt = (keys.has('PageDown') ? 1 : 0) - (keys.has('PageUp') ? 1 : 0);
+    if (rotate !== 0 || tilt !== 0) {
+      applyEyeOrbit(this.camera, this.target, {
+        yaw: cameraKeyboardMagnitude(
+          rotate * this.cityRotateSpeed * dt,
+          this.controlPreferences.keyboardTurnSensitivity,
+        ),
+        pitch: cameraKeyboardMagnitude(
+          tilt * this.cityRotateSpeed * 0.7 * dt,
+          this.controlPreferences.keyboardTurnSensitivity,
+        ),
+      });
+    }
+
+    let horizontal =
+      (keys.has('KeyD') || keys.has('ArrowRight') ? 1 : 0) -
+      (keys.has('KeyA') || keys.has('ArrowLeft') ? 1 : 0);
+    let vertical =
+      (keys.has('KeyW') || keys.has('ArrowUp') ? 1 : 0) -
+      (keys.has('KeyS') || keys.has('ArrowDown') ? 1 : 0);
+    if (horizontal === 0 && vertical === 0) return;
+    const length = Math.hypot(horizontal, vertical);
+    horizontal /= length;
+    vertical /= length;
+    const boost = keys.has('ShiftLeft') || keys.has('ShiftRight') ? 2.5 : 1;
+    const distance = cameraKeyboardMagnitude(
+      Math.max(8, this.camera.position.distanceTo(this.target)) * this.cityPanSpeed * boost * dt,
+      this.controlPreferences.keyboardMoveSensitivity,
+    );
+    this.camera.getWorldDirection(_dir);
+    _right.crossVectors(_dir, UP).normalize();
+    const forward = _dir.clone().setY(0).normalize();
+    _move.copy(_right).multiplyScalar(horizontal * distance).addScaledVector(forward, vertical * distance);
+    this.target.add(_move);
+    this.camera.position.add(_move);
   }
 
   private updateFly(dt: number): void {
@@ -148,7 +295,9 @@ export class CameraRig {
     _dir.set(0, 0, -1).applyQuaternion(this.camera.quaternion);
     _right.set(1, 0, 0).applyQuaternion(this.camera.quaternion);
     _move.set(0, 0, 0).addScaledVector(_dir, -fz).addScaledVector(_right, fx).addScaledVector(UP, fy);
-    if (_move.lengthSq() > 0) _move.normalize().multiplyScalar(this.flySpeed * sprint);
+    if (_move.lengthSq() > 0) _move.normalize().multiplyScalar(
+      cameraKeyboardMagnitude(this.flySpeed * sprint, this.controlPreferences.keyboardMoveSensitivity),
+    );
 
     // Critically-ish damped approach so key taps do not snap the camera.
     const blend = 1 - Math.exp(-dt * 12);
@@ -157,14 +306,23 @@ export class CameraRig {
   }
 
   private onContextMenu = (event: Event): void => {
+    if (!this.suppressNextContextMenu) return;
     event.preventDefault();
+    this.suppressNextContextMenu = false;
   };
 
   private onPointerDown = (event: PointerEvent): void => {
     if (!this.enabled) return;
+    // Never inherit suppression from an earlier gesture whose platform did
+    // not emit a contextmenu event after pointer-up.
+    this.suppressNextContextMenu = false;
     this.dom.setPointerCapture(event.pointerId);
     this.pointers.set(event.pointerId, new Vector2(event.clientX, event.clientY));
     this.dragButton = event.button;
+    if (this.mode === 'orbit' && (event.button === 0 || event.button === 1 || event.button === 2)) {
+      this.dragPress = new Vector2(event.clientX, event.clientY);
+      this.cameraDragging = false;
+    }
     if (this.mode === 'fly' && !this.pointerLocked) void this.dom.requestPointerLock();
   };
 
@@ -172,9 +330,13 @@ export class CameraRig {
     if (!this.enabled) return;
     if (this.mode === 'fly') {
       if (!this.pointerLocked) return;
-      this.euler.yaw -= event.movementX * this.lookSpeed;
+      this.euler.yaw += event.movementX * this.lookSpeed
+        * (this.controlPreferences.reverseHorizontalLook ? 1 : -1)
+        * cameraSensitivityMultiplier(this.controlPreferences.horizontalLookSensitivity);
       this.euler.pitch = MathUtils.clamp(
-        this.euler.pitch - event.movementY * this.lookSpeed,
+        this.euler.pitch + event.movementY * this.lookSpeed
+          * (this.controlPreferences.reverseVerticalLook ? 1 : -1)
+          * cameraSensitivityMultiplier(this.controlPreferences.verticalLookSensitivity),
         -Math.PI / 2 + 0.01,
         Math.PI / 2 - 0.01,
       );
@@ -185,26 +347,41 @@ export class CameraRig {
     const dx = event.clientX - previous.x;
     const dy = event.clientY - previous.y;
     previous.set(event.clientX, event.clientY);
-    if (this.pointers.size >= 2) {
-      this.pan(dx, dy);
-    } else if (this.dragButton === 0 && !event.shiftKey) {
-      this.sphericalDelta.theta -= dx * this.orbitSpeed;
-      this.sphericalDelta.phi -= dy * this.orbitSpeed;
-    } else {
-      this.pan(dx, dy);
+    if (!this.cameraDragging) {
+      const press = this.dragPress;
+      if (!press || !crossedCameraDragThreshold(press.x, press.y, event.clientX, event.clientY)) return;
+      this.cameraDragging = true;
+      this.stableYawRemaining = 0;
+      this.stablePitchRemaining = 0;
+      this.panOffset.set(0, 0, 0);
+      this.dollyScale = 1;
+      if (this.dragButton === 2) this.suppressNextContextMenu = true;
+    }
+    if (this.pointers.size >= 2 || this.dragButton === 1 || this.dragButton === 2) {
+      const button = this.dragButton === 2 ? 2 : 1;
+      const delta = cameraPanDrag(button, dx, dy, this.rightPanScale, this.controlPreferences);
+      this.pan(delta.dx, delta.dy);
+    } else if (this.dragButton === 0) {
+      const delta = cameraLookDrag(dx, dy, this.orbitSpeed, this.damping, this.controlPreferences);
+      this.stableYawRemaining += delta.yaw;
+      this.stablePitchRemaining += delta.pitch;
     }
   };
 
   private onPointerUp = (event: PointerEvent): void => {
     this.pointers.delete(event.pointerId);
-    if (this.pointers.size === 0) this.dragButton = -1;
+    if (this.pointers.size === 0) {
+      this.dragButton = -1;
+      this.dragPress = null;
+      this.cameraDragging = false;
+    }
     if (this.dom.hasPointerCapture(event.pointerId)) this.dom.releasePointerCapture(event.pointerId);
   };
 
   private pan(dx: number, dy: number): void {
     const height = this.dom.clientHeight || 1;
-    const scale =
-      (2 * this.spherical.radius * Math.tan(MathUtils.degToRad(this.camera.fov * 0.5))) / height;
+    const radius = this.camera.position.distanceTo(this.target);
+    const scale = (2 * radius * Math.tan(MathUtils.degToRad(this.camera.fov * 0.5))) / height;
     this.camera.getWorldDirection(_dir);
     _right.crossVectors(_dir, UP).normalize();
     _move.copy(_right).multiplyScalar(-dx * scale * this.panSpeed);
@@ -216,17 +393,29 @@ export class CameraRig {
   private onWheel = (event: WheelEvent): void => {
     if (!this.enabled) return;
     event.preventDefault();
-    const factor = Math.pow(0.95, this.zoomSpeed);
     if (this.mode === 'orbit') {
-      this.dollyScale *= event.deltaY > 0 ? 1 / factor : factor;
+      this.dollyScale *= cameraWheelDollyScale(
+        event.deltaY,
+        this.zoomSpeed,
+        this.controlPreferences.wheelZoomSensitivity,
+      );
     } else {
-      this.flySpeed = MathUtils.clamp(this.flySpeed * (event.deltaY > 0 ? 0.9 : 1.1), 1, 800);
+      const sensitivity = cameraSensitivityMultiplier(this.controlPreferences.wheelZoomSensitivity);
+      const flyFactor = event.deltaY > 0 ? Math.pow(0.9, sensitivity) : Math.pow(1.1, sensitivity);
+      this.flySpeed = MathUtils.clamp(this.flySpeed * flyFactor, 1, 800);
     }
   };
 
   private onKeyDown = (event: KeyboardEvent): void => {
     if (!this.enabled) return;
+    if (isTypingTarget(event.target)) return;
     this.keys.add(event.code);
+    if (
+      this.mode === 'orbit' &&
+      (event.code.startsWith('Arrow') || event.code === 'PageUp' || event.code === 'PageDown')
+    ) {
+      event.preventDefault();
+    }
   };
 
   private onKeyUp = (event: KeyboardEvent): void => {
@@ -251,4 +440,11 @@ export class CameraRig {
     document.removeEventListener('pointerlockchange', this.onPointerLockChange);
     if (this.pointerLocked) document.exitPointerLock();
   }
+}
+
+function isTypingTarget(target: EventTarget | null): boolean {
+  const element = target as HTMLElement | null;
+  if (!element?.tagName) return false;
+  const tag = element.tagName.toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable;
 }

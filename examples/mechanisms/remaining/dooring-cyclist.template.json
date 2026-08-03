@@ -1,0 +1,21 @@
+{
+  "scenarioVersion": 2,
+  "meta": { "name": "Parked-car door opens into cyclist path", "description": "A parked car's typed left-door state drives a hinged collidable door sweep as a bicycle-class actor reaches the door zone; no pedestrian or teleporting-box substitution is used.", "createdAt": "2026-08-01T00:00:00.000Z", "modifiedAt": "2026-08-01T00:00:00.000Z", "appVersion": "uniscenarios/0.0.1", "archetype": "vru.dooring-cyclist", "tags": ["vru", "bicycle", "dooring", "collidable-articulation"], "author": "agent/remaining-mechanisms", "negativeControl": false },
+  "params": { "declarations": [{ "id": "cyclistSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [12, 24], "default": 18, "distribution": "uniform" }], "constraints": [] },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": { "id": "dooring-cyclist", "corridor": { "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" }, "requiresAdjacent": { "value": ["parking", "bike"], "essentiality": "required" }, "runwayDownstreamM": { "value": [120, null], "essentiality": "required" } }, "features": [
+    { "id": "parking", "kind": "parking_zone", "essentiality": "required", "atM": { "value": [35, 75], "essentiality": "required" }, "side": { "value": "right", "essentiality": "required" }, "orientation": { "value": "parallel", "essentiality": "required" } }
+  ], "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.45 } },
+  "roles": [
+    { "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" }, "pose": { "laneOffset": 0, "s": 0, "tFrac": 0, "headingOffsetRad": 0 }, "initialSpeedKph": 0 },
+    { "id": "parked-car", "kind": "in_parking_zone", "feature": "parking", "slot": "any", "facing": "with_traffic", "actor": { "class": "car", "catalogId": "vehicle.hatchback", "static": true }, "initialSpeedKph": 0 },
+    { "id": "cyclist", "kind": "relative_to", "ref": "parked-car", "dLane": 0, "dsM": -45, "tFrac": 0, "headingOffsetRad": 0, "actor": { "class": "bicycle" }, "initialSpeedKph": "param.cyclistSpeedKph", "extensions": { "pathSemantics": "parallel_to_reference_actor", "lateralOffsetM": 2.5, "pathLengthM": 120, "mustNotSubstituteClass": true } }
+  ], "props": [],
+  "choreography": { "clipSeconds": 10, "warmupSeconds": 1, "interactions": [
+    { "id": "door-opens-with-collider", "actor": "parked-car", "verb": "set", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "cyclist", "to": { "role": "parked-car" }, "measure": "euclidean", "op": "<=", "valueM": 7 }, "byLatest": 6, "ifNever": "fire" }, "target": { "key": "doors.left", "value": "opening" } },
+    { "id": "cyclist-brakes-for-door", "actor": "cyclist", "verb": "speed", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "cyclist", "to": { "role": "parked-car" }, "measure": "euclidean", "op": "<=", "valueM": 6.5 }, "byLatest": 7, "ifNever": "fire" }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1.2 } }
+  ] },
+  "invariants": [{ "id": "door-zone-criticality", "kind": "ttc", "of": "cyclist", "to": "parked-car", "range": [0.2, 3], "mode": "min", "essentiality": "required" }],
+  "variants": [], "metricSubject": "cyclist",
+  "extensions": { "requiredPrimitive": "The typed doors.left state must drive a hinged child collision shape attached to the parked vehicle, including its opening sweep; trace-only articulation is insufficient." }
+}

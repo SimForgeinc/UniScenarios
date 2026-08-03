@@ -8,6 +8,11 @@
  */
 
 import { matchAnchorReport, type MatchReport, type MatchedSite } from '@uniscenarios/anchor-matcher';
+import {
+  assertMaterializableMapControls,
+  buildSiteRoadControls,
+  buildSiteSignalPlan,
+} from '@uniscenarios/scenario-materializer';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
 import { adaptTemplate, type AdaptNote } from './adapt.js';
@@ -21,20 +26,95 @@ export interface SiteMatch {
   readonly notes: AdaptNote[];
 }
 
+/**
+ * The catalog persists a concrete matcher-site id, rather than an instruction
+ * to pick the best currently-visible site.  Both catalog authoring and replay
+ * therefore use this one policy: retain every otherwise-eligible exact site
+ * (up to the schema's full cap) and never discard it for presentation
+ * diversity.  Required clauses and the template's minimum score remain
+ * untouched.
+ */
+export const CATALOG_EXACT_SITE_OPTIONS = {
+  exactCatalogSiteResolution: true,
+} as const;
+
+/** Apply the catalog's exact-site policy to an already adapted matcher policy. */
+export function catalogExactMatcherPolicy<T extends object>(policy: T): T & {
+  diversity: 'none';
+  maxSitesPerMap: number;
+} {
+  return { ...policy, diversity: 'none', maxSitesPerMap: 1_000 };
+}
+
+export interface SiteMatchOptions {
+  readonly minScore?: number | undefined;
+  readonly maxSites?: number | undefined;
+  /** Use the catalog's lossless persisted-site replay policy. */
+  readonly exactCatalogSiteResolution?: boolean | undefined;
+}
+
 const cache = new Map<string, SiteMatch>();
 
+/** Release retained matcher reports after bounded bulk verification work. */
+export function clearSiteMatchCache(): void {
+  cache.clear();
+}
+
+/**
+ * Required map controls are part of site feasibility, not a later best-effort
+ * materialization detail. Keep sites with incomplete physical signal/stop
+ * bindings out of the public ranked result so the first reported site is
+ * always executable. Explicit stale site ids still resolve from `rejected`
+ * and fail closed in the materializer with the precise control error.
+ */
+function filterExecutableMapControlSites(
+  template: ScenarioTemplateV2,
+  bundle: MapBundle,
+  report: MatchReport,
+): MatchReport {
+  const sites: MatchedSite[] = [];
+  const rejected = [...report.rejected];
+  for (const site of report.sites) {
+    try {
+      const signalPlan = buildSiteSignalPlan(bundle, site);
+      const roadControls = buildSiteRoadControls(bundle, site);
+      assertMaterializableMapControls(template, bundle, site, signalPlan, roadControls);
+      sites.push(site);
+    } catch (error) {
+      if (!(error instanceof CliError) || error.code !== 'map_control_missing') throw error;
+      rejected.push(site);
+    }
+  }
+  if (sites.length === report.sites.length) return report;
+  return {
+    ...report,
+    sites,
+    rejected,
+    failureSummary: sites.length === 0
+      ? 'candidate geometry matched, but every site lacked an executable required map-control binding'
+      : report.failureSummary,
+    warnings: [
+      ...report.warnings,
+      `${report.sites.length - sites.length} site(s) were rejected because required map controls lacked executable physical bindings.`,
+    ],
+  };
+}
+
 function cacheKey(template: ScenarioTemplateV2, mapId: string): string {
-  const anchor = template.anchor.id ?? template.meta.name;
-  return `${anchor}|${mapId}|${JSON.stringify(template.anchor)}|${JSON.stringify(template.roles)}`;
+  // Matching geometry alone is insufficient for cache identity: executable
+  // map-control filtering also depends on the template's required controls
+  // and roles. Templates that share an anchor/roles must not inherit another
+  // template's filtered site set during catalog replay.
+  return `${mapId}|${JSON.stringify(template)}`;
 }
 
 /** Match one template against one map. */
 export async function matchOnMap(
   template: ScenarioTemplateV2,
   mapId: string,
-  options: { minScore?: number | undefined; maxSites?: number | undefined } = {},
+  options: SiteMatchOptions = {},
 ): Promise<SiteMatch> {
-  const key = `${cacheKey(template, mapId)}|${options.minScore ?? ''}|${options.maxSites ?? ''}`;
+  const key = `${cacheKey(template, mapId)}|${options.minScore ?? ''}|${options.maxSites ?? ''}|${options.exactCatalogSiteResolution ? 'catalog-exact' : ''}`;
   const hit = cache.get(key);
   if (hit) return hit;
 
@@ -43,8 +123,17 @@ export async function matchOnMap(
   const policy = { ...(anchor.policy ?? {}) };
   if (options.minScore !== undefined) policy.minScore = options.minScore;
   if (options.maxSites !== undefined) policy.maxSitesPerMap = options.maxSites;
+  if (options.exactCatalogSiteResolution) {
+    // 1,000 is the validated model maximum, and is intentionally the same
+    // cap used when the catalog reserves a matcher site.
+    Object.assign(policy, catalogExactMatcherPolicy(policy));
+  }
 
-  const report = matchAnchorReport({ ...anchor, policy }, bundle.index, { roles });
+  const report = filterExecutableMapControlSites(
+    template,
+    bundle,
+    matchAnchorReport({ ...anchor, policy }, bundle.index, { roles }),
+  );
   const result: SiteMatch = { mapId, bundle, report, notes };
   cache.set(key, result);
   return result;
@@ -54,7 +143,7 @@ export async function matchOnMap(
 export async function matchOnMaps(
   template: ScenarioTemplateV2,
   mapIds: readonly string[],
-  options: { minScore?: number | undefined; maxSites?: number | undefined } = {},
+  options: SiteMatchOptions = {},
 ): Promise<SiteMatch[]> {
   const out: SiteMatch[] = [];
   for (const mapId of mapIds) out.push(await matchOnMap(template, mapId, options));
@@ -66,8 +155,9 @@ export async function findSite(
   template: ScenarioTemplateV2,
   mapId: string,
   siteId: string,
+  options: SiteMatchOptions = {},
 ): Promise<{ bundle: MapBundle; site: MatchedSite }> {
-  const match = await matchOnMap(template, mapId);
+  const match = await matchOnMap(template, mapId, options);
   const site =
     match.report.sites.find((s) => s.siteId === siteId) ??
     match.report.rejected.find((s) => s.siteId === siteId);

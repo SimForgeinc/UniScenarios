@@ -10,7 +10,11 @@
     "scen": "./bin/scen.js"
   },
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./asam": "./src/asam/index.ts",
+    "./esmini-bundle": "./src/asam/esmini-bundle.ts",
+    "./asam/xml-1.4": "./src/asam/xml-1.4.ts",
+    "./asam/types": "./src/asam/types.ts"
   },
   "files": [
     "src",
@@ -27,6 +31,7 @@
     "@uniscenarios/anchor-matcher": "workspace:*",
     "@uniscenarios/map-intel": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
+    "@uniscenarios/scenario-materializer": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*",
     "tsx": "^4.20.0"
   },

@@ -67,6 +67,21 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
       'Whether the actor brakes/steers to avoid a collision. Set false to make a challenger commit; without this every generated critical scenario degrades into a safe one.',
   }),
   decl({
+    key: 'rules.yield',
+    valueType: 'boolean',
+    appliesTo: 'any_actor',
+    description:
+      'Master right-of-way yielding switch. False is appropriate for uncontrolled rolling objects and deliberate non-yielding actors; class-specific yield switches remain independently available.',
+  }),
+  decl({
+    key: 'control:<id>.indication',
+    pattern: '^control:[A-Za-z0-9][A-Za-z0-9_.:@/-]{0,127}\\.indication$',
+    valueType: 'enum',
+    values: ['green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off', 'green_arrow', 'yellow_arrow', 'red_x', 'proceed', 'stop'],
+    appliesTo: 'world',
+    description: 'Set a portable authored traffic control indication, including work-zone signals, lane-use arrows/X, and human stop/proceed direction.',
+  }),
+  decl({
     key: 'rules.obeySignals',
     valueType: 'boolean',
     appliesTo: 'any_actor',
@@ -145,6 +160,12 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
     appliesTo: 'vehicle',
     description: 'Emergency-vehicle beacons, optionally with siren.',
   }),
+  decl({
+    key: 'audio.horn',
+    valueType: 'boolean',
+    appliesTo: 'vehicle',
+    description: 'Vehicle horn state. This is trace-visible and exporters warn when the target profile cannot preserve audio.',
+  }),
 
   decl({
     key: 'doors.left',
@@ -213,6 +234,21 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
     appliesTo: 'world',
     description: 'Switch a signal to a named program (e.g. night flashing).',
   }),
+  decl({
+    key: 'signal:feature:<feature>:<approach>.phase',
+    pattern: '^signal:feature:[A-Za-z][A-Za-z0-9_-]{0,63}:(ego|opposing|left|right)\\.phase$',
+    valueType: 'enum',
+    values: ['green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off'],
+    appliesTo: 'world',
+    description: 'Force the signal bound to a portable junction feature and relative approach.',
+  }),
+  decl({
+    key: 'signal:feature:<feature>:<approach>.program',
+    pattern: '^signal:feature:[A-Za-z][A-Za-z0-9_-]{0,63}:(ego|opposing|left|right)\\.program$',
+    valueType: 'string',
+    appliesTo: 'world',
+    description: 'Switch the signal bound to a portable junction feature and relative approach to a named program.',
+  }),
 
   decl({
     key: 'env.weather',
@@ -275,6 +311,7 @@ export function lookupSetKey(key: string): SetKeyDecl | undefined {
 /** Namespace of a key (`rules`, `lights`, `doors`, `pose`, `signal`, `env`). */
 export function setKeyNamespace(key: string): string {
   if (key.startsWith('signal:')) return 'signal';
+  if (key.startsWith('control:')) return 'control';
   const dot = key.indexOf('.');
   return dot < 0 ? key : key.slice(0, dot);
 }

@@ -1,0 +1,82 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Double-parked delivery van constrains a pass",
+    "description": "A static high-roof delivery van blocks the kerbside travel lane and occludes a delivery worker who walks around its front as ego moves left to pass.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "parking.delivery-double-park",
+    "tags": ["parking", "delivery", "double-parked", "static-obstruction", "worker", "occlusion"],
+    "author": "agent/parking-transit-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "passTriggerM", "type": "continuous", "unit": "m", "tier": 1, "range": [24, 29], "default": 26.5, "distribution": "uniform" },
+      { "id": "workerSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [3.5, 6], "default": 4.8, "distribution": "uniform" },
+      { "id": "arrivalTtc", "type": "continuous", "unit": "s", "tier": 1, "range": [0.8, 1.2], "default": 1, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "delivery-double-park",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 6], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 60], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 5], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [180, null], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "left", "sRange": [20, 100] }, "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "vehicle approaching the blocked kerbside lane",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 18, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.7 * lane.speedLimitKph, 22, 40)"
+    },
+    {
+      "id": "delivery-vehicle", "kind": "relative_to", "label": "static high-roof delivery van double-parked partly in the lane",
+      "actor": { "class": "van", "catalogId": "vehicle.van", "static": true },
+      "ref": "ego", "dLane": 0, "dsM": 52, "tFrac": 0.3, "headingOffsetRad": 0,
+      "initialSpeedKph": 0,
+      "extensions": { "occludes": { "observer": "ego", "target": "delivery-worker" }, "activity": "delivery" }
+    },
+    {
+      "id": "delivery-worker", "kind": "on_reference", "label": "delivery worker emerging on foot from behind the van",
+      "actor": { "class": "pedestrian", "catalogId": "pedestrian.adult_walking" },
+      "pose": { "laneOffset": 0, "s": 76, "tFrac": -1, "headingOffsetRad": 0 },
+      "initialSpeedKph": "param.workerSpeedKph"
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 13.5,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "delivery-van-remains-stopped", "actor": "delivery-vehicle", "verb": "speed", "trigger": { "kind": "at", "t": -2 }, "target": { "mode": "stop" }, "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 } },
+      { "id": "worker-waits-hidden", "actor": "delivery-worker", "verb": "speed", "trigger": { "kind": "at", "t": 1.75 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1 } },
+      { "id": "worker-path", "actor": "delivery-worker", "verb": "route", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "polyline", "points": [
+        { "laneOffset": 0, "s": 76, "tFrac": -1, "headingOffsetRad": 0 },
+        { "laneOffset": 0, "s": 79, "tFrac": -0.8, "headingOffsetRad": 0 },
+        { "laneOffset": 0, "s": 79, "tFrac": 0.8, "headingOffsetRad": 0 },
+        { "laneOffset": 2, "s": 79, "tFrac": 0, "headingOffsetRad": 0 },
+        { "laneOffset": 2, "s": 79, "tFrac": 1, "headingOffsetRad": 0 }
+      ] } },
+      { "id": "worker-does-not-yield", "actor": "delivery-worker", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "worker-arrival", "actor": "delivery-worker", "verb": "speed", "trigger": { "kind": "arrival", "of": "delivery-worker", "at": { "pose": { "laneOffset": 2, "s": 79, "tFrac": 0, "headingOffsetRad": 0 } }, "syncWith": "ego", "ttc": "param.arrivalTtc" }, "target": { "mode": "absolute", "valueKph": "param.workerSpeedKph" }, "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 } },
+      { "id": "ego-passes-left", "actor": "ego", "verb": "changeLane", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "delivery-vehicle" }, "measure": "alongLane", "op": "<=", "valueM": "param.passTriggerM" }, "byLatest": 8, "ifNever": "fire" }, "target": { "mode": "relative", "dk": 1 }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2.5 } }
+    ]
+  },
+  "invariants": [
+    { "id": "worker-reveal-criticality", "kind": "pet", "of": "ego", "to": "delivery-worker", "range": [0.2, 3], "essentiality": "required" },
+    { "id": "blocked-lane-gap", "kind": "gap", "of": "ego", "to": "delivery-vehicle", "unit": "distance", "range": [2, 36], "window": [0, 8], "essentiality": "preferred" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

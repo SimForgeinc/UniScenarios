@@ -125,6 +125,25 @@ export function buildBarricadeTypeIII(): Group {
   return group;
 }
 
+/** Interlocking steel crowd-control barrier, extending along +X. */
+export function buildPedestrianBarrier(): Group {
+  const group = new Group();
+  const steel = material('steel');
+  const railLength = 2;
+  const height = 1.1;
+
+  group.add(box([railLength, 0.055, 0.055], steel, { at: [0, 0.16, 0] }));
+  group.add(box([railLength, 0.055, 0.055], steel, { at: [0, height - 0.08, 0] }));
+  for (let x = -0.9; x <= 0.901; x += 0.3) {
+    group.add(box([0.035, height - 0.24, 0.035], steel, { at: [x, height / 2, 0] }));
+  }
+  for (const x of [-0.92, 0.92]) {
+    group.add(box([0.055, height, 0.055], steel, { at: [x, height / 2, 0] }));
+    group.add(box([0.1, 0.045, 0.55], steel, { at: [x, 0.0225, 0] }));
+  }
+  return group;
+}
+
 export interface BarrierParams {
   /** Segment length along +X. 3.05 m (10 ft) is the standard precast unit. */
   length: number;
@@ -438,6 +457,37 @@ export interface SpoilPileParams {
   length: number;
   height: number;
   seed: number;
+}
+
+export interface PipeParams { length: number; diameter: number }
+
+export function buildTemporaryStopSign(): Group {
+  const group = new Group();
+  const steel = material('steel');
+  group.add(box([0.82, 0.08, 0.72], steel, { at: [0, 0.04, 0] }));
+  group.add(cyl(0.035, 1.45, steel, { at: [0, 0.78, 0], segments: 8 }));
+  group.add(cyl(0.46, 0.055, material('taillight'), { axis: 'x', at: [0, 1.70, 0], segments: 8 }));
+  group.add(box([0.04, 0.10, 0.55], material('signWhite'), { at: [0.03, 1.70, 0] }));
+  return group;
+}
+
+export function buildPortableSignal(): Group {
+  const group = new Group();
+  const steel = material('steel');
+  group.add(box([1.45, 0.18, 1.2], material('safetyOrange'), { at: [0, 0.23, 0] }));
+  group.add(...mirrored(0.48, (z) => cyl(0.20, 0.14, material('tire'), { axis: 'z', at: [-0.35, 0.20, z], segments: 12 })));
+  group.add(cyl(0.06, 2.35, steel, { at: [0, 1.48, 0], segments: 10 }));
+  group.add(box([0.30, 1.02, 0.50], material('plastic'), { at: [0, 2.72, 0] }));
+  const colors = [material('taillight'), material('lamp'), material('lamp', '#48b460')];
+  colors.forEach((mat, i) => group.add(cyl(0.105, 0.07, mat, { axis: 'x', at: [0.185, 3.03 - i * 0.31, 0], segments: 14 })));
+  return group;
+}
+
+export function buildLongPipe(params: PipeParams = { length: 8, diameter: 0.62 }): Group {
+  const group = new Group();
+  const pipe = cyl(params.diameter / 2, params.length, material('steel'), { axis: 'x', at: [0, params.diameter / 2, 0], segments: 16 });
+  group.add(pipe);
+  return group;
 }
 
 /** Excavated spoil / broken pavement heap. */

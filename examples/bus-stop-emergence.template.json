@@ -30,7 +30,7 @@
         "tier": 1,
         "range": [
           0.8,
-          2.5
+          2.2
         ],
         "default": 1.6,
         "distribution": "uniform"
@@ -148,7 +148,7 @@
       "essentiality": "required",
       "pose": {
         "laneOffset": 0,
-        "s": "9 - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
+        "s": "25.5 - param.busGapM - clamp(0.8 * lane.speedLimitKph, 22, 50) / 3.6 * 8",
         "tFrac": 0,
         "headingOffsetRad": 0
       },
@@ -178,7 +178,6 @@
       "initialSpeedKph": 0,
       "extensions": {
         "placementFeature": "stop",
-        "doorsLeft": "open",
         "occludes": {
           "observer": "ego",
           "target": "ped"
@@ -210,6 +209,20 @@
     "warmupSeconds": 1,
     "interactions": [
       {
+        "id": "bus-curbside-doors-open",
+        "label": "the dwelling bus has its right-side passenger doors open at the kerb",
+        "actor": "bus",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": -1
+        },
+        "target": {
+          "key": "doors.right",
+          "value": "open"
+        }
+      },
+      {
         "id": "ped-commits",
         "label": "an alighting passenger stepping round a bus does not look for the second lane",
         "actor": "ped",
@@ -238,7 +251,7 @@
       },
       {
         "id": "ped-rounds-the-bus",
-        "label": "from the rear flank, along the kerb side, around the bus nose, then into the carriageway",
+        "label": "from the alighting point, along the kerb side, around the bus nose, then into the carriageway",
         "actor": "ped",
         "verb": "route",
         "trigger": {
@@ -250,31 +263,31 @@
           "points": [
             {
               "laneOffset": -3,
-              "s": "3 - param.busGapM",
+              "s": "14.8 - param.busGapM",
               "tFrac": -1,
               "headingOffsetRad": 0
             },
             {
               "laneOffset": -3,
-              "s": "9 - param.busGapM",
+              "s": "16 - param.busGapM",
               "tFrac": -1,
               "headingOffsetRad": 0
             },
             {
               "laneOffset": -3,
-              "s": "15.8 - param.busGapM",
+              "s": "23.5 - param.busGapM",
               "tFrac": -1,
               "headingOffsetRad": 0
             },
             {
               "laneOffset": -2,
-              "s": 9,
+              "s": "25.5 - param.busGapM",
               "tFrac": 0,
               "headingOffsetRad": 0
             },
             {
               "laneOffset": -2,
-              "s": 9,
+              "s": "25.5 - param.busGapM",
               "tFrac": 0.8,
               "headingOffsetRad": 0
             }
@@ -292,7 +305,7 @@
           "at": {
             "pose": {
               "laneOffset": -2,
-              "s": 9,
+              "s": "25.5 - param.busGapM",
               "tFrac": 0,
               "headingOffsetRad": 0
             }
@@ -315,16 +328,19 @@
   "invariants": [
     {
       "id": "criticality",
-      "kind": "ttc",
+      "kind": "pet",
       "label": "the ego must actually be threatened by the pedestrian",
       "essentiality": "required",
       "of": "ego",
       "to": "ped",
       "range": [
-        null,
+        0.2,
         3
       ],
-      "mode": "min"
+      "window": [
+        4,
+        10
+      ]
     },
     {
       "id": "arrival-band",
@@ -335,7 +351,7 @@
       "at": {
         "pose": {
           "laneOffset": -2,
-          "s": 9,
+          "s": "25.5 - param.busGapM",
           "tFrac": 0,
           "headingOffsetRad": 0
         }

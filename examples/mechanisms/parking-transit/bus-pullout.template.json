@@ -1,0 +1,80 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Transit bus pulls out from a stop into ego's lane",
+    "description": "A full-size transit bus waits at a required mapped bus stop, signals, then accelerates and moves progressively from the kerb edge into the lane as ego reaches its rear quarter.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "transit.bus-pullout",
+    "tags": ["transit", "bus", "bus-stop", "pullout", "rear-quarter"],
+    "author": "agent/parking-transit-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "dwellSeconds", "type": "continuous", "unit": "s", "tier": 1, "range": [1, 2], "default": 1.5, "distribution": "uniform" },
+      { "id": "rearQuarterDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [14, 24], "default": 19, "distribution": "uniform" },
+      { "id": "busDepartureSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [12, 24], "default": 18, "distribution": "uniform" },
+      { "id": "mergeDurationS", "type": "continuous", "unit": "s", "tier": 1, "range": [2.5, 4.5], "default": 3.5, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "bus-pullout",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 60], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 7], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [170, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "stop",
+        "kind": "bus_stop",
+        "label": "mapped kerbside transit stop",
+        "essentiality": "required",
+        "atM": { "value": [40, 120], "essentiality": "required" },
+        "lateralDistanceM": { "value": [0, 7], "essentiality": "required" },
+        "sameRoad": { "value": true, "essentiality": "required" },
+        "side": { "value": "right", "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 10, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "vehicle approaching alongside the stopped bus",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": "-clamp(0.75 * lane.speedLimitKph, 24, 45) / 3.6 * 5", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.75 * lane.speedLimitKph, 24, 45)",
+      "extensions": { "placementFeature": "stop" }
+    },
+    {
+      "id": "bus", "kind": "on_reference", "label": "full-size transit bus dwelling at the kerbside stop",
+      "actor": { "class": "bus", "catalogId": "vehicle.bus" },
+      "pose": { "laneOffset": 0, "s": 0, "tFrac": -1, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0,
+      "extensions": { "placementFeature": "stop", "serviceState": "dwelling" }
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 14,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "bus-disables-avoidance", "actor": "bus", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "bus-signals", "actor": "bus", "verb": "set", "trigger": { "kind": "when", "condition": { "kind": "standstill", "of": "bus", "forS": "param.dwellSeconds" }, "byLatest": 3, "ifNever": "skip" }, "target": { "key": "lights.indicator", "value": "left" } },
+      { "id": "bus-accelerates", "actor": "bus", "verb": "speed", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "bus" }, "measure": "euclidean", "op": "<=", "valueM": "param.rearQuarterDistanceM" }, "byLatest": 8, "ifNever": "skip" }, "target": { "mode": "absolute", "valueKph": "param.busDepartureSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 3 } },
+      { "id": "bus-enters-lane", "actor": "bus", "verb": "laneOffset", "trigger": { "kind": "after", "of": "bus-accelerates", "event": "start", "delayS": 0.2 }, "target": { "tFrac": 0, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": "param.mergeDurationS" } }
+    ]
+  },
+  "invariants": [
+    { "id": "bus-pullout-criticality", "kind": "pet", "of": "ego", "to": "bus", "range": [0.5, 3.5], "window": [3, 8], "essentiality": "required" },
+    { "id": "bus-departure-order", "kind": "event_order", "events": ["bus-signals", "bus-accelerates", "bus-enters-lane"], "strict": true, "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

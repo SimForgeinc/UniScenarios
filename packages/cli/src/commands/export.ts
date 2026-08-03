@@ -1,4 +1,4 @@
-/** `uniscenarios export <instance> --format xosc-1.4|osc-2.2 --out <file>`. */
+/** `uniscenarios export <instance> --format xosc-1.4|xosc-1.3-esmini|osc-2.2 --out <file>`. */
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -23,6 +23,12 @@ export interface ExportOptions {
 export async function exportScenario(options: ExportOptions): Promise<number> {
   const instance = await readInstance(options.file);
   const bundle = await loadMap(instance.input.mapId);
+  const replayKey = instance.manifest?.replayKey;
+  const provenance = replayKey === undefined ? undefined : {
+    ...replayKey,
+    instanceId: instance.manifest.instanceId,
+    inputHash: instance.manifest.inputHash,
+  };
   let result;
   try {
     result = exportAsamScenario(options.format, instance.input, {
@@ -31,6 +37,10 @@ export async function exportScenario(options: ExportOptions): Promise<number> {
       ...(options.author === undefined ? {} : { author: options.author }),
       ...(options.description === undefined ? {} : { description: options.description }),
       ...(options.routeSampleM === undefined ? {} : { routeSampleM: options.routeSampleM }),
+      ...(provenance === undefined ? {} : { provenance }),
+      ...(options.format === 'xosc-1.4' || options.format === 'xosc-1.3-esmini'
+        ? { executionMode: 'trajectory-replay' as const }
+        : {}),
     });
   } catch (error) {
     if (error instanceof AsamExportError) {
@@ -49,6 +59,11 @@ export async function exportScenario(options: ExportOptions): Promise<number> {
     ok: true,
     format: result.format,
     standard: result.standard,
+    profile: result.profile,
+    intent: result.intent,
+    roundTrip: result.capabilityReport.roundTrip,
+    externalSimulatorValidation: result.capabilityReport.externalSimulatorValidation,
+    capabilityReport: result.capabilityReport,
     mediaType: result.mediaType,
     out: absolute,
     bytes: Buffer.byteLength(result.content),
@@ -58,6 +73,10 @@ export async function exportScenario(options: ExportOptions): Promise<number> {
   else {
     emitLines([
       `${result.standard} export`,
+      `profile: ${result.profile}`,
+      `intent: ${result.intent}`,
+      `round-trip import: ${result.capabilityReport.roundTrip}`,
+      `external simulator validation: ${result.capabilityReport.externalSimulatorValidation}`,
       `written: ${absolute}`,
       `bytes: ${payload.bytes}`,
       `warnings: ${result.warnings.length}`,

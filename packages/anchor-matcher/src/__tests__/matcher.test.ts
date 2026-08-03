@@ -114,6 +114,82 @@ describe('matchAnchor — the worked example', () => {
     expect(site!.clauses.find((c) => c.path === 'features.stop.atM')?.reason).toContain('same-road station');
   });
 
+  it('hard-rejects a mapped stop beyond the authored lateral proximity', () => {
+    const withFarStop = {
+      ...signalizedIndex,
+      pointFeatures: [
+        ...signalizedIndex.pointFeatures,
+        { id: 'bus-stop:far-kerb', kind: 'bus_stop' as const, laneRsl: '1:0:-2', s: 50, point: { x: -100, y: -14 } },
+      ],
+      factIndex: {
+        ...signalizedIndex.factIndex,
+        pointFeaturesByKind: {
+          ...signalizedIndex.factIndex.pointFeaturesByKind,
+          bus_stop: ['bus-stop:far-kerb'],
+        },
+      },
+    };
+    const base = workedExampleAnchor();
+    const anchor = parseLogicalAnchor({
+      ...base,
+      id: 'worked-example-with-far-stop',
+      features: [
+        ...base.features,
+        {
+          id: 'stop',
+          kind: 'bus_stop',
+          atM: { value: [-95, -85], essentiality: 'required' },
+          lateralDistanceM: { value: [0, 7], essentiality: 'required' },
+        },
+      ],
+    });
+
+    const report = matchAnchorReport(anchor, withFarStop);
+    expect(report.sites).toEqual([]);
+    expect(report.rejected.some((site) => site.clauses.some((clause) =>
+      clause.path === 'features.stop.lateralDistanceM' &&
+      typeof clause.actual === 'number' && clause.actual > 7,
+    ))).toBe(true);
+  });
+
+  it('hard-rejects a proximity-only stop when same-road association is required', () => {
+    const withNearbyStop = {
+      ...signalizedIndex,
+      pointFeatures: [
+        ...signalizedIndex.pointFeatures,
+        { id: 'bus-stop:nearby-only', kind: 'bus_stop' as const, laneRsl: 'missing:0:1', s: 50, point: { x: -100, y: -2 } },
+      ],
+      factIndex: {
+        ...signalizedIndex.factIndex,
+        pointFeaturesByKind: {
+          ...signalizedIndex.factIndex.pointFeaturesByKind,
+          bus_stop: ['bus-stop:nearby-only'],
+        },
+      },
+    };
+    const base = workedExampleAnchor();
+    const anchor = parseLogicalAnchor({
+      ...base,
+      id: 'worked-example-with-proximity-only-stop',
+      features: [
+        ...base.features,
+        {
+          id: 'stop',
+          kind: 'bus_stop',
+          atM: { value: [-95, -85], essentiality: 'required' },
+          lateralDistanceM: { value: [0, 7], essentiality: 'required' },
+          sameRoad: { value: true, essentiality: 'required' },
+        },
+      ],
+    });
+
+    const report = matchAnchorReport(anchor, withNearbyStop);
+    expect(report.sites).toEqual([]);
+    expect(report.rejected.some((site) => site.clauses.some((clause) =>
+      clause.path === 'features.stop.sameRoad' && clause.actual === false,
+    ))).toBe(true);
+  });
+
   it('stamps map, digest and semantics version onto the site', () => {
     const site = sites[0]!;
     expect(site.mapId).toBe('synthetic');
@@ -412,6 +488,27 @@ describe('matchAnchor — corridor-only anchors', () => {
     expect(site.frame.origin.kind).toBe('corridor');
     expect(site.frame.origin.mapFeatureId).toMatch(/^seg:/);
     expect(site.clauses.find((c) => c.path === 'corridor.throughLanesSameDir')!.actual).toBe(3);
+  });
+
+  it('places featureless corridor zero after the required approach runway', () => {
+    const anchor = parseLogicalAnchor({
+      id: 'featureless-with-approach',
+      corridor: {
+        throughLanesSameDir: { value: [3, 3], essentiality: 'required' },
+        runwayUpstreamM: { value: 40, essentiality: 'required' },
+        runwayDownstreamM: { value: 120, essentiality: 'required' },
+      },
+      policy: { diversity: 'none', minScore: 0 },
+    });
+    const roles = parseRoleBindings([
+      { role: 'ego', kind: 'on_reference', dsM: -30, tFrac: 0 },
+    ]);
+    const sites = matchAnchor(anchor, signalizedIndex, { roles });
+    expect(sites.length).toBeGreaterThan(0);
+    expect(sites[0]!.frame.runwayUpstreamM).toBe(40);
+    expect(sites[0]!.frame.runwayDownstreamM).toBeGreaterThanOrEqual(120);
+    expect(sites[0]!.bindings[0]).toMatchObject({ role: 'ego', status: 'bound' });
+    expect(sites[0]!.bindings[0]!.pose!.s).toBe(-30);
   });
 
   it('fails a required clause the index cannot answer, loudly', () => {

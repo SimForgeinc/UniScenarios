@@ -27,6 +27,7 @@ export {
   AnchorFeatureSchema,
   CorridorSchema,
   JunctionPredicateSchema,
+  CrossingPredicateSchema,
   MatchPolicySchema,
   RangeSchema,
   EssentialitySchema,
@@ -47,6 +48,7 @@ export {
   type AnchorFeature,
   type Corridor,
   type JunctionPredicate,
+  type CrossingPredicate,
   type MatchPolicy,
   type Clause,
   type Essentiality,
@@ -180,6 +182,30 @@ export { mirrorAnchor, mirrorRoleBindings } from './mirror.js';
 
 export { computeSiteId, quantizeS, S_QUANTUM_M, type SiteIdInput } from './site-id.js';
 
+export { projectPoint, headingAtS, pointAtS } from './geometry.js';
+
 export { sha256Hex } from './sha256.js';
 
-export { matchAnchor, matchAnchorReport, type MatchOptions } from './matcher.js';
+export { matchAnchor, matchAnchorReport, resolveExactCorridorSite, type MatchOptions } from './matcher.js';
+
+export {
+  VARIATION_CONTRACT_VERSION,
+  inferPortableSitePattern,
+  reportSiteEquivalence,
+  searchScenarioVariations,
+  compareBehaviorSignatures,
+  finalizeVariationAcceptance,
+  type BehaviorEquivalenceReport,
+  type BehaviorSignature,
+  type InferSitePatternOptions,
+  type PortableSitePattern,
+  type SiteEquivalenceReport,
+  type SitePatternProvenance,
+  type SiteStructuralSignature,
+  type VariationCandidate,
+  type VariationAcceptanceReport,
+  type VariationIssue,
+  type VariationIssueCode,
+  type VariationIssueStage,
+  type VariationSearchResult,
+} from './variations.js';

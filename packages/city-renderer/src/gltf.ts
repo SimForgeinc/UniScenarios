@@ -1,9 +1,12 @@
 import type { BufferGeometry, Material, Object3D, Texture, WebGLRenderer } from 'three';
 import { Mesh } from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 
 let sharedLoader: GLTFLoader | null = null;
+let sharedKtx2: KTX2Loader | null = null;
+let sharedKtx2Path = '';
 
 /**
  * One GLTFLoader for the whole app.
@@ -15,17 +18,26 @@ let sharedLoader: GLTFLoader | null = null;
  *   exists, which moves PNG decode off the main thread. That is the single
  *   biggest hitch source here: a LOD0 tile carries up to 41 x 2048px PNGs.
  */
-export function getGLTFLoader(): GLTFLoader {
+export function getGLTFLoader(renderer?: WebGLRenderer, ktx2TranscoderPath = ''): GLTFLoader {
   if (!sharedLoader) {
     const loader = new GLTFLoader();
     MeshoptDecoder.useWorkers(Math.min(4, Math.max(1, (navigator.hardwareConcurrency ?? 4) - 2)));
     loader.setMeshoptDecoder(MeshoptDecoder);
     sharedLoader = loader;
   }
+  if (renderer && ktx2TranscoderPath && (!sharedKtx2 || sharedKtx2Path !== ktx2TranscoderPath)) {
+    sharedKtx2?.dispose();
+    sharedKtx2 = new KTX2Loader().setTranscoderPath(ktx2TranscoderPath).detectSupport(renderer);
+    sharedKtx2Path = ktx2TranscoderPath;
+    sharedLoader.setKTX2Loader(sharedKtx2);
+  }
   return sharedLoader;
 }
 
 export function disposeSharedLoader(): void {
+  sharedKtx2?.dispose();
+  sharedKtx2 = null;
+  sharedKtx2Path = '';
   sharedLoader = null;
 }
 

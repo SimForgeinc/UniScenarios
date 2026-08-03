@@ -1,0 +1,96 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Vehicle emerges from an obstructed parking-area access",
+    "description": "A mapped parking area anchors a creeping access vehicle. A static hedge blocks the initial sight triangle before the vehicle crosses the frontage edge and accelerates into ego's lane.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "parking.driveway-emergence",
+    "tags": ["parking", "driveway", "emergence", "static-obstruction", "occlusion"],
+    "author": "agent/parking-transit-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "emergenceDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [20, 34], "default": 27, "distribution": "uniform" },
+      { "id": "creepSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [3, 7], "default": 5, "distribution": "uniform" },
+      { "id": "entrySpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [12, 24], "default": 18, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "driveway-emergence",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 60], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 7], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [100, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "access",
+        "kind": "parking_zone",
+        "label": "mapped parking-area access beside the frontage",
+        "essentiality": "required",
+        "atM": { "value": [35, 110], "essentiality": "required" },
+        "side": { "value": "right", "essentiality": "preferred" }
+      }
+    ],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "vehicle approaching the obstructed frontage",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": "-clamp(0.75 * lane.speedLimitKph, 24, 45) / 3.6 * 5", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.75 * lane.speedLimitKph, 24, 45)",
+      "extensions": { "placementFeature": "access" }
+    },
+    {
+      "id": "emerging-vehicle", "kind": "on_reference", "label": "vehicle creeping nose-first out of the driveway",
+      "actor": { "class": "car", "catalogId": "vehicle.suv" },
+      "pose": { "laneOffset": 0, "s": 0, "tFrac": -1, "headingOffsetRad": 1.5707963267948966 },
+      "initialSpeedKph": 0,
+      "extensions": { "placementFeature": "access" }
+    }
+  ],
+  "props": [
+    {
+      "id": "driveway-hedge",
+      "catalogId": "occluder.hedge_run",
+      "label": "static frontage hedge restricting the driveway sight triangle",
+      "feature": "access",
+      "pose": { "laneOffset": 0, "s": -3, "tFrac": -1, "headingOffsetRad": 0 },
+      "headingOffsetRad": 0,
+      "scale": 1,
+      "occludes": { "observer": "ego", "target": "emerging-vehicle" },
+      "targetRevealToConflictS": 1.2,
+      "essentiality": "required",
+      "extensions": { "staticObstruction": true, "dims": { "l": 6, "w": 0.8, "h": 1.2 } }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 14,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "driveway-path", "actor": "emerging-vehicle", "verb": "route", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "polyline", "points": [
+        { "laneOffset": 0, "s": 0, "tFrac": -1, "headingOffsetRad": 1.5707963267948966 },
+        { "laneOffset": 0, "s": 0, "tFrac": -0.55, "headingOffsetRad": 1.2 },
+        { "laneOffset": 0, "s": 2, "tFrac": 0, "headingOffsetRad": 0.5 },
+        { "laneOffset": 0, "s": 24, "tFrac": 0, "headingOffsetRad": 0 }
+      ] } },
+      { "id": "emerging-disables-avoidance", "actor": "emerging-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "emerging-creeps", "actor": "emerging-vehicle", "verb": "speed", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "emerging-vehicle" }, "measure": "euclidean", "op": "<=", "valueM": "param.emergenceDistanceM" }, "byLatest": 8, "ifNever": "fire" }, "target": { "mode": "absolute", "valueKph": "param.creepSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1 } },
+      { "id": "emerging-accelerates", "actor": "emerging-vehicle", "verb": "speed", "trigger": { "kind": "after", "of": "emerging-creeps", "event": "start", "delayS": 2 }, "target": { "mode": "absolute", "valueKph": "param.entrySpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2.5 } }
+    ]
+  },
+  "invariants": [
+    { "id": "emergence-criticality", "kind": "ttc", "of": "ego", "to": "emerging-vehicle", "range": [0.5, 3.5], "mode": "min", "essentiality": "required" },
+    { "id": "emergence-order", "kind": "event_order", "events": ["emerging-creeps", "emerging-accelerates"], "strict": true, "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

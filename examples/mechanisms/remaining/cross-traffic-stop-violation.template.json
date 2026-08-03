@@ -1,0 +1,28 @@
+{
+  "scenarioVersion": 2,
+  "meta": { "name": "Cross traffic rolls a stop", "description": "At a stop-controlled junction, ego proceeds with priority while a cross-traffic car keeps nonzero speed through its control point and reaches the geometric conflict shortly after ego.", "createdAt": "2026-08-01T00:00:00.000Z", "modifiedAt": "2026-08-01T00:00:00.000Z", "appVersion": "uniscenarios/0.0.1", "archetype": "intersection.cross-traffic-stop-violation", "tags": ["intersection", "minor-stop", "stop-violation", "cross-traffic"], "author": "agent/remaining-mechanisms", "negativeControl": false },
+  "params": { "declarations": [
+    { "id": "arrivalDeltaS", "type": "continuous", "unit": "s", "tier": 1, "range": [1.6, 2], "default": 1.8, "distribution": "uniform" },
+    { "id": "rollSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [12, 16], "default": 14, "distribution": "uniform" }
+  ], "constraints": [] },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": { "id": "cross-traffic-stop-violation", "corridor": {
+    "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" }, "runwayUpstreamM": { "value": [45, null], "essentiality": "required" }, "runwayDownstreamM": { "value": [60, null], "essentiality": "required" }
+  }, "features": [
+    { "id": "stop-junction", "kind": "junction", "essentiality": "required", "atM": { "value": [0, 0], "essentiality": "required" }, "arms": { "value": [3, 4], "essentiality": "required" }, "control": { "value": ["minor_stop"], "essentiality": "required" }, "egoTurn": { "value": ["straight"], "essentiality": "required" }, "conflictingApproach": { "value": { "from": "from_left", "turn": "straight", "crossingAngleDeg": [55, 125] }, "essentiality": "required" } }
+  ], "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "strict", "minScore": 0.45 } },
+  "roles": [
+    { "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" }, "pose": { "laneOffset": 0, "s": -38, "tFrac": 0, "headingOffsetRad": 0 }, "initialSpeedKph": "clamp(0.65 * lane.speedLimitKph, 18, 38)", "requiredMovementControl": "uncontrolled" },
+    { "id": "violator", "kind": "conflicting_gate", "feature": "stop-junction", "from": "from_left", "turn": "straight", "actor": { "class": "car", "catalogId": "vehicle.suv" }, "arriveAtConflict": { "relativeTo": "ego", "deltaT": "param.arrivalDeltaS" }, "initialSpeedKph": "clamp(param.rollSpeedKph, 0.22 * lane.speedLimitKph, 0.35 * lane.speedLimitKph)", "requiredMovementControl": "stop" }
+  ],
+  "props": [],
+  "choreography": { "clipSeconds": 11.5, "warmupSeconds": 2, "interactions": [
+    { "id": "violator-ignores-stop", "actor": "violator", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.obeySignals", "value": false } },
+    { "id": "violator-commits", "actor": "violator", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } }
+  ] },
+  "invariants": [
+    { "id": "roll-through-speed", "kind": "speed_rel_limit", "of": "violator", "rangeFrac": [0.2, 0.8], "window": [0, 8], "essentiality": "required" },
+    { "id": "cross-traffic-arrival", "kind": "arrival", "of": "violator", "at": { "feature": "stop-junction", "at": "center" }, "syncWith": "ego", "deltaTRange": [1.4, 2.2], "essentiality": "required" },
+    { "id": "lateral-criticality", "kind": "pet", "of": "ego", "to": "violator", "range": [0.3, 3.2], "essentiality": "required" }
+  ], "variants": [], "metricSubject": "ego"
+}

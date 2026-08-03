@@ -1,0 +1,128 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Right turn across an occupied crosswalk",
+    "description": "Ego follows a map-derived right-turn movement while an adult pedestrian walks completely across a marked receiving-leg crossing and remains at the terminal pose for the aftermath. Pedestrian arrival is solved against the mapped crossing centre so the conflict survives retargeting.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "intersection.right-turn-crosswalk",
+    "tags": ["junction", "vru", "right-turn", "crosswalk", "stable-aftermath"],
+    "author": "agent/junction-vru",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "arrivalTtc",
+        "type": "continuous",
+        "description": "Seconds between ego and pedestrian arrival at the crossing conflict point.",
+        "unit": "s",
+        "tier": 1,
+        "range": [2, 2.05],
+        "default": 2.03,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "right-turn-crosswalk",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [20, 60], "essentiality": "preferred" },
+      "runwayUpstreamM": { "value": [45, null], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [35, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "jx",
+        "kind": "junction",
+        "label": "the junction where ego turns right",
+        "essentiality": "required",
+        "atM": { "value": [0, 0], "essentiality": "required" },
+        "arms": { "value": [3, 4], "essentiality": "preferred" },
+        "control": { "value": ["signalized"], "essentiality": "required" },
+        "egoTurn": { "value": ["right"], "essentiality": "required" },
+        "hasCrossingOnLeg": { "value": true, "essentiality": "required" }
+      },
+      {
+        "id": "xw",
+        "kind": "crossing",
+        "label": "the occupied junction-leg crossing",
+        "essentiality": "required",
+        "atM": { "value": [0, 24], "essentiality": "required" }
+      }
+    ],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 12, "diversity": "strict", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "the right-turning vehicle under test",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": "-(clamp(0.55 * lane.speedLimitKph, 12, 28) / 3.6) * 3.2", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.55 * lane.speedLimitKph, 12, 28)"
+    },
+    {
+      "id": "pedestrian",
+      "kind": "on_crossing",
+      "label": "the pedestrian already entering the crossing",
+      "actor": { "class": "pedestrian", "catalogId": "pedestrian.adult_walking" },
+      "essentiality": "required",
+      "feature": "xw",
+      "startFrac": 0.05,
+      "direction": "near_to_far",
+      "lateralFrac": 0,
+      "initialSpeedKph": 3.6
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 12,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "ego-bound-signal-proceeds",
+        "label": "the exact bound ego movement is released for the occupied crossing interval",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": { "key": "signal:feature:jx:ego.phase", "value": "green" }
+      },
+      {
+        "id": "ego-continues-turn",
+        "label": "controlled right turn yielding clearance at the occupied crossing",
+        "actor": "ego",
+        "verb": "set",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": { "key": "rules.collisionAvoidance", "value": true }
+      },
+      {
+        "id": "pedestrian-commits",
+        "actor": "pedestrian",
+        "verb": "set",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": { "key": "rules.collisionAvoidance", "value": false }
+      },
+      {
+        "id": "pedestrian-arrival",
+        "actor": "pedestrian",
+        "verb": "speed",
+        "trigger": { "kind": "arrival", "of": "pedestrian", "at": { "feature": "xw", "at": "center" }, "syncWith": "ego", "ttc": "param.arrivalTtc" },
+        "target": { "mode": "absolute", "valueKph": 5.4 },
+        "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "criticality", "kind": "pet", "essentiality": "required", "of": "ego", "to": "pedestrian", "range": [0.2, 3] },
+    { "id": "arrival-band", "kind": "arrival", "essentiality": "required", "of": "pedestrian", "at": { "feature": "xw", "at": "center" }, "syncWith": "ego", "deltaTRange": [-2.2, -1.9] },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "preferred", "of": "ego", "maxMps2": 8 }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

@@ -1,0 +1,117 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Crossing guard releases a waiting child group",
+    "description": "A crossing guard holds a child group at a marked school crossing, checks the approach, then gives an explicit wave-through cue. The children remain a separate actor, enter only after the release, cross as a compact group, and stop on the far side while the guard returns to a stable halt gesture.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "school.crossing-guard-release",
+    "tags": ["school", "crossing", "crossing-guard", "children", "release-cue"],
+    "author": "agent/school-workzone-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "guardReleaseS", "type": "continuous", "unit": "s", "tier": 1, "range": [2.5, 4], "default": 3.2, "distribution": "uniform" },
+      { "id": "releaseLagS", "type": "continuous", "unit": "s", "tier": 1, "range": [0.5, 1.2], "default": 0.8, "distribution": "uniform" },
+      { "id": "groupSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [8.5, 11], "default": 9.5, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "morning" },
+  "anchor": {
+    "id": "school-crossing-guard-release",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 2], "essentiality": "required" },
+      "speedLimitKph": { "value": [20, 50], "essentiality": "preferred", "weight": 2 },
+      "requiresAdjacent": { "value": ["sidewalk"], "essentiality": "preferred" },
+      "curvatureDegPer10m": { "value": [0, 7], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [140, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "school-zone",
+        "kind": "school_zone",
+        "label": "signed school-zone control for the staffed crossing",
+        "essentiality": "required",
+        "atM": { "value": [0, null], "essentiality": "required" }
+      },
+      {
+        "id": "school-crossing",
+        "kind": "crossing",
+        "label": "marked school crossing staffed by the guard",
+        "essentiality": "required",
+        "atM": { "value": [65, 140], "essentiality": "preferred" },
+        "marked": { "value": true, "essentiality": "preferred" },
+        "placement": { "value": "either", "essentiality": "preferred" }
+      }
+    ],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "vehicle approaching the staffed crossing",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": 24, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.72 * lane.speedLimitKph, 20, 36)"
+    },
+    {
+      "id": "crossing-guard",
+      "kind": "on_reference",
+      "label": "stationary crossing guard who controls the release cue",
+      "actor": { "class": "pedestrian", "catalogId": "construction.flagger", "static": true, "dims": { "length": 0.65, "width": 0.65, "height": 1.75 } },
+      "pose": { "laneOffset": 0, "s": 96, "tFrac": -0.9, "headingOffsetRad": 0 },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "child-group",
+      "kind": "on_crossing",
+      "label": "compact group of children waiting for and obeying the guard's release",
+      "actor": { "class": "pedestrian", "catalogId": "pedestrian.child_walking", "dims": { "length": 1.2, "width": 1.5, "height": 1.35 } },
+      "feature": "school-crossing",
+      "startFrac": 0.03,
+      "direction": "near_to_far",
+      "lateralFrac": 0,
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 16,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "guard-holds", "actor": "crossing-guard", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "pose.gesture", "value": "halt" } },
+      { "id": "ego-yields-to-guard", "actor": "ego", "verb": "speed", "trigger": { "kind": "at", "t": 1 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 10 } },
+      { "id": "children-commit", "actor": "child-group", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "children-wait", "actor": "child-group", "verb": "speed", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "stop" }, "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 } },
+      { "id": "guard-releases", "actor": "crossing-guard", "verb": "set", "trigger": { "kind": "at", "t": "param.guardReleaseS" }, "target": { "key": "pose.gesture", "value": "wave_through" } },
+      {
+        "id": "children-enter",
+        "actor": "child-group",
+        "verb": "speed",
+        "trigger": { "kind": "after", "of": "guard-releases", "event": "start", "delayS": "param.releaseLagS" },
+        "target": { "mode": "absolute", "valueKph": "param.groupSpeedKph" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 0.35 }
+      },
+      {
+        "id": "children-clear",
+        "actor": "child-group",
+        "verb": "speed",
+        "trigger": { "kind": "after", "of": "children-enter", "event": "start", "delayS": 7.5 },
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "time", "value": 0.5 }
+      },
+      { "id": "guard-secures-crossing", "actor": "crossing-guard", "verb": "set", "trigger": { "kind": "after", "of": "children-clear", "event": "start", "delayS": 0.5 }, "target": { "key": "pose.gesture", "value": "halt" } }
+    ]
+  },
+  "invariants": [
+    { "id": "release-before-entry", "kind": "event_order", "events": ["guard-releases", "children-enter", "children-clear", "guard-secures-crossing"], "strict": true, "minSeparationS": 0.4, "essentiality": "required" },
+    { "id": "crossing-criticality", "kind": "ttc", "of": "ego", "to": "child-group", "range": [0.2, 4], "window": [3, 13], "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

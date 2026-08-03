@@ -1,0 +1,77 @@
+import { Box3, Group, Scene, Vector3 } from 'three';
+import type { WebGLRenderer } from 'three';
+import { describe, expect, it, vi } from 'vitest';
+import { TileStreamLayer, type PreparedAsset } from './streaming';
+
+const emptyAsset = (): PreparedAsset => ({
+  object: new Group(),
+  resources: { geometries: [], materials: [], textures: [] },
+  bytes: 1,
+  pendingTextures: [],
+});
+
+describe('essential streaming assets', () => {
+  it('starts the pinned road/ground load even when the optional-detail budget refuses it', async () => {
+    const build = vi.fn(async () => emptyAsset());
+    const layer = new TileStreamLayer({
+      name: 'road-layer',
+      renderer: { compileAsync: async () => undefined } as never,
+      scene: new Scene(),
+      defs: [{
+        id: 'road',
+        box: new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+        lods: [{ level: 0, file: 'road.glb', triangles: 1, fileSize: 1000, geometricError: 0 }],
+      }],
+      build,
+      maxConcurrent: 1,
+      memory: { admit: () => false, maxAssetBytes: () => 0 },
+      pinCoarsest: true,
+      essentialCoarsest: true,
+    });
+    layer.update(new Vector3(), 1, 9999);
+    await Promise.resolve();
+    expect(build).toHaveBeenCalledOnce();
+    layer.dispose();
+  });
+
+  it('keeps compilation observable through disposal so the renderer can be torn down afterward', async () => {
+    let resolveCompile!: () => void;
+    const compile = new Promise<void>((resolve) => { resolveCompile = resolve; });
+    const compileAsync = vi.fn(() => compile);
+    const renderer = { compileAsync } as unknown as WebGLRenderer;
+    const asset = emptyAsset();
+    const disposeAsset = vi.fn();
+    asset.dispose = disposeAsset;
+    const layer = new TileStreamLayer({
+      name: 'cross-map-layer',
+      renderer,
+      scene: new Scene(),
+      defs: [{
+        id: 'cross-map-tile',
+        box: new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+        lods: [{ level: 0, file: 'tile.glb', triangles: 1, fileSize: 1, geometricError: 0 }],
+      }],
+      build: vi.fn(async () => asset),
+      maxConcurrent: 1,
+      memory: { admit: () => true, maxAssetBytes: () => 100 },
+      pinCoarsest: true,
+    });
+
+    layer.update(new Vector3(), 1, 9999);
+    await Promise.resolve();
+    layer.pumpUploads(performance.now() + 100, { remaining: 1 }, {} as never);
+    expect(compileAsync).toHaveBeenCalledOnce();
+
+    layer.dispose();
+    let idle = false;
+    const settled = layer.whenCompilationIdle().then(() => { idle = true; });
+    await Promise.resolve();
+    expect(idle).toBe(false);
+    expect(disposeAsset).not.toHaveBeenCalled();
+
+    resolveCompile();
+    await settled;
+    expect(idle).toBe(true);
+    expect(disposeAsset).toHaveBeenCalledOnce();
+  });
+});

@@ -32,7 +32,8 @@ import {
 import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
-import { loadMapSignalCatalog, type MapSignalCatalog } from './map-signals.js';
+import type { MapSignalCatalog } from './map-signals.js';
+import { loadMapSignalCatalog } from './map-signals-loader.js';
 
 export { KNOWN_MAPS };
 

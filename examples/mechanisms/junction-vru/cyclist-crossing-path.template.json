@@ -1,0 +1,92 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Cyclist crossing the vehicle path",
+    "description": "A bicycle-class actor rides along a side path, turns across ego's corridor, passes through the declared lane-centre conflict point, and finishes beyond the far edge for a stable aftermath. Bicycle identity, compact footprint, and cycling speed are preserved explicitly; no pedestrian substitution is used.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "vru.cyclist-crossing-path",
+    "tags": ["vru", "bicycle", "crossing-path", "midblock", "stable-aftermath"],
+    "author": "agent/junction-vru",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "arrivalTtc", "type": "continuous", "description": "Seconds between cyclist and ego reaching the shared path point.", "unit": "s", "tier": 1, "range": [1.0, 1.8], "default": 1.4, "distribution": "uniform" },
+      { "id": "cyclistSpeedKph", "type": "continuous", "description": "Cycling speed retained by the bicycle-class actor.", "unit": "kph", "tier": 1, "range": [12, 24], "default": 18, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "noon" },
+  "anchor": {
+    "id": "cyclist-crossing-path",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 3], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 60], "essentiality": "preferred" },
+      "curvatureDegPer10m": { "value": [0, 8], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [150, null], "essentiality": "required" }
+    },
+    "features": [],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.5 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "the vehicle under test",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": "100 - (clamp(0.8 * lane.speedLimitKph, 22, 48) / 3.6) * 5.5", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 22, 48)"
+    },
+    {
+      "id": "cyclist",
+      "kind": "on_reference",
+      "label": "the bicycle rider entering from the side",
+      "actor": { "class": "bicycle" },
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 65, "tFrac": -1, "headingOffsetRad": 0 },
+      "initialSpeedKph": "param.cyclistSpeedKph"
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 12,
+    "warmupSeconds": 1,
+    "interactions": [
+      { "id": "ego-holds-course", "actor": "ego", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "cyclist-commits", "actor": "cyclist", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      {
+        "id": "cyclist-crosses",
+        "actor": "cyclist",
+        "verb": "route",
+        "trigger": { "kind": "at", "t": 0 },
+        "target": {
+          "mode": "polyline",
+          "points": [
+            { "laneOffset": 0, "s": 65, "tFrac": -1, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 100, "tFrac": -1, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 100, "tFrac": 0, "headingOffsetRad": 0 },
+            { "laneOffset": 0, "s": 100, "tFrac": 1, "headingOffsetRad": 0 }
+          ]
+        }
+      },
+      {
+        "id": "cyclist-arrival",
+        "actor": "cyclist",
+        "verb": "speed",
+        "trigger": { "kind": "arrival", "of": "cyclist", "at": { "pose": { "laneOffset": 0, "s": 100, "tFrac": 0, "headingOffsetRad": 0 } }, "syncWith": "ego", "ttc": "param.arrivalTtc" },
+        "target": { "mode": "absolute", "valueKph": "param.cyclistSpeedKph" },
+        "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "criticality", "kind": "pet", "essentiality": "required", "of": "ego", "to": "cyclist", "range": [0.2, 3] },
+    { "id": "arrival-band", "kind": "arrival", "essentiality": "required", "of": "cyclist", "at": { "pose": { "laneOffset": 0, "s": 100, "tFrac": 0, "headingOffsetRad": 0 } }, "syncWith": "ego", "deltaTRange": [-2.6, -0.8] },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "preferred", "of": "ego", "maxMps2": 8 }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

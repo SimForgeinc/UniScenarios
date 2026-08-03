@@ -17,6 +17,8 @@
  * | invariant | source |
  * |---|---|
  * | `ttc` | `metrics.minTTC` (engine, closing-speed form) |
+ * | `path_ttc` | `metrics.minPathTTC` (route/conflict-zone occupancy) |
+ * | `pet` | `metrics.minPET` (route-intersection occupancy separation) |
  * | `gap` (distance) | `metrics.minDistance` for the pair |
  * | `gap` (time), `headway` | per-tick centre distance ÷ follower speed — Euclidean, not along-lane |
  * | `closing_speed` | per-tick range rate at the criticality peak |
@@ -33,7 +35,7 @@ import {
   type Range,
   type ScenarioTemplateV2,
 } from '@uniscenarios/scenario-model';
-import type { ArrivalSolution, SimTrace } from '@uniscenarios/sim-engine';
+import { criticalityMetricsInWindow, type ArrivalSolution, type SimTrace } from '@uniscenarios/sim-engine';
 
 export interface InvariantResidualReport {
   readonly id: string;
@@ -155,14 +157,15 @@ export function checkInvariants(ctx: InvariantContext): InvariantResidualReport[
 
     switch (inv.kind) {
       case 'ttc': {
-        const min = trace.metrics.minTTC;
-        const pairMatches =
-          min !== null && ((min.pair[0] === inv.of && min.pair[1] === inv.to) || (min.pair[0] === inv.to && min.pair[1] === inv.of));
+        const min = trace.metrics.criticalitySamples === undefined
+          ? trace.metrics.minTTC
+          : criticalityMetricsInWindow(trace.metrics, [lo, hi], [inv.of, inv.to]).minTTC;
+        const pairMatches = min !== null && ((min.pair[0] === inv.of && min.pair[1] === inv.to) || (min.pair[0] === inv.to && min.pair[1] === inv.of));
         if (min === null || !pairMatches) {
           out.push(unchecked(inv, `no TTC was recorded for ${inv.of}/${inv.to}`));
           break;
         }
-        if (!inWindow(min.t)) {
+        if (trace.metrics.criticalitySamples === undefined && !inWindow(min.t)) {
           out.push(unchecked(inv, `the TTC minimum at t=${min.t.toFixed(2)} s is outside the window ${lo}–${hi} s`));
           break;
         }
@@ -177,8 +180,86 @@ export function checkInvariants(ctx: InvariantContext): InvariantResidualReport[
         );
         break;
       }
+      case 'path_ttc': {
+        const min = trace.metrics.criticalitySamples === undefined
+          ? (trace.metrics.minPathTTC ?? null)
+          : criticalityMetricsInWindow(trace.metrics, [lo, hi], [inv.of, inv.to]).minPathTTC;
+        const pairMatches =
+          min !== null && ((min.pair[0] === inv.of && min.pair[1] === inv.to) || (min.pair[0] === inv.to && min.pair[1] === inv.of));
+        if (min === null || !pairMatches) {
+          out.push(unchecked(inv, `no path TTC was recorded for ${inv.of}/${inv.to}`));
+          break;
+        }
+        if (trace.metrics.criticalitySamples === undefined && !inWindow(min.t)) {
+          out.push(unchecked(inv, `the path-TTC minimum at t=${min.t.toFixed(2)} s is outside the window ${lo}–${hi} s`));
+          break;
+        }
+        out.push(
+          report(
+            inv,
+            inv.range,
+            min.value,
+            'metrics.minPathTTC',
+            `min path TTC ${min.value.toFixed(2)} s at t=${min.t.toFixed(2)} s, wanted ${fmtRange(inv.range)}`,
+          ),
+        );
+        break;
+      }
+      case 'pet': {
+        const min = trace.metrics.criticalitySamples === undefined
+          ? (trace.metrics.minPET ?? null)
+          : criticalityMetricsInWindow(trace.metrics, [lo, hi], [inv.of, inv.to]).minPET;
+        const pairMatches =
+          min !== null && ((min.pair[0] === inv.of && min.pair[1] === inv.to) || (min.pair[0] === inv.to && min.pair[1] === inv.of));
+        if (min === null || !pairMatches) {
+          out.push(unchecked(inv, `no PET was recorded for ${inv.of}/${inv.to}`));
+          break;
+        }
+        if (trace.metrics.criticalitySamples === undefined && !inWindow(min.t)) {
+          out.push(unchecked(inv, `the PET prediction at t=${min.t.toFixed(2)} s is outside the window ${lo}–${hi} s`));
+          break;
+        }
+        out.push(
+          report(
+            inv,
+            inv.range,
+            min.value,
+            'metrics.minPET',
+            `min PET ${min.value.toFixed(2)} s at t=${min.t.toFixed(2)} s, wanted ${fmtRange(inv.range)}`,
+          ),
+        );
+        break;
+      }
       case 'gap': {
         if (inv.unit === 'distance') {
+          const series = pairSeries(trace, inv.of, inv.to);
+          if (series && inv.window !== undefined) {
+            let minDistance = Infinity;
+            let minT = 0;
+            for (let i = 0; i < series.t.length; i += 1) {
+              const t = series.t[i] as number;
+              if (!inWindow(t)) continue;
+              const distance = series.distance[i] as number;
+              if (distance < minDistance) {
+                minDistance = distance;
+                minT = t;
+              }
+            }
+            if (!Number.isFinite(minDistance)) {
+              out.push(unchecked(inv, 'no tick fell inside the window'));
+              break;
+            }
+            out.push(
+              report(
+                inv,
+                inv.range,
+                minDistance,
+                'pair-series-distance',
+                `closest approach ${minDistance.toFixed(2)} m at t=${minT.toFixed(2)} s within the required window`,
+              ),
+            );
+            break;
+          }
           const entry = trace.metrics.minDistance.find(
             (d) => (d.pair[0] === inv.of && d.pair[1] === inv.to) || (d.pair[0] === inv.to && d.pair[1] === inv.of),
           );

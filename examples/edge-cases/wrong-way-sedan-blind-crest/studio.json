@@ -1,0 +1,14 @@
+{
+  "kind": "uniscenarios-studio-record",
+  "version": 1,
+  "title": "04 — Wrong-Way Sedan Beyond a Blind Crest",
+  "template": "scenario.template.json",
+  "instance": "scenario.instance.json",
+  "trace": "scenario.trace.json.gz",
+  "rubric": "rubric.json",
+  "intentRubric": "intent-rubric.json",
+  "evidence": "evidence.json",
+  "ambientEvidence": "ambient-evidence.json",
+  "ambientSweep": "ambient-sweep.json",
+  "defaultReplay": { "startSeconds": 0, "endSeconds": 20, "autoplay": false, "spaceToPlay": true }
+}

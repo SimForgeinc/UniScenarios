@@ -13,8 +13,11 @@ import {
   Vector3,
   WebGLRenderer,
 } from 'three';
-import type { Texture } from 'three';
+import type { Material, Texture } from 'three';
 import { CameraRig, type CameraMode } from './camera-controls';
+import type { CameraView } from './camera-controls';
+import type { CameraControlPreferences } from './camera-drag';
+import { cameraEnvelopeFromBounds, constrainCameraToEnvelope, initialEditorCameraPose } from './camera-envelope';
 import { FrameStats, jsHeapMB } from './frame-stats';
 import {
   collectResources,
@@ -25,7 +28,10 @@ import { createSun, loadEnvironment } from './environment';
 import { GroundIndex, type GroundIndexOptions } from './ground-index';
 import { boundsToBox3, normalizeLods, resolveUrl } from './manifest';
 import { patchTree, type ShadowPatchOptions } from './materials';
+import { SurfaceMaterialRegistry, type SurfaceMaterialProfile } from './surface-materials';
+import { UltraLowMaterialCache, type UltraLowLayer } from './ultra-low-materials';
 import { ShadowAtlas } from './shadow-atlas';
+import { allowsSourceAssetFallback, isCityAssetVariantManifest, selectAssetVariant, type CityAssetVariantManifest } from './asset-variants';
 import {
   TileStreamLayer,
   boxOf,
@@ -36,9 +42,14 @@ import {
 import { buildVegetation, type VegPrototypeGroup } from './vegetation';
 import type {
   BenchResult,
+  CameraDiagnostics,
   CityManifest,
+  CityViewerLiveQuality,
   CityViewerOptions,
   CityViewerStats,
+  FramePhaseStats,
+  FrameTimeCounts,
+  RendererCapability,
   VegetationInstanceFile,
 } from './types';
 
@@ -49,6 +60,7 @@ export interface CityViewerLayers {
 
 const DEFAULTS = {
   maxPixelRatio: 2,
+  antialias: true,
   /**
    * Pixel threshold for the LOD selector. The Yale Street geometric errors are
    * a 4x chain (4.6 / 18.2 / 72.9 m for a 76 m cell), so at a 1600 px tall
@@ -87,6 +99,11 @@ const DEFAULTS = {
   shadowAtlasCellSize: 512,
   shadowStrength: 1,
   debugShadowProjection: false,
+  cameraBoundsInset: 2,
+  assetVariant: 'auto' as const,
+  ultraLowFidelity: false,
+  variantManifestUrl: '',
+  ktx2TranscoderPath: '',
 };
 
 /**
@@ -121,10 +138,18 @@ export class CityViewer {
   private readonly canvas: HTMLCanvasElement;
   private readonly options: Required<CityViewerOptions>;
   private readonly frameStats = new FrameStats(150);
+  private readonly phaseStats = {
+    controls: new FrameStats(150),
+    streaming: new FrameStats(150),
+    uploads: new FrameStats(150),
+    render: new FrameStats(150),
+    integration: new FrameStats(150),
+  };
   private readonly raycaster = new Raycaster();
   private readonly abort = new AbortController();
 
   private manifest: CityManifest | null = null;
+  private variantManifest: CityAssetVariantManifest | null = null;
   private assetBase = '';
   private atlas: ShadowAtlas | null = null;
   private cityLayer: TileStreamLayer | null = null;
@@ -132,8 +157,21 @@ export class CityViewer {
   private roadLayer: TileStreamLayer | null = null;
   private sun: DirectionalLight | null = null;
   private disposeEnvironment: (() => void) | null = null;
+  private visualResourcesPromise: Promise<void> | null = null;
+  private visualResourcesStarted = false;
   private vegetationData = new Map<string, VegetationInstanceFile>();
   private sceneBox = new Box3();
+  private cameraGroundIndex: GroundIndex | null = null;
+  private cameraConstraintRefresh = 0;
+  private localEnvelopeBounds: Box3 | null = null;
+  private localBuildingMax = 0;
+  private localGroundY = 0;
+  private localHeadroom = 0;
+  private localMaxAltitude = 0;
+  private readonly cameraClampFlags = {
+    eyeX: false, eyeY: false, eyeZ: false,
+    targetX: false, targetY: false, targetZ: false,
+  };
 
   private rafHandle = 0;
   private lastFrameTime = 0;
@@ -145,6 +183,38 @@ export class CityViewer {
   private lastDrawCalls = 0;
   private lastTriangles = 0;
   private fps = 0;
+  private renderingSuspended = false;
+  private canvasVisibility = '';
+  private benchmarkFrameHook: (() => void) | null = null;
+  private ultraLowFidelity = false;
+  private readonly originalMaterials = new Map<Object3D, Material | Material[]>();
+  private readonly ultraLowMaterials = new UltraLowMaterialCache();
+  private savedEnvironment: Scene['environment'] = null;
+  private savedBackground: Scene['background'] = null;
+  private ultraRefreshCounter = 0;
+  private readonly surfaceMaterials = new SurfaceMaterialRegistry();
+  private readonly variantLoads = { original: 0, 'geometry-only': 0, ktx2: 0 };
+  private variantFallbacks = 0;
+  private assetVariantReloadGeneration = 0;
+
+  private phaseSnapshot(): FramePhaseStats {
+    return {
+      controlsMsAvg: this.phaseStats.controls.avg(),
+      streamingMsAvg: this.phaseStats.streaming.avg(),
+      uploadsMsAvg: this.phaseStats.uploads.avg(),
+      renderMsAvg: this.phaseStats.render.avg(),
+      integrationMsAvg: this.phaseStats.integration.avg(),
+    };
+  }
+
+  private frameTimeCounts(stats = this.frameStats): FrameTimeCounts {
+    return {
+      over16_7: stats.countAbove(16.7),
+      over25: stats.countAbove(25),
+      over33_3: stats.countAbove(33.3),
+      over50: stats.countAbove(50),
+    };
+  }
 
   constructor(canvas: HTMLCanvasElement, options: CityViewerOptions = {}) {
     this.canvas = canvas;
@@ -154,10 +224,11 @@ export class CityViewer {
       Object.entries(options).filter(([, value]) => value !== undefined),
     ) as CityViewerOptions;
     this.options = { ...DEFAULTS, baseUrl: '', ...provided };
+    this.ultraLowFidelity = this.options.ultraLowFidelity;
 
     this.renderer = new WebGLRenderer({
       canvas,
-      antialias: true,
+      antialias: this.options.antialias,
       powerPreference: 'high-performance',
       alpha: false,
       stencil: false,
@@ -179,6 +250,7 @@ export class CityViewer {
     this.camera = new PerspectiveCamera(55, this.aspect(), 0.5, 6000);
     this.camera.position.set(0, 200, 400);
     this.controls = new CameraRig(this.camera, canvas);
+    this.controls.setPoseConstraint((camera, target) => this.constrainCameraPose(camera, target));
 
     this.resizeObserver = new ResizeObserver(() => this.resize());
     this.resizeObserver.observe(canvas);
@@ -192,6 +264,15 @@ export class CityViewer {
     const w = this.canvas.clientWidth || 1;
     const h = this.canvas.clientHeight || 1;
     return w / h;
+  }
+
+  /** Stable viewpoint API for editors; callers never retain mutable Three.js vectors. */
+  captureView(): CameraView {
+    return this.controls.getView();
+  }
+
+  applyView(view: CameraView): void {
+    this.controls.applyView(view);
   }
 
   private resize(): void {
@@ -224,6 +305,8 @@ export class CityViewer {
     })) as CityManifest;
     if (this.disposed) return;
     this.manifest = manifest;
+    this.variantManifest = await this.loadVariantManifest();
+    if (this.disposed) return;
 
     this.sceneBox = boundsToBox3(manifest.scene.bounds);
     const center = this.sceneBox.getCenter(new Vector3());
@@ -240,15 +323,8 @@ export class CityViewer {
 
     this.atlas = new ShadowAtlas(manifest, this.options.shadowAtlasCellSize);
 
-    const environmentUrl = resolveUrl(this.assetBase, this.options.environmentUrl);
-    const environmentPromise = loadEnvironment(this.renderer, this.scene, environmentUrl)
-      .then((dispose) => {
-        if (this.disposed) dispose();
-        else this.disposeEnvironment = dispose;
-      })
-      .catch((err: unknown) => console.error('[city-renderer] environment failed', err));
-
-    const atlasPromise = this.atlas.load(manifest, this.assetBase, this.abort.signal);
+    const visualResourcesPromise = this.ultraLowFidelity ? Promise.resolve() : this.ensureVisualResources();
+    if (this.sun) this.sun.visible = !this.ultraLowFidelity;
     const vegetationPromise = this.loadVegetationInstances(manifest);
 
     this.createRoadLayer(manifest);
@@ -257,20 +333,139 @@ export class CityViewer {
     if (this.disposed) return;
     this.createVegetationLayer(manifest);
 
-    await Promise.all([environmentPromise, atlasPromise]);
+    await visualResourcesPromise;
   }
 
-  /** Whole-city framing: 3/4 view from above the south-west corner. */
+  private ensureVisualResources(): Promise<void> {
+    if (this.visualResourcesPromise) return this.visualResourcesPromise;
+    const manifest = this.manifest;
+    const atlas = this.atlas;
+    if (!manifest || !atlas) return Promise.resolve();
+    this.visualResourcesStarted = true;
+    const environmentUrl = resolveUrl(this.assetBase, this.options.environmentUrl);
+    const environmentPromise = loadEnvironment(this.renderer, this.scene, environmentUrl)
+      .then((dispose) => {
+        if (this.disposed) dispose();
+        else {
+          this.disposeEnvironment = dispose;
+          if (this.ultraLowFidelity) this.disableEnvironment();
+        }
+      })
+      .catch((err: unknown) => console.error('[city-renderer] environment failed', err));
+    this.visualResourcesPromise = Promise.all([
+      environmentPromise,
+      atlas.load(manifest, this.assetBase, this.abort.signal),
+    ]).then(() => undefined);
+    return this.visualResourcesPromise;
+  }
+
+  /** Neighborhood framing close enough to read houses, roads and actors. */
   private frameCamera(center: Vector3, size: Vector3): void {
-    const span = Math.max(size.x, size.z);
-    const position = new Vector3(
-      center.x - span * 0.3,
-      center.y + span * 0.31,
-      center.z + span * 0.42,
+    this.updateLocalCameraEnvelope(center.x, center.z);
+    const pose = initialEditorCameraPose(
+      center,
+      size,
+      this.localGroundY,
+      this.localBuildingMax,
+      this.localMaxAltitude || center.y + 45,
     );
     this.controls.minDistance = 3;
-    this.controls.maxDistance = span * 4;
-    this.controls.setView(position, center);
+    this.controls.maxDistance = pose.maxDistance;
+    this.controls.setView(pose.position, pose.target);
+  }
+
+  private updateLocalCameraEnvelope(x: number, z: number): void {
+    const cached = this.localEnvelopeBounds;
+    if (!cached || x < cached.min.x || x > cached.max.x || z < cached.min.z || z > cached.max.z) {
+      const tile = this.manifest?.tiles.find((candidate) => {
+        const bounds = candidate.bounds;
+        return x >= (bounds.min[0] ?? -Infinity) && x <= (bounds.max[0] ?? Infinity)
+          && z >= (bounds.min[2] ?? -Infinity) && z <= (bounds.max[2] ?? Infinity);
+      });
+      this.localEnvelopeBounds = tile ? boundsToBox3(tile.bounds) : this.sceneBox.clone();
+    }
+    this.localGroundY = this.cameraGroundIndex?.sample(x, z) ?? this.sceneBox.min.y;
+    this.localBuildingMax = Math.max(this.localGroundY, this.localEnvelopeBounds?.max.y ?? this.sceneBox.max.y);
+    const localHeight = Math.max(0, this.localBuildingMax - this.localGroundY);
+    this.localHeadroom = Math.max(6, Math.min(20, localHeight * 0.15));
+    this.localMaxAltitude = Math.max(this.localGroundY + 12, this.localBuildingMax + this.localHeadroom);
+  }
+
+  private constrainCameraPose(camera: PerspectiveCamera, target: Vector3): void {
+    if (!this.cameraPoseConstraintsEnabled) return;
+    if (!this.manifest || this.sceneBox.isEmpty()) return;
+    // First bring an arbitrary/imported target into the global footprint. This
+    // must happen before selecting its local tile envelope; otherwise an
+    // out-of-bounds target would cache the whole-city height range forever.
+    const coarseFlags = constrainCameraToEnvelope(
+      camera,
+      target,
+      cameraEnvelopeFromBounds(
+        this.sceneBox,
+        this.options.cameraBoundsInset,
+        -Number.MAX_SAFE_INTEGER,
+        Number.MAX_SAFE_INTEGER,
+      ),
+    );
+    this.updateLocalCameraEnvelope(target.x, target.z);
+    const localFlags = constrainCameraToEnvelope(
+      camera,
+      target,
+      cameraEnvelopeFromBounds(
+        this.sceneBox,
+        this.options.cameraBoundsInset,
+        this.localGroundY,
+        this.localMaxAltitude,
+      ),
+    );
+    for (const key of Object.keys(this.cameraClampFlags) as (keyof typeof this.cameraClampFlags)[]) {
+      this.cameraClampFlags[key] = coarseFlags[key] || localFlags[key];
+    }
+  }
+
+  private cameraPoseConstraintsEnabled = true;
+
+  /** Sensor rigs may temporarily own the exact physical eye pose below editor navigation limits. */
+  setCameraPoseConstraintsEnabled(enabled: boolean): void {
+    this.cameraPoseConstraintsEnabled = enabled;
+    if (!enabled) {
+      for (const key of Object.keys(this.cameraClampFlags) as (keyof typeof this.cameraClampFlags)[]) {
+        this.cameraClampFlags[key] = false;
+      }
+    }
+  }
+
+  resetCamera(): void {
+    if (!this.manifest || this.sceneBox.isEmpty()) return;
+    this.frameCamera(this.sceneBox.getCenter(new Vector3()), this.sceneBox.getSize(new Vector3()));
+  }
+
+  getCameraDiagnostics(): CameraDiagnostics {
+    const ready = Boolean(this.manifest) && !this.sceneBox.isEmpty();
+    const position: [number, number, number] = [this.camera.position.x, this.camera.position.y, this.camera.position.z];
+    const target: [number, number, number] = [this.controls.target.x, this.controls.target.y, this.controls.target.z];
+    const viewDistance = this.camera.position.distanceTo(this.controls.target);
+    if (!ready) {
+      return { ready: false, position, target, groundY: null, altitudeAgl: null, minAltitude: null, maxAltitude: null,
+        viewDistance, fov: this.camera.fov, bounds: null, localBuildingMax: null, headroom: null,
+        clamps: { ...this.cameraClampFlags } };
+    }
+    this.updateLocalCameraEnvelope(this.controls.target.x, this.controls.target.z);
+    return {
+      ready: true, position, target,
+      groundY: this.localGroundY,
+      altitudeAgl: this.camera.position.y - this.localGroundY,
+      minAltitude: this.localGroundY + 2,
+      maxAltitude: this.localMaxAltitude,
+      viewDistance,
+      fov: this.camera.fov,
+      bounds: { minX: this.sceneBox.min.x, maxX: this.sceneBox.max.x, minZ: this.sceneBox.min.z,
+        maxZ: this.sceneBox.max.z, width: this.sceneBox.max.x - this.sceneBox.min.x,
+        height: this.sceneBox.max.z - this.sceneBox.min.z },
+      localBuildingMax: this.localBuildingMax,
+      headroom: this.localHeadroom,
+      clamps: { ...this.cameraClampFlags },
+    };
   }
 
   private shadowOptions(box: Box3, fadeFrom: number, fadeTo: number): ShadowPatchOptions {
@@ -291,6 +486,51 @@ export class CityViewer {
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error(`${res.status} ${url}`);
     return res.arrayBuffer();
+  }
+
+  private async loadVariantManifest(): Promise<CityAssetVariantManifest | null> {
+    const relative = this.options.variantManifestUrl || 'variants/manifest.json';
+    try {
+      const response = await fetch(resolveUrl(this.assetBase, relative), { signal: this.abort.signal });
+      if (!response.ok) return null;
+      const value: unknown = await response.json();
+      return isCityAssetVariantManifest(value) ? value : null;
+    } catch (error) {
+      if ((error as { name?: string } | null)?.name === 'AbortError') throw error;
+      return null;
+    }
+  }
+
+  /** Parse an optimized local derivative, then retry source unless Ultra Low forbids textures. */
+  private async parseAsset(sourceFile: string, signal: AbortSignal) {
+    const declaredKtxPath = this.variantManifest?.variants.ktx2?.runtime?.ktx2TranscoderPath ?? '';
+    const ktx2TranscoderPath = this.options.ktx2TranscoderPath
+      || (declaredKtxPath ? resolveUrl(this.assetBase, declaredKtxPath) : '');
+    const selected = selectAssetVariant(this.variantManifest, sourceFile, this.options.assetVariant, {
+      ultraLow: this.ultraLowFidelity,
+      ktx2Ready: Boolean(ktx2TranscoderPath),
+    });
+    if (this.ultraLowFidelity && selected.variant !== 'geometry-only') {
+      this.canvas.dataset.assetVariant = 'geometry-only-unavailable';
+      throw new Error(`Ultra Low requires a geometry-only derivative for ${sourceFile}`);
+    }
+    const loader = getGLTFLoader(this.renderer, ktx2TranscoderPath);
+    try {
+      const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, selected.file), signal);
+      const parsed = await loader.parseAsync(buffer, '');
+      this.variantLoads[selected.variant]++;
+      this.canvas.dataset.assetVariant = selected.variant;
+      return parsed;
+    } catch (error) {
+      if (!allowsSourceAssetFallback(selected.variant, this.ultraLowFidelity)
+        || (error as { name?: string } | null)?.name === 'AbortError') throw error;
+      this.variantFallbacks++;
+      const source = await this.fetchBuffer(resolveUrl(this.assetBase, sourceFile), signal);
+      const parsed = await loader.parseAsync(source, '');
+      this.variantLoads.original++;
+      this.canvas.dataset.assetVariant = 'original-fallback';
+      return parsed;
+    }
   }
 
   /** Shared per-asset preparation: static matrices, bounds, anisotropy. */
@@ -340,22 +580,28 @@ export class CityViewer {
       maxConcurrent: 1,
       memory: this.memory,
       pinCoarsest: true,
+      essentialCoarsest: true,
       build: async (tileDef, lod, signal) => {
-        const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
-        const gltf = await getGLTFLoader().parseAsync(buffer, '');
+        const gltf = await this.parseAsset(lod.file, signal);
         const root = gltf.scene;
         root.name = tileDef.id;
         this.prepareTree(root);
         const box = new Box3().setFromObject(root);
         // The road is the ground: it takes the shadow term everywhere, and only
         // the electric towers reaching above ~20 m fade out of it.
-        patchTree(root, this.shadowOptions(box, 20, 40));
+        if (this.visualResourcesStarted && !this.ultraLowFidelity) patchTree(root, this.shadowOptions(box, 20, 40));
+        this.surfaceMaterials.registerTree(root, 'road');
         const resources = collectResources(root);
+        if (this.ultraLowFidelity) this.simplifyTree(root, 'road');
         return {
           object: root,
           resources,
           bytes: estimateResourceBytes(resources),
-          pendingTextures: [...resources.textures],
+          pendingTextures: this.ultraLowFidelity ? [] : [...resources.textures],
+          dispose: () => {
+            this.surfaceMaterials.unregisterTree(root);
+            this.releaseSimplifiedTree(root);
+          },
         } satisfies PreparedAsset;
       },
     });
@@ -377,19 +623,24 @@ export class CityViewer {
       memory: this.memory,
       pinCoarsest: true,
       build: async (def, lod, signal) => {
-        const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
-        const gltf = await getGLTFLoader().parseAsync(buffer, '');
+        const gltf = await this.parseAsset(lod.file, signal);
         const root = gltf.scene;
         root.name = `${def.id}.lod${lod.level}`;
         this.prepareTree(root);
         const box = new Box3().setFromObject(root);
-        patchTree(root, this.shadowOptions(box, 20, 40));
+        if (this.visualResourcesStarted && !this.ultraLowFidelity) patchTree(root, this.shadowOptions(box, 20, 40));
+        this.surfaceMaterials.registerTree(root, 'city');
         const resources = collectResources(root);
+        if (this.ultraLowFidelity) this.simplifyTree(root, 'city');
         return {
           object: root,
           resources,
           bytes: estimateResourceBytes(resources),
-          pendingTextures: [...resources.textures],
+          pendingTextures: this.ultraLowFidelity ? [] : [...resources.textures],
+          dispose: () => {
+            this.surfaceMaterials.unregisterTree(root);
+            this.releaseSimplifiedTree(root);
+          },
         } satisfies PreparedAsset;
       },
     });
@@ -436,20 +687,23 @@ export class CityViewer {
       build: async (def, lod, signal) => {
         const data = this.vegetationData.get(def.id);
         if (!data) throw new Error(`no instance data for ${def.id}`);
-        const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, lod.file), signal);
-        const gltf = await getGLTFLoader().parseAsync(buffer, '');
+        const gltf = await this.parseAsset(lod.file, signal);
         this.prepareTree(gltf.scene);
         const built = buildVegetation(gltf.scene, data, VEG_BAND_KEEP_ROW);
         built.object.name = `${def.id}.lod${lod.level}`;
         built.object.userData.prototypes = built.prototypes;
-        patchTree(built.object, this.shadowOptions(def.box, 6, 14));
+        if (this.visualResourcesStarted && !this.ultraLowFidelity) patchTree(built.object, this.shadowOptions(def.box, 6, 14));
+        this.surfaceMaterials.registerTree(built.object, 'vegetation');
         const resources = collectResources(built.object);
+        if (this.ultraLowFidelity) this.simplifyTree(built.object, 'vegetation');
         return {
           object: built.object,
           resources,
           bytes: estimateResourceBytes(resources),
-          pendingTextures: [...resources.textures],
+          pendingTextures: this.ultraLowFidelity ? [] : [...resources.textures],
           dispose: () => {
+            this.surfaceMaterials.unregisterTree(built.object);
+            this.releaseSimplifiedTree(built.object);
             for (const proto of built.prototypes) for (const mesh of proto.meshes) mesh.dispose();
             built.object.clear();
           },
@@ -486,24 +740,46 @@ export class CityViewer {
     const dt = Math.min(0.1, (now - this.lastFrameTime) / 1000);
     this.lastFrameTime = now;
 
-    if (!this.benchmarkActive) this.controls.update(dt);
+    if (!this.cameraGroundIndex && ++this.cameraConstraintRefresh % 60 === 0 && this.roadReady) {
+      this.cameraGroundIndex = this.buildGroundIndex();
+      this.localEnvelopeBounds = null;
+    }
 
-    this.camera.updateMatrixWorld();
-    this.camera.getWorldPosition(_cameraPos);
+    if (this.ultraLowFidelity && ++this.ultraRefreshCounter % 60 === 0) {
+      for (const child of this.scene.children) {
+        if (child !== this.cityGroup && child !== this.roadGroup && child !== this.vegetationGroup) {
+          this.simplifyTree(child, 'actor');
+        }
+      }
+    }
+
+    let phaseStart = performance.now();
+    if (!this.renderingSuspended && !this.benchmarkActive) this.controls.update(dt);
+    this.phaseStats.controls.push(performance.now() - phaseStart);
+
+    if (!this.renderingSuspended) {
+      this.camera.updateMatrixWorld();
+      this.camera.getWorldPosition(_cameraPos);
+    }
 
     // Streaming decisions are cheap but not free: 10 Hz is plenty responsive.
-    if (now - this.lastStreamUpdate > 100) {
+    if (!this.renderingSuspended && now - this.lastStreamUpdate > 100) {
+      phaseStart = performance.now();
       this.lastStreamUpdate = now;
       this.updateStreaming(_cameraPos);
+      this.phaseStats.streaming.push(performance.now() - phaseStart);
+    } else {
+      this.phaseStats.streaming.push(0);
     }
-    this.vegLayer?.tickDisplayed();
+    if (!this.renderingSuspended) this.vegLayer?.tickDisplayed();
 
     // Adaptive upload backoff: a 2048px texture costs ~30 ms of GPU time on
     // this class of machine, so after a frame that already ran long we skip the
     // pacer entirely and let the pipeline drain instead of stacking stalls.
     // The counter guarantees forward progress if frames stay heavy.
     const ceiling = Math.max(14, this.frameStats.percentile(0.5) * 2);
-    if (dt * 1000 <= ceiling || this.uploadSkips >= 4) {
+    phaseStart = performance.now();
+    if (!this.renderingSuspended && (dt * 1000 <= ceiling || this.uploadSkips >= 4)) {
       this.uploadSkips = 0;
       const deadline = now + this.options.uploadBudgetMs;
       const pixelBudget = { remaining: this.options.uploadPixelsPerFrame };
@@ -513,17 +789,29 @@ export class CityViewer {
     } else {
       this.uploadSkips++;
     }
+    this.phaseStats.uploads.push(performance.now() - phaseStart);
 
-    this.renderer.info.reset();
-    this.renderer.render(this.scene, this.camera);
-    this.lastDrawCalls = this.renderer.info.render.calls;
-    this.lastTriangles = this.renderer.info.render.triangles;
+    if (!this.renderingSuspended) {
+      this.renderer.info.reset();
+      phaseStart = performance.now();
+      this.renderer.render(this.scene, this.camera);
+      this.phaseStats.render.push(performance.now() - phaseStart);
+      this.lastDrawCalls = this.renderer.info.render.calls;
+      this.lastTriangles = this.renderer.info.render.triangles;
+    } else {
+      this.phaseStats.render.push(0);
+      this.lastDrawCalls = 0;
+      this.lastTriangles = 0;
+    }
 
     // Wall-clock frame delta (not just our CPU slice) so the HUD reports what
     // the display actually did, including time lost to the compositor.
     this.frameStats.push(Math.min(1000, dt * 1000));
     this.fps = 1000 / Math.max(0.001, this.frameStats.avg());
+    phaseStart = performance.now();
     this.onFrame?.(dt);
+    this.phaseStats.integration.push(performance.now() - phaseStart);
+    this.benchmarkFrameHook?.();
   };
 
   /** Optional per-frame hook (used by the benchmark and by integrations). */
@@ -605,7 +893,12 @@ export class CityViewer {
     return {
       fps: this.fps,
       frameMsAvg: this.frameStats.avg(),
+      frameMsP50: this.frameStats.percentile(0.5),
       frameMsP95: this.frameStats.percentile(0.95),
+      frameMsP99: this.frameStats.percentile(0.99),
+      frameMsMax: this.frameStats.max(),
+      frameTimeCounts: this.frameTimeCounts(),
+      phases: this.phaseSnapshot(),
       drawCalls: this.lastDrawCalls,
       triangles: this.lastTriangles,
       programs: this.renderer.info.programs?.length ?? 0,
@@ -619,11 +912,212 @@ export class CityViewer {
       uploading: sum((s) => s.uploading),
       jsHeapMB: jsHeapMB(),
       cameraMode: this.controls.mode,
+      renderingSuspended: this.renderingSuspended,
+      ultraLowFidelity: this.ultraLowFidelity,
+      roadVisible: this.roadReady && this.roadGroup.visible,
+      uiTicksPerSecond: this.fps,
+      surfaceMaterials: this.surfaceMaterials.report(),
+      assetVariants: { manifest: Boolean(this.variantManifest), loaded: { ...this.variantLoads }, fallbacks: this.variantFallbacks },
     };
+  }
+
+  /**
+   * Suspend the complete visual pipeline while keeping requestAnimationFrame and
+   * `onFrame` alive for simulation, timeline and metrics consumers.
+   */
+  setRenderingSuspended(suspended: boolean): void {
+    if (suspended === this.renderingSuspended) return;
+    this.renderingSuspended = suspended;
+    if (suspended) {
+      this.canvasVisibility = this.canvas.style.visibility;
+      this.canvas.style.visibility = 'hidden';
+      this.controls.setEnabled(false);
+      this.lastDrawCalls = 0;
+      this.lastTriangles = 0;
+    } else {
+      this.canvas.style.visibility = this.canvasVisibility;
+      this.controls.setEnabled(true);
+      this.lastStreamUpdate = 0;
+      this.frameStats.reset();
+    }
+  }
+
+  get isRenderingSuspended(): boolean {
+    return this.renderingSuspended;
+  }
+
+  getLiveQuality(): CityViewerLiveQuality {
+    const {
+      maxPixelRatio,
+      maxScreenSpaceError,
+      vegetationScreenSpaceError,
+      byteBudget,
+      uploadBudgetMs,
+      uploadPixelsPerFrame,
+      vegetationMaxDistance,
+      exposure,
+    } = this.options;
+    return {
+      maxPixelRatio,
+      maxScreenSpaceError,
+      vegetationScreenSpaceError,
+      byteBudget,
+      uploadBudgetMs,
+      uploadPixelsPerFrame,
+      vegetationMaxDistance,
+      exposure,
+    };
+  }
+
+  getRendererCapability(): RendererCapability {
+    const gl = this.renderer.getContext();
+    const debug = gl.getExtension('WEBGL_debug_renderer_info') as { UNMASKED_RENDERER_WEBGL: number; UNMASKED_VENDOR_WEBGL: number } | null;
+    const renderer = String(gl.getParameter(debug?.UNMASKED_RENDERER_WEBGL ?? gl.RENDERER) ?? 'unknown');
+    const vendor = String(gl.getParameter(debug?.UNMASKED_VENDOR_WEBGL ?? gl.VENDOR) ?? 'unknown');
+    const identity = `${renderer} ${vendor}`.toLowerCase();
+    return {
+      renderer,
+      vendor,
+      webgl2: typeof WebGL2RenderingContext !== 'undefined' && gl instanceof WebGL2RenderingContext,
+      software: /swiftshader|llvmpipe|software|basic render|mesa offscreen/.test(identity),
+    };
+  }
+
+  /** Swap expensive PBR/textured materials for shared unlit colors, reversibly. */
+  setUltraLowFidelity(enabled: boolean): void {
+    if (enabled === this.ultraLowFidelity) return;
+    this.ultraLowFidelity = enabled;
+    if (enabled) {
+      this.simplifyTree(this.cityGroup, 'city');
+      this.simplifyTree(this.roadGroup, 'road');
+      // Actors and editor helpers are scene children outside the map groups.
+      for (const child of this.scene.children) {
+        if (child !== this.cityGroup && child !== this.roadGroup && child !== this.vegetationGroup) {
+          this.simplifyTree(child, 'actor');
+        }
+      }
+      this.disableEnvironment();
+      if (this.sun) this.sun.visible = false;
+      this.vegetationGroup.visible = false;
+    } else {
+      for (const [object, material] of this.originalMaterials) {
+        const mesh = object as Mesh;
+        if (mesh.isMesh) mesh.material = material;
+      }
+      this.originalMaterials.clear();
+      this.scene.environment = this.savedEnvironment;
+      this.scene.background = this.savedBackground ?? new Color(0x14181e);
+      if (this.sun) this.sun.visible = true;
+      if (!this.visualResourcesStarted) {
+        void this.ensureVisualResources().then(() => {
+          if (!this.disposed && !this.ultraLowFidelity && this.variantManifest?.variants['geometry-only']) {
+            void this.reloadAssetVariant();
+          }
+        });
+        return;
+      }
+    }
+    if (this.variantManifest?.variants['geometry-only']) {
+      void this.reloadAssetVariant();
+    }
+  }
+
+  private async reloadAssetVariant(): Promise<void> {
+    const generation = ++this.assetVariantReloadGeneration;
+    const view = this.captureView();
+    const layers = [this.roadLayer, this.cityLayer, this.vegLayer].filter(
+      (layer): layer is TileStreamLayer => layer !== null,
+    );
+    await Promise.all(layers.map((layer) => layer.resetAssets()));
+    if (this.disposed || generation !== this.assetVariantReloadGeneration) return;
+    // Asset variants are a rendering-quality choice. Keep the editor viewpoint
+    // byte-for-byte stable while the streamed scene graph is rebuilt.
+    this.applyView(view);
+    this.lastStreamUpdate = 0;
+    this.camera.getWorldPosition(_cameraPos);
+    this.updateStreaming(_cameraPos);
+  }
+
+  get isUltraLowFidelity(): boolean {
+    return this.ultraLowFidelity;
+  }
+
+  /** Select a reversible, visual-only material treatment for streamed map surfaces. */
+  setSurfaceMaterialProfile(profile: SurfaceMaterialProfile): ReturnType<SurfaceMaterialRegistry['report']> {
+    return this.surfaceMaterials.apply(profile);
+  }
+
+  getSurfaceMaterialReport(): ReturnType<SurfaceMaterialRegistry['report']> {
+    return this.surfaceMaterials.report();
+  }
+
+  private simplifyTree(root: Object3D, layer: UltraLowLayer): void {
+    this.ultraLowMaterials.apply(root, layer, this.originalMaterials);
+  }
+
+  private releaseSimplifiedTree(root: Object3D): void {
+    root.traverse((object) => this.originalMaterials.delete(object));
+  }
+
+  private disableEnvironment(): void {
+    if (this.scene.environment) this.savedEnvironment = this.scene.environment;
+    if (this.scene.background) this.savedBackground = this.scene.background;
+    this.scene.environment = null;
+    this.scene.background = new Color(0x171c22);
+  }
+
+  /** Apply authoring quality without rebuilding the renderer or reloading the map. */
+  setLiveQuality(next: Partial<CityViewerLiveQuality>): CityViewerLiveQuality {
+    const finite = (value: number | undefined, fallback: number, min: number, max: number) =>
+      value === undefined || !Number.isFinite(value)
+        ? fallback
+        : Math.min(max, Math.max(min, value));
+    this.options.maxPixelRatio = finite(next.maxPixelRatio, this.options.maxPixelRatio, 0.5, 3);
+    this.options.maxScreenSpaceError = finite(
+      next.maxScreenSpaceError,
+      this.options.maxScreenSpaceError,
+      25,
+      5000,
+    );
+    this.options.vegetationScreenSpaceError = finite(
+      next.vegetationScreenSpaceError,
+      this.options.vegetationScreenSpaceError,
+      100,
+      10000,
+    );
+    this.options.byteBudget = finite(next.byteBudget, this.options.byteBudget, 256e6, 4e9);
+    this.options.uploadBudgetMs = finite(
+      next.uploadBudgetMs,
+      this.options.uploadBudgetMs,
+      0.25,
+      20,
+    );
+    this.options.uploadPixelsPerFrame = finite(
+      next.uploadPixelsPerFrame,
+      this.options.uploadPixelsPerFrame,
+      128e3,
+      16.8e6,
+    );
+    this.options.vegetationMaxDistance = finite(
+      next.vegetationMaxDistance,
+      this.options.vegetationMaxDistance,
+      0,
+      2000,
+    );
+    this.options.exposure = finite(next.exposure, this.options.exposure, 0.1, 4);
+    this.renderer.toneMappingExposure = this.options.exposure;
+    this.resize();
+    this.camera.getWorldPosition(_cameraPos);
+    this.updateStreaming(_cameraPos);
+    return this.getLiveQuality();
   }
 
   setCameraMode(mode: CameraMode): void {
     this.controls.setMode(mode);
+  }
+
+  setCameraControlPreferences(preferences: CameraControlPreferences): void {
+    this.controls.setControlPreferences(preferences);
   }
 
   toggleCameraMode(): CameraMode {
@@ -718,6 +1212,7 @@ export class CityViewer {
 
     this.benchmarkActive = true;
     this.controls.setEnabled(false);
+    for (const phase of Object.values(this.phaseStats)) phase.reset();
     const stats = new FrameStats(Math.ceil(durationMs / 4));
     const start = performance.now();
     let frames = 0;
@@ -726,7 +1221,7 @@ export class CityViewer {
     let last = start;
 
     await new Promise<void>((resolve) => {
-      this.onFrame = () => {
+      this.benchmarkFrameHook = () => {
         const now = performance.now();
         const elapsed = now - start;
         const frameMs = now - last;
@@ -759,21 +1254,35 @@ export class CityViewer {
       };
     });
 
-    this.onFrame = null;
+    this.benchmarkFrameHook = null;
     this.benchmarkActive = false;
-    this.controls.setEnabled(true);
+    this.controls.setEnabled(!this.renderingSuspended);
     this.controls.setMode(savedMode);
     this.controls.setView(savedPosition, savedTarget);
 
     const durationSeconds = (performance.now() - start) / 1000;
+    const phases = this.phaseSnapshot();
+    const phaseMs = phases.controlsMsAvg + phases.streamingMsAvg + phases.uploadsMsAvg + phases.renderMsAvg + phases.integrationMsAvg;
     return {
       avgFps: frames / durationSeconds,
+      p50FrameMs: stats.percentile(0.5),
       p95FrameMs: stats.percentile(0.95),
+      p99FrameMs: stats.percentile(0.99),
+      maxFrameMs: worstFrameMs,
       minFps: worstFrameMs > 0 ? 1000 / worstFrameMs : 0,
       drawCalls: frames > 3 ? Math.round(drawCallTotal / (frames - 3)) : this.lastDrawCalls,
       residentBytes: this.residentBytes(),
       frames,
       durationMs: durationSeconds * 1000,
+      frameTimeCounts: this.frameTimeCounts(stats),
+      phases,
+      capturedAt: new Date().toISOString(),
+      renderingSuspended: this.renderingSuspended,
+      displayFps: frames / durationSeconds,
+      uiFrameP95Ms: stats.percentile(0.95),
+      simulationTicksPerSecond: null,
+      cpuUtilizationProxy: Math.min(100, 100 * phaseMs / Math.max(0.001, stats.avg())),
+      ultraLowFidelity: this.ultraLowFidelity,
     };
   }
 
@@ -785,14 +1294,26 @@ export class CityViewer {
     this.resizeObserver?.disconnect();
     this.resizeObserver = null;
     this.controls.dispose();
-    this.cityLayer?.dispose();
-    this.vegLayer?.dispose();
-    this.roadLayer?.dispose();
+    this.canvas.style.visibility = this.canvasVisibility;
+    const layers = [this.cityLayer, this.vegLayer, this.roadLayer].filter(
+      (layer): layer is TileStreamLayer => layer !== null,
+    );
+    for (const layer of layers) layer.dispose();
     this.atlas?.dispose();
     this.disposeEnvironment?.();
     this.vegetationData.clear();
+    this.surfaceMaterials.dispose();
     if (this.sun) this.scene.remove(this.sun, this.sun.target);
     this.scene.clear();
-    this.renderer.dispose();
+    // Three's compileAsync() owns an internal requestAnimationFrame readiness
+    // poll and offers no cancellation API. Disposing WebGLRenderer first clears
+    // the material program table underneath that poll, producing
+    // `currentProgram is undefined` / `isReady` page errors on cross-map swaps.
+    // The stream layers already refuse all new work once disposed, so keep only
+    // the old renderer alive until the finite set of in-flight polls settles.
+    void Promise.all(layers.map((layer) => layer.whenCompilationIdle())).then(() => {
+      this.renderer.dispose();
+      this.ultraLowMaterials.dispose();
+    });
   }
 }

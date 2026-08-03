@@ -25,6 +25,7 @@
  */
 
 import { clamp } from '../core/math.js';
+import { isPedestrianLikeKind, type ActorKind } from '../schema/input.js';
 import { alongRouteGapM, lateralSeparationM } from './pairs.js';
 import { transitionValue } from './dynamics.js';
 import type { ActorRuntime } from './state.js';
@@ -55,8 +56,72 @@ export const PEDESTRIAN_LIMITS: MotionLimits = {
   lateralAccelMax: 2.0,
 };
 
-export function limitsFor(a: ActorRuntime): MotionLimits {
-  return a.kind === 'pedestrian' ? PEDESTRIAN_LIMITS : VEHICLE_LIMITS;
+/** Per-class envelopes. Generic `vehicle` keeps the original limits so legacy
+ * inputs simulate byte-for-byte as before. */
+export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = {
+  vehicle: VEHICLE_LIMITS,
+  car: VEHICLE_LIMITS,
+  truck: {
+    accelMax: 1.4,
+    brakeComfort: 2.5,
+    brakeHard: 6,
+    lateralRateMax: 1.25,
+    lateralAccelMax: 1.5,
+  },
+  bus: {
+    accelMax: 1.2,
+    brakeComfort: 2.2,
+    brakeHard: 5.5,
+    lateralRateMax: 1.1,
+    lateralAccelMax: 1.3,
+  },
+  van: {
+    accelMax: 2.4,
+    brakeComfort: 3.2,
+    brakeHard: 7,
+    lateralRateMax: 2,
+    lateralAccelMax: 2.4,
+  },
+  motorcycle: {
+    accelMax: 4,
+    brakeComfort: 4,
+    brakeHard: 9,
+    lateralRateMax: 3,
+    lateralAccelMax: 4,
+  },
+  bicycle: {
+    accelMax: 1.1,
+    brakeComfort: 1.5,
+    brakeHard: 3.5,
+    lateralRateMax: 1.2,
+    lateralAccelMax: 2,
+  },
+  pedestrian: PEDESTRIAN_LIMITS,
+  scooter: {
+    accelMax: 1.5,
+    brakeComfort: 2,
+    brakeHard: 4,
+    lateralRateMax: 1.5,
+    lateralAccelMax: 2.5,
+  },
+  animal: {
+    accelMax: 2,
+    brakeComfort: 2,
+    brakeHard: 4,
+    lateralRateMax: 1.5,
+    lateralAccelMax: 3,
+  },
+  static_object: {
+    accelMax: 0,
+    brakeComfort: 0,
+    brakeHard: 0,
+    lateralRateMax: 0,
+    lateralAccelMax: 0,
+  },
+};
+
+export function limitsFor(a: Pick<ActorRuntime, 'kind'>): MotionLimits {
+  return MOTION_LIMITS_BY_KIND[a.kind];
 }
 
 /** Cruise convergence gain: `τ = 0.5 s`, so warm-up settles to <1e-4 relative
@@ -182,7 +247,7 @@ export function governorCap(
   a: ActorRuntime,
   leader: { gapM: number; speedMps: number } | null,
   stopLineDistM: number | null,
-  conflict: { distM: number; deltaT: number } | null,
+  conflict: { distM: number; deltaT: number; otherKind?: ActorKind } | null,
 ): HazardResult {
   const lim = limitsFor(a);
   let cap = Infinity;
@@ -215,7 +280,14 @@ export function governorCap(
     }
   }
 
-  if (a.rules.collisionAvoidance && a.rules.yield && conflict) {
+  const yieldsToConflict = conflict
+    ? conflict.otherKind === undefined
+      ? a.rules.yieldToVehicles
+      : isPedestrianLikeKind(conflict.otherKind)
+        ? a.rules.yieldToPedestrians
+        : a.rules.yieldToVehicles
+    : false;
+  if (a.rules.collisionAvoidance && a.rules.yield && yieldsToConflict && conflict) {
     // Give way: shed enough speed that we reach the crossing after them.
     const accel = -(a.speedMps * a.speedMps) / (2 * Math.max(conflict.distM - 2, 0.5));
     required = Math.max(required, -accel);
@@ -272,8 +344,14 @@ export function findLeader(
   corridorHalfWidthM = 1.6,
 ): { gapM: number; speedMps: number; id: string } | null {
   let best: { gapM: number; speedMps: number; id: string } | null = null;
+  const authoredObserver = !a.tags.includes('ambient');
   for (const b of others) {
     if (b.id === a.id || !b.present || b.retired) continue;
+    // Generated background traffic may react to authored choreography, but it
+    // must never become the reason an authored actor brakes or misses a timed
+    // trigger. If an ambient leader would be physically caught, the generator's
+    // full-clip collision screen removes that ambient actor before playback.
+    if (authoredObserver && b.tags.includes('ambient')) continue;
     const gap = alongRouteGapM(a, b);
     if (gap === null || gap <= 0) continue;
     const lateral = lateralSeparationM(a, b);
@@ -296,6 +374,7 @@ export function distanceToStopLine(
   signals: SignalBook,
   t: number,
   lookaheadM: number,
+  leader: { gapM: number; speedMps: number } | null = null,
 ): number | null {
   if (!a.rules.obeySignals || signals.isEmpty || a.route.isFreeform) return null;
   let best: number | null = null;
@@ -316,8 +395,52 @@ export function distanceToStopLine(
       const routeS = leg.sStart + laneS;
       const d = routeS - a.routeS;
       if (d < -0.5 || d > lookaheadM) continue;
-      const phase = signals.phaseAt(line.signalId, t);
-      if (phase === null || !phaseForbidsEntry(phase)) continue;
+      if (line.kind === 'stop') {
+        const states = a.roadControlStates;
+        const state = states.get(line.controlId) ?? { stoppedSinceS: null, released: false };
+        if (state.released) continue;
+        if (a.speedMps <= 0.05 && d <= 0.75) {
+          if (state.stoppedSinceS === null) state.stoppedSinceS = t;
+          if (t - state.stoppedSinceS >= line.dwellS) {
+            state.released = true;
+            states.set(line.controlId, state);
+            continue;
+          }
+        } else if (a.speedMps > 0.05) {
+          // Dwell must be continuous; rolling stops reset the clock.
+          state.stoppedSinceS = null;
+        }
+        states.set(line.controlId, state);
+      } else {
+        const phase = line.signalId === null ? null : signals.phaseAt(line.signalId, t);
+        const state = a.roadControlStates.get(line.controlId) ?? { stoppedSinceS: null, released: false };
+        if (state.released) continue;
+
+        // A yellow is a real dilemma-zone decision, not a request for an
+        // emergency stop. Once the comfort envelope says continue, remember
+        // that commitment so a red transition while crossing cannot make the
+        // vehicle stop inside the junction.
+        if (phase === 'yellow') {
+          const comfortRequired = requiredDecelFor(a.speedMps, Math.max(d - 0.5, 0.05));
+          if (comfortRequired > limitsFor(a).brakeComfort) {
+            state.released = true;
+            a.roadControlStates.set(line.controlId, state);
+            continue;
+          }
+        }
+
+        // Even on green, do not enter a junction whose connecting lane and
+        // immediate exit are occupied by a stopped queue. This is the compact
+        // browser-native equivalent of a keep-clear/intersection-box rule.
+        const connectingLeg = line.connectingLaneRsls
+          .map((rsl) => a.route.legs.find((candidate) => candidate.sStart >= leg.sStart && candidate.rsl === rsl))
+          .find((candidate) => candidate !== undefined);
+        const blockedExit = leader !== null
+          && leader.speedMps < 1.5
+          && leader.gapM > d
+          && leader.gapM < d + (connectingLeg?.lengthM ?? 12) + 8;
+        if (!blockedExit && (phase === null || !phaseForbidsEntry(phase))) continue;
+      }
       if (best === null || d < best) best = Math.max(d, 0);
     }
   }

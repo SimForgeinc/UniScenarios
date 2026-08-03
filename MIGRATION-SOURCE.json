@@ -1,5 +1,5 @@
 {
-  "schema": "uniscenarios.repository-extraction.v1",
+  "schema": "uniscenarios.repository-extraction.v2",
   "capturedAt": "2026-08-01T21:36:47.188Z",
   "source": {
     "repositoryName": "scenario-studio",
@@ -323,6 +323,30 @@
     "dist/",
     "dev-assets/"
   ],
+  "provenance": {
+    "reproducibility": {
+      "classification": "verification-only-non-reconstructible",
+      "exactDirtySnapshotReconstructibleFromManifest": false,
+      "statement": "The committed HEAD may be recoverable from an independently available Git repository, but this manifest does not contain the modified and untracked file bytes needed to reconstruct the captured dirty snapshot. SHA-256 digests identify bytes; they cannot recover them."
+    },
+    "sourceLocator": {
+      "kind": "not-recorded",
+      "value": null,
+      "policy": "A source checkout must be supplied explicitly by the verifier's caller. No public URL, private URL, filesystem path, or assurance of continued source availability is asserted by this manifest."
+    },
+    "verification": {
+      "command": "node scripts/verify-migration-source.mjs --source <source-checkout>",
+      "checks": [
+        "gitHead",
+        "gitBranch",
+        "gitStatusPorcelainV1",
+        "materialPathSet",
+        "fileKind",
+        "posixMode",
+        "sha256"
+      ]
+    }
+  },
   "files": [
     {
       "path": ".gitignore",

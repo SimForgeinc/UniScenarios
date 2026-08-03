@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "owner": "edge_campaign_09_10",
+  "scenarios": [
+    {
+      "number": 9,
+      "slug": "double-turn-mobility-scooter",
+      "status": "baseline-and-ambient-verified",
+      "catalogReady": true,
+      "inputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+      "traceDigest": "1fcdfe5b8fdc82bd2614d3137139756833a771a721ff85f7b28606448ef40385",
+      "template": "../double-turn-mobility-scooter/scenario.template.json",
+      "instance": "../double-turn-mobility-scooter/instance.json",
+      "trace": "../double-turn-mobility-scooter/trace.json.gz",
+      "simulation": "../double-turn-mobility-scooter/simulation.json",
+      "review": "../double-turn-mobility-scooter/review.json",
+      "intentRubric": "../double-turn-mobility-scooter/intent-rubric.json",
+      "blindReviewPacket": "../double-turn-mobility-scooter/blind-review.json",
+      "ambientMatrix": "../double-turn-mobility-scooter/ambient-matrix.json",
+      "ambientRobustness": "../double-turn-mobility-scooter/ambient-matrix.json",
+      "ambientTraces": [
+        "../double-turn-mobility-scooter/ambient-off.trace.json.gz",
+        "../double-turn-mobility-scooter/ambient-light.trace.json.gz",
+        "../double-turn-mobility-scooter/ambient-moderate.trace.json.gz"
+      ],
+      "intent": "Remain behind the stop line through layered pickup occlusion, fast-cyclist emergence, destination traffic, and the mobility-scooter user's staged crossing.",
+      "requiredOutcomes": ["ego remains stopped through 20 s", "pickup creep is capped at 3 km/h", "cyclist emerges after pickup stops", "mobility scooter pauses and resumes", "vehicle-only gaps do not release ego"],
+      "forbiddenOutcomes": ["copy pickup movement", "block crosswalk", "cut ahead of or behind mobility scooter", "turn side-by-side with pickup"],
+      "transferInvariants": ["at least two same-direction turn lanes", "controlled marked junction crossing", "adjacent large occluder", "two distinct VRU speeds and directions", "opposing destination conflict"]
+    },
+    {
+      "number": 10,
+      "slug": "reversible-lane-stadium-egress",
+      "status": "baseline-and-ambient-verified",
+      "catalogReady": true,
+      "inputHash": "c2b88baa72531fa7252df937d119f9ba2f6af229fca457d134f768104c8fbadb",
+      "traceDigest": "a0ba32d860c58215c94d371e6eee31cdbcfa7603cb0a80c27f25f0f8991244a4",
+      "template": "../reversible-lane-stadium-egress/scenario.template.json",
+      "sourceTemplate": "../reversible-lane-stadium-egress/source.template.json",
+      "sourceInstance": "../reversible-lane-stadium-egress/source.instance.json",
+      "sourceTrace": "../reversible-lane-stadium-egress/source.trace.json.gz",
+      "sourceSimulation": "../reversible-lane-stadium-egress/source.simulation.json",
+      "review": "../reversible-lane-stadium-egress/review.json",
+      "intentRubric": "../reversible-lane-stadium-egress/intent-rubric.json",
+      "blindReviewPacket": "../reversible-lane-stadium-egress/blind-review.json",
+      "ambientMatrix": "../reversible-lane-stadium-egress/ambient-matrix.json",
+      "ambientRobustness": "../reversible-lane-stadium-egress/ambient-matrix.json",
+      "ambientTraces": [
+        "../reversible-lane-stadium-egress/ambient-off.trace.json.gz",
+        "../reversible-lane-stadium-egress/ambient-light.trace.json.gz",
+        "../reversible-lane-stadium-egress/ambient-moderate.trace.json.gz"
+      ],
+      "intent": "Respond to the nearest downstream red-X, avoid traffic committed under the former direction, and merge through the controlled cone gap only after a safe right-lane opening.",
+      "requiredOutcomes": ["red-X response begins within 2 s", "transition speed is no more than 20 km/h", "rideshare brakes", "ego merges right after the shuttle gap opens", "follower's unsafe pass aborts"],
+      "forbiddenOutcomes": ["continue because upstream arrow was green", "cross moving barrier line", "force rideshare or shuttle to evade", "merge due only to follower pressure"],
+      "transferInvariants": ["reversible center lane", "contradictory sequential controls", "actors committed under both configurations", "bus occlusion", "marshal and cone taper", "right-side escape gap"]
+    }
+  ]
+}

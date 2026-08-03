@@ -47,6 +47,7 @@
  */
 
 import { decodeMaybeGzippedJson } from '@uniscenarios/xodr-tools';
+import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
 
 /** `road:section:lane`, the topology index's lane key. */
 export type LaneRsl = string;
@@ -112,11 +113,16 @@ interface TopologyFile {
       laneId: number;
       laneType: string;
       isJunction?: boolean;
+      junctionId?: string | null;
+      predecessors?: string[];
+      successors?: string[];
       speedLimitKph?: number | null;
       representativeWidthM?: number | null;
       polyline?: Array<{ x: number; y: number }> | number[][];
     }
   >;
+  gates?: TopologyIndex['gates'];
+  junctions?: TopologyIndex['junctions'];
 }
 
 export interface LaneIndexStats {
@@ -198,6 +204,8 @@ function vertexOf(p: { x: number; y: number } | number[]): { x: number; y: numbe
  */
 export class LaneIndex {
   readonly stats: LaneIndexStats;
+  /** Directed connectivity over the same decoded topology payload. */
+  readonly graph: LaneGraph;
 
   private readonly lanes: IndexedLane[];
   private readonly byRsl = new Map<LaneRsl, IndexedLane>();
@@ -225,6 +233,7 @@ export class LaneIndex {
     nx: number;
     nz: number;
     stats: LaneIndexStats;
+    graph: LaneGraph;
   }) {
     this.lanes = parts.lanes;
     this.segLane = parts.segLane;
@@ -237,6 +246,7 @@ export class LaneIndex {
     this.nx = parts.nx;
     this.nz = parts.nz;
     this.stats = parts.stats;
+    this.graph = parts.graph;
     for (const lane of this.lanes) this.byRsl.set(lane.rsl, lane);
   }
 
@@ -404,6 +414,32 @@ export class LaneIndex {
       options.bytes ??
       lanes.reduce((sum, l) => sum + l.xs.byteLength + l.zs.byteLength + l.cum.byteLength, 0);
 
+    const graph = buildLaneGraph({
+      mapName: file.mapName,
+      source: file.source,
+      lanes: Object.fromEntries(Object.entries(file.lanes).map(([rsl, lane]) => [rsl, {
+        rsl,
+        roadId: Number(lane.roadId),
+        section: lane.section,
+        laneId: lane.laneId,
+        laneType: lane.laneType,
+        isJunction: lane.isJunction === true,
+        junctionId: lane.junctionId ?? null,
+        predecessors: lane.predecessors ?? [],
+        successors: lane.successors ?? [],
+        speedLimitKph: lane.speedLimitKph ?? null,
+        ...(lane.representativeWidthM && lane.representativeWidthM > 0
+          ? { representativeWidthM: lane.representativeWidthM }
+          : {}),
+        polyline: (lane.polyline ?? []).flatMap((point) => {
+          const value = vertexOf(point);
+          return value ? [value] : [];
+        }),
+      }])),
+      gates: file.gates ?? [],
+      junctions: file.junctions ?? {},
+    });
+
     return new LaneIndex({
       lanes,
       segLane,
@@ -429,6 +465,7 @@ export class LaneIndex {
         fetchMs: options.fetchMs ?? 0,
         bytes,
       },
+      graph,
     });
   }
 

@@ -1,0 +1,105 @@
+import { useCallback, useEffect, useReducer, useRef } from 'react';
+import type { EditorController } from '../editor/controller';
+import { initialSession, reduceSession, canMutate, shouldPreparePlayback, type StudioSessionState } from './model';
+import { handleTransportKey } from './keyboard';
+
+export interface StudioSessionApi {
+  readonly state: StudioSessionState;
+  readonly playPause: () => void;
+  readonly stop: () => void;
+  readonly seek: (time: number) => void;
+}
+
+export interface StudioSessionOptions {
+  /** Build the immutable concrete input + trace before entering playback. */
+  prepare?: () => Promise<void>;
+  /** Immediately cancel preparation and discard derived playback artifacts. */
+  cancel?: () => void;
+  /** Another transport (for example an imported verified trace) owns Space. */
+  keyboardEnabled?: boolean;
+}
+
+export function useStudioSession(
+  controller: EditorController | null,
+  duration: number,
+  options: StudioSessionOptions = {},
+): StudioSessionApi {
+  const [state, dispatch] = useReducer(reduceSession, duration, initialSession);
+  const frame = useRef(0);
+  const preparation = useRef(0);
+
+  useEffect(() => {
+    controller?.setAuthoringEnabled(canMutate(state.mode));
+    return () => controller?.setAuthoringEnabled(true);
+  }, [controller, state.mode]);
+
+  useEffect(() => {
+    if (state.mode !== 'playing') return;
+    const wallStart = performance.now();
+    const traceStart = state.time;
+    const tick = (now: number): void => {
+      dispatch({ type: 'clock', time: traceStart + Math.max(0, (now - wallStart) / 1000) });
+      frame.current = requestAnimationFrame(tick);
+    };
+    frame.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame.current);
+  }, [state.mode]);
+
+  useEffect(() => {
+    if (state.mode === 'authoring' && state.duration !== duration) {
+      dispatch({ type: 'stop' });
+    }
+  }, [duration, state.duration, state.mode]);
+
+  const playPause = useCallback(() => {
+    if (!controller) return;
+    // A failed preparation must not leave a visually enabled Play button that
+    // can never do anything.  Retrying uses the current editor document, so a
+    // corrected binding/interaction can be played immediately without an
+    // otherwise mysterious Escape-reset first.
+    if (shouldPreparePlayback(state.mode)) {
+      dispatch({ type: 'prepare', duration });
+      const id = ++preparation.current;
+      void Promise.resolve().then(async () => {
+        const report = controller.doc.validation;
+        if (!report.ok) {
+          const errors = report.issues.filter((item) => item.severity === 'error').slice(0, 3);
+          throw new Error(errors.map((item) => item.message).join(' · ') || 'Scenario is invalid');
+        }
+        await options.prepare?.();
+        if (preparation.current !== id) return;
+        // One atomic transition latches the initiating Play intent across an
+        // asynchronous cold prepare. Separate ready/play dispatches can be
+        // observed as paused by playback mounting effects in the same commit.
+        dispatch({ type: 'ready-and-play' });
+      }).catch((reason: unknown) => {
+        if (preparation.current !== id) return;
+        dispatch({ type: 'fail', message: reason instanceof Error ? reason.message : String(reason) });
+      });
+      return;
+    }
+    dispatch({ type: state.mode === 'playing' ? 'pause' : 'play' });
+  }, [controller, duration, options, state.mode]);
+
+  const stop = useCallback(() => {
+    preparation.current += 1;
+    options.cancel?.();
+    dispatch({ type: 'stop' });
+  }, [options]);
+
+  useEffect(() => {
+    if (options.keyboardEnabled === false) return;
+    const onKeyDown = (event: KeyboardEvent): void => {
+      handleTransportKey(event, state.mode, playPause, stop);
+    };
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [options.keyboardEnabled, playPause, state.mode, stop]);
+
+  return {
+    state,
+    playPause,
+    stop,
+    seek: useCallback((time: number) => dispatch({ type: 'seek', time }), []),
+  };
+}

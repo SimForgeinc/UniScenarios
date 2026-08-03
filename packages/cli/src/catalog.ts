@@ -14,6 +14,14 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import {
+  matchAnchorReport,
+  normalizeDerivedMapIndex,
+  type DerivedMapIndex,
+  type MatchedSite,
+} from '@uniscenarios/anchor-matcher';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
+
+import {
   CATALOG_RESEARCH_SOURCES,
   INCIDENT_DOMAINS,
   INCIDENT_TAXONOMY,
@@ -21,12 +29,17 @@ import {
   type IncidentDefinition,
 } from './catalog-taxonomy.js';
 import { CliError, EXIT } from './errors.js';
-import { DEV_ASSETS, KNOWN_MAPS, REPO_ROOT } from './maps.js';
+import { DEV_ASSETS, KNOWN_MAPS, REPO_ROOT, loadMap } from './maps.js';
+import { adaptTemplate } from './adapt.js';
+import { materialize, templateId as canonicalTemplateId } from './materialize.js';
+import { catalogExactMatcherPolicy } from './sites.js';
+import { readTemplate } from './template-io.js';
 
 export const CATALOG_KIND = 'uniscenarios-scenario-catalog' as const;
 export const CATALOG_VERSION = 2 as const;
 export const CATALOG_GENERATOR_VERSION = '2.0.0' as const;
 export const CATALOG_SLOTS_PER_MAP = 100 as const;
+export const CATALOG_MIN_INCIDENT_TYPES_PER_MAP = 3 as const;
 export const DEFAULT_CATALOG_NAMESPACE = 'uniscenarios-five-map-v2' as const;
 
 /** Existing executable templates are implementation provenance, not the taxonomy. */
@@ -36,6 +49,38 @@ export const CATALOG_TEMPLATE_SOURCES = [
   { id: 'multiple-threat', source: 'examples/multiple-threat.template.json' },
   { id: 'bus-stop-emergence', source: 'examples/bus-stop-emergence.template.json' },
   { id: 'school-dartout', source: 'examples/school-dartout.template.json' },
+  { id: 'intersection.cross-traffic-stop-violation', source: 'examples/mechanisms/remaining/cross-traffic-stop-violation.template.json' },
+  { id: 'intersection.red-light-late-entry', source: 'examples/mechanisms/remaining/red-light-late-entry.template.json' },
+  { id: 'intersection.right-turn-crosswalk', source: 'examples/mechanisms/junction-vru/right-turn-crosswalk.template.json' },
+  { id: 'intersection.left-turn-crosswalk', source: 'examples/mechanisms/junction-vru/left-turn-crosswalk.template.json' },
+  { id: 'intersection.opposing-turn-encroachment', source: 'examples/mechanisms/remaining/opposing-turn-encroachment.template.json' },
+  { id: 'intersection-blocked-box-reveal', source: 'examples/mechanisms/junction-vru/intersection-blocked-box-reveal.template.json' },
+  { id: 'vru.adult-midblock-crossing', source: 'examples/mechanisms/junction-vru/adult-midblock-crossing.template.json' },
+  { id: 'vru.reversing-pedestrian', source: 'examples/mechanisms/remaining/reversing-pedestrian.template.json' },
+  { id: 'vru.cyclist-right-hook', source: 'examples/mechanisms/remaining/cyclist-right-hook.template.json' },
+  { id: 'vru.cyclist-crossing-path', source: 'examples/mechanisms/junction-vru/cyclist-crossing-path.template.json' },
+  { id: 'vru.dooring-cyclist', source: 'examples/mechanisms/remaining/dooring-cyclist.template.json' },
+  { id: 'longitudinal.lead-hard-brake', source: 'examples/mechanisms/corridor/lead-hard-brake.template.json' },
+  { id: 'longitudinal.queue-tail', source: 'examples/mechanisms/corridor/queue-tail.template.json' },
+  { id: 'longitudinal.cutout-reveals-stopped', source: 'examples/mechanisms/corridor/cutout-reveals-stopped.template.json' },
+  { id: 'longitudinal.cut-in-brake', source: 'examples/mechanisms/corridor/cut-in-brake.template.json' },
+  { id: 'longitudinal.slow-vulnerable-lead', source: 'examples/mechanisms/remaining/slow-vulnerable-lead.template.json' },
+  { id: 'lane-change.sideswipe', source: 'examples/mechanisms/corridor/sideswipe.template.json' },
+  { id: 'lane-change.merge-gap-collapse', source: 'examples/mechanisms/corridor/merge-gap-collapse.template.json' },
+  { id: 'lane-change.lane-drop-late-merge', source: 'examples/mechanisms/remaining/lane-drop-late-merge.template.json' },
+  { id: 'lane-change.oncoming-overtake', source: 'examples/mechanisms/remaining/oncoming-overtake.template.json' },
+  { id: 'parking.vehicle-pulls-out', source: 'examples/mechanisms/parking-transit/vehicle-pulls-out.template.json' },
+  { id: 'parking.backing-out-vehicle', source: 'examples/mechanisms/parking-transit/backing-out-vehicle.template.json' },
+  { id: 'parking.delivery-double-park', source: 'examples/mechanisms/parking-transit/delivery-double-park.template.json' },
+  { id: 'parking.driveway-emergence', source: 'examples/mechanisms/parking-transit/driveway-emergence.template.json' },
+  { id: 'transit.bus-pullout', source: 'examples/mechanisms/parking-transit/bus-pullout.template.json' },
+  { id: 'school.crossing-guard-release', source: 'examples/mechanisms/school-workzone/crossing-guard-release.template.json' },
+  { id: 'workzone.lane-shift', source: 'examples/mechanisms/school-workzone/lane-shift.template.json' },
+  { id: 'workzone.worker-intrusion', source: 'examples/mechanisms/school-workzone/worker-intrusion.template.json' },
+  { id: 'road-departure.curve-loss-control', source: 'examples/mechanisms/obstacle/curve-loss-control.template.json' },
+  { id: 'obstacle.fallen-cargo', source: 'examples/mechanisms/obstacle/fallen-cargo.template.json' },
+  { id: 'obstacle.animal-crossing', source: 'examples/mechanisms/obstacle/animal-crossing.template.json' },
+  { id: 'obstacle.disabled-vehicle', source: 'examples/mechanisms/obstacle/disabled-vehicle.template.json' },
 ] as const;
 
 export type CatalogSlotStatus =
@@ -57,7 +102,10 @@ export interface CatalogEvidencePaths {
 }
 
 export interface CatalogTemplateProvenance {
+  /** Taxonomy/registry key used to locate the implementation template. */
   readonly id: string;
+  /** Canonical replay-key identity derived by the materializer. */
+  readonly runtimeTemplateId: string;
   readonly source: string;
   readonly digest: string;
 }
@@ -94,7 +142,7 @@ export interface CatalogSiteBinding {
 
 export interface CatalogAcceptanceCheck {
   readonly id: 'schema' | 'site-grounding' | 'determinism' | 'kinematics' | 'render-integrity' | 'visual-realism';
-  readonly kind: 'automated' | 'human';
+  readonly kind: 'automated' | 'manual';
   readonly criterion: string;
   readonly state: 'pending' | 'passed' | 'failed';
   readonly evidenceKey: keyof CatalogEvidencePaths | 'catalog';
@@ -142,6 +190,12 @@ export interface ScenarioCatalogSlot {
     readonly state: 'authored-design' | 'template-backed';
     readonly templateId?: string;
     readonly templateSource?: string;
+    /** Matcher site persisted only after exact catalog-location binding exists. */
+    readonly matcherSiteId?: string;
+    /** Must equal `site.locationId`; closes the catalog-location/matcher join. */
+    readonly matchedLocationId?: string;
+    /** Must equal `variant.id` once that operational condition is truly applied. */
+    readonly materializedVariantId?: string;
   };
   readonly acceptance: {
     readonly state: 'pending' | 'accepted' | 'rejected';
@@ -196,7 +250,6 @@ export interface CatalogIssue {
     | 'wrong_slot_count'
     | 'insufficient_taxonomy_breadth'
     | 'duplicate_identity'
-    | 'duplicate_design'
     | 'duplicate_seed'
     | 'invalid_identity'
     | 'invalid_seed'
@@ -241,6 +294,7 @@ interface RawRoadAnchor {
   readonly s?: unknown;
   readonly offsetM?: unknown;
   readonly headingRad?: unknown;
+  readonly junctionId?: unknown;
 }
 
 interface RawLocation {
@@ -250,7 +304,10 @@ interface RawLocation {
   readonly type?: unknown;
   readonly tags?: unknown;
   readonly affordances?: unknown;
-  readonly anchor?: { readonly road?: RawRoadAnchor | null };
+  readonly anchor?: {
+    readonly road?: RawRoadAnchor | null;
+    readonly scene?: { readonly x?: unknown; readonly z?: unknown } | null;
+  };
   readonly quality?: { readonly anchor?: unknown; readonly confidence?: unknown };
 }
 
@@ -270,6 +327,19 @@ interface DerivedProvenance {
 interface MapContext {
   readonly provenance: CatalogMapProvenance;
   readonly locations: readonly RawLocation[];
+  readonly matcherIndex: DerivedMapIndex;
+}
+
+interface ExecutableTemplate {
+  readonly provenance: CatalogTemplateProvenance;
+  readonly template: ScenarioTemplateV2;
+}
+
+interface CatalogLocationSitePair {
+  readonly location: RawLocation;
+  readonly matcherSiteId?: string;
+  readonly matchedLocationId?: string;
+  readonly matcherSite?: MatchedSite;
 }
 
 function sha256(value: string | Uint8Array): string {
@@ -282,6 +352,19 @@ function unzip(bytes: Buffer): Buffer {
 
 function digestPayload(manifest: Omit<ScenarioCatalogManifest, 'catalogDigest'>): string {
   return sha256(JSON.stringify(manifest));
+}
+
+/** Immutable authored-coordinate digest. Lifecycle/review state is excluded. */
+export function catalogDesignDigest(
+  slot: Omit<ScenarioCatalogSlot, 'designDigest'> | ScenarioCatalogSlot,
+): string {
+  const {
+    designDigest: _digest,
+    status: _status,
+    acceptance: _acceptance,
+    ...authored
+  } = slot as ScenarioCatalogSlot;
+  return sha256(JSON.stringify(authored));
 }
 
 function stableLocationDigest(location: RawLocation): string {
@@ -299,6 +382,21 @@ function stableLocationDigest(location: RawLocation): string {
 function taxonomyDigest(): string {
   return sha256(JSON.stringify({ sources: CATALOG_RESEARCH_SOURCES, incidents: INCIDENT_TAXONOMY, variants: OPERATIONAL_VARIANTS }));
 }
+
+const CANDIDATE_MATERIALIZATION_FINDINGS = new Set([
+  'arrival_conflict_unclosed',
+  'arrival_unconverged',
+  'map_control_missing',
+  'movement_priority_missing',
+  'movement_stop_missing',
+  'no_actors',
+  'reference_route_unbuildable',
+  'role_unbound',
+  'route_turn_mismatch',
+  'route_turn_unbindable',
+  'route_unbuildable',
+  'signal_unbindable',
+]);
 
 function catalogSeed(
   namespace: string,
@@ -360,7 +458,7 @@ function assertRelativeRoot(value: string): string {
   return normalized;
 }
 
-async function readTemplateProvenance(repoRoot: string): Promise<CatalogTemplateProvenance[]> {
+async function readExecutableTemplates(repoRoot: string): Promise<ExecutableTemplate[]> {
   return Promise.all(CATALOG_TEMPLATE_SOURCES.map(async (entry) => {
     const file = path.join(repoRoot, entry.source);
     let bytes: Buffer;
@@ -369,7 +467,16 @@ async function readTemplateProvenance(repoRoot: string): Promise<CatalogTemplate
     } catch {
       throw new CliError('file_not_found', `cannot read catalog template ${entry.source}`, { path: file });
     }
-    return { id: entry.id, source: entry.source, digest: sha256(bytes) };
+    const template = await readTemplate(file);
+    return {
+      provenance: {
+        id: entry.id,
+        runtimeTemplateId: canonicalTemplateId(template),
+        source: entry.source,
+        digest: sha256(bytes),
+      },
+      template,
+    };
   }));
 }
 
@@ -393,10 +500,11 @@ async function readMapContext(devAssets: string, mapId: string): Promise<MapCont
 
   let derived: DerivedProvenance;
   let catalog: RawLocationCatalog;
+  let topology: unknown;
   try {
     derived = JSON.parse(unzip(derivedBytes).toString('utf8')) as DerivedProvenance;
     catalog = JSON.parse(unzip(locationBytes).toString('utf8')) as RawLocationCatalog;
-    JSON.parse(unzip(engineBytes).toString('utf8')) as unknown;
+    topology = JSON.parse(unzip(engineBytes).toString('utf8')) as unknown;
   } catch (error) {
     throw new CliError('invalid_map_provenance', error instanceof Error ? error.message : String(error), {
       path: path.join(devAssets, mapId),
@@ -419,17 +527,37 @@ async function readMapContext(devAssets: string, mapId: string): Promise<MapCont
       path: path.join(devAssets, mapId),
     });
   }
+  const matcherIndex = normalizeDerivedMapIndex(derived as unknown, {
+    mapId,
+    topology: topology as never,
+    locations: catalog as unknown,
+  });
+  const topologyRecord = isRecord(topology) ? topology : null;
+  const topologySource = topologyRecord && isRecord(topologyRecord['source']) ? topologyRecord['source'] : null;
+  const engineGraphDigest = topologySource?.['xodrSha256'];
+  if (
+    typeof matcherIndex.topologyDigest !== 'string' || matcherIndex.topologyDigest.length === 0 ||
+    typeof engineGraphDigest !== 'string' || engineGraphDigest.length === 0
+  ) {
+    throw new CliError('invalid_map_provenance', `${mapId} lacks concrete matcher/engine replay digests`, {
+      path: path.join(devAssets, mapId),
+    });
+  }
   return {
     provenance: {
       mapId,
       mapAssetId: catalog.mapAssetId,
       catalogRevision: catalog.catalogRevision,
-      matcherIndexDigest: sha256(unzip(derivedBytes)),
-      engineGraphDigest: sha256(unzip(engineBytes)),
+      // These are the exact replay domains emitted by MatchedSite and
+      // LaneGraph/trace headers. File-byte digests are not interchangeable
+      // with the semantic topology digests used by concrete execution.
+      matcherIndexDigest: matcherIndex.topologyDigest,
+      engineGraphDigest,
       locationCatalogDigest: sha256(unzip(locationBytes)),
       slots: CATALOG_SLOTS_PER_MAP,
     },
     locations: catalog.locations as RawLocation[],
+    matcherIndex,
   };
 }
 
@@ -479,6 +607,104 @@ function siteScore(location: RawLocation, incident: IncidentDefinition): number 
   return preferred * 10 + exact + confidence;
 }
 
+function laneSection(rsl: string): string | null {
+  const parts = rsl.split(':');
+  return parts.length === 3 && parts[0] && parts[1] ? `${parts[0]}:${parts[1]}` : null;
+}
+
+function pointSegmentDistance(
+  point: { x: number; y: number },
+  start: { x: number; y: number },
+  end: { x: number; y: number },
+): number {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const lengthSquared = dx * dx + dy * dy;
+  if (lengthSquared === 0) return Math.hypot(point.x - start.x, point.y - start.y);
+  const t = Math.max(0, Math.min(1, ((point.x - start.x) * dx + (point.y - start.y) * dy) / lengthSquared));
+  return Math.hypot(point.x - (start.x + t * dx), point.y - (start.y + t * dy));
+}
+
+function pointPolylineDistance(
+  point: { x: number; y: number },
+  polyline: readonly { x: number; y: number }[],
+): number {
+  if (polyline.length === 0) return Number.POSITIVE_INFINITY;
+  if (polyline.length === 1) return Math.hypot(point.x - polyline[0]!.x, point.y - polyline[0]!.y);
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 1; index < polyline.length; index += 1) {
+    best = Math.min(best, pointSegmentDistance(point, polyline[index - 1]!, polyline[index]!));
+  }
+  return best;
+}
+
+/**
+ * Prove that a persisted matcher site and a raw catalog location describe the
+ * same physical reservation. A shared map or road name is deliberately not
+ * enough: the location's scene point must close against its pinned lane, and
+ * the matched frame must bind that location, its exact junction movement, or
+ * its anchored road section.
+ */
+export function matcherSiteClosesLocation(
+  site: MatchedSite,
+  value: unknown,
+  index: DerivedMapIndex,
+): boolean {
+  if (!isRecord(value)) return false;
+  const anchor = isRecord(value['anchor']) ? value['anchor'] : null;
+  const road = anchor && isRecord(anchor['road']) ? anchor['road'] : null;
+  const scene = anchor && isRecord(anchor['scene']) ? anchor['scene'] : null;
+  const locationId = value['id'];
+  const rsl = road?.['rsl'];
+  const offsetM = road?.['offsetM'];
+  const sceneX = scene?.['x'];
+  const sceneZ = scene?.['z'];
+  if (
+    typeof locationId !== 'string' ||
+    typeof rsl !== 'string' ||
+    typeof offsetM !== 'number' ||
+    typeof sceneX !== 'number' ||
+    typeof sceneZ !== 'number'
+  ) return false;
+
+  const anchoredLane = index.lanes[rsl];
+  const anchoredSection = laneSection(rsl);
+  if (!anchoredLane || !anchoredSection) return false;
+  const anchorDistance = pointPolylineDistance({ x: sceneX, y: -sceneZ }, anchoredLane.polyline);
+  if (!Number.isFinite(anchorDistance) || anchorDistance > Math.abs(offsetM) + 2) return false;
+
+  const pathRsls = new Set(site.frame.referencePath.map((span) => span.laneRsl));
+  const featureBound = Object.values(site.featureMatches).some((match) => match.mapFeatureId === locationId);
+  const bindsWorkZoneReservation = Object.values(site.featureMatches)
+    .some((match) => match.kind === 'work_zone_suitable');
+  const pointFeature = index.pointFeatures.find((feature) => feature.id === locationId);
+  // A point feature (notably a crosswalk) may be anchored to its own
+  // perpendicular road/lane while the matcher frame's vehicle reference path
+  // runs through it. Once the location scene point has closed geometrically to
+  // its pinned anchor lane above, an exact feature-id match is the authoritative
+  // join; requiring the vehicle path to share that road section rejects valid
+  // perpendicular crossings.
+  if (featureBound) return true;
+  // `work_zone_suitable` is a derived corridor reservation represented in the
+  // shared point-feature index for lookup convenience. It is not an authored
+  // point feature that a template binds by id: exactness is its anchored road
+  // segment plus membership in the matcher reference path, checked below.
+  // Genuine point features (crossings, bus stops, driveways, school zones,
+  // parking and occlusion points) remain identity-bound and cannot fall back
+  // to a merely nearby corridor.
+  if (pointFeature && (
+    pointFeature.kind !== 'work_zone_suitable' || bindsWorkZoneReservation
+  )) return false;
+
+  const origin = site.frame.origin.mapFeatureId;
+  const junctionId = road!['junctionId'];
+  if (origin.startsWith('junction:')) {
+    return typeof junctionId === 'string' && origin === `junction:${junctionId}` && pathRsls.has(rsl);
+  }
+  const anchoredSegment = index.factIndex.segmentIdsByLane[rsl];
+  return anchoredSegment !== undefined && origin === anchoredSegment && pathRsls.has(rsl);
+}
+
 function acceptanceChecks(): readonly CatalogAcceptanceCheck[] {
   return [
     { id: 'schema', kind: 'automated', criterion: 'Concrete instance passes the versioned scenario schema.', state: 'pending', evidenceKey: 'instance' },
@@ -486,7 +712,7 @@ function acceptanceChecks(): readonly CatalogAcceptanceCheck[] {
     { id: 'determinism', kind: 'automated', criterion: 'Repeated generation and simulation produce identical normalized output for the recorded seed.', state: 'pending', evidenceKey: 'trace' },
     { id: 'kinematics', kind: 'automated', criterion: 'Actor speeds, accelerations, paths, clearances, trigger ordering, and conflict timing pass incident-specific plausibility limits.', state: 'pending', evidenceKey: 'result' },
     { id: 'render-integrity', kind: 'automated', criterion: 'Rendered frames use the pinned map and actors, cover pre-reveal through aftermath, and contain no missing/off-map/overlapping assets.', state: 'pending', evidenceKey: 'renderManifest' },
-    { id: 'visual-realism', kind: 'human', criterion: 'A reviewer inspects stills and video and accepts site fit, actor intent, occlusion, timing, motion, continuity, and real-world plausibility.', state: 'pending', evidenceKey: 'visualInspection' },
+    { id: 'visual-realism', kind: 'manual', criterion: 'A named reviewer inspects stills and video in Studio and accepts site fit, actor intent, occlusion, timing, motion, continuity, and real-world plausibility.', state: 'pending', evidenceKey: 'visualInspection' },
   ];
 }
 
@@ -496,7 +722,7 @@ function acceptanceCriteria(incident: IncidentDefinition): string[] {
     `Critical observables are measured: ${incident.criticality.join(', ')}.`,
     'Every dynamic actor follows a continuous, lane/site-compatible path with plausible speed, acceleration, and response timing.',
     'The conflict is challenging but not created by teleportation, impossible overlap, wrong-way geometry, or an unavoidable initial state.',
-    'Pre-reveal, reveal, conflict, and aftermath are visible in the evidence bundle and pass human review.',
+    'Pre-reveal, reveal, conflict, and aftermath are visible in the evidence bundle and pass named Studio review.',
   ];
 }
 
@@ -514,7 +740,31 @@ function progressFor(slots: readonly ScenarioCatalogSlot[]): CatalogProgressCoun
   };
 }
 
-/** Build 100 distinct, authored, map-grounded incident briefs per map. */
+/**
+ * Recompute every derived catalog field after lifecycle changes.
+ *
+ * Callers may only change source fields (for example `status`). Keeping this in
+ * the catalog module prevents an executor from accidentally publishing stale
+ * per-slot or manifest digests, or hand-maintained progress counters.
+ */
+export function refreshScenarioCatalog(
+  catalog: ScenarioCatalogManifest,
+  slots: readonly ScenarioCatalogSlot[],
+): ScenarioCatalogManifest {
+  const refreshedSlots = slots.map((slot) => {
+    const { designDigest: _ignored, ...withoutDesignDigest } = slot;
+    return { ...withoutDesignDigest, designDigest: catalogDesignDigest(slot) };
+  });
+  const { catalogDigest: _oldDigest, slots: _oldSlots, progress: _oldProgress, ...rest } = catalog;
+  const withoutDigest: Omit<ScenarioCatalogManifest, 'catalogDigest'> = {
+    ...rest,
+    slots: refreshedSlots,
+    progress: progressFor(refreshedSlots),
+  };
+  return { ...withoutDigest, catalogDigest: digestPayload(withoutDigest) };
+}
+
+/** Build exactly 100 deterministic, authored, map-grounded incident briefs per map. */
 export async function createScenarioCatalog(
   options: CreateCatalogOptions = {},
 ): Promise<ScenarioCatalogManifest> {
@@ -526,49 +776,164 @@ export async function createScenarioCatalog(
     throw new CliError('bad_value', '--namespace must not be empty', { path: '--namespace' });
   }
 
-  const [templates, contexts] = await Promise.all([
-    readTemplateProvenance(repoRoot),
+  const [executableTemplates, contexts] = await Promise.all([
+    readExecutableTemplates(repoRoot),
     Promise.all(KNOWN_MAPS.map((mapId) => readMapContext(devAssets, mapId))),
   ]);
+  const runtimeBundles = new Map<string, Awaited<ReturnType<typeof loadMap>>>(
+    await Promise.all(KNOWN_MAPS.map(async (mapId) => [mapId, await loadMap(mapId)] as const)),
+  );
+  const templates = executableTemplates.map((entry) => entry.provenance);
   const templateById = new Map(templates.map((template) => [template.id, template]));
+  const executableById = new Map(executableTemplates.map((entry) => [entry.provenance.id, entry.template]));
   const taxonomyHash = taxonomyDigest();
   const slots: ScenarioCatalogSlot[] = [];
+  const selectedMechanismCoverage = new Set<string>();
+  const materializationFailuresByMechanism = new Map<string, Set<string>>();
+  const eligibilityByMap: Array<{ mapId: string; incidentIds: string[]; domains: string[] }> = [];
+  const materializedBreadthFailures: Array<Record<string, unknown>> = [];
 
   for (const context of contexts) {
     const map = context.provenance;
-    const eligible = INCIDENT_TAXONOMY.flatMap((incident) => {
+    const eligible = (await Promise.all(INCIDENT_TAXONOMY.map(async (incident) => {
       if (incident.mapIds && !incident.mapIds.includes(map.mapId)) return [];
-      const candidates = context.locations
+      if (!incident.implementationTemplateId) return [];
+      const locations = context.locations
         .filter((location) => locationMatches(location, incident))
         .sort((left, right) => siteScore(right, incident) - siteScore(left, incident) || String(left.id).localeCompare(String(right.id)));
+      const template = executableById.get(incident.implementationTemplateId);
+      if (!template) return [];
+      // This must remain identical to executor replay.  A persisted site is
+      // an exact reservation, not a request to re-run the interactive site's
+      // diversity/truncation policy.
+      const { anchor, roles } = adaptTemplate(template);
+      const matched = matchAnchorReport({
+        ...anchor,
+        policy: catalogExactMatcherPolicy(anchor.policy ?? {}),
+      }, context.matcherIndex, { roles }).sites;
+      const candidates: CatalogLocationSitePair[] = locations.flatMap((location) => matched.flatMap((matcherSite) =>
+        matcherSiteClosesLocation(matcherSite, location, context.matcherIndex)
+          ? [{
+              location,
+              matcherSiteId: matcherSite.siteId,
+              matchedLocationId: String(location.id),
+              matcherSite,
+            }]
+          : [],
+      )).sort((left, right) =>
+        (siteScore(right.location, incident) + right.matcherSite!.score) -
+          (siteScore(left.location, incident) + left.matcherSite!.score) ||
+        String(left.location.id).localeCompare(String(right.location.id)) ||
+        String(left.matcherSiteId).localeCompare(String(right.matcherSiteId)),
+      );
+      // Hard eligibility: a taxonomy mechanism is available on this map only
+      // when one exact catalog-location/matcher-site pair exists. An unrelated
+      // authored location must never occupy an executable delivery slot.
       return candidates.length > 0 ? [{ incident, candidates }] : [];
+    }))).flat();
+    eligibilityByMap.push({
+      mapId: map.mapId,
+      incidentIds: eligible.map((entry) => entry.incident.id),
+      domains: [...new Set(eligible.map((entry) => entry.incident.domain))],
     });
-    if (eligible.length < 20 || new Set(eligible.map((entry) => entry.incident.domain)).size < 7) {
-      throw new CliError('insufficient_map_authorability', `${map.mapId} cannot support a broad incident catalog`, {
-        path: path.join(devAssets, map.mapId),
-        detail: {
-          eligibleIncidentTypes: eligible.map((entry) => entry.incident.id),
-          domains: [...new Set(eligible.map((entry) => entry.incident.domain))],
-        },
-        exitCode: EXIT.validationFindings,
-      });
-    }
 
+    const selectedMapMechanisms = new Set<string>();
     for (let ordinal = 0; ordinal < CATALOG_SLOTS_PER_MAP; ordinal += 1) {
-      const entry = eligible[ordinal % eligible.length]!;
-      const cycle = Math.floor(ordinal / eligible.length);
-      const location = entry.candidates[(cycle * 7 + ordinal) % entry.candidates.length]!;
-      const site = bindSite(location);
-      // Repeated use of a rare map feature (for example the only school zone)
-      // advances the operational condition every taxonomy round. This keeps
-      // map/incident/site/variant coordinates unique even when only one
-      // suitable site exists.
-      const variant = OPERATIONAL_VARIANTS[cycle % OPERATIONAL_VARIANTS.length]!;
-      const seed = catalogSeed(namespace, map, ordinal, entry.incident, site, variant.id, taxonomyHash);
+      // Use the baseline operational condition for every occurrence. Variant
+      // rotation is not a delivery quota and must not displace a stronger
+      // truthful exact fit merely to manufacture diversity.
+      const runtimeBundle = runtimeBundles.get(map.mapId);
+      if (!runtimeBundle) {
+        throw new CliError('catalog_internal_ineligible_slot', 'eligible selection lost its template or runtime map bundle', {
+          path: `${map.mapId}:${ordinal}`,
+          exitCode: EXIT.validationFindings,
+        });
+      }
+      let entry: (typeof eligible)[number] | undefined;
+      let variant: (typeof OPERATIONAL_VARIANTS)[number] | undefined;
+      let selectedPair: CatalogLocationSitePair | undefined;
+      let site: CatalogSiteBinding | undefined;
+      let seed: string | undefined;
+      const candidateFailures: Array<{ siteId: string; code: string }> = [];
+      const entryOrder = Array.from({ length: eligible.length }, (_, incidentOffset) => ({
+        entry: eligible[(ordinal + incidentOffset) % eligible.length]!,
+        incidentOffset,
+      })).sort((left, right) =>
+        Number(selectedMechanismCoverage.has(left.entry.incident.id)) - Number(selectedMechanismCoverage.has(right.entry.incident.id)) ||
+        (selectedMapMechanisms.size < CATALOG_MIN_INCIDENT_TYPES_PER_MAP
+          ? Number(selectedMapMechanisms.has(left.entry.incident.id)) - Number(selectedMapMechanisms.has(right.entry.incident.id))
+          : 0) ||
+        left.incidentOffset - right.incidentOffset,
+      );
+      selection: for (const { entry: candidateEntry } of entryOrder) {
+        const candidateVariant = OPERATIONAL_VARIANTS[0]!;
+        const templateDocument = executableById.get(candidateEntry.incident.implementationTemplateId!);
+        if (!templateDocument) continue;
+        for (let offset = 0; offset < candidateEntry.candidates.length; offset += 1) {
+          // Exact pairs are always attempted strongest-first. Slot identity,
+          // ordinal and seed provide occurrence identity; rotating to a weaker
+          // physical site for artificial diversity would be less truthful.
+          const candidate = candidateEntry.candidates[offset]!;
+          if (!candidate.matcherSite) continue;
+          const candidateSite = bindSite(candidate.location);
+          const candidateSeed = catalogSeed(namespace, map, ordinal, candidateEntry.incident, candidateSite, candidateVariant.id, taxonomyHash);
+          try {
+            const concrete = materialize(templateDocument, runtimeBundle, candidate.matcherSite, {
+              drawIndex: 0,
+              seed: candidateSeed,
+              variant: candidateVariant,
+            });
+            if (!concrete.manifest.feasible) {
+              candidateFailures.push({ siteId: candidate.matcherSite.siteId, code: 'manifest_infeasible' });
+              const failures = materializationFailuresByMechanism.get(candidateEntry.incident.id) ?? new Set<string>();
+              const issueSummary = concrete.manifest.issues
+                .filter((issue) => issue.severity === 'error')
+                .map((issue) => `${issue.code}[${issue.path}]:${issue.reason}`)
+                .join('|');
+              failures.add(`${map.mapId}:${candidate.matcherSite.siteId}:manifest_infeasible:${issueSummary}`);
+              materializationFailuresByMechanism.set(candidateEntry.incident.id, failures);
+              continue;
+            }
+            entry = candidateEntry;
+            variant = candidateVariant;
+            selectedPair = candidate;
+            site = candidateSite;
+            seed = candidateSeed;
+            break selection;
+          } catch (error) {
+            // A hard materialization finding makes this exact pair ineligible,
+            // not the mechanism itself. Try the next exact pair/incident; if
+            // all fail the slot is rejected below with the candidate summary.
+            if (error instanceof CliError && (
+              error.exitCode === EXIT.validationFindings || CANDIDATE_MATERIALIZATION_FINDINGS.has(error.code)
+            )) {
+              candidateFailures.push({ siteId: candidate.matcherSite.siteId, code: error.code });
+              const failures = materializationFailuresByMechanism.get(candidateEntry.incident.id) ?? new Set<string>();
+              failures.add(`${map.mapId}:${candidate.matcherSite.siteId}:${error.code}`);
+              materializationFailuresByMechanism.set(candidateEntry.incident.id, failures);
+              continue;
+            }
+            throw error;
+          }
+        }
+      }
+      if (!entry || !variant || !selectedPair || !site || !seed) {
+        throw new CliError('no_materializable_catalog_pair', 'no exact location/matcher pair can materialize the reserved mechanism and variant', {
+          path: `${map.mapId}:${ordinal}`,
+          detail: { candidateFailures },
+          exitCode: EXIT.validationFindings,
+        });
+      }
+      selectedMapMechanisms.add(entry.incident.id);
+      selectedMechanismCoverage.add(entry.incident.id);
       const identity = catalogIdentity(map.mapId, ordinal, entry.incident.id, seed);
-      const template = entry.incident.implementationTemplateId
-        ? templateById.get(entry.incident.implementationTemplateId)
-        : undefined;
+      const backedTemplate = templateById.get(entry.incident.implementationTemplateId!);
+      if (!backedTemplate || !selectedPair.matcherSiteId || !selectedPair.matchedLocationId) {
+        throw new CliError('catalog_internal_ineligible_slot', 'eligible catalog selection lost executable provenance', {
+          path: `${map.mapId}:${ordinal}`,
+          exitCode: EXIT.validationFindings,
+        });
+      }
       const withoutDesignDigest: Omit<ScenarioCatalogSlot, 'designDigest'> = {
         identity,
         ordinal,
@@ -583,7 +948,7 @@ export async function createScenarioCatalog(
           engineGraphDigest: map.engineGraphDigest,
           locationCatalogDigest: map.locationCatalogDigest,
           taxonomyDigest: taxonomyHash,
-          ...(template ? { templateDigest: template.digest } : {}),
+          ...(backedTemplate ? { templateDigest: backedTemplate.digest } : {}),
         },
         scenario: {
           incidentId: entry.incident.id,
@@ -600,14 +965,65 @@ export async function createScenarioCatalog(
           criticality: entry.incident.criticality,
           acceptanceCriteria: acceptanceCriteria(entry.incident),
         },
-        implementation: template
-          ? { state: 'template-backed', templateId: template.id, templateSource: template.source }
-          : { state: 'authored-design' },
+        implementation: {
+          state: 'template-backed',
+          templateId: backedTemplate.runtimeTemplateId,
+          templateSource: backedTemplate.source,
+          matcherSiteId: selectedPair.matcherSiteId,
+          matchedLocationId: selectedPair.matchedLocationId,
+          materializedVariantId: variant.id,
+        },
         acceptance: { state: 'pending', checks: acceptanceChecks(), reviewer: null },
         evidencePaths: evidencePaths(root, map.mapId, identity),
       };
-      slots.push({ ...withoutDesignDigest, designDigest: sha256(JSON.stringify(withoutDesignDigest)) });
+      slots.push({ ...withoutDesignDigest, designDigest: catalogDesignDigest(withoutDesignDigest) });
     }
+    if (selectedMapMechanisms.size < CATALOG_MIN_INCIDENT_TYPES_PER_MAP) {
+      const unselected = eligible
+        .map((candidate) => candidate.incident.id)
+        .filter((incidentId) => !selectedMapMechanisms.has(incidentId));
+      materializedBreadthFailures.push({
+        mapId: map.mapId,
+          selectedMechanisms: [...selectedMapMechanisms].sort(),
+          unselectedMechanisms: unselected,
+          materializationFailures: Object.fromEntries(unselected.map((incidentId) => [
+            incidentId,
+            [...(materializationFailuresByMechanism.get(incidentId) ?? [])].filter((failure) => failure.startsWith(`${map.mapId}:`)),
+          ])),
+      });
+    }
+  }
+
+  if (materializedBreadthFailures.length > 0) {
+    throw new CliError('insufficient_map_authorability', 'one or more maps cannot materialize the required exact-pair mechanism breadth', {
+      path: devAssets,
+      detail: { maps: materializedBreadthFailures },
+      exitCode: EXIT.validationFindings,
+    });
+  }
+
+  const ineligibleMaps = eligibilityByMap.filter((entry) => entry.incidentIds.length < CATALOG_MIN_INCIDENT_TYPES_PER_MAP);
+  if (ineligibleMaps.length > 0) {
+    throw new CliError('insufficient_map_authorability', 'one or more maps cannot support the required exact-pair breadth', {
+      path: devAssets,
+      detail: { maps: eligibilityByMap },
+      exitCode: EXIT.validationFindings,
+    });
+  }
+
+  const missingMechanisms = INCIDENT_TAXONOMY.filter((incident) => !selectedMechanismCoverage.has(incident.id));
+  if (missingMechanisms.length > 0) {
+    throw new CliError('incomplete_mechanism_coverage', 'exact-pair catalog does not cover every intended mechanism', {
+      path: 'slots',
+      detail: {
+        missingMechanisms: missingMechanisms.map((incident) => incident.id),
+        materializationFailures: Object.fromEntries(missingMechanisms.map((incident) => [
+          incident.id,
+          [...(materializationFailuresByMechanism.get(incident.id) ?? [])],
+        ])),
+      },
+      exitCode: EXIT.validationFindings,
+    });
   }
 
   const maps = contexts.map((context) => context.provenance);
@@ -618,8 +1034,8 @@ export async function createScenarioCatalog(
       supportedMaps: [...KNOWN_MAPS],
       slotsPerMap: CATALOG_SLOTS_PER_MAP,
       totalSlots: KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP,
-      minimumIncidentTypesPerMap: 20,
-      minimumDomainsPerMap: 7,
+      minimumIncidentTypesPerMap: CATALOG_MIN_INCIDENT_TYPES_PER_MAP,
+      minimumDomainsPerMap: 0,
     },
     provenance: {
       generator: '@uniscenarios/cli catalog create',
@@ -712,8 +1128,8 @@ export function validateScenarioCatalog(
   if (contract['slotsPerMap'] !== CATALOG_SLOTS_PER_MAP || contract['totalSlots'] !== KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP) {
     issue(issues, 'wrong_slot_count', 'contract', 'contract must declare exactly 100 slots per map and 500 total');
   }
-  if (contract['minimumIncidentTypesPerMap'] !== 20 || contract['minimumDomainsPerMap'] !== 7) {
-    issue(issues, 'insufficient_taxonomy_breadth', 'contract', 'catalog breadth gates must require at least 20 incident types and 7 domains per map');
+  if (contract['minimumIncidentTypesPerMap'] !== CATALOG_MIN_INCIDENT_TYPES_PER_MAP || contract['minimumDomainsPerMap'] !== 0) {
+    issue(issues, 'insufficient_taxonomy_breadth', 'contract', `catalog breadth gates must require at least ${CATALOG_MIN_INCIDENT_TYPES_PER_MAP} incident types per map and no domain quota`);
   }
   if (typeof value['evidenceRoot'] !== 'string' || !isSafeEvidencePath(`${evidenceRoot}/probe`, evidenceRoot)) {
     issue(issues, 'invalid_evidence_path', 'evidenceRoot', 'evidenceRoot must be a safe relative path');
@@ -729,6 +1145,19 @@ export function validateScenarioCatalog(
   const taxonomyHash = sha256(JSON.stringify({ sources: sourceRows, incidents: taxonomyRows, variants: OPERATIONAL_VARIANTS }));
   if (taxonomyRows.length < 30 || new Set(taxonomyRows.flatMap((row) => isRecord(row) && typeof row['domain'] === 'string' ? [row['domain']] : [])).size < INCIDENT_DOMAINS.length) {
     issue(issues, 'insufficient_taxonomy_breadth', 'taxonomy', 'taxonomy must cover at least 30 incident mechanisms across all eight domains');
+  }
+  const templateRows = Array.isArray(value['templates']) ? value['templates'] : [];
+  const templateByRegistryId = new Map<string, Record<string, unknown>>();
+  for (const [index, row] of templateRows.entries()) {
+    if (
+      !isRecord(row) || typeof row['id'] !== 'string' ||
+      typeof row['runtimeTemplateId'] !== 'string' || row['runtimeTemplateId'].length === 0 ||
+      typeof row['source'] !== 'string' || !/^[0-9a-f]{64}$/.test(String(row['digest']))
+    ) {
+      issue(issues, 'invalid_provenance', `templates[${index}]`, 'template registry, canonical runtime identity, source, and digest must be complete');
+      continue;
+    }
+    templateByRegistryId.set(row['id'], row);
   }
   const topProvenance = isRecord(value['provenance']) ? value['provenance'] : {};
   if (topProvenance['taxonomyDigest'] !== taxonomyHash || topProvenance['generatorVersion'] !== CATALOG_GENERATOR_VERSION) {
@@ -756,7 +1185,6 @@ export function validateScenarioCatalog(
 
   const identities = new Set<string>();
   const seeds = new Set<string>();
-  const designs = new Set<string>();
   const mapOrdinals = new Map<string, Set<number>>();
   const statusCounts: Record<string, number> = {};
   const mapCounts: Record<string, number> = {};
@@ -836,9 +1264,6 @@ export function validateScenarioCatalog(
     ) {
       issue(issues, 'invalid_site_binding', `${base}.site`, 'site binding and operational variant must be complete');
     } else {
-      const designCoordinate = `${mapId}\0${incident.id}\0${site['locationId']}\0${variant['id']}`;
-      if (designs.has(designCoordinate)) issue(issues, 'duplicate_design', base, 'map/incident/site/variant design is duplicated');
-      else designs.add(designCoordinate);
       const expectedSeed = catalogSeed(provenance['namespace'], map, ordinal, incident, site as unknown as CatalogSiteBinding, variant['id'], taxonomyHash);
       if (seed !== expectedSeed) issue(issues, 'invalid_seed', `${base}.seed`, 'seed does not match deterministic authored coordinates', expectedSeed, seed);
       const expectedIdentity = catalogIdentity(map.mapId, ordinal, incident.id, expectedSeed);
@@ -858,8 +1283,61 @@ export function validateScenarioCatalog(
         !Array.isArray(brief['criticality']) || brief['criticality'].length < 3 ||
         !Array.isArray(brief['acceptanceCriteria']) || brief['acceptanceCriteria'].length < 5
       ) issue(issues, 'invalid_catalog', `${base}.brief`, 'authored brief must retain complete incident actors, sequence, observables, and acceptance criteria');
-      if (incident.implementationTemplateId && implementation['templateId'] !== incident.implementationTemplateId) {
-        issue(issues, 'invalid_provenance', `${base}.implementation`, 'template-backed incident lost its implementation provenance');
+      if (incident.implementationTemplateId) {
+        if (implementation['state'] === 'template-backed') {
+          const registeredTemplate = templateByRegistryId.get(incident.implementationTemplateId);
+          if (
+            !registeredTemplate ||
+            implementation['templateId'] !== registeredTemplate['runtimeTemplateId'] ||
+            implementation['templateSource'] !== registeredTemplate['source'] ||
+            provenance['templateDigest'] !== registeredTemplate['digest']
+          ) {
+            issue(issues, 'invalid_provenance', `${base}.implementation`, 'template-backed incident lost registry-to-runtime identity provenance');
+          }
+          const hasMatcherBinding = implementation['matcherSiteId'] !== undefined || implementation['matchedLocationId'] !== undefined;
+          if (hasMatcherBinding && (
+            typeof implementation['matcherSiteId'] !== 'string' ||
+            !/^[0-9a-f]{16}$/.test(implementation['matcherSiteId']) ||
+            implementation['matchedLocationId'] !== site['locationId']
+          )) {
+            issue(
+              issues,
+              'invalid_site_binding',
+              `${base}.implementation`,
+              'template-backed incident must persist one exact matcher-site/catalog-location pair',
+            );
+          }
+          if (hasMatcherBinding && implementation['materializedVariantId'] !== variant['id']) {
+            issue(
+              issues,
+              'invalid_site_binding',
+              `${base}.implementation.materializedVariantId`,
+              'template-backed execution must apply the exact operational variant reserved by the slot',
+              variant['id'],
+              implementation['materializedVariantId'],
+            );
+          }
+          if (!hasMatcherBinding) {
+            issue(
+              issues,
+              'invalid_site_binding',
+              `${base}.implementation`,
+              'delivery catalog slots require an exact persisted matcher-site/catalog-location pair',
+            );
+          }
+        } else if (
+          implementation['state'] !== 'authored-design' ||
+          implementation['matcherSiteId'] !== undefined ||
+          implementation['matchedLocationId'] !== undefined
+        ) {
+          issue(issues, 'invalid_provenance', `${base}.implementation`, 'unmatched catalog location must remain an authored-only design');
+        }
+      } else if (
+        implementation['state'] !== 'authored-design' ||
+        implementation['matcherSiteId'] !== undefined ||
+        implementation['matchedLocationId'] !== undefined
+      ) {
+        issue(issues, 'invalid_provenance', `${base}.implementation`, 'authored-only incident must not claim executable matcher provenance');
       }
     }
 
@@ -893,20 +1371,31 @@ export function validateScenarioCatalog(
     if (typeof raw['designDigest'] !== 'string') {
       issue(issues, 'invalid_provenance', `${base}.designDigest`, 'design digest is required');
     } else {
-      const { designDigest: _ignored, ...withoutDesignDigest } = raw;
-      const expected = sha256(JSON.stringify(withoutDesignDigest));
+      const expected = catalogDesignDigest(raw as unknown as ScenarioCatalogSlot);
       if (raw['designDigest'] !== expected) issue(issues, 'invalid_provenance', `${base}.designDigest`, 'authored design content does not match its digest', expected, raw['designDigest']);
     }
   });
 
   if (slots.length !== KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP) issue(issues, 'wrong_slot_count', 'slots', 'catalog must contain exactly 500 slots', 500, slots.length);
+  const templateBackedCount = slots.filter((slot) => isRecord(slot) && isRecord(slot['implementation']) && slot['implementation']['state'] === 'template-backed').length;
+  if (templateBackedCount !== slots.length) {
+    issue(issues, 'invalid_provenance', 'slots', 'every delivery catalog slot must be template-backed and executable', slots.length, templateBackedCount);
+  }
+  const coveredIncidentIds = new Set(slots.flatMap((slot) => {
+    if (!isRecord(slot) || !isRecord(slot['scenario']) || typeof slot['scenario']['incidentId'] !== 'string') return [];
+    return [slot['scenario']['incidentId']];
+  }));
+  const missingIncidentIds = INCIDENT_TAXONOMY.filter((incident) => !coveredIncidentIds.has(incident.id)).map((incident) => incident.id);
+  if (missingIncidentIds.length > 0) {
+    issue(issues, 'insufficient_taxonomy_breadth', 'slots', 'catalog must cover every intended mechanism', INCIDENT_TAXONOMY.map((incident) => incident.id), [...coveredIncidentIds]);
+  }
   for (const mapId of KNOWN_MAPS) {
     const ordinals = mapOrdinals.get(mapId) ?? new Set<number>();
     if (mapCounts[mapId] !== CATALOG_SLOTS_PER_MAP || ordinals.size !== CATALOG_SLOTS_PER_MAP) {
       issue(issues, 'wrong_slot_count', `slots(map=${mapId})`, 'map must contain each ordinal 0..99 exactly once', CATALOG_SLOTS_PER_MAP, mapCounts[mapId] ?? 0);
     }
-    if ((mapIncidents.get(mapId)?.size ?? 0) < 20 || (mapDomains.get(mapId)?.size ?? 0) < 7) {
-      issue(issues, 'insufficient_taxonomy_breadth', `slots(map=${mapId})`, 'map must contain at least 20 incident mechanisms across 7 domains');
+    if ((mapIncidents.get(mapId)?.size ?? 0) < CATALOG_MIN_INCIDENT_TYPES_PER_MAP) {
+      issue(issues, 'insufficient_taxonomy_breadth', `slots(map=${mapId})`, `map must contain at least ${CATALOG_MIN_INCIDENT_TYPES_PER_MAP} incident mechanisms`);
     }
   }
 

@@ -1,0 +1,78 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Parked vehicle pulls into the occupied travel lane",
+    "description": "A vehicle waits at the kerb in a mapped parking zone, signals, then accelerates and moves laterally from the parking edge into ego's occupied lane.",
+    "createdAt": "2026-08-01T00:00:00.000Z",
+    "modifiedAt": "2026-08-01T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "parking.vehicle-pulls-out",
+    "tags": ["parking", "pullout", "parking-zone", "lateral-conflict"],
+    "author": "agent/parking-transit-mechanisms",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      { "id": "triggerDistanceM", "type": "continuous", "unit": "m", "tier": 1, "range": [18, 30], "default": 24, "distribution": "uniform" },
+      { "id": "pulloutSpeedKph", "type": "continuous", "unit": "kph", "tier": 1, "range": [10, 20], "default": 15, "distribution": "uniform" },
+      { "id": "lateralRateMps", "type": "continuous", "unit": "m/s", "tier": 1, "range": [0.35, 0.8], "default": 0.55, "distribution": "uniform" }
+    ],
+    "constraints": []
+  },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "vehicle-pulls-out",
+    "corridor": {
+      "throughLanesSameDir": { "value": [1, 4], "essentiality": "required" },
+      "speedLimitKph": { "value": [25, 60], "essentiality": "preferred", "weight": 2 },
+      "curvatureDegPer10m": { "value": [0, 7], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [100, null], "essentiality": "required" }
+    },
+    "features": [
+      {
+        "id": "parking",
+        "kind": "parking_zone",
+        "label": "kerbside parking position beside the travel lane",
+        "essentiality": "required",
+        "atM": { "value": [35, 105], "essentiality": "required" },
+        "side": { "value": "right", "essentiality": "preferred" }
+      }
+    ],
+    "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "moderate", "minScore": 0.45 }
+  },
+  "roles": [
+    {
+      "id": "ego", "kind": "on_reference", "label": "approaching vehicle under test",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "pose": { "laneOffset": 0, "s": "-clamp(0.75 * lane.speedLimitKph, 24, 45) / 3.6 * 5", "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.75 * lane.speedLimitKph, 24, 45)",
+      "extensions": { "placementFeature": "parking" }
+    },
+    {
+      "id": "departing-vehicle", "kind": "in_parking_zone", "label": "parked vehicle beginning a forward pullout",
+      "actor": { "class": "car", "catalogId": "vehicle.hatchback" },
+      "feature": "parking", "slot": "any", "facing": "with_traffic",
+      "requiredSameRoadSectionAs": "ego",
+      "requiredHeadingRelation": { "role": "ego", "relation": "parallel", "maxErrorDeg": 12 },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 14,
+    "warmupSeconds": 2,
+    "interactions": [
+      { "id": "departing-disables-avoidance", "actor": "departing-vehicle", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+      { "id": "departing-signals", "actor": "departing-vehicle", "verb": "set", "trigger": { "kind": "when", "condition": { "kind": "distance", "from": "ego", "to": { "role": "departing-vehicle" }, "measure": "euclidean", "op": "<=", "valueM": "param.triggerDistanceM" }, "byLatest": 8, "ifNever": "fire" }, "target": { "key": "lights.indicator", "value": "left" } },
+      { "id": "departing-accelerates", "actor": "departing-vehicle", "verb": "speed", "trigger": { "kind": "after", "of": "departing-signals", "event": "start", "delayS": 0.5 }, "target": { "mode": "absolute", "valueKph": "param.pulloutSpeedKph" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 2 } },
+      { "id": "departing-enters-lane", "actor": "departing-vehicle", "verb": "laneOffset", "trigger": { "kind": "after", "of": "departing-signals", "event": "start", "delayS": 0.5 }, "target": { "tFrac": 0, "reference": "lane_center" }, "dynamics": { "shape": "sinusoidal", "constraint": "rate", "value": "param.lateralRateMps" } }
+    ]
+  },
+  "invariants": [
+    { "id": "pullout-criticality", "kind": "ttc", "of": "ego", "to": "departing-vehicle", "range": [0.5, 3.5], "mode": "min", "essentiality": "required" },
+    { "id": "pullout-order", "kind": "event_order", "events": ["departing-signals", "departing-accelerates"], "strict": true, "essentiality": "required" },
+    { "id": "ego-decel-budget", "kind": "decel_budget", "of": "ego", "maxMps2": 8, "essentiality": "required" }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}

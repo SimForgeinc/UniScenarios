@@ -1,0 +1,25 @@
+{
+  "scenarioVersion": 2,
+  "meta": { "name": "Late entry after red", "description": "A signalized conflict is bound to physical signal programs: ego proceeds on green while cross traffic, configured not to obey signals, continues when its own approach is red.", "createdAt": "2026-08-01T00:00:00.000Z", "modifiedAt": "2026-08-01T00:00:00.000Z", "appVersion": "uniscenarios/0.0.1", "archetype": "intersection.red-light-late-entry", "tags": ["intersection", "signalized", "red-light", "late-entry"], "author": "agent/remaining-mechanisms", "negativeControl": false },
+  "params": { "declarations": [{ "id": "arrivalDeltaS", "type": "continuous", "unit": "s", "tier": 1, "range": [2.13, 2.18], "default": 2.15, "distribution": "uniform" }], "constraints": [] },
+  "environment": { "weather": "clear", "timeOfDay": "night" },
+  "anchor": { "id": "red-light-late-entry", "corridor": { "throughLanesSameDir": { "value": [1, 5], "essentiality": "required" }, "runwayUpstreamM": { "value": [45, null], "essentiality": "required" }, "runwayDownstreamM": { "value": [65, null], "essentiality": "required" } }, "features": [
+    { "id": "signal-junction", "kind": "junction", "essentiality": "required", "atM": { "value": [0, 0], "essentiality": "required" }, "arms": { "value": [4, 4], "essentiality": "required" }, "control": { "value": ["signalized"], "essentiality": "required" }, "egoTurn": { "value": ["straight"], "essentiality": "required" }, "conflictingApproach": { "value": { "from": "from_left", "turn": "straight", "crossingAngleDeg": [60, 120] }, "essentiality": "required" } }
+  ], "policy": { "allowMirror": true, "maxSitesPerMap": 12, "diversity": "strict", "minScore": 0.5 } },
+  "roles": [
+    { "id": "ego", "kind": "on_reference", "actor": { "class": "car", "catalogId": "vehicle.sedan" }, "pose": { "laneOffset": 0, "s": -42, "tFrac": 0, "headingOffsetRad": 0 }, "initialSpeedKph": "clamp(0.62 * lane.speedLimitKph, 18, 38)" },
+    { "id": "late-entry", "kind": "conflicting_gate", "feature": "signal-junction", "from": "from_left", "turn": "straight", "actor": { "class": "car", "catalogId": "vehicle.hatchback" }, "arriveAtConflict": { "relativeTo": "ego", "deltaT": "param.arrivalDeltaS" }, "initialSpeedKph": "clamp(0.7 * lane.speedLimitKph, 20, 42)" }
+  ], "props": [],
+  "choreography": { "clipSeconds": 16, "warmupSeconds": 2, "interactions": [
+    { "id": "ego-bound-signal-green", "actor": "@world", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "signal:feature:signal-junction:ego.phase", "value": "green" } },
+    { "id": "left-bound-signal-red", "actor": "@world", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "signal:feature:signal-junction:left.phase", "value": "red" } },
+    { "id": "late-entry-ignores-signal", "actor": "late-entry", "verb": "set", "trigger": { "kind": "at", "t": 0 }, "target": { "key": "rules.obeySignals", "value": false } },
+    { "id": "late-entry-commits", "actor": "late-entry", "verb": "set", "trigger": { "kind": "when", "condition": { "kind": "signal", "signal": { "feature": "signal-junction", "approach": "left" }, "phase": "red" }, "byLatest": 8, "ifNever": "fire" }, "target": { "key": "rules.collisionAvoidance", "value": false } },
+    { "id": "ego-released", "actor": "ego", "verb": "speed", "trigger": { "kind": "when", "condition": { "kind": "signal", "signal": { "feature": "signal-junction", "approach": "ego" }, "phase": "green" }, "byLatest": 8, "ifNever": "fire" }, "target": { "mode": "absolute", "valueKph": "clamp(0.62 * lane.speedLimitKph, 18, 38)" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 0.8 } }
+  ] },
+  "invariants": [
+    { "id": "phase-before-conflict", "kind": "event_order", "events": ["ego-released", "late-entry-commits"], "strict": false, "essentiality": "required" },
+    { "id": "late-arrival", "kind": "arrival", "of": "late-entry", "at": { "feature": "signal-junction", "at": "center" }, "syncWith": "ego", "deltaTRange": [1.9, 2.3], "essentiality": "required" },
+    { "id": "lateral-clearance-criticality", "kind": "pet", "of": "ego", "to": "late-entry", "range": [0.3, 1.5], "window": [3.2, 12.8], "essentiality": "required" }
+  ], "variants": [], "metricSubject": "ego"
+}

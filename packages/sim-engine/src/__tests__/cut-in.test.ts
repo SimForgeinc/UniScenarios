@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 import { runSimulation } from '../sim/engine.js';
 import { LANE_LEFT, LANE_RIGHT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
+import { LANE_LEFT_2 } from './fixtures/synthetic-map.js';
 
 const graph = syntheticGraph();
 
@@ -58,7 +59,9 @@ describe('cut-in composition', () => {
     // Starts in the right lane (y = -3.5) and finishes in the left (y = 0).
     expect(track.y[0]!).toBeCloseTo(-3.5, 3);
     expect(track.y[track.y.length - 1]!).toBeCloseTo(0, 2);
-    expect(track.laneRsl[track.laneRsl.length - 1]).toBe(LANE_LEFT);
+    // The actor keeps its travelled station through the route hand-off and
+    // therefore reaches the directed successor during the remainder of the clip.
+    expect(track.laneRsl[track.laneRsl.length - 1]).toBe(LANE_LEFT_2);
   });
 
   it('respects the commanded lateral velocity', () => {
@@ -123,5 +126,46 @@ describe('cut-in composition', () => {
     const track = trace.ticks.actors['challenger']!;
     // -0.25 of a 3.5 m lane = -0.875 m, relative to the lane centreline at -3.5.
     expect(track.y[track.y.length - 1]!).toBeCloseTo(-3.5 - 0.875, 2);
+  });
+
+  it('aborts an in-progress true lane change back to its source route', () => {
+    const input = scenario(graph, {
+      actors: [
+        vehicle(graph, { id: 'challenger', rsl: LANE_RIGHT, s: 40, speedMps: 14, cruiseSpeedMps: 14 }),
+      ],
+      interactions: [
+        {
+          id: 'incursion',
+          actorId: 'challenger',
+          trigger: { kind: 'at', t: 1 },
+          verb: 'changeLane',
+          target: { mode: 'lane', rsl: LANE_LEFT },
+          dynamics: { shape: 'sinusoidal', constraint: 'rate', value: 0.65 },
+        },
+        {
+          id: 'abort-to-source',
+          actorId: 'challenger',
+          trigger: { kind: 'at', t: 3.5 },
+          verb: 'changeLane',
+          target: { mode: 'lane', rsl: LANE_RIGHT },
+          dynamics: { shape: 'sinusoidal', constraint: 'rate', value: 0.65 },
+        },
+      ],
+    });
+
+    const { trace, issues } = runSimulation(input, { graph, guards: 'collect' });
+    const track = trace.ticks.actors.challenger!;
+    expect(issues.filter((issue) => issue.severity === 'error')).toEqual([]);
+    expect(Math.max(...track.y)).toBeGreaterThan(-3);
+    expect(track.y.at(-1)).toBeCloseTo(-3.5, 2);
+    expect(track.laneRsl.at(-1)).toBe(LANE_RIGHT);
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: 'preemption',
+      byInteractionId: 'abort-to-source',
+      preemptedInteractionId: 'incursion',
+    }));
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: 'lane_change', actorId: 'challenger', toRsl: LANE_RIGHT, legal: true,
+    }));
   });
 });

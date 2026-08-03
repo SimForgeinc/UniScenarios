@@ -1,34 +1,15 @@
 /**
- * The editor's view of a scenario: entities, props, undo and autosave.
+ * The editor's view of a canonical ScenarioTemplate v2: roles, undo and autosave.
  *
- * ## One list, two storage lanes
- *
- * Everything the user places behaves identically — select it, grab it, rotate
- * it, delete it — so the editor works against a single {@link ActorRecord}
- * list. Underneath there are two lanes, because the v1 schema has two:
- *
- * - **Vehicles and pedestrians** are `Entity` records, the schema's first-class
- *   citizens, with `pose` and an optional `laneRef`.
- * - **Props** (cones, barriers, dumpsters, hedges, bus shelters — 22 of the 36
- *   catalog entries) have no home in v1: `EntityKind` is exactly
- *   `'vehicle' | 'pedestrian'`, and filing a traffic cone as a vehicle would put
- *   a lie in every file the studio writes, which is worse than the inconvenience
- *   of a sidecar.
- *
- * So props live in `extensions.{@link PROPS_KEY}` — the schema's one sanctioned
- * escape hatch (`ExtensionsSchema`, an untyped bag that round-trips verbatim).
- * They are in the same document, the same `localStorage` value and the same undo
- * history as everything else; they are simply namespaced as a v0 experiment
- * rather than pretending to be modelled.
- *
- * TODO(scenario-model v2): v2 defines a first-class `PropPlacement`. When it
- * lands, migrate `extensions.propsV0` into it and delete this lane. The shape
- * below is deliberately *not* coupled to the in-flight v2 schema — it is the
- * minimum the editor needs, so the migration is a pure read-side transform.
+ * Current viewport placements are v2 `scene_absolute` roles. That role kind is
+ * intentionally map-bound and therefore preserves exact editor poses without
+ * inventing a portable anchor. Portable role kinds can coexist in the same
+ * document and are materialized before playback; this viewport only renders
+ * roles whose absolute authoring pose is available.
  *
  * ## Undo groups
  *
- * `ScenarioDocument` undoes one operation at a time, but a single user gesture
+ * `TemplateDocument` undoes one operation at a time, but a single user gesture
  * (moving four selected actors) is several operations. This class keeps a stack
  * of group sizes so one Cmd-Z reverses one gesture. Every mutation therefore has
  * to go through here — an op applied behind its back would desynchronise the
@@ -36,22 +17,23 @@
  */
 
 import {
-  ScenarioDocument,
+  TemplateDocument,
   ScenarioNotFoundError,
-  WebScenarioFileStore,
-  newId,
-  type Entity,
+  WebTemplateFileStore,
+  newTemplateId,
   type LaneRef,
-  type ScenarioV1,
+  type RoleBinding,
+  type Interaction,
+  type ActorSensor,
+  type ScenarioTemplateV2,
+  type TemplateFileStore,
+  type ValidationReport,
 } from '@uniscenarios/scenario-model';
 import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { MapEntry } from '../maps';
 
-/** Extension key the prop sidecar lives under. */
-export const PROPS_KEY = 'propsV0';
-
 /** Where an actor is stored. */
-export type ActorSource = 'entity' | 'prop';
+export type ActorSource = 'role' | 'prop';
 
 /** Broad actor class, driving snapping rules and the palette grouping. */
 export type ActorKind = 'vehicle' | 'pedestrian' | 'prop';
@@ -80,22 +62,16 @@ export interface ActorRecord {
   readonly headingRad: number;
   readonly laneRef: LaneAnchor | undefined;
   readonly dims: Dims;
-}
-
-/** A prop as persisted in `extensions.propsV0`. */
-interface PropPlacementV0 {
-  id: string;
-  catalogId: string;
-  x: number;
-  y: number;
-  z: number;
-  headingRad: number;
-  label?: string;
-  laneRef?: LaneAnchor;
+  /** Studio-only presentation color, persisted with the role and ignored by export. */
+  readonly bodyColor: string | undefined;
+  /** Physical sensors mounted to this actor. */
+  readonly sensors: readonly ActorSensor[];
 }
 
 /** Fields accepted when placing something new. */
 export interface NewActor {
+  /** Preallocated stable id, used when deterministic behaviour is planned before commit. */
+  id?: string;
   catalogId: CatalogId;
   x: number;
   y: number;
@@ -103,6 +79,11 @@ export interface NewActor {
   headingRad: number;
   laneRef?: LaneAnchor | undefined;
   label?: string;
+  /** Exact connected lane chain for a default moving road actor. */
+  routeLaneRsls?: readonly string[];
+  /** Truthful initial/cruise speed paired with the generated route. */
+  initialSpeedKph?: number;
+  bodyColor?: string;
 }
 
 /** A partial edit of one actor. `laneRef: null` clears the anchor. */
@@ -114,14 +95,143 @@ export interface ActorUpdate {
   headingRad?: number;
   label?: string;
   laneRef?: LaneAnchor | null;
+  /** Swap only the presentation model; identity and choreography stay intact. */
+  catalogId?: CatalogId;
+  bodyColor?: string;
 }
 
 /** Which lane a catalog id belongs in. */
 export function actorKindFor(catalogId: CatalogId): ActorKind {
+  // A loose shopping cart is a small moving conflict actor, not fixed scenery.
+  if (catalogId === 'street.shopping_cart') return 'vehicle';
   const cls = getEntry(catalogId).class;
   if (cls === 'vehicle') return 'vehicle';
   if (cls === 'pedestrian') return 'pedestrian';
   return 'prop';
+}
+
+/** Preserve the semantic simulation class for specialized catalog actors. */
+export function simulationClassFor(catalogId: CatalogId): 'car' | 'bus' | 'scooter' | 'pedestrian' | 'static_object' {
+  if (catalogId === 'vehicle.tram') return 'bus';
+  if (catalogId === 'vehicle.mobility_scooter' || catalogId === 'street.shopping_cart') return 'scooter';
+  const kind = actorKindFor(catalogId);
+  if (kind === 'pedestrian') return 'pedestrian';
+  if (kind === 'prop') return 'static_object';
+  return 'car';
+}
+
+export interface AuthoringGraphPrunePlan {
+  readonly interactionIds: readonly string[];
+  readonly propIds: readonly string[];
+  readonly invariantIds: readonly string[];
+  readonly variantIds: readonly string[];
+  readonly clearMetricSubject: boolean;
+}
+
+/**
+ * Find authored graph nodes that cannot survive after roles disappear.
+ *
+ * Interaction dependencies are closed transitively: removing an actor-owned
+ * event also removes every event whose `after`/`until` trigger names it. Rules,
+ * attached props and variants are then evaluated against that final set.
+ */
+export function authoringGraphPrunePlan(
+  template: ScenarioTemplateV2,
+  deletingRoleIds: readonly string[] = [],
+): AuthoringGraphPrunePlan {
+  const deleting = new Set(deletingRoleIds);
+  const remainingRoles = new Set(template.roles.map((role) => role.id).filter((id) => !deleting.has(id)));
+  const removedInteractions = new Set<string>();
+  for (const interaction of template.choreography.interactions) {
+    if ((interaction.actor !== '@world' && !remainingRoles.has(interaction.actor))
+      || triggerReferencesMissingRole(interaction.trigger, remainingRoles)
+      || (interaction.until && triggerReferencesMissingRole(interaction.until, remainingRoles))
+      || targetReferencesMissingRole(interaction.target, remainingRoles)) {
+      removedInteractions.add(interaction.id);
+    }
+  }
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const interaction of template.choreography.interactions) {
+      if (removedInteractions.has(interaction.id)) continue;
+      if (triggerReferencesInteraction(interaction.trigger, removedInteractions)
+        || (interaction.until && triggerReferencesInteraction(interaction.until, removedInteractions))) {
+        removedInteractions.add(interaction.id);
+        changed = true;
+      }
+    }
+  }
+  const propIds = template.props.filter((prop) => {
+    const attachment = prop.attachment?.role;
+    const occludes = prop.occludes;
+    return (attachment && !remainingRoles.has(attachment))
+      || (occludes && (!remainingRoles.has(occludes.observer) || !remainingRoles.has(occludes.target)));
+  }).map((prop) => prop.id);
+  const invariantIds = template.invariants.filter((invariant) => invariant.kind === 'event_order'
+    ? invariant.events.some((id) => removedInteractions.has(id)
+    : invariantReferencesMissingRole(invariant as unknown as Record<string, unknown>, remainingRoles)).map((invariant) => invariant.id);
+  const removedProps = new Set(propIds);
+  const removedInvariants = new Set(invariantIds);
+  const variantIds = template.variants.filter((variant) => variant.overrides.some((override) => {
+    const match = /^(roles|props|invariants)#([A-Za-z][A-Za-z0-9_-]*)/.exec(override.path);
+    if (!match) return false;
+    return match[1] === 'roles' ? !remainingRoles.has(match[2]!)
+      : match[1] === 'props' ? removedProps.has(match[2]!)
+        : removedInvariants.has(match[2]!);
+  })).map((variant) => variant.id);
+  return {
+    interactionIds: [...removedInteractions],
+    propIds,
+    invariantIds,
+    variantIds,
+    clearMetricSubject: template.metricSubject !== undefined && !remainingRoles.has(template.metricSubject),
+  };
+}
+
+function triggerReferencesInteraction(trigger: Interaction['trigger'], removed: ReadonlySet<string>): boolean {
+  return trigger.kind === 'after' && removed.has(trigger.of);
+}
+
+function triggerReferencesMissingRole(trigger: Interaction['trigger'], roles: ReadonlySet<string>): boolean {
+  if (trigger.kind === 'arrival') return !roles.has(trigger.of) || !roles.has(trigger.syncWith) || pointReferencesMissingRole(trigger.at, roles);
+  if (trigger.kind === 'when') return conditionReferencesMissingRole(trigger.condition as unknown as Record<string, unknown>, roles);
+  return false;
+}
+
+function pointReferencesMissingRole(point: unknown, roles: ReadonlySet<string>): boolean {
+  return isRecord(point) && typeof point.role === 'string' && !roles.has(point.role);
+}
+
+function conditionReferencesMissingRole(condition: Record<string, unknown>, roles: ReadonlySet<string>): boolean {
+  if (condition.kind === 'and' || condition.kind === 'or') {
+    return Array.isArray(condition.operands) && condition.operands.some((item) => isRecord(item) && conditionReferencesMissingRole(item, roles));
+  }
+  if (condition.kind === 'not') return isRecord(condition.operand) && conditionReferencesMissingRole(condition.operand, roles);
+  for (const key of ['from', 'of', 'to', 'with'] as const) {
+    const value = condition[key];
+    if (typeof value === 'string' && value !== 'any' && !roles.has(value)) return true;
+    if (key === 'to' && pointReferencesMissingRole(value, roles)) return true;
+  }
+  if (pointReferencesMissingRole(condition.region, roles)) return true;
+  return false;
+}
+
+function targetReferencesMissingRole(target: Interaction['target'], roles: ReadonlySet<string>): boolean {
+  if (!isRecord(target)) return false;
+  return typeof target.role === 'string' && !roles.has(target.role);
+}
+
+function invariantReferencesMissingRole(invariant: Record<string, unknown>, roles: ReadonlySet<string>): boolean {
+  for (const key of ['of', 'to', 'syncWith'] as const) {
+    const value = invariant[key];
+    if (typeof value === 'string' && !roles.has(value)) return true;
+  }
+  return pointReferencesMissingRole(invariant.at, roles);
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 /** Quantise to the serializer's 6-decimal precision so save/load is an identity. */
@@ -143,6 +253,10 @@ function quantizeAnchor(anchor: LaneAnchor): LaneAnchor {
 
 const APP_VERSION = '0.1.0-editor';
 
+/** Exact SI conversion of the authored default: 30 mph = 13.4112 m/s. */
+export const DEFAULT_AUTHORED_VEHICLE_SPEED_MPS = 13.4112;
+export const DEFAULT_AUTHORED_VEHICLE_SPEED_KPH = 48.28032;
+
 /** Autosave debounce. Long enough to coalesce a drag, short enough to trust. */
 const AUTOSAVE_DEBOUNCE_MS = 400;
 
@@ -150,7 +264,7 @@ const AUTOSAVE_DEBOUNCE_MS = 400;
 const HISTORY_LIMIT = 1000;
 
 export interface EditorDocumentOptions {
-  store?: WebScenarioFileStore;
+  store?: TemplateFileStore;
   /** Override the debounce (tests, verification scripts). */
   autosaveMs?: number;
 }
@@ -169,8 +283,8 @@ export function autosaveName(mapId: string): string {
 export class EditorDocument {
   readonly map: MapEntry;
 
-  #doc: ScenarioDocument;
-  readonly #store: WebScenarioFileStore;
+  #doc: TemplateDocument;
+  readonly #store: TemplateFileStore;
   readonly #autosaveMs: number;
   readonly #listeners = new Set<() => void>();
 
@@ -181,15 +295,17 @@ export class EditorDocument {
   #redoGroups: number[] = [];
   #saveTimer: ReturnType<typeof setTimeout> | null = null;
   #savePromise: Promise<void> | null = null;
+  /** Optional user-facing saved-scenario slot mirrored alongside map autosave. */
+  #namedSave: string | null = null;
   #savedAt: number | null = null;
   #saveError: string | null = null;
   #unsubscribe: () => void;
   #disposed = false;
 
-  private constructor(map: MapEntry, doc: ScenarioDocument, options: EditorDocumentOptions) {
+  private constructor(map: MapEntry, doc: TemplateDocument, options: EditorDocumentOptions) {
     this.map = map;
     this.#doc = doc;
-    this.#store = options.store ?? new WebScenarioFileStore();
+    this.#store = options.store ?? new WebTemplateFileStore();
     this.#autosaveMs = options.autosaveMs ?? AUTOSAVE_DEBOUNCE_MS;
     this.#unsubscribe = doc.subscribe((change) => {
       if (change.reason === 'apply') this.#opCount++;
@@ -199,20 +315,21 @@ export class EditorDocument {
 
   /** Load this map's autosave, or start a fresh scenario for it. */
   static async open(map: MapEntry, options: EditorDocumentOptions = {}): Promise<EditorDocument> {
-    const store = options.store ?? new WebScenarioFileStore();
-    let doc: ScenarioDocument;
+    const store = options.store ?? new WebTemplateFileStore();
+    let doc: TemplateDocument;
     try {
       const data = await store.read(autosaveName(map.id));
-      doc = ScenarioDocument.fromJSON(data, { historyLimit: HISTORY_LIMIT });
+      doc = TemplateDocument.fromJSON(data, { historyLimit: HISTORY_LIMIT });
     } catch (err) {
       if (!(err instanceof ScenarioNotFoundError)) {
         // A corrupt or outdated autosave must not lock the user out of the map.
         console.warn(`[editor] could not read autosave for ${map.id}; starting fresh`, err);
       }
-      doc = ScenarioDocument.create(
+      doc = TemplateDocument.create(
         {
           name: `${map.label} scratch`,
-          map: { mapId: map.id, mapName: map.label },
+          sourceMap: { mapId: map.id, mapName: map.label },
+          anchor: { features: [], pin: { mapId: map.id } },
           appVersion: APP_VERSION,
         },
         { historyLimit: HISTORY_LIMIT },
@@ -227,7 +344,7 @@ export class EditorDocument {
     return this.#actors;
   }
 
-  get data(): ScenarioV1 {
+  get data(): ScenarioTemplateV2 {
     return this.#doc.data;
   }
 
@@ -256,8 +373,25 @@ export class EditorDocument {
     return this.#saveError;
   }
 
+  /** Tier-1 template validation, suitable for the future Validate panel. */
+  get validation(): ValidationReport {
+    return this.#doc.validate();
+  }
+
   actor(id: string): ActorRecord | undefined {
     return this.#actors.find((a) => a.id === id);
+  }
+
+  /** Stable input for deterministic per-actor route choice. */
+  get routeSeed(): string {
+    return `${this.map.id}|${this.#doc.data.meta.createdAt}|${this.#doc.data.meta.name}`;
+  }
+
+  allocateActorId(catalogId: CatalogId): string {
+    const kind = actorKindFor(catalogId);
+    let id = newTemplateId(kind);
+    while (this.#doc.role(id)) id = newTemplateId(kind);
+    return id;
   }
 
   subscribe(listener: () => void): () => void {
@@ -277,42 +411,58 @@ export class EditorDocument {
   add(inputs: readonly NewActor[]): string[] {
     const ids: string[] = [];
     this.#transaction(() => {
-      const props: PropPlacementV0[] = [...this.#props()];
-      let propsChanged = false;
       for (const input of inputs) {
         const kind = actorKindFor(input.catalogId);
-        if (kind === 'prop') {
-          const placement: PropPlacementV0 = {
-            id: newId(),
-            catalogId: input.catalogId,
-            x: q(input.x),
-            y: q(input.y),
-            z: q(input.z),
-            headingRad: q(input.headingRad),
-          };
-          if (input.label !== undefined) placement.label = input.label;
-          if (input.laneRef) placement.laneRef = quantizeAnchor(input.laneRef);
-          props.push(placement);
-          propsChanged = true;
-          ids.push(placement.id);
-          continue;
-        }
         const dims = getEntry(input.catalogId).dims;
-        ids.push(
-          this.#doc.addEntity({
-            kind,
-            model: { catalogId: input.catalogId },
-            pose: {
-              position: { x: input.x, y: input.y, z: input.z },
-              headingRad: input.headingRad,
-            },
-            ...(input.label === undefined ? {} : { label: input.label }),
-            ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
+        const id = input.id ?? this.allocateActorId(input.catalogId);
+        if (this.#doc.role(id)) throw new Error(`actor id "${id}" already exists`);
+        this.#doc.addRole({
+          id,
+          kind: 'scene_absolute',
+          actor: {
+            class: simulationClassFor(input.catalogId),
+            catalogId: input.catalogId,
             dims: { length: dims.l, width: dims.w, height: dims.h },
-          }),
-        );
+            static: kind === 'prop',
+            sensors: [],
+          },
+          pose: {
+            position: { x: q(input.x), y: q(input.y), z: q(input.z) },
+            headingRad: q(input.headingRad),
+          },
+          ...(input.label === undefined ? {} : { label: input.label }),
+          ...(input.initialSpeedKph === undefined ? {} : { initialSpeedKph: q(Math.max(0, input.initialSpeedKph)) }),
+          ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
+          essentiality: kind === 'prop' ? 'preferred' : 'required',
+          ...(input.bodyColor ? { extensions: { 'studio.presentation.bodyColor': input.bodyColor } } : {}),
+        });
+        if (input.routeLaneRsls && input.routeLaneRsls.length > 0) {
+          this.#doc.addInteraction({
+            id: `route_${id}_initial`.slice(0, 64),
+            actor: id,
+            // This is deliberately a presentation label over a concrete,
+            // deterministic lanePath. It is not a new simulator/export verb.
+            label: 'Random turns',
+            trigger: { kind: 'at', t: 0 },
+            verb: 'route',
+            target: { mode: 'lanePath', lanes: [...input.routeLaneRsls] },
+          });
+        }
+        if (input.initialSpeedKph !== undefined && input.initialSpeedKph > 0) {
+          this.#doc.addInteraction({
+            id: `speed_${id}_initial`.slice(0, 64),
+            actor: id,
+            label: input.initialSpeedKph === DEFAULT_AUTHORED_VEHICLE_SPEED_KPH
+              ? '30 mph'
+              : `Cruise at ${q(input.initialSpeedKph)} km/h`,
+            trigger: { kind: 'at', t: 0 },
+            verb: 'speed',
+            target: { mode: 'absolute', valueKph: q(input.initialSpeedKph) },
+            dynamics: { shape: 'linear', constraint: 'time', value: 0.25 },
+          });
+        }
+        ids.push(id);
       }
-      if (propsChanged) this.#writeProps(props);
     });
     return ids;
   }
@@ -321,44 +471,38 @@ export class EditorDocument {
   update(updates: readonly ActorUpdate[]): void {
     if (updates.length === 0) return;
     this.#transaction(() => {
-      const props = [...this.#props()];
-      let propsChanged = false;
       for (const update of updates) {
-        const index = props.findIndex((p) => p.id === update.id);
-        if (index >= 0) {
-          const current = props[index] as PropPlacementV0;
-          const next: PropPlacementV0 = { ...current };
-          if (update.x !== undefined) next.x = q(update.x);
-          if (update.y !== undefined) next.y = q(update.y);
-          if (update.z !== undefined) next.z = q(update.z);
-          if (update.headingRad !== undefined) next.headingRad = q(update.headingRad);
-          if (update.label !== undefined) next.label = update.label;
-          if (update.laneRef === null) delete next.laneRef;
-          else if (update.laneRef !== undefined) next.laneRef = quantizeAnchor(update.laneRef);
-          props[index] = next;
-          propsChanged = true;
-          continue;
-        }
-        const position: { x?: number; y?: number; z?: number } = {};
-        if (update.x !== undefined) position.x = update.x;
-        if (update.y !== undefined) position.y = update.y;
-        if (update.z !== undefined) position.z = update.z;
-        this.#doc.updateEntity(update.id, {
-          ...(Object.keys(position).length > 0 || update.headingRad !== undefined
-            ? {
-                pose: {
-                  ...(Object.keys(position).length > 0 ? { position } : {}),
-                  ...(update.headingRad === undefined ? {} : { headingRad: update.headingRad }),
-                },
-              }
-            : {}),
+        const current = this.#doc.role(update.id);
+        if (!current || current.kind !== 'scene_absolute') continue;
+        const role: RoleBinding = {
+          ...current,
           ...(update.label === undefined ? {} : { label: update.label }),
-          ...(update.laneRef === undefined
-            ? {}
-            : { laneRef: update.laneRef === null ? null : quantizeAnchor(update.laneRef) }),
-        });
+          pose: {
+            position: {
+              x: q(update.x ?? current.pose.position.x),
+              y: q(update.y ?? current.pose.position.y),
+              z: q(update.z ?? current.pose.position.z),
+            },
+            headingRad: q(update.headingRad ?? current.pose.headingRad),
+          },
+        };
+        if (update.catalogId !== undefined) {
+          const entry = getEntry(update.catalogId);
+          role.actor = {
+            ...current.actor,
+            class: simulationClassFor(update.catalogId),
+            catalogId: update.catalogId,
+            dims: { length: entry.dims.l, width: entry.dims.w, height: entry.dims.h },
+            static: actorKindFor(update.catalogId) === 'prop',
+          };
+        }
+        if (update.bodyColor !== undefined) {
+          role.extensions = { ...current.extensions, 'studio.presentation.bodyColor': update.bodyColor };
+        }
+        if (update.laneRef === null) delete role.laneRef;
+        else if (update.laneRef !== undefined) role.laneRef = quantizeAnchor(update.laneRef);
+        this.#doc.replaceRole(update.id, role);
       }
-      if (propsChanged) this.#writeProps(props);
     });
   }
 
@@ -366,10 +510,12 @@ export class EditorDocument {
   remove(ids: readonly string[]): void {
     if (ids.length === 0) return;
     this.#transaction(() => {
-      const keep = this.#props().filter((p) => !ids.includes(p.id));
-      if (keep.length !== this.#props().length) this.#writeProps(keep);
       for (const id of ids) {
-        if (this.#doc.entity(id)) this.#doc.removeEntity(id);
+        if (!this.#doc.role(id)) continue;
+        for (const interaction of [...this.#doc.data.choreography.interactions]) {
+          if (interaction.actor === id) this.#doc.removeInteraction(interaction.id);
+        }
+        this.#doc.removeRole(id);
       }
     });
   }
@@ -379,6 +525,81 @@ export class EditorDocument {
     this.#transaction(() => {
       this.#doc.setMeta({ name });
     });
+  }
+
+  /**
+   * Open a validated canonical v2 template in this map session.
+   *
+   * Campaign and Saved Scenario imports replace the undo-bearing document as
+   * one explicit navigation operation. The previous autosave is already
+   * preserved by the named-scenario store; history must not cross documents.
+   */
+  importTemplate(value: unknown, options: { saveName?: string } = {}): void {
+    const next = TemplateDocument.fromJSON(value, { historyLimit: HISTORY_LIMIT });
+    this.#unsubscribe();
+    this.#doc = next;
+    this.#opCount = 0;
+    this.#groups = [];
+    this.#redoGroups = [];
+    this.#unsubscribe = next.subscribe((change) => {
+      if (change.reason === 'apply') this.#opCount++;
+    });
+    this.#savedAt = null;
+    this.#saveError = null;
+    this.#namedSave = options.saveName ?? null;
+    this.#rebuild();
+    this.#scheduleSave();
+    this.#emit();
+  }
+
+  /** Add one semantic timeline interaction as an undoable/autosaved gesture. */
+  addInteraction(interaction: Interaction): void {
+    this.#transaction(() => { this.#doc.addInteraction(interaction); });
+  }
+
+  /** Replace one timeline interaction while retaining its stable identity. */
+  replaceInteraction(id: string, interaction: Interaction): void {
+    this.#transaction(() => { this.#doc.replaceInteraction(id, interaction); });
+  }
+
+  /** Delete one semantic timeline interaction. Validation surfaces dangling references. */
+  removeInteraction(id: string): void {
+    this.#transaction(() => { this.#doc.removeInteraction(id); });
+  }
+
+  /** Add one validated actor-attached sensor as an undoable/autosaved gesture. */
+  addActorSensor(actorId: string, sensor: ActorSensor): string {
+    let id = sensor.id;
+    this.#transaction(() => { id = this.#doc.addActorSensor(actorId, sensor); });
+    return id;
+  }
+
+  /** Replace one sensor while retaining its stable identity. */
+  updateActorSensor(actorId: string, sensorId: string, sensor: ActorSensor): void {
+    if (sensor.id !== sensorId) throw new Error('sensor identity cannot change during update');
+    this.#transaction(() => { this.#doc.replaceActorSensor(actorId, sensorId, sensor); });
+  }
+
+  /** Remove one actor-attached sensor. */
+  removeActorSensor(actorId: string, sensorId: string): void {
+    this.#transaction(() => { this.#doc.removeActorSensor(actorId, sensorId); });
+  }
+
+  /** Set recorded/warm-up duration as one editor gesture. */
+  setClip(clip: { clipSeconds?: number; warmupSeconds?: number }): void {
+    this.#transaction(() => { this.#doc.setClip(clip.clipSeconds, clip.warmupSeconds); });
+  }
+
+  /**
+   * Persist editor presentation state (cameras, layout, render preferences).
+   * Materialization deliberately ignores these extensions, so these edits do
+   * not change SimScenarioInput or its deterministic hash.
+   */
+  setPresentationExtension(key: string, value?: unknown): void {
+    if (!key.startsWith('studio.presentation.')) {
+      throw new Error(`presentation extension key must start with "studio.presentation.": ${key}`);
+    }
+    this.#transaction(() => { this.#doc.setExtension(key, value); });
   }
 
   undo(): boolean {
@@ -418,17 +639,6 @@ export class EditorDocument {
 
   // -------------------------------------------------------------- internals
 
-  #props(): readonly PropPlacementV0[] {
-    const raw = this.#doc.data.extensions?.[PROPS_KEY];
-    return Array.isArray(raw) ? (raw as PropPlacementV0[]) : [];
-  }
-
-  #writeProps(props: readonly PropPlacementV0[]): void {
-    // One extension write per gesture, not per prop: the whole array is the
-    // unit of change, which also keeps the undo group small.
-    this.#doc.setExtension(PROPS_KEY, props.length === 0 ? [] : props.map((p) => ({ ...p })));
-  }
-
   #transaction(fn: () => void): void {
     const before = this.#opCount;
     try {
@@ -451,9 +661,8 @@ export class EditorDocument {
 
   #rebuild(): void {
     const out: ActorRecord[] = [];
-    for (const entity of this.#doc.data.entities) out.push(recordFromEntity(entity));
-    for (const prop of this.#props()) {
-      const record = recordFromProp(prop);
+    for (const role of this.#doc.data.roles) {
+      const record = recordFromRole(role);
       if (record) out.push(record);
     }
     this.#actors = out;
@@ -473,6 +682,9 @@ export class EditorDocument {
     const run = async (): Promise<void> => {
       try {
         await this.#store.write(autosaveName(this.map.id), this.#doc);
+        if (this.#namedSave && this.#namedSave !== autosaveName(this.map.id)) {
+          await this.#store.write(this.#namedSave, this.#doc);
+        }
         this.#doc.markClean();
         this.#savedAt = Date.now();
         this.#saveError = null;
@@ -503,41 +715,29 @@ function anchorFrom(laneRef: LaneRef | LaneAnchor | undefined): LaneAnchor | und
   };
 }
 
-function recordFromEntity(entity: Entity): ActorRecord {
-  const catalogId = entity.model.catalogId as CatalogId;
-  const dims = entity.dims
-    ? { l: entity.dims.length, w: entity.dims.width, h: entity.dims.height }
+function recordFromRole(role: RoleBinding): ActorRecord | null {
+  if (role.kind !== 'scene_absolute' || !role.actor.catalogId) return null;
+  const catalogId = role.actor.catalogId as CatalogId;
+  const dims = role.actor.dims
+    ? { l: role.actor.dims.length, w: role.actor.dims.width, h: role.actor.dims.height }
     : safeDims(catalogId);
+  const isProp = role.actor.class === 'static_object';
   return {
-    id: entity.id,
-    source: 'entity',
-    kind: entity.kind,
+    id: role.id,
+    source: isProp ? 'prop' : 'role',
+    kind: isProp ? 'prop' : role.actor.class === 'pedestrian' ? 'pedestrian' : 'vehicle',
     catalogId,
-    label: entity.label,
-    x: entity.pose.position.x,
-    y: entity.pose.position.y,
-    z: entity.pose.position.z,
-    headingRad: entity.pose.headingRad,
-    laneRef: anchorFrom(entity.laneRef),
+    label: role.label,
+    x: role.pose.position.x,
+    y: role.pose.position.y,
+    z: role.pose.position.z,
+    headingRad: role.pose.headingRad,
+    laneRef: anchorFrom(role.laneRef),
     dims,
-  };
-}
-
-function recordFromProp(prop: PropPlacementV0): ActorRecord | null {
-  if (typeof prop?.id !== 'string' || typeof prop.catalogId !== 'string') return null;
-  const catalogId = prop.catalogId as CatalogId;
-  return {
-    id: prop.id,
-    source: 'prop',
-    kind: 'prop',
-    catalogId,
-    label: prop.label,
-    x: prop.x,
-    y: prop.y,
-    z: prop.z,
-    headingRad: prop.headingRad,
-    laneRef: anchorFrom(prop.laneRef),
-    dims: safeDims(catalogId),
+    bodyColor: typeof role.extensions?.['studio.presentation.bodyColor'] === 'string'
+      ? role.extensions['studio.presentation.bodyColor']
+      : undefined,
+    sensors: role.actor.sensors,
   };
 }
 

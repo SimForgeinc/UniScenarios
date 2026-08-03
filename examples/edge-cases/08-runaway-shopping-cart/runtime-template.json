@@ -1,0 +1,598 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Runaway Shopping Cart in Rain and Glare",
+    "description": "A small uncontrolled cart rolls from a sloped access across ego's lane in heavy rain and dusk glare, appears to clear, then rolls back while nearby pedestrians remain out of the road.",
+    "createdAt": "2026-08-02T06:30:00.000Z",
+    "modifiedAt": "2026-08-02T06:30:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "edge.runaway-cart-rain-glare",
+    "tags": [
+      "edge-case",
+      "shopping-cart",
+      "heavy-rain",
+      "glare",
+      "rollback",
+      "pedestrian"
+    ],
+    "author": "codex/edge-campaign-07-08",
+    "negativeControl": false
+  },
+  "sourceMap": {
+    "mapId": "el-camino-road",
+    "mapName": "el-camino-road"
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "egoSpeedKph",
+        "unit": "kph",
+        "tier": 1,
+        "type": "continuous",
+        "range": [
+          32,
+          38
+        ],
+        "default": 35,
+        "distribution": "uniform"
+      },
+      {
+        "id": "cartSpeedKph",
+        "unit": "kph",
+        "tier": 1,
+        "type": "continuous",
+        "range": [
+          7,
+          12
+        ],
+        "default": 9,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "heavy_rain",
+    "timeOfDay": "dusk",
+    "frictionScale": 0.58,
+    "sunAzimuthDeg": 180,
+    "sunElevationDeg": 4,
+    "extensions": {
+      "visibility": "directional-glare",
+      "rainIntensity": 0.9,
+      "wetRoadReflections": true
+    }
+  },
+  "anchor": {
+    "id": "runaway-cart-rain-glare",
+    "features": [],
+    "policy": {
+      "allowMirror": false,
+      "maxSitesPerMap": 10,
+      "diversity": "strict",
+      "minScore": 0.5
+    },
+    "pin": {
+      "mapId": "el-camino-road"
+    }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan",
+        "static": false
+      },
+      "label": "ego approaching driveway hazard",
+      "initialSpeedKph": {
+        "kind": "ref",
+        "name": "param.egoSpeedKph"
+      },
+      "essentiality": "required",
+      "extensions": {
+        "placementFeature": "access"
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 1318.2152238430003,
+          "y": 0,
+          "z": -1322.2130499378243
+        },
+        "headingRad": 2.5517081137100868
+      },
+      "laneRef": {
+        "roadId": "71",
+        "section": 0,
+        "laneId": 3,
+        "s": 9.920763285649912,
+        "t": 0,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "cart",
+      "actor": {
+        "class": "scooter",
+        "catalogId": "street.shopping_cart",
+        "dims": {
+          "length": 1.05,
+          "width": 0.65,
+          "height": 1.05
+        },
+        "static": false
+      },
+      "label": "uncontrolled runaway shopping cart",
+      "initialSpeedKph": 0,
+      "essentiality": "required",
+      "extensions": {
+        "semanticClass": "shopping_cart",
+        "uncontrolled": true,
+        "nonAgentHazard": true,
+        "placementFeature": "access"
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 1270.6563298352626,
+          "y": 0,
+          "z": -1358.8552355526194
+        },
+        "headingRad": 2.5258646078943743
+      },
+      "laneRef": {
+        "roadId": "7",
+        "section": 0,
+        "laneId": -2,
+        "s": 13.247138914322363,
+        "t": -2.999407427213666,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "shopper",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_walking",
+        "static": false
+      },
+      "label": "shopper chasing but stopping at driveway edge",
+      "initialSpeedKph": 4,
+      "essentiality": "required",
+      "extensions": {
+        "placementFeature": "access",
+        "mustRemainOutsideRoad": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 1274.9764995195173,
+          "y": 0,
+          "z": -1356.3241845092414
+        },
+        "headingRad": 2.529191678973946
+      },
+      "laneRef": {
+        "roadId": "7",
+        "section": 0,
+        "laneId": -2,
+        "s": 8.247138914322363,
+        "t": -3.4212622862989854,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "oncoming-glare",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv",
+        "static": false
+      },
+      "label": "oncoming vehicle producing headlight glare",
+      "initialSpeedKph": 32,
+      "essentiality": "required",
+      "extensions": {
+        "headlights": "high-glare",
+        "glareSource": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 1134.9050365492174,
+          "y": 0,
+          "z": -1432.49990295292
+        },
+        "headingRad": -0.5683943981876284
+      },
+      "laneRef": {
+        "roadId": "685",
+        "section": 0,
+        "laneId": -1,
+        "s": 40.769997743948764,
+        "t": 0,
+        "headingOffsetRad": 0
+      }
+    },
+    {
+      "id": "umbrella-pedestrian",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_walking",
+        "static": false
+      },
+      "label": "umbrella pedestrian who notices cart and waits",
+      "initialSpeedKph": 0,
+      "essentiality": "required",
+      "extensions": {
+        "umbrella": true
+      },
+      "kind": "scene_absolute",
+      "pose": {
+        "position": {
+          "x": 1258.827178750204,
+          "y": 0,
+          "z": -1366.5357126622525
+        },
+        "headingRad": 2.560913247413888
+      },
+      "laneRef": {
+        "roadId": "7",
+        "section": 0,
+        "laneId": -2,
+        "s": 27.247138914322363,
+        "t": -2.7743285127219193,
+        "headingOffsetRad": 0
+      }
+    }
+  ],
+  "props": [],
+  "trafficControls": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "interactions": [
+      {
+        "id": "cart-uncontrolled",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      },
+      {
+        "id": "cart-does-not-yield",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.yield",
+          "value": false
+        }
+      },
+      {
+        "id": "cart-ignores-vehicles",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.yieldToVehicles",
+          "value": false
+        }
+      },
+      {
+        "id": "shopper-path",
+        "actor": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "route",
+        "target": {
+          "mode": "polyline",
+          "points": [
+            {
+              "laneOffset": 0,
+              "s": 81,
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": 0,
+              "s": 85,
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "shopper-chases",
+        "actor": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "valueKph": 4
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "cart-crossing-path",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "verb": "route",
+        "target": {
+          "mode": "polyline",
+          "points": [
+            {
+              "laneOffset": 0,
+              "s": 90,
+              "tFrac": -1,
+              "headingOffsetRad": 1.5707963267948966
+            },
+            {
+              "laneOffset": 0,
+              "s": 90,
+              "tFrac": -0.25,
+              "headingOffsetRad": 1.5707963267948966
+            },
+            {
+              "laneOffset": 0,
+              "s": 90,
+              "tFrac": 1,
+              "headingOffsetRad": 1.5707963267948966
+            }
+          ]
+        }
+      },
+      {
+        "id": "cart-rolls",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "valueKph": {
+            "kind": "ref",
+            "name": "param.cartSpeedKph"
+          }
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "shopper-stops",
+        "actor": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 6.8
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        }
+      },
+      {
+        "id": "ego-progressive-brake",
+        "actor": "ego",
+        "trigger": {
+          "kind": "at",
+          "t": 6.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "cubic",
+          "constraint": "time",
+          "value": 2.7
+        }
+      },
+      {
+        "id": "cart-hits-median",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 11.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.25
+        }
+      },
+      {
+        "id": "pedestrian-steps",
+        "actor": "umbrella-pedestrian",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "valueKph": 3
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "pedestrian-notices-cart",
+        "actor": "umbrella-pedestrian",
+        "trigger": {
+          "kind": "at",
+          "t": 14
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "cart-rollback-path",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 15
+        },
+        "verb": "route",
+        "target": {
+          "mode": "polyline",
+          "points": [
+            {
+              "laneOffset": 0,
+              "s": 90,
+              "tFrac": 1,
+              "headingOffsetRad": -1.5707963267948966
+            },
+            {
+              "laneOffset": 0,
+              "s": 90,
+              "tFrac": 0.55,
+              "headingOffsetRad": -1.5707963267948966
+            }
+          ]
+        }
+      },
+      {
+        "id": "cart-rolls-back",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 15
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "valueKph": 2.5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.6
+        }
+      },
+      {
+        "id": "cart-secured",
+        "actor": "cart",
+        "trigger": {
+          "kind": "at",
+          "t": 17.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.25
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "wet-braking-budget",
+      "essentiality": "required",
+      "kind": "decel_budget",
+      "of": "ego",
+      "maxMps2": 5.7
+    },
+    {
+      "id": "ego-cart-criticality",
+      "essentiality": "required",
+      "kind": "ttc",
+      "of": "ego",
+      "to": "cart",
+      "range": [
+        0.8,
+        4
+      ],
+      "mode": "min"
+    },
+    {
+      "id": "cart-event-order",
+      "essentiality": "required",
+      "kind": "event_order",
+      "events": [
+        "cart-rolls",
+        "cart-hits-median",
+        "cart-rolls-back",
+        "cart-secured"
+      ],
+      "strict": true
+    },
+    {
+      "id": "pedestrian-response-order",
+      "essentiality": "required",
+      "kind": "event_order",
+      "events": [
+        "pedestrian-steps",
+        "pedestrian-notices-cart"
+      ],
+      "strict": true
+    }
+  ],
+  "variants": [],
+  "metricSubject": "ego",
+  "extensions": {
+    "intentId": "edge-case-08-runaway-cart-rain-glare",
+    "requiredBehavior": "cart must cross once, stop at median, then visibly roll back before being secured",
+    "forbidLateralEscape": true,
+    "requiredSiteEvidence": {
+      "commercialLot": true,
+      "slopedAccess": true,
+      "accessImmediatelyBeforeCrossing": true,
+      "medianCurbForRollback": true
+    },
+    "evidenceRendition": "behavioral-surrogate",
+    "exactMatchCount": 0
+  }
+}

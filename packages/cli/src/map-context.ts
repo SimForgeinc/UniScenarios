@@ -25,6 +25,8 @@ import type {
   MapContext,
   SignalFacts,
 } from '@uniscenarios/scenario-model';
+import type { MapBundle } from './maps.js';
+import { buildSiteSignalPlan, resolveSiteSignalProgram } from './map-signals.js';
 
 const LANE_TYPES = new Set<LaneType>([
   'driving',
@@ -42,8 +44,11 @@ function laneType(raw: string): LaneType {
 }
 
 /** Build a `MapContext` for one matched site. */
-export function createMapContext(index: DerivedMapIndex, site: MatchedSite): MapContext {
+export function createMapContext(source: DerivedMapIndex | MapBundle, site: MatchedSite): MapContext {
+  const bundle = 'index' in source && 'signalCatalog' in source ? source : null;
+  const index = bundle?.index ?? (source as DerivedMapIndex);
   const frame = site.frame;
+  const signalPlan = bundle ? buildSiteSignalPlan(bundle, site) : null;
 
   const laneFacts = (rsl: string, k: number, s: number): LaneFacts | undefined => {
     const lane = index.lanes[rsl];
@@ -172,10 +177,16 @@ export function createMapContext(index: DerivedMapIndex, site: MatchedSite): Map
       return undefined;
     },
 
-    signal(): SignalFacts | undefined {
-      // The derived index carries junction *control*, not per-approach signal
-      // heads with phase programs, so there is nothing honest to return yet.
-      return undefined;
+    signal(ref): SignalFacts | undefined {
+      if (!bundle || !signalPlan) return undefined;
+      const handle = resolveSiteSignalProgram(bundle, site, signalPlan, ref);
+      if (!handle) return undefined;
+      const program = signalPlan.programs.find((candidate) => candidate.id === handle);
+      if (!program) return undefined;
+      return {
+        handle,
+        phases: [...new Set(program.phases.map((phase) => phase.phase))],
+      };
     },
 
     feature(featureId): FeatureFacts | undefined {

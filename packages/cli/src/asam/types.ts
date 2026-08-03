@@ -7,8 +7,36 @@ import type {
   SimScenarioInput,
 } from '@uniscenarios/sim-engine';
 
-export const ASAM_FORMATS = ['xosc-1.4', 'osc-2.2'] as const;
+export const ASAM_FORMATS = ['xosc-1.4', 'xosc-1.3-esmini', 'osc-2.2'] as const;
 export type AsamFormat = (typeof ASAM_FORMATS)[number];
+
+export type AsamExportProfile =
+  | 'xml-1.4-actions'
+  | 'xml-1.4-trajectory-replay'
+  | 'xml-1.3-esmini-actions'
+  | 'xml-1.3-esmini-trajectory-replay'
+  | 'dsl-2.2-actions';
+
+export type AsamExportIntent = 'editable-semantic' | 'trajectory-replay';
+
+export interface AsamCapabilityEntry {
+  /** SimScenarioInput field covered by this decision. */
+  readonly path: keyof SimScenarioInput;
+  readonly disposition: 'preserved' | 'derived' | 'extension' | 'omitted';
+  readonly fidelity: 'exact' | 'approximate' | 'metadata-only' | 'none';
+  readonly reason: string;
+}
+
+export interface AsamCapabilityReport {
+  readonly profile: AsamExportProfile;
+  readonly intent: AsamExportIntent;
+  /** Import is intentionally not claimed by this exporter. */
+  readonly roundTrip: 'not-supported';
+  /** One entry for every top-level SimScenarioInput field. */
+  readonly fields: readonly AsamCapabilityEntry[];
+  readonly summary: Readonly<Record<AsamCapabilityEntry['disposition'], number>>;
+  readonly externalSimulatorValidation: 'not-verified';
+}
 
 export interface AsamExportIssue {
   readonly code: string;
@@ -37,17 +65,29 @@ export interface AsamExportOptions {
   readonly headerDate?: string | undefined;
   readonly author?: string | undefined;
   readonly description?: string | undefined;
+  /** Stable instance-manifest fields carried into the interchange artifact. */
+  readonly provenance?: Readonly<Record<string, string | number | boolean>> | undefined;
+  /**
+   * `trajectory-replay` embeds deterministic timed actor tracks and avoids
+   * relying on unspecified simulator traffic-rule/controller behaviour.
+   * The lower-level API keeps `actions` as its compatibility default; the CLI
+   * selects trajectory replay for standards-faithful interchange.
+   */
+  readonly executionMode?: 'actions' | 'trajectory-replay' | undefined;
   /** Maximum distance between exported route waypoints. */
   readonly routeSampleM?: number | undefined;
 }
 
 export interface AsamExportResult {
   readonly format: AsamFormat;
-  readonly standard: 'ASAM OpenSCENARIO XML 1.4.0' | 'ASAM OpenSCENARIO DSL 2.2.0';
+  readonly standard: 'ASAM OpenSCENARIO XML 1.4.0' | 'ASAM OpenSCENARIO XML 1.3.1 · esmini compatibility' | 'ASAM OpenSCENARIO DSL 2.2.0';
   readonly extension: '.xosc' | '.osc';
   readonly mediaType: 'application/xml' | 'text/plain';
   readonly content: string;
   readonly warnings: readonly AsamExportWarning[];
+  readonly profile: AsamExportProfile;
+  readonly intent: AsamExportIntent;
+  readonly capabilityReport: AsamCapabilityReport;
 }
 
 export interface ResolvedActor {

@@ -9,6 +9,7 @@ import {
 } from '@uniscenarios/sim-engine';
 import {
   PlaybackLoadError,
+  defaultCatalogIdForActorKind,
   parsePlaybackPair,
   readPlaybackFiles,
   samplePlaybackActors,
@@ -53,7 +54,7 @@ function trace(documentInput = input()): SimTrace {
   const hash = contentHash(documentInput);
   return {
     header: {
-      traceVersion: 1,
+      traceVersion: 2,
       engineVersion: '0.1.0',
       inputHash: hash,
       seed: 'playback-test',
@@ -66,6 +67,8 @@ function trace(documentInput = input()): SimTrace {
       frame: 'xodr-local',
       actorIds: ['bus', 'ego'],
       metricSubject: 'ego',
+      operationalConditions: documentInput.operationalConditions,
+      physics: { mode: 'kinematic-v1', solver: 'uniscenarios-sim-engine', solverVersion: '0.1.0', substepS: 0.2, vehicleProfileDigest: null },
     },
     ticks: {
       t: [0, 1],
@@ -87,6 +90,7 @@ function trace(documentInput = input()): SimTrace {
           laneRsl: [null, null],
           s: [0, 10],
           present: [1, 1],
+          motionDirection: [-1, -1],
         },
       },
     },
@@ -121,6 +125,55 @@ function pair() {
   };
 }
 
+function catalogPair(): any {
+  const fixture = pair() as any;
+  const variant = {
+    id: 'clear-day',
+    title: 'Clear daytime',
+    weather: 'clear',
+    timeOfDay: 'day',
+    traffic: 'moderate',
+    visibility: 'unrestricted',
+  };
+  const catalogSlot = {
+    identity: 'yale-street-001-bus-stop-deadbeef0000',
+    mapId: 'yale-street',
+    incidentId: 'bus-stop-emergence',
+    seed: 'a'.repeat(64),
+    attemptSeed: 'b'.repeat(64),
+    designDigest: 'c'.repeat(64),
+    selectedLocationId: 'location-1',
+    selectedMatcherSiteId: 'site-1',
+    variant,
+    provenance: {
+      namespace: 'catalog',
+      generatorVersion: '2.0.0',
+      mapCatalogRevision: 'revision-1',
+      matcherIndexDigest: 'matcher-digest',
+      engineGraphDigest: 'graph-digest',
+      locationCatalogDigest: 'location-digest',
+      taxonomyDigest: 'taxonomy-digest',
+      templateDigest: 'template-digest',
+    },
+    templateId: 'bus-stop-emergence',
+  };
+  fixture.instance.catalogSlot = catalogSlot;
+  fixture.instance.manifest.replayKey = {
+    ...fixture.instance.manifest.replayKey,
+    siteId: catalogSlot.selectedMatcherSiteId,
+    paramSeed: catalogSlot.attemptSeed,
+    templateId: catalogSlot.templateId,
+    templateDigest: catalogSlot.provenance.templateDigest,
+    matcherIndexDigest: catalogSlot.provenance.matcherIndexDigest,
+  };
+  fixture.instance.manifest.operationalVariant = {
+    ...variant,
+    concrete: structuredClone(fixture.instance.input.operationalConditions),
+  };
+  fixture.trace.header.catalogSlot = structuredClone(catalogSlot);
+  return fixture;
+}
+
 class BytesFile implements PlaybackFile {
   constructor(readonly name: string, private readonly bytes: Uint8Array) {}
   async arrayBuffer(): Promise<ArrayBuffer> {
@@ -139,6 +192,47 @@ function message(action: () => unknown): string {
 }
 
 describe('UniScenarios concrete playback import', () => {
+  it.each([1, 2, 3])('accepts explicitly supported trace format v%s', (traceVersion) => {
+    const fixture = pair();
+    (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;
+    expect(parsePlaybackPair(fixture.instance, fixture.trace).trace.header.traceVersion).toBe(traceVersion);
+  });
+
+  it.each([0, 4, 99])('fails closed for unknown trace format v%s', (traceVersion) => {
+    const fixture = pair();
+    (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;
+    const error = message(() => parsePlaybackPair(fixture.instance, fixture.trace));
+    expect(error).toContain('header.traceVersion must be one of 1, 2, 3 (current 3)');
+  });
+
+  it('maps every semantic actor kind to a buildable fallback model', () => {
+    expect({
+      vehicle: defaultCatalogIdForActorKind('vehicle'),
+      car: defaultCatalogIdForActorKind('car'),
+      truck: defaultCatalogIdForActorKind('truck'),
+      bus: defaultCatalogIdForActorKind('bus'),
+      van: defaultCatalogIdForActorKind('van'),
+      motorcycle: defaultCatalogIdForActorKind('motorcycle'),
+      bicycle: defaultCatalogIdForActorKind('bicycle'),
+      pedestrian: defaultCatalogIdForActorKind('pedestrian'),
+      scooter: defaultCatalogIdForActorKind('scooter'),
+      animal: defaultCatalogIdForActorKind('animal'),
+      static_object: defaultCatalogIdForActorKind('static_object'),
+    }).toEqual({
+      vehicle: 'vehicle.sedan',
+      car: 'vehicle.sedan',
+      truck: 'vehicle.box_truck',
+      bus: 'vehicle.bus',
+      van: 'vehicle.van',
+      motorcycle: 'vehicle.motorcycle',
+      bicycle: 'vehicle.bicycle',
+      pedestrian: 'pedestrian.adult_walking',
+      scooter: 'vehicle.bicycle',
+      animal: 'pedestrian.child_walking',
+      static_object: 'hazard.cardboard_box',
+    });
+  });
+
   it('parses a concrete instance with plain JSON or a gzip trace', async () => {
     const fixture = pair();
     const instanceBytes = new TextEncoder().encode(JSON.stringify(fixture.instance));
@@ -233,6 +327,17 @@ describe('UniScenarios concrete playback import', () => {
     expect(error).toContain('ticks.actors.bus is missing');
   });
 
+  it('rejects explicit topology and operational-condition closure mismatches', () => {
+    const fixture = pair();
+    const broken = structuredClone(fixture.trace) as any;
+    broken.header.topologyDigest = 'different-topology';
+    broken.header.operationalConditions.weather = 'snow';
+
+    const error = message(() => parsePlaybackPair(fixture.instance, broken));
+    expect(error).toContain('header.topologyDigest does not match manifest.replayKey.engineGraphDigest');
+    expect(error).toContain('header.operationalConditions does not exactly match instance input.operationalConditions');
+  });
+
   it('maps real actor ids and interpolates dynamic pose and wrapped heading', () => {
     const fixture = pair();
     const bundle = parsePlaybackPair(fixture.instance, fixture.trace);
@@ -244,6 +349,7 @@ describe('UniScenarios concrete playback import', () => {
     expect(bus.static).toBe(true);
     expect(bus).toMatchObject({ x: 10, z: -20, headingRad: 0.25, present: true });
     expect(ego.static).toBe(false);
+    expect(ego.motionDirection).toBe(-1);
     expect(ego.x).toBeCloseTo(5, 8);
     expect(ego.z).toBeCloseTo(0, 8);
     expect(Math.abs(ego.headingRad)).toBeGreaterThan(3.1);
@@ -274,6 +380,90 @@ describe('UniScenarios concrete playback import', () => {
     expect(error).toContain('ticks.actors.ego.present length 1 does not match ticks.t length 2');
   });
 
+  it('strictly joins catalog slot provenance between instance and trace', () => {
+    const fixture = catalogPair();
+    const catalogSlot = fixture.instance.catalogSlot;
+
+    expect(parsePlaybackPair(fixture.instance, fixture.trace).catalogSlot).toEqual(catalogSlot);
+
+    (fixture.trace.header as any).catalogSlot = { ...catalogSlot, selectedMatcherSiteId: 'site-2' };
+    expect(message(() => parsePlaybackPair(fixture.instance, fixture.trace))).toContain(
+      'header.catalogSlot does not exactly match the instance catalogSlot closure',
+    );
+  });
+
+  it.each([
+    ['selected matcher site', (value: any) => { value.instance.manifest.replayKey.siteId = 'site-2'; }, 'catalogSlot.selectedMatcherSiteId'],
+    ['attempt seed', (value: any) => { value.instance.manifest.replayKey.paramSeed = 'd'.repeat(64); }, 'catalogSlot.attemptSeed'],
+    ['template id', (value: any) => { value.instance.manifest.replayKey.templateId = 'other-template'; }, 'catalogSlot.templateId'],
+    ['matcher digest', (value: any) => { value.instance.manifest.replayKey.matcherIndexDigest = 'other-matcher'; }, 'catalogSlot.provenance.matcherIndexDigest'],
+    ['engine digest', (value: any) => { value.instance.manifest.replayKey.engineGraphDigest = 'other-engine'; }, 'catalogSlot.provenance.engineGraphDigest'],
+    ['template digest', (value: any) => { value.instance.manifest.replayKey.templateDigest = 'other-digest'; }, 'catalogSlot.provenance.templateDigest'],
+    ['variant source', (value: any) => { value.instance.manifest.operationalVariant.weather = 'rain'; }, 'operationalVariant source fields'],
+    ['variant concrete conditions', (value: any) => { value.instance.manifest.operationalVariant.concrete.weather = 'rain'; }, 'operationalVariant.concrete'],
+  ])('rejects catalog %s mutations against the replay closure', (_label, mutate, diagnostic) => {
+    const fixture = catalogPair();
+    mutate(fixture);
+    expect(message(() => parsePlaybackPair(fixture.instance, fixture.trace))).toContain(diagnostic);
+  });
+
+  it('loads fixed collidable props only when trace metadata closes over the exact prop', () => {
+    const documentInput = parseSimScenarioInput({
+      ...input(),
+      props: [{
+        id: 'workzone-barrier',
+        catalogId: 'construction.jersey_barrier',
+        pose: { x: 7, z: -3, headingRad: 0.4 },
+        dims: { l: 2.4, w: 0.55, h: 0.85 },
+        scale: 1.25,
+        collidable: true,
+        essentiality: 'required',
+      }],
+    });
+    const propTrace = trace(documentInput);
+    (propTrace.header as any).propMetadata = { 'workzone-barrier': documentInput.props[0]! };
+    const instance = {
+      kind: 'scenario-instance',
+      version: 1,
+      manifest: {
+        instanceId: 'fixed-prop#1',
+        inputHash: contentHash(documentInput),
+        replayKey: { mapId: 'yale-street', engineGraphDigest: 'graph-digest' },
+        actors: [{ id: 'bus' }, { id: 'ego' }],
+      },
+      input: documentInput,
+    } as const;
+
+    const bundle = parsePlaybackPair(instance, propTrace);
+    expect(bundle.props).toEqual([
+      expect.objectContaining({
+        id: 'workzone-barrier',
+        catalogId: 'construction.jersey_barrier',
+        collidable: true,
+        essentiality: 'required',
+      }),
+    ]);
+
+    (propTrace.header as any).propMetadata = {};
+    expect(message(() => parsePlaybackPair(instance, propTrace))).toContain('instance props=[workzone-barrier]');
+  });
+
+  it('rejects malformed reverse-motion channels and preserves body orientation while reversing', () => {
+    const fixture = pair();
+    const bundle = parsePlaybackPair(fixture.instance, fixture.trace);
+    const start = samplePlaybackActors(bundle, 0).find((actor) => actor.id === 'ego')!;
+    const end = samplePlaybackActors(bundle, 1).find((actor) => actor.id === 'ego')!;
+    expect(start.motionDirection).toBe(-1);
+    expect(end.motionDirection).toBe(-1);
+    expect(end.headingRad).not.toBeCloseTo(start.headingRad + Math.PI);
+
+    const broken = structuredClone(fixture.trace) as any;
+    broken.ticks.actors.ego.motionDirection = [-1, 0];
+    expect(message(() => parsePlaybackPair(fixture.instance, broken))).toContain(
+      'motionDirection must contain only -1 or 1',
+    );
+  });
+
   it('rejects unknown actor model mappings instead of drawing a cosmetic box', () => {
     const fixture = pair();
     fixture.instance.input.actors[0]!.tags = ['catalog:vehicle.does-not-exist'];
@@ -290,7 +480,7 @@ const GOLDEN_ROOT = new URL('../../../../../fixtures/evidence/golden-yale-bus-st
 const GOLDEN_INSTANCE = new URL('instance.json', GOLDEN_ROOT);
 const GOLDEN_TRACE = new URL('trace.json.gz', GOLDEN_ROOT);
 
-describe.skipIf(!existsSync(GOLDEN_INSTANCE) || !existsSync(GOLDEN_TRACE))('corrected golden Yale pair', () => {
+describe.skipIf(!existsSync(GOLDEN_INSTANCE) || !existsSync(GOLDEN_TRACE))('current-engine golden Yale pair', () => {
   it('loads three concrete actors and samples real static/dynamic motion', async () => {
     const bundle = await readPlaybackFiles(
       new BytesFile('instance.json', readFileSync(GOLDEN_INSTANCE)),
@@ -298,7 +488,7 @@ describe.skipIf(!existsSync(GOLDEN_INSTANCE) || !existsSync(GOLDEN_TRACE))('corr
     );
     expect(bundle.instance.manifest.instanceId).toBe('fa9fa19457cf576f#8');
     expect(bundle.instance.manifest.inputHash).toBe(
-      '29309981338d6ada82186b3a7e21d2138775dd8cedd16e587efbca5f4da66531',
+      'e0538cb4b73547228248372bc6f2f606bbab8d3b97722b46789d41c229e70897',
     );
     expect(bundle.actors.map((actor) => actor.id)).toEqual(['bus', 'ego', 'ped']);
 

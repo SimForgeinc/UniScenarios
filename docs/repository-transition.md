@@ -15,12 +15,50 @@ The `apps/studio` directory name describes the authoring surface; it is not a
 legacy product name. Public UI, schemas, package metadata, and documentation use
 UniScenarios naming.
 
+The naming contract is executable:
+
+```sh
+pnpm verify:naming
+```
+
+The audit checks the root name, every workspace package scope, the primary and
+compatibility CLI names, duplicate workspace names, and public documentation.
+Legacy product naming is allowed only in these transition and extraction
+documents, where it identifies historical provenance rather than the current
+product.
+
 ## Provenance and local-only state
 
-`MIGRATION-SOURCE.json` records the exact source commit, dirty status, and a
-SHA-256 digest for every copied source file. The extraction preserves committed
-history but intentionally configures no Git remote, so publishing requires an
-explicit remote choice.
+`MIGRATION-SOURCE.json` is an integrity inventory of the extraction input. It
+records the source commit and branch, the dirty status, and the file kind,
+POSIX mode, and SHA-256 digest of every tracked or non-ignored untracked source
+file copied by the extractor.
+
+The provenance classification is **verification-only, non-reconstructible**.
+The manifest can prove that an independently obtained source checkout matches
+the captured input, but it cannot create that checkout. In particular, hashes
+do not contain the modified or untracked file bytes from the dirty working tree.
+The committed `HEAD` alone is therefore insufficient to reproduce the exact
+extraction input.
+
+No source URL or source filesystem path is recorded. This is deliberate: no
+public source location or continuing availability has been established, and a
+machine-local path would expose local information without making the snapshot
+portable. A caller that already has a candidate source checkout can verify it:
+
+```sh
+node scripts/verify-migration-source.mjs \
+  --source /path/to/candidate-source-checkout
+```
+
+The verifier fails closed unless the Git `HEAD`, branch, complete porcelain
+status, complete tracked/non-ignored path set, file kinds, modes, and SHA-256
+digests all match. A successful check establishes identity with the recorded
+snapshot; it does not establish how the checkout was obtained or that it will
+remain available.
+
+The extraction preserves committed history but intentionally configures no Git
+remote, so publishing requires an explicit remote choice.
 
 Ignored dependencies, generated build output, local render evidence, and
 proprietary/local map assets are not committed. Publish selected evidence through

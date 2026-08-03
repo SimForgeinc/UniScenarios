@@ -22,6 +22,39 @@ import { findSite } from './sites.js';
 import { writeJsonFile, writeTraceFile } from './template-io.js';
 import { toStructuredError } from './errors.js';
 
+export interface CatalogArtifactProvenance {
+  readonly identity: string;
+  /** Authored catalog reservation seed. */
+  readonly seed: string;
+  /** Concrete attempt seed used to materialize this artifact. */
+  readonly attemptSeed: string;
+  /** Immutable digest of authored coordinates, excluding lifecycle state. */
+  readonly designDigest: string;
+  readonly mapId: string;
+  readonly incidentId: string;
+  readonly selectedLocationId: string;
+  readonly selectedMatcherSiteId: string;
+  readonly variant: {
+    readonly id: string;
+    readonly title: string;
+    readonly weather: string;
+    readonly timeOfDay: string;
+    readonly traffic: string;
+    readonly visibility: string;
+  };
+  readonly provenance: {
+    readonly namespace: string;
+    readonly generatorVersion: string;
+    readonly mapCatalogRevision: string;
+    readonly matcherIndexDigest: string;
+    readonly engineGraphDigest: string;
+    readonly locationCatalogDigest: string;
+    readonly taxonomyDigest: string;
+    readonly templateDigest: string;
+  };
+  readonly templateId: string;
+}
+
 export interface CellCoords {
   readonly mapId: string;
   readonly siteId: string;
@@ -33,6 +66,18 @@ export interface CellOptions extends CellCoords {
   readonly writeTrace: boolean;
   readonly filter: EvaluateFilterMode;
   readonly trivialTtcS?: number | undefined;
+  /** Override the coordinate-derived seed (used by catalog reservations). */
+  readonly seed?: string | undefined;
+  /** Write to reserved catalog paths instead of the template-batch layout. */
+  readonly artifactPaths?: ReturnType<typeof cellPaths> | undefined;
+  /** Stable external identity for a catalog slot. */
+  readonly instanceId?: string | undefined;
+  /** Provenance closure carried by both the instance and result artifacts. */
+  readonly catalogSlot?: CatalogArtifactProvenance | undefined;
+  /** Replay the catalog's exact persisted-site matcher contract in workers. */
+  readonly exactCatalogSiteResolution?: boolean | undefined;
+  /** Explicit catalog eligibility rule. Catalog execution defaults to reject. */
+  readonly collisionPolicy?: 'reject' | 'allow' | undefined;
 }
 
 export interface CellResult extends CellCoords {
@@ -56,6 +101,16 @@ export interface CellResult extends CellCoords {
   readonly traceFile: string | null;
   readonly issues: Array<{ code: string; severity: string; reason: string }>;
   readonly error?: { code: string; reason: string; path?: string };
+  readonly catalogSlot?: CellOptions['catalogSlot'];
+  readonly artifactHashes?: {
+    readonly instanceSha256: string | null;
+    readonly traceSha256: string | null;
+  };
+  readonly eligibility?: {
+    readonly collisionPolicy: 'reject' | 'allow';
+    readonly eligible: boolean;
+    readonly hardFailureCodes: readonly string[];
+  };
 }
 
 export function cellPaths(outDir: string, coords: CellCoords): {
@@ -72,69 +127,118 @@ export function cellPaths(outDir: string, coords: CellCoords): {
   };
 }
 
+export function hardInvariantFailures(
+  invariants: readonly InvariantResidualReport[],
+): InvariantResidualReport[] {
+  return invariants.filter((entry) => entry.essentiality === 'required' && entry.status !== 'held');
+}
+
+export function hardEligibilityFailureCodes(options: {
+  readonly feasible: boolean;
+  readonly evidenceIssues: readonly { code: string }[];
+  readonly invariantFailures: readonly InvariantResidualReport[];
+  readonly evaluationVerdict: 'accept' | 'reject';
+  readonly evaluationFindings: readonly { code: string }[];
+}): string[] {
+  return [
+    ...options.evidenceIssues.map((entry) => entry.code),
+    ...options.invariantFailures.map((entry) => entry.status === 'unchecked' ? 'invariant_unchecked' : 'invariant_violated'),
+    // Negative-control evaluation may accept with an informational
+    // `trivially_safe` finding. Only findings that actually made evaluation
+    // reject are hard eligibility failures.
+    ...(options.evaluationVerdict === 'reject' ? options.evaluationFindings.map((entry) => entry.code) : []),
+    ...(!options.feasible ? ['materialization_infeasible'] : []),
+  ];
+}
+
 /** Run one cell. Never throws: a failure is a recorded cell, not a dead batch. */
 export async function runCell(
   template: ScenarioTemplateV2,
   options: CellOptions,
 ): Promise<CellResult> {
-  const paths = cellPaths(options.outDir, options);
+  const paths = options.artifactPaths ?? cellPaths(options.outDir, options);
   const base = {
     mapId: options.mapId,
     siteId: options.siteId,
     drawIndex: options.drawIndex,
-    instanceId: `${options.siteId}#${options.drawIndex}`,
+    instanceId: options.instanceId ?? `${options.siteId}#${options.drawIndex}`,
+    ...(options.catalogSlot === undefined ? {} : { catalogSlot: options.catalogSlot }),
   };
   try {
-    const { bundle, site } = await findSite(template, options.mapId, options.siteId);
+    const { bundle, site } = await findSite(template, options.mapId, options.siteId,
+      options.exactCatalogSiteResolution ? { exactCatalogSiteResolution: true } : {});
     const { input, manifest } = materialize(template, bundle, site, {
       drawIndex: options.drawIndex,
+      ...(options.seed === undefined ? {} : { seed: options.seed }),
+      ...(options.catalogSlot === undefined ? {} : { variant: options.catalogSlot.variant }),
     });
-    await writeJsonFile(paths.instance, {
-      kind: 'scenario-instance',
-      version: 1,
+    const instance = {
+      kind: 'scenario-instance' as const,
+      version: 1 as const,
+      ...(options.catalogSlot === undefined ? {} : { catalogSlot: options.catalogSlot }),
       manifest,
       input,
-    });
+    };
+    await writeJsonFile(paths.instance, instance);
 
     const run = runSimulation(input, { graph: bundle.graph, guards: 'collect' });
-    if (options.writeTrace) await writeTraceFile(paths.trace, run.trace);
+    const trace = options.catalogSlot === undefined
+      ? run.trace
+      : { ...run.trace, header: { ...run.trace.header, catalogSlot: options.catalogSlot } };
+    if (options.writeTrace) await writeTraceFile(paths.trace, trace);
 
     const evaluation = evaluateTrace(
-      run.trace,
+      trace,
       filtersFor(
         template.meta.negativeControl ? 'negative-control' : options.filter,
-        { trivialTtcS: options.trivialTtcS },
+        {
+          trivialTtcS: options.trivialTtcS,
+          rejectCollisions: options.collisionPolicy === 'reject',
+        },
       ),
     );
     const speedLimitKph = bundle.index.lanes[site.frame.entryLaneRsl]?.speedLimitKph ?? null;
     const invariants = checkInvariants({
       template,
-      trace: run.trace,
+      trace,
       scope: {
         params: manifest.params.values,
-        clip: { seconds: run.trace.header.clipSeconds },
+        clip: { seconds: trace.header.clipSeconds },
         ...(speedLimitKph === null ? {} : { lane: { speedLimitKph } }),
       },
       arrival: manifest.arrival,
       speedLimitKph,
     });
-    const invariantViolations = invariants.filter(
-      (r) => r.status === 'violated' && r.essentiality === 'required',
-    );
-    const evidence = verifyEvidenceHashes({ kind: 'scenario-instance', version: 1, manifest, input }, run.trace);
+    const requiredInvariantFailures = hardInvariantFailures(invariants);
+    const evidence = verifyEvidenceHashes(instance, trace);
     const findings: Array<{ code: string; reason: string }> = evaluation.findings.map((f) => ({ code: f.code, reason: f.reason }));
     if (!evidence.ok) {
       findings.push(...evidence.issues.map((i) => ({ code: i.code, reason: i.reason })));
     }
-    if (invariantViolations.length > 0) {
+    if (requiredInvariantFailures.length > 0) {
       findings.push(
-        ...invariantViolations.map((r) => ({
-          code: 'invariant_violated',
+        ...requiredInvariantFailures.map((r) => ({
+          code: r.status === 'unchecked' ? 'invariant_unchecked' : 'invariant_violated',
           reason: `${r.id}: ${r.reason}`,
         })),
       );
     }
-    const verdict = invariantViolations.length > 0 || !evidence.ok ? 'reject' : evaluation.verdict;
+    if (!manifest.feasible) {
+      findings.push({
+        code: 'materialization_infeasible',
+        reason: 'materializer could not satisfy the concrete scenario constraints',
+      });
+    }
+    const verdict = !manifest.feasible || requiredInvariantFailures.length > 0 || !evidence.ok
+      ? 'reject'
+      : evaluation.verdict;
+    const hardFailureCodes = hardEligibilityFailureCodes({
+      feasible: manifest.feasible,
+      evidenceIssues: evidence.issues,
+      invariantFailures: requiredInvariantFailures,
+      evaluationVerdict: evaluation.verdict,
+      evaluationFindings: evaluation.findings,
+    });
 
     const result: CellResult = {
       ...base,
@@ -143,24 +247,27 @@ export async function runCell(
       verdict,
       band: !evidence.ok
         ? 'evidence-mismatch'
-        : invariantViolations.length > 0
+        : !manifest.feasible
+          ? 'infeasible'
+        : requiredInvariantFailures.length > 0
           ? 'invariant'
           : criticalityBand(evaluation.verdict, evaluation.findings),
       tags: [
         ...evaluation.tags,
         ...(!evidence.ok ? ['evidence_mismatch'] : []),
-        ...(invariantViolations.length > 0 ? ['invariant_violated'] : []),
+        ...(requiredInvariantFailures.some((entry) => entry.status === 'violated') ? ['invariant_violated'] : []),
+        ...(requiredInvariantFailures.some((entry) => entry.status === 'unchecked') ? ['invariant_unchecked'] : []),
       ],
       findings,
       invariants,
       evidence,
-      metrics: metricsSummary(run.trace),
+      metrics: metricsSummary(trace),
       siteScore: site.score,
       siteVerdict: site.degradation.verdict,
       paramSeed: manifest.replayKey.paramSeed,
       params: manifest.params.values,
       inputHash: manifest.inputHash,
-      traceDigest: traceDigest(run.trace),
+      traceDigest: traceDigest(trace),
       instanceFile: paths.instance,
       traceFile: options.writeTrace ? paths.trace : null,
       issues: [...manifest.issues, ...run.issues].map((i) => ({
@@ -168,6 +275,11 @@ export async function runCell(
         severity: i.severity,
         reason: i.reason,
       })),
+      eligibility: {
+        collisionPolicy: options.collisionPolicy ?? 'allow',
+        eligible: verdict === 'accept',
+        hardFailureCodes,
+      },
     };
     await writeJsonFile(paths.result, result);
     return result;
@@ -211,6 +323,11 @@ export async function runCell(
       traceFile: null,
       issues: [],
       error: structured,
+      eligibility: {
+        collisionPolicy: options.collisionPolicy ?? 'allow',
+        eligible: false,
+        hardFailureCodes: [structured.code],
+      },
     };
     await writeJsonFile(paths.result, result).catch(() => undefined);
     return result;

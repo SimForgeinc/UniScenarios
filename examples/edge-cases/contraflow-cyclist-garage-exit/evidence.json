@@ -1,0 +1,42 @@
+{
+  "scenarioOrdinal": 3,
+  "status": "independently-replayable",
+  "mapId": "yale-street",
+  "siteId": "22f66ed9554e1403",
+  "seed": "03c0ffee",
+  "engineVersion": "0.2.6",
+  "templateDigest": "fc6cca16e511e5f6",
+  "durationSeconds": 20,
+  "tickSeconds": 0.02,
+  "ticksSimulated": 1001,
+  "triggerCount": 10,
+  "missedTriggers": 0,
+  "collisions": 0,
+  "observations": {
+    "egoInitialSpeedKph": 0,
+    "egoCreepSpeedKph": 4,
+    "egoStopAfterContraflowDetectionSeconds": 13.6,
+    "contraflowPassMarkerSeconds": 17.5,
+    "finalEntryBeginsSeconds": 18.7,
+    "postPassObservationSeconds": 1.2,
+    "legalCyclistMinimumClearanceM": 2.770189,
+    "wrongWayCyclistMinimumClearanceM": 5.784862,
+    "legalCyclistRequiredDecelMps2": 0,
+    "wrongWayCyclistRequiredDecelMps2": 0,
+    "egoPositionAt18_7": [394.215, 1826.258],
+    "egoPositionAt20": [396.418, 1827.757],
+    "wrongWayRiderPositionAt17_5": [392.996, 1828.708],
+    "wrongWayRiderPositionAt18_7": [397.569, 1835.648]
+  },
+  "verdicts": {
+    "full-stop": "pass",
+    "controlled-creep": "pass",
+    "bike-lane-encroachment": "pass-by-route-boundary: pre-entry route terminates at the lane-edge frame; final crossing route is installed only after the observation delay",
+    "observation-time": "pass",
+    "cyclist-clearance": "pass",
+    "collision-free": "pass",
+    "riders-not-forced-to-brake": "pass"
+  },
+  "traceDigest": "81e899e561195eed460c03311db4ad2457f517805b464ab68748513a91d135c2",
+  "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f"
+}

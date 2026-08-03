@@ -45,10 +45,13 @@ uniscenarios validate          <instance|template> [--tier 1|2 --map --site --dr
 uniscenarios evaluate          <trace> [--filter critical|negative-control|all]
                        [--trivial-ttc S --reject-collisions]
 uniscenarios evidence verify   <instance.json> <trace.json.gz>
-uniscenarios export            <instance.json> --format xosc-1.4|osc-2.2 --out <file>
+uniscenarios export            <instance.json> --format xosc-1.4|xosc-1.3-esmini|osc-2.2 --out <file>
                        [--road-file map.xodr --route-sample-m 20]
 uniscenarios catalog create    --out <catalog.json> [--namespace ID --evidence-root DIR]
 uniscenarios catalog verify    <catalog.json> [--evidence-root DIR --require-evidence]
+uniscenarios catalog batch     <catalog.json> [--ledger FILE --slots a,b --map ID]
+                               [--allow-collisions]
+                       [--mechanisms a,b --attempts N --concurrency N --force]
 uniscenarios batch             <template.json> --maps a,b,c --draws N --out dir/
                        [--concurrency N --min-score --max-sites --force --no-trace]
 uniscenarios schemas           [--name template|anchor|interactions] [--content]
@@ -63,14 +66,54 @@ Every lane/follow/polyline route is resolved through the instance map graph and
 sampled into world-coordinate waypoints, so an exported file never mistakes
 UniScenarios' lane-local `rsl:s` for OpenDRIVE road `s`.
 
+`xosc-1.3-esmini` is a separate compatibility target for a pinned external
+esmini runner. It is authored as OpenSCENARIO XML 1.3.1 and never relabels the
+native 1.4 artifact. The runnable-bundle API validates it with the pinned
+official 1.3.1 XSD, resolves the complete immutable OpenDRIVE file server-side
+from `mapId + sha256`, and packages the canonical trace and explicit capability
+and provenance reports. Its deterministic-trajectory profile claims motion
+parity only; lowered presentation cues remain visible in the capability report.
+
 Both profiles export vehicle/pedestrian dimensions, initial world pose and
 speed, resolved paths, static occluder geometry, clip duration and absolute
-speed changes. XML 1.4 additionally supports relative speed targets, relative
+speed changes. The CLI's XML 1.4 path uses deterministic trajectory replay: it
+runs the concrete instance, emits absolute-time `FollowTrajectoryAction`
+vertices (including signed reverse speed), replays standard lights and vehicle
+component animations at their observed firing times, and schedules physical
+signal-head states from the trace. Motion-rule, route, speed and lane-change
+interactions are embodied in that trace instead of being delegated to
+simulator-specific controllers. Simulation/arrival errors, incomplete signal
+tracks, unsupported entity spawning, and state without an exact XML carrier
+reject the export.
+
+The library also exposes an action-oriented XML profile for consumers that need
+editable controller actions. It supports relative speed targets, relative
 left/right lane changes, dynamic route replacement, add/delete entity actions,
 `at`/`after` triggers, a documented subset of `when` conditions, and looping
-traffic-signal controllers. DSL 2.2 supports statically resolvable `at`/`after`
+traffic-signal controllers. In that profile, a signal program is exported only when its
+`mapBinding.controllerHeadGroups` closes the ordered physical OpenDRIVE
+controller-stage membership to the bound head ids. One logical scenario
+program may emit several `TrafficSignalController` elements, each named with
+its physical OpenDRIVE controller-group ID and containing only that group's
+head ids as `TrafficSignalState` entries. No self-reference is synthesized;
+phase conditions reference the first ordered physical controller in the bound
+program. The complete controller/head closure is retained in header
+properties. Controller offsets are represented by rotating (and, when
+necessary, splitting) the phase cycle. A
+persistent UniScenarios signal override is rejected in the action profile
+because an XML phase action does not have the same semantics. DSL 2.2 supports statically resolvable `at`/`after`
 schedules, linear speed transitions, time-constrained lane changes, gaps and
 metre lane offsets.
+
+The ASAM timeline starts at the beginning of the instance warm-up. Therefore an
+engine trigger at `t` is exported at `t + warmupSeconds`, and the ASAM stop time
+is `warmupSeconds + clipSeconds`. The recorded UniScenarios `t=0` remains the
+same physical instant instead of silently dropping pre-roll behavior.
+
+When the input is a materialized instance file, replay-key fields and its input
+hash are carried into XML `FileHeader/Properties` or DSL header comments. A bare
+`SimScenarioInput` has no manifest, so an exporter cannot reconstruct template,
+site, matcher, solver, draw or seed provenance from that file alone.
 
 The command never silently substitutes a different behavior. Unsupported
 controller rules, dynamics, conditions, deadlines, entity lifecycle, signal
@@ -80,9 +123,29 @@ UniScenarios-only metric subjects and occlusion-evaluation pairs are reported as
 warnings; their physical actors and occluders are still exported.
 
 The default referenced road file is `<mapId>.xodr`. Use `--road-file` to write
-the path used by the target simulator. XML output is exercised against ASAM's
-official 1.4.0 XSD when `ASAM_OPENSCENARIO_14_XSD` points to the official schema
-deliverable.
+the path used by the target simulator. XML tests fetch [ASAM's official 1.4.0
+schema archive](https://publications.pages.asam.net/standards/ASAM_OpenSCENARIO/ASAM_OpenSCENARIO_XML/v1.4.0/_attachments/generated/ASAM_OpenSCENARIO_v1.4.0_Schema.zip)
+and require SHA-256
+`efbb2da3432ef8bb9f87daa9d710fb20a2ad65276bc386d28885a5fe9511a39c`;
+the extracted `OpenSCENARIO.xsd` must hash to
+`949fe2bcebd1f3fdb941a2cc56641482737ab48e3c5b0eed0ee5294b2355c0e9`.
+`ASAM_OPENSCENARIO_14_XSD` may point to a local copy, but it must have that same
+XSD digest. To update the pin, obtain a newly versioned official ASAM
+deliverable, review its model/schema changes and exporter mappings, update both
+digests and fixtures, and rerun all semantic rejection and XSD tests.
+
+DSL 2.2 output is gated by a deterministic parser for the exact concrete
+grammar profile emitted by this package. The test pins ASAM's official 2.2.0
+`grammar.ebnf` at SHA-256
+`77acf08e7a8a9f424358452d4f955e4dcd15636468aba7b18ba644ce9edc619b`
+and verifies that the implemented subset is drawn from its import, scenario,
+constraint, composition, invocation, modifier and wait productions. A second
+pin checks the official 2.2 domain-model library archive at SHA-256
+`b18ee980a48b9e71db8612b846f04be10dfba4cbb82944a48806078721879fa3`
+and audits every actor category and action/modifier symbol emitted. This is a
+syntax/profile guarantee, not a claim that the repository implements the full
+DSL type system or a general-purpose compiler. XML 1.4 remains the interchange
+path with full official XSD validation.
 
 `locations` is the model's spatial awareness: it never sees a road id, it
 queries by semantics and receives **handles**, road anchors and
@@ -200,18 +263,54 @@ out/
                    draw-000.result.json
 ```
 
-## What this package deliberately does not do yet
+`catalog batch` is the lifecycle-aware companion for the 500-slot catalog. It
+writes a checkpointed execution ledger, uses each reservation seed for attempt
+zero, records deterministic bounded draws, and advances a slot only after its
+reserved artifacts exist. Unsupported authored mechanisms, template-backed
+slots without an exact persisted catalog-location/matcher-site join, and
+operational variants not actually applied by the materializer/engine, and
+template/map combinations with no executable site are structured findings
+(exit 2), never simulated counts. `SIGINT`/`SIGTERM` stop new dispatch; rerunning
+the same command validates accepted artifact hashes and resumes the ledger.
+Collision-free execution is a hard eligibility rule by default and is recorded
+in every result; `--allow-collisions` is the explicit opt-out for mechanisms
+whose authored outcome intentionally includes contact.
+
+For a cancellable campaign, invoke the CLI process directly so `SIGINT` and
+`SIGTERM` reach its checkpoint handler instead of stopping a package-manager
+wrapper first:
+
+```bash
+node packages/cli/bin/uniscenarios.js catalog batch \
+  catalog/uniscenarios-five-map-v2.catalog.json \
+  --ledger catalog/catalog-execution-ledger.json \
+  --attempts 3 --concurrency 4 --filter all --pretty
+```
+
+The handler stops new dispatch, removes any uncommitted interrupted work, moves
+in-flight slots back to `pending`, writes ledger status `cancelled`, and exits
+with validation-findings status. Re-running the identical direct command
+reconciles a ledger left by a hard process loss: stale `running` records become
+`pending`, completed evidence is hash-checked, and the interrupted attempt
+number and deterministic seed are retried rather than consumed.
+
+## Current execution boundaries
 
 Stated plainly, because they bound what a number from `uniscenarios` means:
 
-- **No signal programs.** The derived index carries junction *control*, not
-  per-approach heads with phase timing, so `signalPrograms` is empty and a
-  `signal` condition is dropped with a note. Junction control still scores the
-  anchor; it just does not animate.
-- **Variants are not applied.** `variants[]` parses and validates; the
-  materializer does not yet fold overrides into a draw.
-- **`props` are occluders only.** They become OBBs for the line-of-sight test.
-  `targetRevealToConflictS` is *reported against*, not solved for.
+- **Physical signal timing is explicit about provenance.** OpenDRIVE controller,
+  stage, and head membership are map-bound. Where the map has no authoritative
+  phase durations or initial state, the materializer records the deterministic
+  cycle as `synthetic-default`; it never presents that timing as map-authored.
+  XML 1.4 action export supports these programs, while DSL 2.2 export rejects
+  signal-program inputs instead of silently losing them.
+- **Catalog variants are executable.** The reserved operational variant is
+  applied during materialization and closed against the slot identity. A batch
+  refuses a template-backed slot whose materialized variant differs.
+- **Props carry executable semantics.** Catalog behavior determines visibility
+  occlusion and collision geometry, with per-prop overrides where authored.
+  `targetRevealToConflictS` remains an asserted/reportable target rather than a
+  free placement solver.
 - **Prop footprints are mirrored, not imported.** `prop-catalog` depends on
   three.js; `src/prop-dims.ts` copies the dimensions of the props that can
   occlude, and a test reads the catalog as text to catch drift.

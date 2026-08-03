@@ -27,6 +27,7 @@ export interface ConditionContext {
   readonly world: WorldState;
   readonly signals: SignalBook;
   readonly occluders: readonly OccluderShape[];
+  readonly visibilityRangeM: number;
   /** Pair keys colliding on this tick. */
   readonly collisions: ReadonlySet<string>;
 }
@@ -126,7 +127,7 @@ export function evaluateCondition(ctx: ConditionContext, cond: Condition): boole
       const a = actor(ctx, cond.a);
       const b = actor(ctx, cond.to);
       if (!a || !b) return false;
-      const los = hasLineOfSight(b.position, a.position, ctx.occluders);
+      const los = hasLineOfSight(b.position, a.position, ctx.occluders, ctx.visibilityRangeM);
       return los === cond.value;
     }
   }

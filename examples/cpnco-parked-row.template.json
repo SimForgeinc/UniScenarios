@@ -119,7 +119,21 @@
         "essentiality": "required"
       }
     },
-    "features": [],
+    "features": [
+      {
+        "id": "parked-vehicle-zone",
+        "kind": "occlusion_zone",
+        "label": "the mapped kerbside parked-vehicle occlusion zone used by the authored SUV row",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            -200,
+            200
+          ],
+          "essentiality": "required"
+        }
+      }
+    ],
     "policy": {
       "allowMirror": false,
       "maxSitesPerMap": 8,
@@ -286,16 +300,15 @@
   "invariants": [
     {
       "id": "criticality",
-      "kind": "ttc",
+      "kind": "pet",
       "label": "ego must actually be threatened by the pedestrian",
       "essentiality": "required",
       "of": "ego",
       "to": "ped",
       "range": [
-        null,
+        0.2,
         3.0
-      ],
-      "mode": "min"
+      ]
     },
     {
       "id": "arrival-band",

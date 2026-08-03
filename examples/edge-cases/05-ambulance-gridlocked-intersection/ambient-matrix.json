@@ -1,0 +1,4167 @@
+{
+  "version": 1,
+  "stableId": "edge-05-ambulance-gridlock-v1",
+  "sourceInstance": "instance.baseline.json",
+  "evaluationPolicy": "Existing scenario-specific automated acceptance gates; thresholds unchanged from rubric.json and acceptance.baseline.json.",
+  "baseline": {
+    "hashes": {
+      "baseInput": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+      "trace": "255740226f1b85ac4c1b1831d29f928c2ed0ff234c3bce8f06764a419ffc4879",
+      "traceDigest": "fe42cf8938f656a3975917b9739fe4a4e2c52c96167a5f3cfa34f3fbadded58a"
+    },
+    "engineEvaluation": {
+      "verdict": "reject",
+      "findings": [
+        {
+          "code": "trivially_safe",
+          "reason": "min ttc 5.11 s exceeds the 3 s triviality threshold",
+          "detail": {
+            "criticality": 5.106072468252852,
+            "kind": "ttc",
+            "pair": [
+              "ambulance",
+              "ego"
+            ]
+          }
+        }
+      ],
+      "tags": [
+        "negative-control"
+      ],
+      "summary": {
+        "minTTC": 5.106072468252852,
+        "minTTCt": 13.1,
+        "criticalityKind": "ttc",
+        "criticality": 5.106072468252852,
+        "criticalityT": 13.1,
+        "requiredDecelMax": 0,
+        "collisions": 0,
+        "neverFired": 0,
+        "occlusionUnproven": 0
+      }
+    },
+    "rubricEvaluation": {
+      "verdict": "accept",
+      "gates": [
+        {
+          "id": "collision-free",
+          "passed": true,
+          "expected": 0,
+          "actual": 0
+        },
+        {
+          "id": "all-authored-triggers-complete",
+          "passed": true,
+          "expected": [],
+          "actual": []
+        },
+        {
+          "id": "ego-stationary-until-protected-conflicts-clear",
+          "passed": true,
+          "expected": "<= 0.36 km/h before ego-creeps",
+          "actual": 0
+        },
+        {
+          "id": "pedestrian-clears-before-ego-creep",
+          "passed": true,
+          "expected": "pedestrian-clears < ego-creeps",
+          "actual": {
+            "pedestrianClears": 12.200000000000001,
+            "creep": 13.1
+          }
+        },
+        {
+          "id": "cross-traffic-clears-before-ego-creep",
+          "passed": true,
+          "expected": "cross-traffic-clears < ego-creeps",
+          "actual": {
+            "crossTrafficClears": 7.5,
+            "creep": 13.1
+          }
+        },
+        {
+          "id": "ego-relocation-speed-cap",
+          "passed": true,
+          "expected": "<= 8 km/h",
+          "actual": 6.0000012
+        },
+        {
+          "id": "ego-stops-again",
+          "passed": true,
+          "expected": "stop after creep and final <= 0.36 km/h",
+          "actual": {
+            "creep": 13.1,
+            "stopPocket": 15.1,
+            "egoFinalKph": 0
+          }
+        },
+        {
+          "id": "ambulance-passes-without-stopping",
+          "passed": true,
+          "expected": "ambulance-passes and minimum >= 24 km/h",
+          "actual": {
+            "pass": 15.700000000000001,
+            "ambulanceMinKph": 24.000001200000003
+          }
+        },
+        {
+          "id": "ego-does-not-follow-through-red",
+          "passed": true,
+          "expected": "ego signal red and final <= 0.36 km/h",
+          "actual": {
+            "egoSignalRed": true,
+            "egoFinalKph": 0
+          }
+        }
+      ],
+      "failures": []
+    },
+    "intentEvaluation": {
+      "status": "evaluated",
+      "result": {
+        "version": 1,
+        "intentId": "edge-05-ambulance-gridlock-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 7,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "ambulance-siren",
+                    "ambulance-horn-1-on",
+                    "ambulance-horn-1-off",
+                    "ambulance-horn-2-on",
+                    "ambulance-horn-2-off",
+                    "pedestrian-enters",
+                    "cross-traffic-clears",
+                    "cross-red",
+                    "pedestrian-clears",
+                    "ego-creeps",
+                    "ego-stops-pocket",
+                    "ambulance-passes"
+                  ],
+                  "matchedTimesS": [
+                    0.2,
+                    2,
+                    2.36,
+                    2.56,
+                    2.9,
+                    4,
+                    7.5,
+                    8.5,
+                    12.2,
+                    13.1,
+                    15.1,
+                    15.7
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "ego-initial-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    13
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 13,
+                  "requiredPresentSeconds": 13
+                }
+              }
+            ]
+          },
+          {
+            "id": "bounded-ego-relocation",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    13.1,
+                    15.1
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 1.666667,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 2.222222
+                }
+              }
+            ]
+          },
+          {
+            "id": "ambulance-corridor",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ambulance",
+                    "ego"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 11.989446,
+                  "atS": 17.6,
+                  "requiredMinM": 3,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "pedestrian-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "pedestrian"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 32.191884,
+                  "atS": 15.48,
+                  "requiredMinM": 2,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "ambulance-pass-fired",
+            "kind": "trigger",
+            "required": true,
+            "status": "pass",
+            "reason": "trigger fired",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "trigger outcome evidence",
+                "values": {
+                  "interactionId": "ambulance-passes",
+                  "outcome": "fired",
+                  "timesS": [
+                    15.7
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+            "mapId": "yale-street",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 5
+          },
+          "actors": [
+            {
+              "actorId": "ambulance",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 6.666667,
+              "maxSpeedMps": 10.555556,
+              "finalSpeedMps": 10.555556,
+              "distanceTravelledM": 147.567641,
+              "stationaryIntervals": [],
+              "lanes": []
+            },
+            {
+              "actorId": "cross-traffic",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 9.444444,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 80.183329,
+              "stationaryIntervals": [
+                [
+                  9.48,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "downstream-queue",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.666667,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 9.324018,
+              "stationaryIntervals": [
+                [
+                  0,
+                  13.12
+                ],
+                [
+                  15.48,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "pedestrian",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.388889,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 11.093045,
+              "stationaryIntervals": [
+                [
+                  0,
+                  4.06
+                ],
+                [
+                  12.68,
+                  20
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:gridlock-junction:left.phase=green"
+            },
+            {
+              "t": 0,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:gridlock-junction:ego.phase=red"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "cross-green"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-holds"
+            },
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-red"
+            },
+            {
+              "t": 0.2,
+              "kind": "state_set",
+              "actorId": "ambulance",
+              "detail": "lights.emergency=flashing_siren"
+            },
+            {
+              "t": 0.2,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-siren"
+            },
+            {
+              "t": 2,
+              "kind": "state_set",
+              "actorId": "ambulance",
+              "detail": "audio.horn=true"
+            },
+            {
+              "t": 2,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-horn-1-on"
+            },
+            {
+              "t": 2.36,
+              "kind": "state_set",
+              "actorId": "ambulance",
+              "detail": "audio.horn=false"
+            },
+            {
+              "t": 2.36,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-horn-1-off"
+            },
+            {
+              "t": 2.56,
+              "kind": "state_set",
+              "actorId": "ambulance",
+              "detail": "audio.horn=true"
+            },
+            {
+              "t": 2.56,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-horn-2-on"
+            },
+            {
+              "t": 2.9,
+              "kind": "state_set",
+              "actorId": "ambulance",
+              "detail": "audio.horn=false"
+            },
+            {
+              "t": 2.9,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-horn-2-off"
+            },
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "pedestrian",
+              "interactionId": "pedestrian-enters"
+            },
+            {
+              "t": 7.5,
+              "kind": "trigger_fired",
+              "actorId": "cross-traffic",
+              "interactionId": "cross-traffic-clears"
+            },
+            {
+              "t": 8.5,
+              "kind": "state_set",
+              "actorId": "ego",
+              "detail": "signal:gridlock-junction:left.phase=red"
+            },
+            {
+              "t": 8.5,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "cross-red"
+            },
+            {
+              "t": 12.2,
+              "kind": "preemption",
+              "actorId": "pedestrian"
+            },
+            {
+              "t": 12.2,
+              "kind": "trigger_fired",
+              "actorId": "pedestrian",
+              "interactionId": "pedestrian-clears"
+            },
+            {
+              "t": 13.1,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 13.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-creeps"
+            },
+            {
+              "t": 13.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-nudges-right"
+            },
+            {
+              "t": 15.1,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 15.1,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-pocket"
+            },
+            {
+              "t": 15.7,
+              "kind": "trigger_fired",
+              "actorId": "ambulance",
+              "interactionId": "ambulance-passes"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 5.106072468252852,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": []
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      }
+    }
+  },
+  "intentRubricCompatibility": {
+    "status": "compatible"
+  },
+  "accepted": true,
+  "runtimeMs": 160834.671625,
+  "cases": [
+    {
+      "label": "off",
+      "profile": {
+        "version": 1,
+        "preset": "off",
+        "seed": "edge-05-ambient-off",
+        "maxActors": 0
+      },
+      "hashes": {
+        "baseInput": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "profile": "49a63ac5be913645476f6eabd88e60935b169ab0feff980a892632222a88c176",
+        "generatedInput": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "trace": "255740226f1b85ac4c1b1831d29f928c2ed0ff234c3bce8f06764a419ffc4879",
+        "traceDigest": "fe42cf8938f656a3975917b9739fe4a4e2c52c96167a5f3cfa34f3fbadded58a"
+      },
+      "generatedCount": 0,
+      "rejectedSpawnCount": 0,
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "off",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-05-ambient-off",
+          "maxActors": 0,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 0
+        },
+        "profileHash": "49a63ac5be913645476f6eabd88e60935b169ab0feff980a892632222a88c176",
+        "baseInputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "generatedInputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "actors": [],
+        "rejectedSpawnCount": 0,
+        "eligibleLaneKm": 0,
+        "warnings": []
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 5.11 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 5.106072468252852,
+              "kind": "ttc",
+              "pair": [
+                "ambulance",
+                "ego"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 5.106072468252852,
+          "minTTCt": 13.1,
+          "criticalityKind": "ttc",
+          "criticality": 5.106072468252852,
+          "criticalityT": 13.1,
+          "requiredDecelMax": 0,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "rubricEvaluation": {
+        "verdict": "accept",
+        "gates": [
+          {
+            "id": "collision-free",
+            "passed": true,
+            "expected": 0,
+            "actual": 0
+          },
+          {
+            "id": "all-authored-triggers-complete",
+            "passed": true,
+            "expected": [],
+            "actual": []
+          },
+          {
+            "id": "ego-stationary-until-protected-conflicts-clear",
+            "passed": true,
+            "expected": "<= 0.36 km/h before ego-creeps",
+            "actual": 0
+          },
+          {
+            "id": "pedestrian-clears-before-ego-creep",
+            "passed": true,
+            "expected": "pedestrian-clears < ego-creeps",
+            "actual": {
+              "pedestrianClears": 12.200000000000001,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "cross-traffic-clears-before-ego-creep",
+            "passed": true,
+            "expected": "cross-traffic-clears < ego-creeps",
+            "actual": {
+              "crossTrafficClears": 7.5,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "ego-relocation-speed-cap",
+            "passed": true,
+            "expected": "<= 8 km/h",
+            "actual": 6.0000012
+          },
+          {
+            "id": "ego-stops-again",
+            "passed": true,
+            "expected": "stop after creep and final <= 0.36 km/h",
+            "actual": {
+              "creep": 13.1,
+              "stopPocket": 15.1,
+              "egoFinalKph": 0
+            }
+          },
+          {
+            "id": "ambulance-passes-without-stopping",
+            "passed": true,
+            "expected": "ambulance-passes and minimum >= 24 km/h",
+            "actual": {
+              "pass": 15.700000000000001,
+              "ambulanceMinKph": 24.000001200000003
+            }
+          },
+          {
+            "id": "ego-does-not-follow-through-red",
+            "passed": true,
+            "expected": "ego signal red and final <= 0.36 km/h",
+            "actual": {
+              "egoSignalRed": true,
+              "egoFinalKph": 0
+            }
+          }
+        ],
+        "failures": []
+      },
+      "intentEvaluation": {
+        "status": "evaluated",
+        "result": {
+          "version": 1,
+          "intentId": "edge-05-ambulance-gridlock-v1",
+          "verdict": "accept",
+          "counts": {
+            "pass": 7,
+            "fail": 0,
+            "unchecked": 0,
+            "unsupported": 0
+          },
+          "criteria": [
+            {
+              "id": "required-event-order",
+              "kind": "event_order",
+              "required": true,
+              "status": "pass",
+              "reason": "required event-order condition held",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "ordered trigger evidence",
+                  "values": {
+                    "interactionIds": [
+                      "ambulance-siren",
+                      "ambulance-horn-1-on",
+                      "ambulance-horn-1-off",
+                      "ambulance-horn-2-on",
+                      "ambulance-horn-2-off",
+                      "pedestrian-enters",
+                      "cross-traffic-clears",
+                      "cross-red",
+                      "pedestrian-clears",
+                      "ego-creeps",
+                      "ego-stops-pocket",
+                      "ambulance-passes"
+                    ],
+                    "matchedTimesS": [
+                      0.2,
+                      2,
+                      2.36,
+                      2.56,
+                      2.9,
+                      4,
+                      7.5,
+                      8.5,
+                      12.2,
+                      13.1,
+                      15.1,
+                      15.7
+                    ],
+                    "complete": true
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ego-initial-hold",
+              "kind": "stationary_success",
+              "required": true,
+              "status": "pass",
+              "reason": "stationary compliance succeeded",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "stationary actor evidence",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      0,
+                      13
+                    ],
+                    "observedMaxSpeedMps": 0,
+                    "allowedMaxSpeedMps": 0.1,
+                    "presentSeconds": 13,
+                    "requiredPresentSeconds": 13
+                  }
+                }
+              ]
+            },
+            {
+              "id": "bounded-ego-relocation",
+              "kind": "speed_band",
+              "required": true,
+              "status": "pass",
+              "reason": "speed remained inside the authored band",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "speed extrema in window",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      13.1,
+                      15.1
+                    ],
+                    "minSpeedMps": 0,
+                    "maxSpeedMps": 1.666667,
+                    "requiredMinMps": null,
+                    "requiredMaxMps": 2.222222
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-corridor",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ambulance",
+                      "ego"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 11.989446,
+                    "atS": 17.6,
+                    "requiredMinM": 3,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "pedestrian-clearance",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ego",
+                      "pedestrian"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 32.191884,
+                    "atS": 15.48,
+                    "requiredMinM": 2,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-pass-fired",
+              "kind": "trigger",
+              "required": true,
+              "status": "pass",
+              "reason": "trigger fired",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "trigger outcome evidence",
+                  "values": {
+                    "interactionId": "ambulance-passes",
+                    "outcome": "fired",
+                    "timesS": [
+                      15.7
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "collision-free",
+              "kind": "collision",
+              "required": true,
+              "status": "pass",
+              "reason": "collision budget held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "collision evidence",
+                  "values": {
+                    "pair": [],
+                    "observedCount": 0,
+                    "maxCount": 0,
+                    "timesS": []
+                  }
+                }
+              ]
+            }
+          ],
+          "behaviorSummary": {
+            "version": 1,
+            "trace": {
+              "inputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+              "mapId": "yale-street",
+              "clipSeconds": 20,
+              "dt": 0.02,
+              "actorCount": 5
+            },
+            "actors": [
+              {
+                "actorId": "ambulance",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 6.666667,
+                "maxSpeedMps": 10.555556,
+                "finalSpeedMps": 10.555556,
+                "distanceTravelledM": 147.567641,
+                "stationaryIntervals": [],
+                "lanes": []
+              },
+              {
+                "actorId": "cross-traffic",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 9.444444,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 80.183329,
+                "stationaryIntervals": [
+                  [
+                    9.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "downstream-queue",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 0,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 0,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "ego",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.666667,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 9.324018,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    13.12
+                  ],
+                  [
+                    15.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "pedestrian",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.388889,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 11.093045,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    4.06
+                  ],
+                  [
+                    12.68,
+                    20
+                  ]
+                ],
+                "lanes": []
+              }
+            ],
+            "events": [
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=green"
+              },
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:ego.phase=red"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-green"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-holds"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-red"
+              },
+              {
+                "t": 0.2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "lights.emergency=flashing_siren"
+              },
+              {
+                "t": 0.2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-siren"
+              },
+              {
+                "t": 2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-on"
+              },
+              {
+                "t": 2.36,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.36,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-off"
+              },
+              {
+                "t": 2.56,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2.56,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-on"
+              },
+              {
+                "t": 2.9,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.9,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-off"
+              },
+              {
+                "t": 4,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-enters"
+              },
+              {
+                "t": 7.5,
+                "kind": "trigger_fired",
+                "actorId": "cross-traffic",
+                "interactionId": "cross-traffic-clears"
+              },
+              {
+                "t": 8.5,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=red"
+              },
+              {
+                "t": 8.5,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-red"
+              },
+              {
+                "t": 12.2,
+                "kind": "preemption",
+                "actorId": "pedestrian"
+              },
+              {
+                "t": 12.2,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-clears"
+              },
+              {
+                "t": 13.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-creeps"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-nudges-right"
+              },
+              {
+                "t": 15.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 15.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-stops-pocket"
+              },
+              {
+                "t": 15.7,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-passes"
+              }
+            ],
+            "metrics": {
+              "collisions": 0,
+              "minTTC": 5.106072468252852,
+              "minPathTTC": null,
+              "minPET": null,
+              "triggerNeverFired": [],
+              "declaredOcclusion": []
+            },
+            "truncated": {
+              "actors": false,
+              "events": false,
+              "occlusions": false
+            }
+          }
+        }
+      },
+      "runtimeMs": 974.4408330000006,
+      "accepted": true,
+      "failures": [],
+      "traceArtifact": "ambient-off.trace.json.gz",
+      "trace": {
+        "inputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "traceHash": "255740226f1b85ac4c1b1831d29f928c2ed0ff234c3bce8f06764a419ffc4879",
+        "traceDigest": "fe42cf8938f656a3975917b9739fe4a4e2c52c96167a5f3cfa34f3fbadded58a",
+        "ticks": 1001,
+        "durationS": 20,
+        "actorCount": 5,
+        "collisions": [],
+        "missedTriggers": [],
+        "authoredEvents": [
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "cross-green",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "green"
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-holds",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:ego.phase",
+            "value": "red"
+          },
+          {
+            "t": 0.2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-siren",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0.2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "lights.emergency",
+            "value": "flashing_siren"
+          },
+          {
+            "t": 2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.36,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.36,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 2.56,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.56,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.9,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.9,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-enters",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 7.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-traffic-clears",
+            "actorId": "cross-traffic",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "red"
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-clears",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "preemption",
+            "actorId": "pedestrian",
+            "axis": "longitudinal",
+            "byInteractionId": "pedestrian-clears",
+            "preemptedInteractionId": "pedestrian-enters"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-creeps",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 13.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-creeps",
+            "preemptedInteractionId": "ego-holds"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-nudges-right",
+            "actorId": "ego",
+            "verb": "laneOffset",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-stops-pocket",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-stops-pocket",
+            "preemptedInteractionId": "ego-creeps"
+          },
+          {
+            "t": 15.700000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-passes",
+            "actorId": "ambulance",
+            "verb": "speed",
+            "forced": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "light",
+      "profile": {
+        "version": 1,
+        "preset": "light",
+        "seed": "edge-05-ambient-light",
+        "maxActors": 24
+      },
+      "hashes": {
+        "baseInput": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "profile": "76e30414f6627e4ca74d6928894c5b53e7c0d2e84d8e5deaaf0218cff0f661f3",
+        "generatedInput": "cebd1305df2b78a97219b600ccac74b3c510f8c72108caa653192edd73b8d4d4",
+        "trace": "89d4e49c0b4db28912a3b0c8adc9778645f4bef46388077d75f3c55e8479c7da",
+        "traceDigest": "f4c5db30835440fe47d99e488cecf8ec75c9d16654a5f07cee5116d71c7c6797"
+      },
+      "generatedCount": 7,
+      "rejectedSpawnCount": 28,
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "light",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-05-ambient-light",
+          "maxActors": 24,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 3
+        },
+        "profileHash": "76e30414f6627e4ca74d6928894c5b53e7c0d2e84d8e5deaaf0218cff0f661f3",
+        "baseInputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "generatedInputHash": "cebd1305df2b78a97219b600ccac74b3c510f8c72108caa653192edd73b8d4d4",
+        "actors": [
+          {
+            "id": "ambient:v1:76585baff6787dd2:000",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "110:0:-1",
+              "1298:0:-1",
+              "89:0:1",
+              "863:0:1",
+              "72:0:1",
+              "568:0:1",
+              "52:0:-1",
+              "536:0:-1",
+              "50:0:-1"
+            ],
+            "seedKey": "76585baff6787dd2"
+          },
+          {
+            "id": "ambient:v1:0ebd5bcda38e5127:001",
+            "kind": "car",
+            "routeLaneRsls": [
+              "13:0:5",
+              "135:0:1",
+              "0:0:-4",
+              "248:0:-4",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "116:0:1",
+              "108:0:1",
+              "1022:0:1",
+              "101:0:1",
+              "437:0:1",
+              "68:0:-1",
+              "1105:0:-1",
+              "41:0:1",
+              "514:0:1",
+              "52:0:1",
+              "572:0:1",
+              "51:0:1",
+              "1067:0:1",
+              "37:0:-1"
+            ],
+            "seedKey": "0ebd5bcda38e5127"
+          },
+          {
+            "id": "ambient:v1:f9d47f6c7b785737:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "30:0:-4",
+              "487:0:-1",
+              "31:0:-3",
+              "1120:0:-1",
+              "70:0:-4",
+              "1377:0:-4",
+              "71:0:-4",
+              "373:0:-1",
+              "27:0:3",
+              "133:0:1",
+              "109:0:4",
+              "343:0:1",
+              "87:0:-3",
+              "1035:0:-1",
+              "26:0:-4"
+            ],
+            "seedKey": "f9d47f6c7b785737"
+          },
+          {
+            "id": "ambient:v1:ffe70fbe94650dcb:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "1:0:-3",
+              "266:0:-1",
+              "30:0:-4",
+              "487:0:-1",
+              "31:0:-3",
+              "1120:0:-1",
+              "70:0:-4",
+              "1377:0:-4",
+              "71:0:-4",
+              "373:0:-1",
+              "27:0:3",
+              "133:0:1",
+              "109:0:4",
+              "343:0:1",
+              "87:0:-3"
+            ],
+            "seedKey": "ffe70fbe94650dcb"
+          },
+          {
+            "id": "ambient:v1:83079c4e784609c0:004",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "348:0:-1",
+              "67:0:-1",
+              "403:0:-1",
+              "68:0:-1",
+              "1105:0:-1",
+              "41:0:1",
+              "519:0:1"
+            ],
+            "seedKey": "83079c4e784609c0"
+          },
+          {
+            "id": "ambient:v1:e7ba425ecfad4038:005",
+            "kind": "car",
+            "routeLaneRsls": [
+              "52:0:1",
+              "572:0:1",
+              "51:0:1",
+              "1073:0:1",
+              "78:0:1",
+              "479:0:1",
+              "59:0:-1",
+              "799:0:-1",
+              "60:0:-1"
+            ],
+            "seedKey": "e7ba425ecfad4038"
+          },
+          {
+            "id": "ambient:v1:46b3a3e7eda76374:006",
+            "kind": "car",
+            "routeLaneRsls": [
+              "105:0:-3",
+              "459:0:-1",
+              "22:0:-2",
+              "1003:0:-2",
+              "23:0:-2",
+              "875:0:-1",
+              "47:0:-2",
+              "1337:0:-1",
+              "32:0:-2",
+              "195:0:-1",
+              "100:0:1",
+              "771:1:1",
+              "771:0:1",
+              "95:3:1",
+              "95:2:1",
+              "95:1:1",
+              "95:0:1",
+              "994:0:1",
+              "94:0:1",
+              "1145:0:1",
+              "93:0:1",
+              "1223:0:1",
+              "57:0:-1"
+            ],
+            "seedKey": "46b3a3e7eda76374"
+          }
+        ],
+        "rejectedSpawnCount": 28,
+        "eligibleLaneKm": 3.1040338050650376,
+        "warnings": [
+          "Removed 2 ambient actor(s) whose full-clip simulation intersected authored choreography, collidable props, or other ambient traffic."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 5.11 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 5.106072468252852,
+              "kind": "ttc",
+              "pair": [
+                "ambulance",
+                "ego"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 5.106072468252852,
+          "minTTCt": 13.1,
+          "criticalityKind": "ttc",
+          "criticality": 5.106072468252852,
+          "criticalityT": 13.1,
+          "requiredDecelMax": 2.384643644042804,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "rubricEvaluation": {
+        "verdict": "accept",
+        "gates": [
+          {
+            "id": "collision-free",
+            "passed": true,
+            "expected": 0,
+            "actual": 0
+          },
+          {
+            "id": "all-authored-triggers-complete",
+            "passed": true,
+            "expected": [],
+            "actual": []
+          },
+          {
+            "id": "ego-stationary-until-protected-conflicts-clear",
+            "passed": true,
+            "expected": "<= 0.36 km/h before ego-creeps",
+            "actual": 0
+          },
+          {
+            "id": "pedestrian-clears-before-ego-creep",
+            "passed": true,
+            "expected": "pedestrian-clears < ego-creeps",
+            "actual": {
+              "pedestrianClears": 12.200000000000001,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "cross-traffic-clears-before-ego-creep",
+            "passed": true,
+            "expected": "cross-traffic-clears < ego-creeps",
+            "actual": {
+              "crossTrafficClears": 7.5,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "ego-relocation-speed-cap",
+            "passed": true,
+            "expected": "<= 8 km/h",
+            "actual": 6.0000012
+          },
+          {
+            "id": "ego-stops-again",
+            "passed": true,
+            "expected": "stop after creep and final <= 0.36 km/h",
+            "actual": {
+              "creep": 13.1,
+              "stopPocket": 15.1,
+              "egoFinalKph": 0
+            }
+          },
+          {
+            "id": "ambulance-passes-without-stopping",
+            "passed": true,
+            "expected": "ambulance-passes and minimum >= 24 km/h",
+            "actual": {
+              "pass": 15.700000000000001,
+              "ambulanceMinKph": 24.000001200000003
+            }
+          },
+          {
+            "id": "ego-does-not-follow-through-red",
+            "passed": true,
+            "expected": "ego signal red and final <= 0.36 km/h",
+            "actual": {
+              "egoSignalRed": true,
+              "egoFinalKph": 0
+            }
+          }
+        ],
+        "failures": []
+      },
+      "intentEvaluation": {
+        "status": "evaluated",
+        "result": {
+          "version": 1,
+          "intentId": "edge-05-ambulance-gridlock-v1",
+          "verdict": "accept",
+          "counts": {
+            "pass": 7,
+            "fail": 0,
+            "unchecked": 0,
+            "unsupported": 0
+          },
+          "criteria": [
+            {
+              "id": "required-event-order",
+              "kind": "event_order",
+              "required": true,
+              "status": "pass",
+              "reason": "required event-order condition held",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "ordered trigger evidence",
+                  "values": {
+                    "interactionIds": [
+                      "ambulance-siren",
+                      "ambulance-horn-1-on",
+                      "ambulance-horn-1-off",
+                      "ambulance-horn-2-on",
+                      "ambulance-horn-2-off",
+                      "pedestrian-enters",
+                      "cross-traffic-clears",
+                      "cross-red",
+                      "pedestrian-clears",
+                      "ego-creeps",
+                      "ego-stops-pocket",
+                      "ambulance-passes"
+                    ],
+                    "matchedTimesS": [
+                      0.2,
+                      2,
+                      2.36,
+                      2.56,
+                      2.9,
+                      4,
+                      7.5,
+                      8.5,
+                      12.2,
+                      13.1,
+                      15.1,
+                      15.7
+                    ],
+                    "complete": true
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ego-initial-hold",
+              "kind": "stationary_success",
+              "required": true,
+              "status": "pass",
+              "reason": "stationary compliance succeeded",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "stationary actor evidence",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      0,
+                      13
+                    ],
+                    "observedMaxSpeedMps": 0,
+                    "allowedMaxSpeedMps": 0.1,
+                    "presentSeconds": 13,
+                    "requiredPresentSeconds": 13
+                  }
+                }
+              ]
+            },
+            {
+              "id": "bounded-ego-relocation",
+              "kind": "speed_band",
+              "required": true,
+              "status": "pass",
+              "reason": "speed remained inside the authored band",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "speed extrema in window",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      13.1,
+                      15.1
+                    ],
+                    "minSpeedMps": 0,
+                    "maxSpeedMps": 1.666667,
+                    "requiredMinMps": null,
+                    "requiredMaxMps": 2.222222
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-corridor",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ambulance",
+                      "ego"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 11.989446,
+                    "atS": 17.6,
+                    "requiredMinM": 3,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "pedestrian-clearance",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ego",
+                      "pedestrian"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 32.191884,
+                    "atS": 15.48,
+                    "requiredMinM": 2,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-pass-fired",
+              "kind": "trigger",
+              "required": true,
+              "status": "pass",
+              "reason": "trigger fired",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "trigger outcome evidence",
+                  "values": {
+                    "interactionId": "ambulance-passes",
+                    "outcome": "fired",
+                    "timesS": [
+                      15.7
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "collision-free",
+              "kind": "collision",
+              "required": true,
+              "status": "pass",
+              "reason": "collision budget held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "collision evidence",
+                  "values": {
+                    "pair": [],
+                    "observedCount": 0,
+                    "maxCount": 0,
+                    "timesS": []
+                  }
+                }
+              ]
+            }
+          ],
+          "behaviorSummary": {
+            "version": 1,
+            "trace": {
+              "inputHash": "cebd1305df2b78a97219b600ccac74b3c510f8c72108caa653192edd73b8d4d4",
+              "mapId": "yale-street",
+              "clipSeconds": 20,
+              "dt": 0.02,
+              "actorCount": 12
+            },
+            "actors": [
+              {
+                "actorId": "ambient:v1:0ebd5bcda38e5127:001",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 30.140368,
+                "maxSpeedMps": 30.140368,
+                "finalSpeedMps": 30.140368,
+                "distanceTravelledM": 602.777476,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "0:0:-4",
+                  "101:0:1",
+                  "1022:0:1",
+                  "108:0:1",
+                  "1105:0:-1",
+                  "1122:0:-1",
+                  "116:0:1",
+                  "135:0:1",
+                  "1377:0:-5",
+                  "13:0:5",
+                  "1:0:-4",
+                  "248:0:-4",
+                  "264:0:-1",
+                  "27:0:4",
+                  "30:0:-5",
+                  "31:0:-4",
+                  "374:0:-1",
+                  "41:0:1",
+                  "437:0:1",
+                  "489:0:-1",
+                  "514:0:1",
+                  "68:0:-1",
+                  "70:0:-5",
+                  "71:0:-5"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:46b3a3e7eda76374:006",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 17.176053,
+                "maxSpeedMps": 17.176053,
+                "finalSpeedMps": 17.176053,
+                "distanceTravelledM": 343.517099,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1003:0:-2",
+                  "100:0:1",
+                  "105:0:-3",
+                  "1337:0:-1",
+                  "195:0:-1",
+                  "22:0:-2",
+                  "23:0:-2",
+                  "32:0:-2",
+                  "459:0:-1",
+                  "47:0:-2",
+                  "771:0:1",
+                  "771:1:1",
+                  "875:0:-1",
+                  "95:3:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:76585baff6787dd2:000",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 6.032551,
+                "maxSpeedMps": 6.032551,
+                "finalSpeedMps": 6.032551,
+                "distanceTravelledM": 120.649184,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "110:0:-1",
+                  "1298:0:-1",
+                  "52:0:-1",
+                  "568:0:1",
+                  "72:0:1",
+                  "863:0:1",
+                  "89:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:83079c4e784609c0:004",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 5.660724,
+                "maxSpeedMps": 5.660724,
+                "finalSpeedMps": 5.660724,
+                "distanceTravelledM": 113.213847,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "276:0:-1",
+                  "49:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:e7ba425ecfad4038:005",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 9.969003,
+                "maxSpeedMps": 11.316124,
+                "finalSpeedMps": 11.316124,
+                "distanceTravelledM": 223.093235,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1073:0:1",
+                  "479:0:1",
+                  "51:0:1",
+                  "52:0:1",
+                  "572:0:1",
+                  "59:0:-1",
+                  "60:0:-1",
+                  "78:0:1",
+                  "799:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:f9d47f6c7b785737:002",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 18.008624,
+                "maxSpeedMps": 18.008624,
+                "finalSpeedMps": 18.008624,
+                "distanceTravelledM": 360.172142,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "109:0:4",
+                  "1120:0:-1",
+                  "133:0:1",
+                  "1377:0:-4",
+                  "27:0:3",
+                  "30:0:-4",
+                  "31:0:-3",
+                  "343:0:1",
+                  "373:0:-1",
+                  "487:0:-1",
+                  "70:0:-4",
+                  "71:0:-4",
+                  "87:0:-3"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:ffe70fbe94650dcb:003",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 17.289053,
+                "maxSpeedMps": 17.289053,
+                "finalSpeedMps": 17.289053,
+                "distanceTravelledM": 345.78076,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "109:0:4",
+                  "1120:0:-1",
+                  "133:0:1",
+                  "1377:0:-4",
+                  "1:0:-3",
+                  "266:0:-1",
+                  "27:0:3",
+                  "30:0:-4",
+                  "31:0:-3",
+                  "343:0:1",
+                  "373:0:-1",
+                  "487:0:-1",
+                  "70:0:-4",
+                  "71:0:-4"
+                ]
+              },
+              {
+                "actorId": "ambulance",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 6.666667,
+                "maxSpeedMps": 10.555556,
+                "finalSpeedMps": 10.555556,
+                "distanceTravelledM": 147.567641,
+                "stationaryIntervals": [],
+                "lanes": []
+              },
+              {
+                "actorId": "cross-traffic",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 9.444444,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 80.183329,
+                "stationaryIntervals": [
+                  [
+                    9.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "downstream-queue",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 0,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 0,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "ego",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.666667,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 9.324018,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    13.12
+                  ],
+                  [
+                    15.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "pedestrian",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.388889,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 11.093045,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    4.06
+                  ],
+                  [
+                    12.68,
+                    20
+                  ]
+                ],
+                "lanes": []
+              }
+            ],
+            "events": [
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=green"
+              },
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:ego.phase=red"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-green"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-holds"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-red"
+              },
+              {
+                "t": 0.2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "lights.emergency=flashing_siren"
+              },
+              {
+                "t": 0.2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-siren"
+              },
+              {
+                "t": 2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-on"
+              },
+              {
+                "t": 2.36,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.36,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-off"
+              },
+              {
+                "t": 2.56,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2.56,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-on"
+              },
+              {
+                "t": 2.9,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.9,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-off"
+              },
+              {
+                "t": 4,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-enters"
+              },
+              {
+                "t": 7.5,
+                "kind": "trigger_fired",
+                "actorId": "cross-traffic",
+                "interactionId": "cross-traffic-clears"
+              },
+              {
+                "t": 8.5,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=red"
+              },
+              {
+                "t": 8.5,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-red"
+              },
+              {
+                "t": 12.2,
+                "kind": "preemption",
+                "actorId": "pedestrian"
+              },
+              {
+                "t": 12.2,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-clears"
+              },
+              {
+                "t": 13.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-creeps"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-nudges-right"
+              },
+              {
+                "t": 15.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 15.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-stops-pocket"
+              },
+              {
+                "t": 15.7,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-passes"
+              }
+            ],
+            "metrics": {
+              "collisions": 0,
+              "minTTC": 4.173928680078672,
+              "minPathTTC": 11.259986766012924,
+              "minPET": 0,
+              "triggerNeverFired": [],
+              "declaredOcclusion": []
+            },
+            "truncated": {
+              "actors": false,
+              "events": false,
+              "occlusions": false
+            }
+          }
+        }
+      },
+      "runtimeMs": 9083.560207999995,
+      "accepted": true,
+      "failures": [],
+      "traceArtifact": "ambient-light.trace.json.gz",
+      "trace": {
+        "inputHash": "cebd1305df2b78a97219b600ccac74b3c510f8c72108caa653192edd73b8d4d4",
+        "traceHash": "89d4e49c0b4db28912a3b0c8adc9778645f4bef46388077d75f3c55e8479c7da",
+        "traceDigest": "f4c5db30835440fe47d99e488cecf8ec75c9d16654a5f07cee5116d71c7c6797",
+        "ticks": 1001,
+        "durationS": 20,
+        "actorCount": 12,
+        "collisions": [],
+        "missedTriggers": [],
+        "authoredEvents": [
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "cross-green",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "green"
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-holds",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:ego.phase",
+            "value": "red"
+          },
+          {
+            "t": 0.2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-siren",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0.2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "lights.emergency",
+            "value": "flashing_siren"
+          },
+          {
+            "t": 2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.36,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.36,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 2.56,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.56,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.9,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.9,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-enters",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 7.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-traffic-clears",
+            "actorId": "cross-traffic",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "red"
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-clears",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "preemption",
+            "actorId": "pedestrian",
+            "axis": "longitudinal",
+            "byInteractionId": "pedestrian-clears",
+            "preemptedInteractionId": "pedestrian-enters"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-creeps",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 13.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-creeps",
+            "preemptedInteractionId": "ego-holds"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-nudges-right",
+            "actorId": "ego",
+            "verb": "laneOffset",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-stops-pocket",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-stops-pocket",
+            "preemptedInteractionId": "ego-creeps"
+          },
+          {
+            "t": 15.700000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-passes",
+            "actorId": "ambulance",
+            "verb": "speed",
+            "forced": false
+          }
+        ]
+      }
+    },
+    {
+      "label": "moderate",
+      "profile": {
+        "version": 1,
+        "preset": "moderate",
+        "seed": "edge-05-ambient-moderate",
+        "maxActors": 40
+      },
+      "hashes": {
+        "baseInput": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "profile": "04bf5abf017008398d5d4a8bdef4586a6213da47d646a6bacbb4d57043c9e6b7",
+        "generatedInput": "bdbe4d723188d0aa436eb70260cbc87ca52de77523e5ed03bfd5118ebcbd6b47",
+        "trace": "9f8fdc4c68c0945128ed94a3bc635c0192e9b10329697850c53f52e16002b29a",
+        "traceDigest": "5f58aa3e39d4835bbe0f03e8b27c4b413b2c6b09c5ab0e509aa8dd09377b2c5f"
+      },
+      "generatedCount": 15,
+      "rejectedSpawnCount": 223,
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "moderate",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-05-ambient-moderate",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 8
+        },
+        "profileHash": "04bf5abf017008398d5d4a8bdef4586a6213da47d646a6bacbb4d57043c9e6b7",
+        "baseInputHash": "8d5ffffc7f83bf3237c93acc614d8b18a70cbbd87528543f9ee26f3e339a961f",
+        "generatedInputHash": "bdbe4d723188d0aa436eb70260cbc87ca52de77523e5ed03bfd5118ebcbd6b47",
+        "actors": [
+          {
+            "id": "ambient:v1:58a9feebd5b7e567:000",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "78:0:1",
+              "479:0:1",
+              "59:0:-1",
+              "799:0:-1",
+              "60:0:-1"
+            ],
+            "seedKey": "58a9feebd5b7e567"
+          },
+          {
+            "id": "ambient:v1:d5ecd82e76137842:001",
+            "kind": "bus",
+            "routeLaneRsls": [
+              "62:0:1",
+              "1346:0:1",
+              "103:0:2",
+              "1395:0:2",
+              "102:0:2",
+              "370:0:1",
+              "114:0:-4",
+              "555:0:-1",
+              "105:0:-5",
+              "463:0:-1",
+              "22:0:-4",
+              "1003:0:-4",
+              "23:0:-4",
+              "869:0:-1",
+              "47:0:-5",
+              "1329:0:-1",
+              "32:0:-5"
+            ],
+            "seedKey": "d5ecd82e76137842"
+          },
+          {
+            "id": "ambient:v1:5f7e377208bf94c6:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "329:0:1",
+              "76:0:1",
+              "904:0:1",
+              "75:0:1",
+              "292:0:1",
+              "74:0:1",
+              "292:0:1"
+            ],
+            "seedKey": "5f7e377208bf94c6"
+          },
+          {
+            "id": "ambient:v1:2598e8587f88a4ea:006",
+            "kind": "car",
+            "routeLaneRsls": [
+              "66:0:1",
+              "257:0:1",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1373:0:-1",
+              "82:0:1",
+              "1304:0:1",
+              "79:0:1",
+              "419:0:1",
+              "68:0:-1",
+              "1105:0:-1"
+            ],
+            "seedKey": "2598e8587f88a4ea"
+          },
+          {
+            "id": "ambient:v1:39b527a89d39ffa7:008",
+            "kind": "car",
+            "routeLaneRsls": [
+              "0:0:-2",
+              "248:0:-2",
+              "1:0:-2",
+              "262:0:-1",
+              "30:0:-3",
+              "483:0:-1",
+              "31:0:-2",
+              "1115:0:-1",
+              "70:0:-2",
+              "1377:0:-2",
+              "71:0:-2",
+              "359:0:-1",
+              "102:0:-1",
+              "1396:0:-1",
+              "103:0:-1",
+              "1368:0:-1",
+              "104:0:-1"
+            ],
+            "seedKey": "39b527a89d39ffa7"
+          },
+          {
+            "id": "ambient:v1:48bae75787de6d41:009",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "24:0:1",
+              "1007:0:1",
+              "23:0:-4",
+              "869:0:-1",
+              "47:0:-5",
+              "1329:0:-1",
+              "32:0:-5",
+              "185:0:-1",
+              "15:0:-4"
+            ],
+            "seedKey": "48bae75787de6d41"
+          },
+          {
+            "id": "ambient:v1:c52ce7b7ae7d8926:010",
+            "kind": "car",
+            "routeLaneRsls": [
+              "72:0:1",
+              "562:0:1",
+              "51:0:1",
+              "1073:0:1",
+              "78:0:1",
+              "491:0:1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "344:0:1",
+              "87:0:-4"
+            ],
+            "seedKey": "c52ce7b7ae7d8926"
+          },
+          {
+            "id": "ambient:v1:2823be6181104705:011",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "47:0:-5",
+              "1329:0:-1",
+              "32:0:-5",
+              "205:0:-1",
+              "85:0:-1"
+            ],
+            "seedKey": "2823be6181104705"
+          },
+          {
+            "id": "ambient:v1:7a92aca7d6bff89a:013",
+            "kind": "car",
+            "routeLaneRsls": [
+              "30:0:-4",
+              "487:0:-1",
+              "31:0:-3",
+              "1120:0:-1",
+              "70:0:-4",
+              "1377:0:-4",
+              "71:0:-4",
+              "373:0:-1",
+              "27:0:3",
+              "133:0:1",
+              "109:0:4",
+              "343:0:1",
+              "87:0:-3",
+              "1035:0:-1",
+              "26:0:-4"
+            ],
+            "seedKey": "7a92aca7d6bff89a"
+          },
+          {
+            "id": "ambient:v1:bf3efe7bd25b963b:016",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "38:0:-1",
+              "1320:0:-1",
+              "39:0:-1",
+              "1412:0:-1",
+              "39:0:1",
+              "1319:0:1",
+              "38:0:1",
+              "1194:0:1",
+              "88:0:-1"
+            ],
+            "seedKey": "bf3efe7bd25b963b"
+          },
+          {
+            "id": "ambient:v1:d59e8457519e582f:019",
+            "kind": "car",
+            "routeLaneRsls": [
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1373:0:-1",
+              "82:0:1",
+              "1304:0:1",
+              "79:0:1",
+              "419:0:1",
+              "68:0:-1",
+              "1105:0:-1",
+              "41:0:1",
+              "514:0:1",
+              "52:0:1",
+              "572:0:1",
+              "51:0:1",
+              "1060:0:1",
+              "110:0:-1",
+              "1298:0:-1",
+              "89:0:1",
+              "863:0:1",
+              "72:0:1",
+              "568:0:1"
+            ],
+            "seedKey": "d59e8457519e582f"
+          },
+          {
+            "id": "ambient:v1:8f782ae7f2131c3c:020",
+            "kind": "car",
+            "routeLaneRsls": [
+              "85:0:1",
+              "158:0:1",
+              "0:0:-2",
+              "248:0:-2",
+              "1:0:-2",
+              "269:0:-1",
+              "30:0:-2",
+              "496:0:-1",
+              "22:0:-2",
+              "1003:0:-2",
+              "23:0:-2",
+              "873:0:-1",
+              "47:0:-3",
+              "1335:0:-1",
+              "32:0:-3",
+              "182:0:-1"
+            ],
+            "seedKey": "8f782ae7f2131c3c"
+          },
+          {
+            "id": "ambient:v1:06043bb4e804b6bf:021",
+            "kind": "motorcycle",
+            "routeLaneRsls": [
+              "92:0:1",
+              "1184:0:1",
+              "38:0:-1",
+              "1320:0:-1",
+              "39:0:-1",
+              "1412:0:-1",
+              "39:0:1",
+              "1319:0:1",
+              "38:0:1",
+              "1194:0:1",
+              "88:0:-1"
+            ],
+            "seedKey": "06043bb4e804b6bf"
+          },
+          {
+            "id": "ambient:v1:d862eb12bfff89fb:023",
+            "kind": "car",
+            "routeLaneRsls": [
+              "32:0:-2",
+              "145:0:-1",
+              "0:0:-2",
+              "248:0:-2",
+              "1:0:-2",
+              "262:0:-1",
+              "30:0:-3",
+              "483:0:-1",
+              "31:0:-2",
+              "1115:0:-1",
+              "70:0:-2",
+              "1377:0:-2",
+              "71:0:-2",
+              "359:0:-1",
+              "102:0:-1",
+              "1383:0:-1",
+              "113:0:-1",
+              "1295:0:-1"
+            ],
+            "seedKey": "d862eb12bfff89fb"
+          },
+          {
+            "id": "ambient:v1:e5579f891d7443b4:024",
+            "kind": "car",
+            "routeLaneRsls": [
+              "36:0:-1",
+              "985:0:-1",
+              "95:0:-1",
+              "95:1:-1",
+              "95:2:-1",
+              "95:3:-1",
+              "781:0:-1",
+              "34:0:-1",
+              "1089:0:-1",
+              "66:0:1",
+              "257:0:1",
+              "1:0:-4",
+              "275:0:-1",
+              "49:0:1",
+              "949:0:1",
+              "48:0:1",
+              "1315:0:1"
+            ],
+            "seedKey": "e5579f891d7443b4"
+          }
+        ],
+        "rejectedSpawnCount": 223,
+        "eligibleLaneKm": 3.1040338050650376,
+        "warnings": [
+          "Removed 10 ambient actor(s) whose full-clip simulation intersected authored choreography, collidable props, or other ambient traffic."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 5.11 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 5.106072468252852,
+              "kind": "ttc",
+              "pair": [
+                "ambulance",
+                "ego"
+              ]
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 5.106072468252852,
+          "minTTCt": 13.1,
+          "criticalityKind": "ttc",
+          "criticality": 5.106072468252852,
+          "criticalityT": 13.1,
+          "requiredDecelMax": 4.203581755673823,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "rubricEvaluation": {
+        "verdict": "accept",
+        "gates": [
+          {
+            "id": "collision-free",
+            "passed": true,
+            "expected": 0,
+            "actual": 0
+          },
+          {
+            "id": "all-authored-triggers-complete",
+            "passed": true,
+            "expected": [],
+            "actual": []
+          },
+          {
+            "id": "ego-stationary-until-protected-conflicts-clear",
+            "passed": true,
+            "expected": "<= 0.36 km/h before ego-creeps",
+            "actual": 0
+          },
+          {
+            "id": "pedestrian-clears-before-ego-creep",
+            "passed": true,
+            "expected": "pedestrian-clears < ego-creeps",
+            "actual": {
+              "pedestrianClears": 12.200000000000001,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "cross-traffic-clears-before-ego-creep",
+            "passed": true,
+            "expected": "cross-traffic-clears < ego-creeps",
+            "actual": {
+              "crossTrafficClears": 7.5,
+              "creep": 13.1
+            }
+          },
+          {
+            "id": "ego-relocation-speed-cap",
+            "passed": true,
+            "expected": "<= 8 km/h",
+            "actual": 6.0000012
+          },
+          {
+            "id": "ego-stops-again",
+            "passed": true,
+            "expected": "stop after creep and final <= 0.36 km/h",
+            "actual": {
+              "creep": 13.1,
+              "stopPocket": 15.1,
+              "egoFinalKph": 0
+            }
+          },
+          {
+            "id": "ambulance-passes-without-stopping",
+            "passed": true,
+            "expected": "ambulance-passes and minimum >= 24 km/h",
+            "actual": {
+              "pass": 15.700000000000001,
+              "ambulanceMinKph": 24.000001200000003
+            }
+          },
+          {
+            "id": "ego-does-not-follow-through-red",
+            "passed": true,
+            "expected": "ego signal red and final <= 0.36 km/h",
+            "actual": {
+              "egoSignalRed": true,
+              "egoFinalKph": 0
+            }
+          }
+        ],
+        "failures": []
+      },
+      "intentEvaluation": {
+        "status": "evaluated",
+        "result": {
+          "version": 1,
+          "intentId": "edge-05-ambulance-gridlock-v1",
+          "verdict": "accept",
+          "counts": {
+            "pass": 7,
+            "fail": 0,
+            "unchecked": 0,
+            "unsupported": 0
+          },
+          "criteria": [
+            {
+              "id": "required-event-order",
+              "kind": "event_order",
+              "required": true,
+              "status": "pass",
+              "reason": "required event-order condition held",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "ordered trigger evidence",
+                  "values": {
+                    "interactionIds": [
+                      "ambulance-siren",
+                      "ambulance-horn-1-on",
+                      "ambulance-horn-1-off",
+                      "ambulance-horn-2-on",
+                      "ambulance-horn-2-off",
+                      "pedestrian-enters",
+                      "cross-traffic-clears",
+                      "cross-red",
+                      "pedestrian-clears",
+                      "ego-creeps",
+                      "ego-stops-pocket",
+                      "ambulance-passes"
+                    ],
+                    "matchedTimesS": [
+                      0.2,
+                      2,
+                      2.36,
+                      2.56,
+                      2.9,
+                      4,
+                      7.5,
+                      8.5,
+                      12.2,
+                      13.1,
+                      15.1,
+                      15.7
+                    ],
+                    "complete": true
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ego-initial-hold",
+              "kind": "stationary_success",
+              "required": true,
+              "status": "pass",
+              "reason": "stationary compliance succeeded",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "stationary actor evidence",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      0,
+                      13
+                    ],
+                    "observedMaxSpeedMps": 0,
+                    "allowedMaxSpeedMps": 0.1,
+                    "presentSeconds": 13,
+                    "requiredPresentSeconds": 13
+                  }
+                }
+              ]
+            },
+            {
+              "id": "bounded-ego-relocation",
+              "kind": "speed_band",
+              "required": true,
+              "status": "pass",
+              "reason": "speed remained inside the authored band",
+              "evidence": [
+                {
+                  "source": "actor_track",
+                  "summary": "speed extrema in window",
+                  "values": {
+                    "actorId": "ego",
+                    "window": [
+                      13.1,
+                      15.1
+                    ],
+                    "minSpeedMps": 0,
+                    "maxSpeedMps": 1.666667,
+                    "requiredMinMps": null,
+                    "requiredMaxMps": 2.222222
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-corridor",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ambulance",
+                      "ego"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 11.989446,
+                    "atS": 17.6,
+                    "requiredMinM": 3,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "pedestrian-clearance",
+              "kind": "clearance",
+              "required": true,
+              "status": "pass",
+              "reason": "minimum clearance held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "engine minimum shape clearance",
+                  "values": {
+                    "pair": [
+                      "ego",
+                      "pedestrian"
+                    ],
+                    "measure": "metric_gap",
+                    "minDistanceM": 32.191884,
+                    "atS": 15.48,
+                    "requiredMinM": 2,
+                    "window": [
+                      0,
+                      20
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "ambulance-pass-fired",
+              "kind": "trigger",
+              "required": true,
+              "status": "pass",
+              "reason": "trigger fired",
+              "evidence": [
+                {
+                  "source": "trace_event",
+                  "summary": "trigger outcome evidence",
+                  "values": {
+                    "interactionId": "ambulance-passes",
+                    "outcome": "fired",
+                    "timesS": [
+                      15.7
+                    ]
+                  }
+                }
+              ]
+            },
+            {
+              "id": "collision-free",
+              "kind": "collision",
+              "required": true,
+              "status": "pass",
+              "reason": "collision budget held",
+              "evidence": [
+                {
+                  "source": "metric",
+                  "summary": "collision evidence",
+                  "values": {
+                    "pair": [],
+                    "observedCount": 0,
+                    "maxCount": 0,
+                    "timesS": []
+                  }
+                }
+              ]
+            }
+          ],
+          "behaviorSummary": {
+            "version": 1,
+            "trace": {
+              "inputHash": "bdbe4d723188d0aa436eb70260cbc87ca52de77523e5ed03bfd5118ebcbd6b47",
+              "mapId": "yale-street",
+              "clipSeconds": 20,
+              "dt": 0.02,
+              "actorCount": 20
+            },
+            "actors": [
+              {
+                "actorId": "ambient:v1:06043bb4e804b6bf:021",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 5.846924,
+                "maxSpeedMps": 16.417519,
+                "finalSpeedMps": 5.846924,
+                "distanceTravelledM": 166.60055,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1184:0:1",
+                  "1320:0:-1",
+                  "38:0:-1",
+                  "39:0:-1",
+                  "92:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:2598e8587f88a4ea:006",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 15.938799,
+                "maxSpeedMps": 16.367896,
+                "finalSpeedMps": 16.367896,
+                "distanceTravelledM": 327.021266,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1122:0:-1",
+                  "1304:0:1",
+                  "1373:0:-1",
+                  "1:0:-4",
+                  "257:0:1",
+                  "264:0:-1",
+                  "30:0:-5",
+                  "31:0:-4",
+                  "489:0:-1",
+                  "66:0:1",
+                  "70:0:-5",
+                  "79:0:1",
+                  "82:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:2823be6181104705:011",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 5.443581,
+                "maxSpeedMps": 5.443581,
+                "finalSpeedMps": 5.443581,
+                "distanceTravelledM": 108.870826,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1329:0:-1",
+                  "205:0:-1",
+                  "32:0:-5",
+                  "47:0:-5",
+                  "85:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:39b527a89d39ffa7:008",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 15.750848,
+                "maxSpeedMps": 15.750848,
+                "finalSpeedMps": 15.750848,
+                "distanceTravelledM": 315.028087,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "0:0:-2",
+                  "102:0:-1",
+                  "1115:0:-1",
+                  "1377:0:-2",
+                  "1:0:-2",
+                  "248:0:-2",
+                  "262:0:-1",
+                  "30:0:-3",
+                  "31:0:-2",
+                  "359:0:-1",
+                  "483:0:-1",
+                  "70:0:-2",
+                  "71:0:-2"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:48bae75787de6d41:009",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 6.02334,
+                "maxSpeedMps": 6.02334,
+                "finalSpeedMps": 6.02334,
+                "distanceTravelledM": 120.465694,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1007:0:1",
+                  "1329:0:-1",
+                  "23:0:-4",
+                  "24:0:1",
+                  "32:0:-5",
+                  "47:0:-5",
+                  "869:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:58a9feebd5b7e567:000",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 5.086765,
+                "maxSpeedMps": 5.086765,
+                "finalSpeedMps": 5.086765,
+                "distanceTravelledM": 101.735385,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "479:0:1",
+                  "59:0:-1",
+                  "78:0:1",
+                  "799:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:5f7e377208bf94c6:002",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 16.026422,
+                "maxSpeedMps": 17.803221,
+                "finalSpeedMps": 17.802679,
+                "distanceTravelledM": 353.857946,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "109:0:5",
+                  "1122:0:-1",
+                  "127:0:1",
+                  "1377:0:-5",
+                  "276:0:-1",
+                  "27:0:4",
+                  "30:0:-5",
+                  "31:0:-4",
+                  "329:0:1",
+                  "374:0:-1",
+                  "489:0:-1",
+                  "49:0:-1",
+                  "70:0:-5",
+                  "71:0:-5"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:7a92aca7d6bff89a:013",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 17.059983,
+                "maxSpeedMps": 17.059983,
+                "finalSpeedMps": 17.059983,
+                "distanceTravelledM": 341.199326,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "109:0:4",
+                  "1120:0:-1",
+                  "133:0:1",
+                  "1377:0:-4",
+                  "27:0:3",
+                  "30:0:-4",
+                  "31:0:-3",
+                  "343:0:1",
+                  "373:0:-1",
+                  "487:0:-1",
+                  "70:0:-4",
+                  "71:0:-4",
+                  "87:0:-3"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:8f782ae7f2131c3c:020",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 7.974457,
+                "maxSpeedMps": 15.762778,
+                "finalSpeedMps": 15.762778,
+                "distanceTravelledM": 287.795384,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "0:0:-2",
+                  "158:0:1",
+                  "1:0:-2",
+                  "22:0:-2",
+                  "248:0:-2",
+                  "269:0:-1",
+                  "30:0:-2",
+                  "496:0:-1",
+                  "85:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:bf3efe7bd25b963b:016",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 5.796265,
+                "maxSpeedMps": 5.796265,
+                "finalSpeedMps": 5.796265,
+                "distanceTravelledM": 115.925302,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1320:0:-1",
+                  "38:0:-1",
+                  "39:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:c52ce7b7ae7d8926:010",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 13.311931,
+                "maxSpeedMps": 16.375494,
+                "finalSpeedMps": 16.375494,
+                "distanceTravelledM": 323.274286,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1073:0:1",
+                  "109:0:5",
+                  "1122:0:-1",
+                  "127:0:1",
+                  "1377:0:-5",
+                  "27:0:4",
+                  "31:0:-4",
+                  "344:0:1",
+                  "374:0:-1",
+                  "491:0:1",
+                  "51:0:1",
+                  "562:0:1",
+                  "70:0:-5",
+                  "71:0:-5",
+                  "72:0:1",
+                  "78:0:1",
+                  "87:0:-4"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:d59e8457519e582f:019",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 15.702583,
+                "maxSpeedMps": 15.702583,
+                "finalSpeedMps": 15.702583,
+                "distanceTravelledM": 314.023476,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1105:0:-1",
+                  "1122:0:-1",
+                  "1304:0:1",
+                  "1373:0:-1",
+                  "31:0:-4",
+                  "419:0:1",
+                  "41:0:1",
+                  "514:0:1",
+                  "52:0:1",
+                  "572:0:1",
+                  "68:0:-1",
+                  "70:0:-5",
+                  "79:0:1",
+                  "82:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:d5ecd82e76137842:001",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 13.868108,
+                "maxSpeedMps": 13.868108,
+                "finalSpeedMps": 13.868108,
+                "distanceTravelledM": 277.348526,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1003:0:-4",
+                  "102:0:2",
+                  "103:0:2",
+                  "105:0:-5",
+                  "114:0:-4",
+                  "1346:0:1",
+                  "1395:0:2",
+                  "22:0:-4",
+                  "23:0:-4",
+                  "370:0:1",
+                  "463:0:-1",
+                  "555:0:-1",
+                  "62:0:1"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:d862eb12bfff89fb:023",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 16.003272,
+                "maxSpeedMps": 16.003272,
+                "finalSpeedMps": 16.003272,
+                "distanceTravelledM": 320.051777,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "0:0:-2",
+                  "1115:0:-1",
+                  "145:0:-1",
+                  "1:0:-2",
+                  "248:0:-2",
+                  "262:0:-1",
+                  "30:0:-3",
+                  "31:0:-2",
+                  "32:0:-2",
+                  "483:0:-1",
+                  "70:0:-2"
+                ]
+              },
+              {
+                "actorId": "ambient:v1:e5579f891d7443b4:024",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 16.175754,
+                "maxSpeedMps": 16.175754,
+                "finalSpeedMps": 16.175754,
+                "distanceTravelledM": 323.502362,
+                "stationaryIntervals": [],
+                "lanes": [
+                  "1089:0:-1",
+                  "1:0:-4",
+                  "257:0:1",
+                  "275:0:-1",
+                  "34:0:-1",
+                  "36:0:-1",
+                  "49:0:1",
+                  "66:0:1",
+                  "781:0:-1",
+                  "949:0:1",
+                  "95:0:-1",
+                  "95:1:-1",
+                  "95:2:-1",
+                  "95:3:-1",
+                  "985:0:-1"
+                ]
+              },
+              {
+                "actorId": "ambulance",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 6.666667,
+                "maxSpeedMps": 10.555556,
+                "finalSpeedMps": 10.555556,
+                "distanceTravelledM": 147.567641,
+                "stationaryIntervals": [],
+                "lanes": []
+              },
+              {
+                "actorId": "cross-traffic",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 9.444444,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 80.183329,
+                "stationaryIntervals": [
+                  [
+                    9.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "downstream-queue",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 0,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 0,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "ego",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.666667,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 9.324018,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    13.12
+                  ],
+                  [
+                    15.48,
+                    20
+                  ]
+                ],
+                "lanes": []
+              },
+              {
+                "actorId": "pedestrian",
+                "presentFromS": 0,
+                "presentToS": 20,
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.388889,
+                "finalSpeedMps": 0,
+                "distanceTravelledM": 11.093045,
+                "stationaryIntervals": [
+                  [
+                    0,
+                    4.06
+                  ],
+                  [
+                    12.68,
+                    20
+                  ]
+                ],
+                "lanes": []
+              }
+            ],
+            "events": [
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=green"
+              },
+              {
+                "t": 0,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:ego.phase=red"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-green"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-holds"
+              },
+              {
+                "t": 0,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-red"
+              },
+              {
+                "t": 0.2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "lights.emergency=flashing_siren"
+              },
+              {
+                "t": 0.2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-siren"
+              },
+              {
+                "t": 2,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-on"
+              },
+              {
+                "t": 2.36,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.36,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-1-off"
+              },
+              {
+                "t": 2.56,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=true"
+              },
+              {
+                "t": 2.56,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-on"
+              },
+              {
+                "t": 2.9,
+                "kind": "state_set",
+                "actorId": "ambulance",
+                "detail": "audio.horn=false"
+              },
+              {
+                "t": 2.9,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-horn-2-off"
+              },
+              {
+                "t": 4,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-enters"
+              },
+              {
+                "t": 7.5,
+                "kind": "trigger_fired",
+                "actorId": "cross-traffic",
+                "interactionId": "cross-traffic-clears"
+              },
+              {
+                "t": 8.5,
+                "kind": "state_set",
+                "actorId": "ego",
+                "detail": "signal:gridlock-junction:left.phase=red"
+              },
+              {
+                "t": 8.5,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "cross-red"
+              },
+              {
+                "t": 12.2,
+                "kind": "preemption",
+                "actorId": "pedestrian"
+              },
+              {
+                "t": 12.2,
+                "kind": "trigger_fired",
+                "actorId": "pedestrian",
+                "interactionId": "pedestrian-clears"
+              },
+              {
+                "t": 13.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-creeps"
+              },
+              {
+                "t": 13.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-nudges-right"
+              },
+              {
+                "t": 15.1,
+                "kind": "preemption",
+                "actorId": "ego"
+              },
+              {
+                "t": 15.1,
+                "kind": "trigger_fired",
+                "actorId": "ego",
+                "interactionId": "ego-stops-pocket"
+              },
+              {
+                "t": 15.7,
+                "kind": "trigger_fired",
+                "actorId": "ambulance",
+                "interactionId": "ambulance-passes"
+              }
+            ],
+            "metrics": {
+              "collisions": 0,
+              "minTTC": 5.106072468252852,
+              "minPathTTC": null,
+              "minPET": null,
+              "triggerNeverFired": [],
+              "declaredOcclusion": []
+            },
+            "truncated": {
+              "actors": false,
+              "events": false,
+              "occlusions": false
+            }
+          }
+        }
+      },
+      "runtimeMs": 21743.711416000006,
+      "accepted": true,
+      "failures": [],
+      "traceArtifact": "ambient-moderate.trace.json.gz",
+      "trace": {
+        "inputHash": "bdbe4d723188d0aa436eb70260cbc87ca52de77523e5ed03bfd5118ebcbd6b47",
+        "traceHash": "9f8fdc4c68c0945128ed94a3bc635c0192e9b10329697850c53f52e16002b29a",
+        "traceDigest": "5f58aa3e39d4835bbe0f03e8b27c4b413b2c6b09c5ab0e509aa8dd09377b2c5f",
+        "ticks": 1001,
+        "durationS": 20,
+        "actorCount": 20,
+        "collisions": [],
+        "missedTriggers": [],
+        "authoredEvents": [
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "cross-green",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "green"
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-holds",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "interactionId": "ego-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:ego.phase",
+            "value": "red"
+          },
+          {
+            "t": 0.2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-siren",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 0.2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "lights.emergency",
+            "value": "flashing_siren"
+          },
+          {
+            "t": 2,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.36,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-1-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.36,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 2.56,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-on",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.56,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": true
+          },
+          {
+            "t": 2.9,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-horn-2-off",
+            "actorId": "ambulance",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 2.9,
+            "kind": "state_set",
+            "actorId": "ambulance",
+            "key": "audio.horn",
+            "value": false
+          },
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-enters",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 7.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-traffic-clears",
+            "actorId": "cross-traffic",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "trigger_fired",
+            "interactionId": "cross-red",
+            "actorId": "ego",
+            "verb": "set",
+            "forced": false
+          },
+          {
+            "t": 8.5,
+            "kind": "state_set",
+            "actorId": "ego",
+            "key": "signal:gridlock-junction:left.phase",
+            "value": "red"
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "pedestrian-clears",
+            "actorId": "pedestrian",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 12.200000000000001,
+            "kind": "preemption",
+            "actorId": "pedestrian",
+            "axis": "longitudinal",
+            "byInteractionId": "pedestrian-clears",
+            "preemptedInteractionId": "pedestrian-enters"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-creeps",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 13.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-creeps",
+            "preemptedInteractionId": "ego-holds"
+          },
+          {
+            "t": 13.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-nudges-right",
+            "actorId": "ego",
+            "verb": "laneOffset",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "trigger_fired",
+            "interactionId": "ego-stops-pocket",
+            "actorId": "ego",
+            "verb": "speed",
+            "forced": false
+          },
+          {
+            "t": 15.1,
+            "kind": "preemption",
+            "actorId": "ego",
+            "axis": "longitudinal",
+            "byInteractionId": "ego-stops-pocket",
+            "preemptedInteractionId": "ego-creeps"
+          },
+          {
+            "t": 15.700000000000001,
+            "kind": "trigger_fired",
+            "interactionId": "ambulance-passes",
+            "actorId": "ambulance",
+            "verb": "speed",
+            "forced": false
+          }
+        ]
+      }
+    }
+  ]
+}

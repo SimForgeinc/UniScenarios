@@ -1,6 +1,8 @@
 node_modules/
 dist/
 /dev-assets
+# Versioned local map derivatives are reproducible and may be many gigabytes.
+**/3d/variants/
 *.local
 .DS_Store
 *.tsbuildinfo
@@ -16,3 +18,4 @@ test-results/
 campaigns/*/batches/
 campaigns/**/*.trace.json.gz
 campaigns/**/work/*.match.json
+.tools/

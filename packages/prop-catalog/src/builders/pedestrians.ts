@@ -206,3 +206,22 @@ export function buildChildWalking(
 ): Group {
   return buildChildStanding({ ...params, pose: 'walking' });
 }
+
+export function buildTrafficMarshal(
+  params: PedestrianParams = { height: 1.82, pose: 'standing' },
+): Group {
+  const group = buildHumanoid({
+    height: params.height,
+    pose: params.pose,
+    shirt: { key: 'shirt', color: '#27384d' },
+    pants: { key: 'pants', color: '#27384d' },
+    skinColor: params.skinColor,
+    vest: true,
+    rightArmPitch: 1.35,
+  });
+  group.add(box([0.18, 0.08, 0.68], material('safetyWhite'), { at: [0.20, params.height - 0.16, 0] }));
+  // Raised directing arm shifts the visual envelope forward; re-centre the
+  // complete figure on the placement origin so snapping/collision agree.
+  group.position.x = -0.20;
+  return group;
+}

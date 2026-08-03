@@ -263,16 +263,15 @@
   "invariants": [
     {
       "id": "criticality",
-      "kind": "ttc",
+      "kind": "pet",
       "label": "ego must actually be threatened",
       "essentiality": "required",
       "of": "ego",
       "to": "ped",
       "range": [
-        null,
+        0.2,
         3.0
-      ],
-      "mode": "min"
+      ]
     },
     {
       "id": "arrival-band",

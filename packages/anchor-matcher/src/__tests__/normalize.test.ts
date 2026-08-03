@@ -129,6 +129,16 @@ describe('normalizeDerivedMapIndex — map-intel shape', () => {
     ).toEqual([]);
   });
 
+  it('adopts a school-zone catalog anchor as a first-class point feature', () => {
+    expect(pointFeaturesFromLocations([{
+      id: 'school:frontage',
+      type: 'school_zone',
+      anchor: { road: { rsl: '1:0:-1', s: 42, offsetM: -2 } },
+    }])).toEqual([expect.objectContaining({
+      id: 'school:frontage', kind: 'school_zone', laneRsl: '1:0:-1', s: 42, side: 'right',
+    })]);
+  });
+
   it('matches the worked example identically to the self-derived index', () => {
     const self = deriveMapIndexFromTopology(syntheticTopology(), {
       mapId: 'synthetic',

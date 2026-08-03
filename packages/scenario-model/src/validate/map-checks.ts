@@ -67,6 +67,7 @@ export function mapIssues(template: ScenarioTemplateV2, map: MapContext): Clause
   const placed: PlacedRole[] = [];
   template.roles.forEach((role, index) => {
     if (role.kind === 'scene_absolute') return; // not expressed in frame coordinates
+    if (role.kind === 'at_lane_drop') return; // concrete k/lane is owned by the feature-aware matcher
     const pose = rolePose(role);
     if (!pose) return; // solver-placed kinds: nothing static to check yet
     const k = role.kind === 'lane_offset' ? role.k : pose.laneOffset;
@@ -245,6 +246,7 @@ export function mapIssues(template: ScenarioTemplateV2, map: MapContext): Clause
       if (trigger.kind === 'when') {
         for (const leaf of conditionLeaves(trigger.condition)) {
           if (leaf.kind !== 'signal') continue;
+          if ('control' in leaf.signal) continue;
           const facts = map.signal(
             'handle' in leaf.signal
               ? { handle: leaf.signal.handle }

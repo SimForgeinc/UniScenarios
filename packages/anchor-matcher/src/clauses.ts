@@ -115,6 +115,93 @@ function unsupported(
   };
 }
 
+function factValue(feature: PointFeature, keys: readonly string[]): string | number | boolean | undefined {
+  for (const key of keys) {
+    const value = feature.facts?.[key];
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
+/** Evaluate authored crossing semantics only from normalized map evidence. */
+function evaluateCrossingPredicates(
+  feature: AnchorFeature,
+  candidate: PointFeature,
+  path: string,
+  anchor: LogicalAnchor,
+): ClauseResult[] {
+  if (feature.kind !== 'crossing' || !feature.crossing) return [];
+  const out: ClauseResult[] = [];
+  const booleanClause = (
+    key: 'marked' | 'controlled',
+    aliases: readonly string[],
+    label: string,
+  ): void => {
+    const clause = feature.crossing?.[key] as Clause<boolean> | undefined;
+    if (!clause) return;
+    const raw = factValue(candidate, aliases);
+    if (typeof raw !== 'boolean') {
+      out.push(unsupported(`${path}.${key}`, clause, `${candidate.id} carries no map evidence for ${label}`));
+      return;
+    }
+    const scored = scoreBool(raw, clause.value);
+    out.push({
+      path: `${path}.${key}`,
+      essentiality: clause.essentiality,
+      required: clause.value,
+      actual: raw,
+      score: scored.score,
+      slack: scored.slack,
+      weight: clauseWeight(clause),
+      supported: true,
+      reason: `${candidate.id} is ${raw ? '' : 'not '}${label}`,
+    });
+  };
+  booleanClause('marked', ['is_marked', 'marked'], 'marked');
+  booleanClause('controlled', ['is_signalized', 'is_controlled', 'controlled'], 'signal-controlled');
+
+  const lengthClause = feature.crossing.lengthM;
+  if (lengthClause) {
+    const raw = factValue(candidate, ['crossing_length_m', 'length_m', 'lengthM']);
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      out.push(unsupported(`${path}.lengthM`, lengthClause, `${candidate.id} carries no measured crossing length`));
+    } else {
+      const scored = scoreRange(raw, lengthClause.value, 'distanceM', anchor.toleranceOverrides, lengthClause.tolerance);
+      out.push({
+        path: `${path}.lengthM`, essentiality: lengthClause.essentiality,
+        required: lengthClause.value, actual: round(raw), score: scored.score, slack: scored.slack,
+        weight: clauseWeight(lengthClause), supported: true,
+        reason: `${candidate.id} crossing envelope is ${round(raw)} m long`,
+      });
+    }
+  }
+
+  const placementClause = feature.crossing.placement;
+  if (placementClause) {
+    const isMidblock = factValue(candidate, ['is_midblock']);
+    const isNearJunction = factValue(candidate, ['is_near_junction']);
+    const actual = typeof isMidblock === 'boolean'
+      ? (isMidblock ? 'midblock' : 'junction_leg')
+      : candidate.junctionId || isNearJunction === true
+        ? 'junction_leg'
+        : isNearJunction === false
+          ? 'midblock'
+          : undefined;
+    if (!actual) {
+      out.push(unsupported(`${path}.placement`, placementClause, `${candidate.id} carries no junction-leg or midblock evidence`));
+    } else {
+      const matches = placementClause.value === 'either' || placementClause.value === actual;
+      out.push({
+        path: `${path}.placement`, essentiality: placementClause.essentiality,
+        required: placementClause.value, actual, score: matches ? 1 : 0, slack: matches ? 0 : 1,
+        weight: clauseWeight(placementClause), supported: true,
+        reason: `${candidate.id} is a ${actual === 'junction_leg' ? 'junction-leg' : 'midblock'} crossing`,
+      });
+    }
+  }
+  return out;
+}
+
 /** Worst (lowest-scoring) sample wins — never the mean. */
 function worstOverSamples<T>(
   samples: CorridorSample[],
@@ -429,18 +516,199 @@ export function junctionsAlongPath(
 
 /** Lane-count transitions along the corridor, used for `merge` / `lane_drop`. */
 export function laneCountTransitions(
+  index: DerivedMapIndex,
   samples: CorridorSample[],
-): Array<{ kind: 'merge' | 'lane_drop'; s: number; from: number; to: number }> {
-  const out: Array<{ kind: 'merge' | 'lane_drop'; s: number; from: number; to: number }> = [];
+  frame?: AnchorFrame,
+): Array<{ kind: 'merge' | 'lane_drop'; s: number; from: number; to: number; laneRsl?: LaneRsl }> {
+  const out: Array<{ kind: 'merge' | 'lane_drop'; s: number; from: number; to: number; laneRsl?: LaneRsl }> = [];
+  const physicalLanes = (sample: CorridorSample): LaneRsl[] => {
+    const raw = [...sample.cs.sameDirDriving.values()].sort();
+    const remaining = new Set(raw);
+    const components: LaneRsl[][] = [];
+    while (remaining.size > 0) {
+      const seed = [...remaining].sort()[0]!;
+      remaining.delete(seed);
+      const component = [seed];
+      for (let cursor = 0; cursor < component.length; cursor += 1) {
+        const lane = index.lanes[component[cursor]!]!;
+        for (const linked of [...lane.predecessors, ...lane.successors].sort()) {
+          if (!remaining.has(linked)) continue;
+          remaining.delete(linked);
+          component.push(linked);
+        }
+      }
+      components.push(component);
+    }
+    const reference = index.lanes[sample.laneRsl];
+    const point = reference ? pointAtS(reference.polyline, sample.sInLane) : null;
+    return components.map((component) => component
+      .map((rsl) => {
+        const lane = index.lanes[rsl];
+        const projection = lane && point ? projectPoint(lane.polyline, point) : null;
+        const endpointPenalty = projection && lane
+          ? Math.min(projection.s, Math.max(0, lane.lengthM - projection.s))
+          : -1;
+        return { rsl, distance: projection?.distance ?? Number.POSITIVE_INFINITY, endpointPenalty };
+      })
+      .sort((a, b) => a.distance - b.distance || b.endpointPenalty - a.endpointPenalty || a.rsl.localeCompare(b.rsl))[0]!.rsl)
+      .sort();
+  };
+  const reaches = (start: LaneRsl, targets: ReadonlySet<LaneRsl>): boolean => {
+    if (targets.has(start)) return true;
+    let open = [start];
+    const seen = new Set(open);
+    for (let depth = 0; depth < 4 && open.length > 0; depth += 1) {
+      const next: LaneRsl[] = [];
+      for (const rsl of open) {
+        for (const successor of index.lanes[rsl]?.successors ?? []) {
+          if (targets.has(successor)) return true;
+          if (!seen.has(successor)) {
+            seen.add(successor);
+            next.push(successor);
+          }
+        }
+      }
+      open = next.sort();
+    }
+    return false;
+  };
+  const reachesWithoutJunction = (start: LaneRsl, target: LaneRsl): boolean => {
+    if (start === target) return true;
+    let open = [start];
+    const seen = new Set(open);
+    for (let depth = 0; depth < 4 && open.length > 0; depth += 1) {
+      const next: LaneRsl[] = [];
+      for (const rsl of open) {
+        for (const successor of index.lanes[rsl]?.successors ?? []) {
+          if (index.lanes[successor]?.isJunction) continue;
+          if (successor === target) return true;
+          if (!seen.has(successor)) {
+            seen.add(successor);
+            next.push(successor);
+          }
+        }
+      }
+      open = next.sort();
+    }
+    return false;
+  };
   for (let i = 1; i < samples.length; i += 1) {
     const prev = samples[i - 1]!;
     const cur = samples[i]!;
-    const from = prev.cs.sameDirDriving.size;
-    const to = cur.cs.sameDirDriving.size;
-    if (to < from) out.push({ kind: 'lane_drop', s: cur.s, from, to });
-    else if (to > from) out.push({ kind: 'merge', s: cur.s, from, to });
+    // Sampling omits junction-internal spans. Opposite sides of a junction may
+    // differ in lane count, but that is a junction funnel, not a road taper.
+    if (!reachesWithoutJunction(prev.laneRsl, cur.laneRsl)) continue;
+    const previous = physicalLanes(prev);
+    const current = physicalLanes(cur);
+    const from = previous.length;
+    const to = current.length;
+    if (to < from) {
+      // Pick exactly one upstream continuation for each downstream lane. Two
+      // upstream lanes commonly both name the same downstream successor at a
+      // merge; treating both as survivors erases the disappearing lane. An
+      // unchanged RSL is authoritative, otherwise the closest aligned lane end
+      // wins deterministically.
+      const survivors = new Set<LaneRsl>();
+      for (const target of current) {
+        const targetLane = index.lanes[target];
+        const candidates = previous
+          .filter((rsl) => !survivors.has(rsl) && reaches(rsl, new Set([target])))
+          .map((rsl) => {
+            const lane = index.lanes[rsl];
+            const end = lane?.polyline[lane.polyline.length - 1];
+            const start = targetLane?.polyline[0];
+            const gap = end && start ? Math.hypot(end.x - start.x, end.y - start.y) : Number.POSITIVE_INFINITY;
+            return { rsl, unchanged: rsl === target, gap };
+          })
+          .sort((a, b) => Number(b.unchanged) - Number(a.unchanged) || a.gap - b.gap || a.rsl.localeCompare(b.rsl));
+        if (candidates[0]) survivors.add(candidates[0].rsl);
+      }
+      const terminating = previous.filter((rsl) => !survivors.has(rsl)).sort();
+      // A converging entry lane has a directed continuation into one of the
+      // surviving downstream lanes: that is a merge. A lane with no such
+      // continuation genuinely terminates and is a lane drop. Both reduce the
+      // cross-section count, so lane count alone cannot distinguish them.
+      // One physical disappearing lane is one feature identity. A 3→1 taper
+      // therefore yields two deterministic candidates rather than an ambiguous
+      // comma-joined pseudo-id.
+      const currentSet = new Set(current);
+      for (const laneRsl of terminating) {
+        out.push({
+          kind: reaches(laneRsl, currentSet) ? 'merge' : 'lane_drop',
+          s: cur.s,
+          from,
+          to,
+          laneRsl,
+        });
+      }
+      // In data too sparse to name the lane, retain the transition as an
+      // unsupported identity; feature-bound roles will fail hard rather than
+      // silently attaching to the reference lane.
+      if (terminating.length === 0) out.push({ kind: 'lane_drop', s: cur.s, from, to });
+    }
+    // A same-direction count increase is a split/diverge, not a merge. There
+    // is no structural feature kind for it yet, so do not fabricate one.
   }
-  return out;
+
+  // A real taper can be shorter than the corridor sampling stride. Derive
+  // those directly from the directed lane topology: a lane ends, an adjacent
+  // same-direction sibling continues, and the ending lane explicitly permits
+  // the lateral move. This also excludes junction funnels by construction.
+  if (frame) {
+    const pathLanes = new Set(frame.referencePath.map((span) => span.laneRsl));
+    for (const terminating of Object.values(index.lanes).sort((a, b) => a.rsl.localeCompare(b.rsl))) {
+      if (terminating.isJunction || terminating.laneType !== 'driving' || terminating.successors.length > 0) continue;
+      const cs = crossSectionAt(index.lanes, terminating.rsl, Math.max(0, terminating.lengthM - 0.5));
+      if (!cs) continue;
+      for (const [k, siblingRsl] of [...cs.sameDirDriving.entries()].sort((a, b) => a[0] - b[0])) {
+        if (k === 0) continue;
+        const sibling = index.lanes[siblingRsl];
+        if (!sibling || sibling.isJunction || sibling.laneType !== 'driving' || sibling.successors.length === 0) continue;
+        const side = k > 0 ? 'left' : 'right';
+        const allowed = terminating.laneChangePermissions.some(
+          (permission) => permission.side === side && permission.allowed &&
+            permission.endS >= Math.max(0, terminating.lengthM - 30),
+        );
+        if (!allowed) continue;
+        const endpoint = terminating.polyline[terminating.polyline.length - 1];
+        if (!endpoint) continue;
+        const siblingAt = projectPoint(sibling.polyline, endpoint);
+        let continuationM = Math.max(0, sibling.lengthM - siblingAt.s);
+        let cursor = sibling;
+        const visited = new Set([sibling.rsl]);
+        for (let hop = 0; hop < 4 && continuationM < 20; hop += 1) {
+          const nextRsl = [...cursor.successors].sort()[0];
+          const next = nextRsl ? index.lanes[nextRsl] : undefined;
+          if (!next || next.isJunction || visited.has(next.rsl)) break;
+          visited.add(next.rsl);
+          continuationM += next.lengthM;
+          cursor = next;
+        }
+        if (continuationM < 20) continue;
+        const survivorTouchesPath = pathLanes.has(siblingRsl) ||
+          sibling.successors.some((rsl) => pathLanes.has(rsl)) ||
+          sibling.predecessors.some((rsl) => pathLanes.has(rsl));
+        if (!survivorTouchesPath) continue;
+        let best: { s: number; distance: number } | null = null;
+        for (const span of frame.referencePath) {
+          const lane = index.lanes[span.laneRsl];
+          if (!lane || lane.isJunction) continue;
+          const projected = projectPoint(lane.polyline, endpoint);
+          const candidate = { s: span.sStart + projected.s, distance: projected.distance };
+          if (!best || candidate.distance < best.distance ||
+            (candidate.distance === best.distance && candidate.s < best.s)) best = candidate;
+        }
+        if (!best || best.distance > 8 || best.s < frame.sRange[0] || best.s > frame.sRange[1]) continue;
+        out.push({ kind: 'lane_drop', s: best.s, from: cs.sameDirDriving.size, to: cs.sameDirDriving.size - 1, laneRsl: terminating.rsl });
+      }
+    }
+  }
+  const unique = new Map<string, (typeof out)[number]>();
+  for (const transition of out) {
+    const key = `${transition.kind}:${transition.laneRsl ?? ''}@${Math.round(transition.s * 100)}`;
+    if (!unique.has(key)) unique.set(key, transition);
+  }
+  return [...unique.values()].sort((a, b) => a.s - b.s || (a.laneRsl ?? '').localeCompare(b.laneRsl ?? ''));
 }
 
 export interface FeatureEvaluation {
@@ -550,9 +818,14 @@ function evaluateJunctionPredicates(
           })
           .filter((m) => !!m.other)
       : [];
-    const hit = matches.find(
+    const movementMatches = matches.filter(
       (m) => m.relation === wanted.from && m.other?.turnRelation === wanted.turn,
     );
+    const hit = movementMatches.find((m) => {
+      if (!wanted.crossingAngleDeg) return true;
+      const [lo, hi] = wanted.crossingAngleDeg;
+      return m.pair.crossingAngleDeg >= lo && m.pair.crossingAngleDeg <= hi;
+    });
     const relationOnly = matches.filter((m) => m.relation === wanted.from);
     const score = hit ? 1 : 0;
     push(collector, {
@@ -561,14 +834,23 @@ function evaluateJunctionPredicates(
       required: wanted,
       actual: hit
         ? { from: hit.relation, turn: hit.other?.turnRelation, crossingAngleDeg: round(hit.pair.crossingAngleDeg) }
-        : { conflictsFound: matches.length, matchingRelation: relationOnly.length },
+        : {
+            conflictsFound: matches.length,
+            matchingRelation: relationOnly.length,
+            matchingMovement: movementMatches.length,
+            ...(wanted.crossingAngleDeg
+              ? { crossingAnglesDeg: movementMatches.map((m) => round(m.pair.crossingAngleDeg)).sort((a, b) => a - b) }
+              : {}),
+          },
       score,
       slack: score >= 1 ? 0 : 1,
       weight: clauseWeight(jp.conflictingApproach),
       supported: !!egoGateId,
       reason: hit
         ? `conflicting ${wanted.from} ${wanted.turn} movement crosses the ego path at ${round(hit.pair.crossingAngleDeg)}°`
-        : `no ${wanted.from} ${wanted.turn} movement crosses the ego path (${matches.length} conflicts at this junction)`,
+        : wanted.crossingAngleDeg && movementMatches.length > 0
+          ? `${wanted.from} ${wanted.turn} movement angle is outside [${wanted.crossingAngleDeg.join(', ')}]°`
+          : `no ${wanted.from} ${wanted.turn} movement crosses the ego path (${matches.length} conflicts at this junction)`,
     });
   }
 
@@ -648,7 +930,7 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
   evaluateCorridor(collector, anchor, index, frame, samples);
 
   const junctions = junctionsAlongPath(index, frame);
-  const transitions = laneCountTransitions(samples);
+  const transitions = laneCountTransitions(index, samples, frame);
 
   for (const feature of anchor.features) {
     // `originFeature()` returns `features[0]`, but a **corridor** frame's origin
@@ -748,7 +1030,7 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
         continue;
       }
       featureMatches[feature.id] = {
-        mapFeatureId: `${feature.kind}:${frame.entryLaneRsl}@${round(best.t.s)}`,
+        mapFeatureId: `${feature.kind}:${best.t.laneRsl ?? frame.entryLaneRsl}@${round(best.t.s)}`,
         s: best.t.s,
         kind: feature.kind,
       };
@@ -773,7 +1055,11 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
         ? index.capabilities.crossings
         : feature.kind === 'parking_zone'
           ? index.capabilities.parkingZones
-          : index.pointFeatures.some((p) => p.kind === feature.kind);
+          : feature.kind === 'work_zone_suitable'
+            ? index.capabilities.workZones
+            : feature.kind === 'occlusion_zone'
+              ? index.capabilities.occlusionZones
+              : index.pointFeatures.some((p) => p.kind === feature.kind);
     if (!kindAvailable) {
       push(collector, unsupported(`${path}.atM`, feature.atM, `this map index carries no ${feature.kind} layer`));
       continue;
@@ -787,11 +1073,41 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
       .filter((e): e is { p: PointFeature; s: number; adjacent: boolean; source: 'point-same-road' | 'point-nearby' | 'lane-adjacent'; distanceM: number; side: 'left' | 'right' | 'both' } => e !== null)
       .map((e) => ({
         ...e,
+        crossingClauses: evaluateCrossingPredicates(feature, e.p, path, anchor),
         sideScore: feature.side ? (featureSideMatches(e.side, feature.side.value) ? 1 : 0) : 1,
+        sameRoadScore: feature.sameRoad
+          ? (feature.sameRoad.value === (e.source === 'point-same-road') ? 1 : 0)
+          : 1,
+        lateral: feature.lateralDistanceM
+          ? scoreRange(
+              e.distanceM,
+              feature.lateralDistanceM.value,
+              'distanceM',
+              anchor.toleranceOverrides,
+              feature.lateralDistanceM.tolerance,
+            )
+          : { score: 1, slack: 0 },
         ...scoreRange(e.s, feature.atM.value, 'distanceM', anchor.toleranceOverrides, feature.atM.tolerance),
       }))
       .sort((a, b) =>
+        Number(
+          (feature.atM.essentiality !== 'required' || b.score === 1) &&
+          (feature.lateralDistanceM?.essentiality !== 'required' || b.lateral.score === 1) &&
+          (feature.sameRoad?.essentiality !== 'required' || b.sameRoadScore === 1) &&
+          (feature.side?.essentiality !== 'required' || b.sideScore === 1) &&
+          b.crossingClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
+        ) - Number(
+          (feature.atM.essentiality !== 'required' || a.score === 1) &&
+          (feature.lateralDistanceM?.essentiality !== 'required' || a.lateral.score === 1) &&
+          (feature.sameRoad?.essentiality !== 'required' || a.sameRoadScore === 1) &&
+          (feature.side?.essentiality !== 'required' || a.sideScore === 1) &&
+          a.crossingClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
+        ) ||
+        b.crossingClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) -
+          a.crossingClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) ||
         b.score - a.score ||
+        b.lateral.score - a.lateral.score ||
+        b.sameRoadScore - a.sameRoadScore ||
         b.sideScore - a.sideScore ||
         a.distanceM - b.distanceM ||
         (a.adjacent === b.adjacent ? 0 : a.adjacent ? 1 : -1) ||
@@ -815,6 +1131,38 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
       worstAtS: best.s,
       reason: `${feature.kind} ${best.p.id} at s=${round(best.s)} m${best.source === 'point-same-road' ? ` (same-road station, ${round(best.distanceM)} m lateral)` : best.source === 'point-nearby' ? ` (projected ${round(best.distanceM)} m from feature point)` : best.adjacent ? ' on an adjacent lane' : ''}`,
     });
+    if (feature.lateralDistanceM) {
+      push(collector, {
+        path: `${path}.lateralDistanceM`,
+        essentiality: feature.lateralDistanceM.essentiality,
+        required: feature.lateralDistanceM.value,
+        actual: round(best.distanceM),
+        score: best.lateral.score,
+        slack: best.lateral.slack,
+        weight: clauseWeight(feature.lateralDistanceM),
+        supported: true,
+        worstAtS: best.s,
+        reason: `${feature.kind} ${best.p.id} is ${round(best.distanceM)} m laterally from the reference path`,
+      });
+    }
+    if (feature.sameRoad) {
+      const actual = best.source === 'point-same-road';
+      const matches = feature.sameRoad.value === actual;
+      push(collector, {
+        path: `${path}.sameRoad`,
+        essentiality: feature.sameRoad.essentiality,
+        required: feature.sameRoad.value,
+        actual,
+        score: matches ? 1 : 0,
+        slack: matches ? 0 : 1,
+        weight: clauseWeight(feature.sameRoad),
+        supported: true,
+        worstAtS: best.s,
+        reason: actual
+          ? `${feature.kind} ${best.p.id} shares the reference OpenDRIVE road and section`
+          : `${feature.kind} ${best.p.id} is only geometrically near the reference path`,
+      });
+    }
     if (feature.side) {
       const matches = featureSideMatches(best.side, feature.side.value);
       push(collector, {
@@ -832,6 +1180,7 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
           : `${feature.kind} ${best.p.id} is on the ${best.side} side of travel, wanted ${feature.side.value}`,
       });
     }
+    for (const clause of best.crossingClauses) push(collector, clause);
   }
 
   collector.results.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

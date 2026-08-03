@@ -263,3 +263,17 @@ export function buildFoodCart(): Group {
   );
   return group;
 }
+
+export function buildShoppingCart(): Group {
+  const group = new Group();
+  const steel = material('steel');
+  const dark = material('plastic');
+  group.add(box([0.72, 0.04, 0.58], steel, { at: [0.02, 0.30, 0] }));
+  group.add(box([0.70, 0.52, 0.04], steel, { at: [0, 0.60, -0.29] }));
+  group.add(box([0.70, 0.52, 0.04], steel, { at: [0, 0.60, 0.29] }));
+  group.add(box([0.04, 0.52, 0.58], steel, { at: [0.35, 0.60, 0] }));
+  group.add(box([0.04, 0.76, 0.65], steel, { at: [-0.50, 0.66, 0] }));
+  group.add(box([0.12, 0.06, 0.65], dark, { at: [-0.50, 1.02, 0] }));
+  for (const x of [-0.36, 0.36]) group.add(...mirrored(0.25, (z) => cyl(0.08, 0.06, dark, { axis: 'z', at: [x, 0.08, z], segments: 8 })));
+  return group;
+}

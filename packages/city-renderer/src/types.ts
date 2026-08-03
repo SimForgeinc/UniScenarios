@@ -99,6 +99,8 @@ export interface CityViewerOptions {
   baseUrl?: string;
   /** Device pixel ratio cap. Retina at 2.0 is ~4x the fill cost of 1.0. */
   maxPixelRatio?: number;
+  /** WebGL multisample antialiasing. Requires a renderer recreation to change. */
+  antialias?: boolean;
   /** Screen-space-error threshold in pixels; smaller = more aggressive streaming. */
   maxScreenSpaceError?: number;
   /** Separate threshold for vegetation tiles (their errors use a different scale). */
@@ -127,12 +129,70 @@ export interface CityViewerOptions {
   shadowStrength?: number;
   /** Render the baked shadow term instead of shading (projection QA). */
   debugShadowProjection?: boolean;
+  /** Horizontal metres kept between the camera and the map footprint edge. */
+  cameraBoundsInset?: number;
+  /** Local optimized asset preference. Ultra Low fails closed rather than fetching textured source. */
+  assetVariant?: import('./asset-variants').CityAssetVariantPreference;
+  /** Start texture-free before map loading; unlike a later toggle this also skips visual texture setup. */
+  ultraLowFidelity?: boolean;
+  /** Variant manifest URL; defaults to `variants/manifest.json` beside the source manifest. */
+  variantManifestUrl?: string;
+  /** Required before KTX2 variants can be selected (for example `/basis/`). */
+  ktx2TranscoderPath?: string;
+}
+
+export interface CameraDiagnostics {
+  ready: boolean;
+  position: [number, number, number];
+  target: [number, number, number];
+  groundY: number | null;
+  altitudeAgl: number | null;
+  minAltitude: number | null;
+  maxAltitude: number | null;
+  viewDistance: number;
+  fov: number;
+  bounds: { minX: number; maxX: number; minZ: number; maxZ: number; width: number; height: number } | null;
+  localBuildingMax: number | null;
+  headroom: number | null;
+  clamps: { eyeX: boolean; eyeY: boolean; eyeZ: boolean; targetX: boolean; targetY: boolean; targetZ: boolean };
+}
+
+export interface FrameTimeCounts {
+  over16_7: number;
+  over25: number;
+  over33_3: number;
+  over50: number;
+}
+
+export interface FramePhaseStats {
+  controlsMsAvg: number;
+  streamingMsAvg: number;
+  uploadsMsAvg: number;
+  renderMsAvg: number;
+  integrationMsAvg: number;
+}
+
+/** Quality controls that are safe to tune while a map remains loaded. */
+export interface CityViewerLiveQuality {
+  maxPixelRatio: number;
+  maxScreenSpaceError: number;
+  vegetationScreenSpaceError: number;
+  byteBudget: number;
+  uploadBudgetMs: number;
+  uploadPixelsPerFrame: number;
+  vegetationMaxDistance: number;
+  exposure: number;
 }
 
 export interface CityViewerStats {
   fps: number;
   frameMsAvg: number;
+  frameMsP50: number;
   frameMsP95: number;
+  frameMsP99: number;
+  frameMsMax: number;
+  frameTimeCounts: FrameTimeCounts;
+  phases: FramePhaseStats;
   drawCalls: number;
   triangles: number;
   programs: number;
@@ -150,14 +210,49 @@ export interface CityViewerStats {
   uploading: number;
   jsHeapMB: number | null;
   cameraMode: 'orbit' | 'fly';
+  /** True when GPU rendering and scene streaming are bypassed but integrations still tick. */
+  renderingSuspended: boolean;
+  ultraLowFidelity: boolean;
+  /** Road/ground geometry is resident and its layer is visible. */
+  roadVisible: boolean;
+  /** Browser UI loop frequency; deliberately not the simulation engine throughput. */
+  uiTicksPerSecond: number;
+  /** Runtime semantic material classification and shader-application telemetry. */
+  surfaceMaterials: import('./surface-materials').SurfaceMaterialReport;
+  assetVariants: {
+    manifest: boolean;
+    loaded: Record<'original' | 'geometry-only' | 'ktx2', number>;
+    fallbacks: number;
+  };
 }
 
 export interface BenchResult {
   avgFps: number;
+  p50FrameMs: number;
   p95FrameMs: number;
+  p99FrameMs: number;
+  maxFrameMs: number;
   minFps: number;
   drawCalls: number;
   residentBytes: number;
   frames: number;
   durationMs: number;
+  frameTimeCounts: FrameTimeCounts;
+  phases: FramePhaseStats;
+  /** ISO timestamp makes downloaded benchmark snapshots self-identifying. */
+  capturedAt: string;
+  renderingSuspended: boolean;
+  displayFps: number;
+  uiFrameP95Ms: number;
+  /** Supplied by an integration benchmark; renderer-only benchmarks leave this null. */
+  simulationTicksPerSecond: number | null;
+  cpuUtilizationProxy: number;
+  ultraLowFidelity: boolean;
+}
+
+export interface RendererCapability {
+  readonly renderer: string;
+  readonly vendor: string;
+  readonly webgl2: boolean;
+  readonly software: boolean;
 }

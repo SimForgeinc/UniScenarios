@@ -133,7 +133,9 @@ export interface SignalHeadUserData {
   signalIds: string[];
 }
 
-export type TrafficLightVisualPhase = 'green' | 'yellow' | 'red';
+export type TrafficLightVisualPhase =
+  | 'green' | 'yellow' | 'red' | 'flashing_yellow' | 'flashing_red' | 'off'
+  | 'green_arrow' | 'yellow_arrow' | 'red_x' | 'proceed' | 'stop';
 
 export interface TrafficLightStateUserData {
   layer: 'traffic-light-state';
@@ -478,12 +480,28 @@ const TRAFFIC_LIGHT_PHASE_COLOR: Record<TrafficLightVisualPhase, number> = {
   green: 0x34c759,
   yellow: 0xffcc00,
   red: 0xff3b30,
+  flashing_yellow: 0xffcc00,
+  flashing_red: 0xff3b30,
+  off: 0x222222,
+  green_arrow: 0x34c759,
+  yellow_arrow: 0xffcc00,
+  red_x: 0xff3b30,
+  proceed: 0x34c759,
+  stop: 0xff3b30,
 };
 
 const TRAFFIC_LIGHT_PHASE_Y: Record<TrafficLightVisualPhase, number> = {
   green: -0.28,
   yellow: 0,
   red: 0.28,
+  flashing_yellow: 0,
+  flashing_red: 0.28,
+  off: 0,
+  green_arrow: -0.28,
+  yellow_arrow: 0,
+  red_x: 0.28,
+  proceed: -0.28,
+  stop: 0.28,
 };
 
 /**
@@ -503,6 +521,8 @@ export function setTrafficLightStates(
     const placement = signalPlacement(group, id);
     const phase = states[id]!;
     if (!placement || placement.category !== 'traffic_light') continue;
+    // A failed/dark head intentionally has no emissive active-lamp point.
+    if (phase === 'off') continue;
     positions.push(
       placement.position[0],
       placement.position[1] + TRAFFIC_LIGHT_PHASE_Y[phase],

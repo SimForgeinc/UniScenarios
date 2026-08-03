@@ -480,6 +480,28 @@
                   "properties": {
                     "mode": {
                       "type": "string",
+                      "const": "lanePath"
+                    },
+                    "lanes": {
+                      "minItems": 1,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema17"
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "lanes"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
                       "const": "acquire"
                     },
                     "pose": {
@@ -1152,6 +1174,20 @@
                     "approach"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "control": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 128
+                    }
+                  },
+                  "required": [
+                    "control"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             },
@@ -1163,7 +1199,12 @@
                 "red",
                 "flashing_yellow",
                 "flashing_red",
-                "off"
+                "off",
+                "green_arrow",
+                "yellow_arrow",
+                "red_x",
+                "proceed",
+                "stop"
               ]
             },
             "minDurationS": {
@@ -1404,6 +1445,10 @@
         "value"
       ],
       "additionalProperties": false
+    },
+    "__schema17": {
+      "type": "string",
+      "minLength": 1
     }
   }
 }

@@ -1,0 +1,8 @@
+{
+  "stableId": "edge-02-bus-occluded-child-signalized-crossing-v1",
+  "title": "Bus-Occluded Child at a Signalized Crossing",
+  "intent": "Discount a legal green because the stopped bus creates a severe sight-line hazard, stop for the unexpected child, absorb rear pressure, and remain stopped until the whole crossing clears.",
+  "requiredOutcomes": ["approach speed at or below 20 km/h before bus front", "ego does not enter occupied crosswalk", "at least 1.5 m pedestrian distance", "peak deceleration at or below 6 m/s2", "no taxi collision", "ego remains stopped through child hesitation and continuation"],
+  "forbiddenOutcomes": ["accelerate to beat child", "swerve into bus", "stop on crosswalk", "move on partial clearance"],
+  "reviewSignals": ["physical ego signal phase", "bus-child occlusion reveal", "ego speed near bus nose", "ego-child distance", "ego stopping pose versus crossing", "taxi-ego gap", "child pause/resume", "ego speed through 20s"]
+}

@@ -1,0 +1,29 @@
+{
+  "stableId": "edge-05-ambulance-gridlock-v1",
+  "source": "independent_edge_cases",
+  "title": "Ambulance Through a Gridlocked Intersection",
+  "behavioralAcceptance": [
+    "ego remains stationary until both the live cross stream and pedestrian path are clear",
+    "ego relocates forward-right at no more than 8 km/h and stops again",
+    "ego does not proceed through the red signal after yielding",
+    "ambulance begins behind ego, carries flashing_siren state, and passes without stopping",
+    "downstream queue geometry leaves only a bounded refuge rather than a legal escape lane"
+  ],
+  "forbidden": [
+    "ego enters live cross traffic",
+    "ego mounts an occupied sidewalk",
+    "ego follows the ambulance through red",
+    "ego stays immobile once the protected conflicts have cleared"
+  ],
+  "quantitative": {
+    "egoMaxRelocationKph": 8,
+    "minimumAmbulanceCorridorM": 3,
+    "clipSeconds": 20,
+    "pedestrianMustClearBeforeInteraction": "ego-creeps",
+    "crossTrafficMustClearBeforeInteraction": "ego-creeps"
+  },
+  "review": {
+    "required": ["trace event chronology", "actor speed extrema", "world signal phase state", "viewport replay"],
+    "specialActorSupport": "A dedicated vehicle.ambulance actor is used with explicit flashing_siren state and two 350 ms audio.horn bursts separated by 200 ms."
+  }
+}

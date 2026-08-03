@@ -1,0 +1,3415 @@
+{
+  "version": 2,
+  "sourceInstance": {
+    "templateDigest": "fc6cca16e511e5f6",
+    "solverVersion": "0.2.6",
+    "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f"
+  },
+  "evaluationPolicy": "Combined gate: evaluateAmbientRobustness AND evaluateIntentRubric AND the original scenario-specific rubric; no thresholds relaxed.",
+  "unsupportedCriteriaPolicy": "Unsupported typed criteria are not treated as measured passes. Post-pass observation and rider braking are enforced by the scenario-specific gate. Bike-lane encroachment remains route-proven, not trace-measured.",
+  "seedSelection": {
+    "policy": "First combined-accepted deterministic seed in a bounded sequence of at most 20 candidates; actor caps and all acceptance thresholds unchanged.",
+    "off": {
+      "candidatesSearched": 1,
+      "acceptedCandidate": "edge-case-03-ambient-off-pinned"
+    },
+    "light": {
+      "candidatesSearched": 1,
+      "acceptedCandidate": "edge-case-03-ambient-light-pinned-01",
+      "failedCandidates": 0
+    },
+    "moderate": {
+      "candidatesSearched": 8,
+      "acceptedCandidate": "edge-case-03-ambient-moderate-pinned-08",
+      "failedCandidates": 7
+    }
+  },
+  "baseline": {
+    "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+    "traceDigest": "81e899e561195eed460c03311db4ad2457f517805b464ab68748513a91d135c2",
+    "robustnessEvaluation": {
+      "verdict": "accept",
+      "findings": [],
+      "tags": [],
+      "summary": {
+        "minTTC": 0.8899610741388394,
+        "minTTCt": 7.140000000000001,
+        "criticalityKind": "ttc",
+        "criticality": 0.8899610741388394,
+        "criticalityT": 7.140000000000001,
+        "requiredDecelMax": 0,
+        "collisions": 0,
+        "neverFired": 0,
+        "occlusionUnproven": 0
+      }
+    },
+    "intentEvaluation": {
+      "version": 1,
+      "intentId": "edge-03-contraflow-cyclist-garage-exit-v1",
+      "verdict": "accept",
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "unchecked": 0,
+        "unsupported": 3
+      },
+      "criteria": [
+        {
+          "id": "required-event-order",
+          "kind": "event_order",
+          "required": true,
+          "status": "pass",
+          "reason": "required event-order condition held",
+          "evidence": [
+            {
+              "source": "trace_event",
+              "summary": "ordered trigger evidence",
+              "values": {
+                "interactionIds": [
+                  "pedestrian-clears",
+                  "ego-first-creep",
+                  "ego-yields-legal",
+                  "legal-rider-passes",
+                  "ego-second-creep",
+                  "wrong-way-rider-emerges",
+                  "ego-stops-for-contraflow",
+                  "contraflow-rider-passes",
+                  "ego-final-entry-route",
+                  "ego-enters-after-bidirectional-check"
+                ],
+                "matchedTimesS": [
+                  4,
+                  4.2,
+                  7.6,
+                  9,
+                  11.2,
+                  11.4,
+                  13.6,
+                  17.5,
+                  18.6,
+                  18.7
+                ],
+                "complete": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "initial-pedestrian-hold",
+          "kind": "stationary_success",
+          "required": true,
+          "status": "pass",
+          "reason": "stationary compliance succeeded",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stationary actor evidence",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  0,
+                  4.18
+                ],
+                "observedMaxSpeedMps": 0,
+                "allowedMaxSpeedMps": 0.1,
+                "presentSeconds": 4.18,
+                "requiredPresentSeconds": 4.16
+              }
+            }
+          ]
+        },
+        {
+          "id": "first-creep-cap",
+          "kind": "speed_band",
+          "required": true,
+          "status": "pass",
+          "reason": "speed remained inside the authored band",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "speed extrema in window",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  4.2,
+                  7.6
+                ],
+                "minSpeedMps": 0,
+                "maxSpeedMps": 1.111111,
+                "requiredMinMps": null,
+                "requiredMaxMps": 1.388889
+              }
+            }
+          ]
+        },
+        {
+          "id": "second-creep-cap",
+          "kind": "speed_band",
+          "required": true,
+          "status": "pass",
+          "reason": "speed remained inside the authored band",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "speed extrema in window",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  11.2,
+                  13.6
+                ],
+                "minSpeedMps": 0,
+                "maxSpeedMps": 0,
+                "requiredMinMps": null,
+                "requiredMaxMps": 1.388889
+              }
+            }
+          ]
+        },
+        {
+          "id": "contraflow-stop-hold",
+          "kind": "stationary_success",
+          "required": true,
+          "status": "pass",
+          "reason": "stationary compliance succeeded",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stationary actor evidence",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  13.62,
+                  18.68
+                ],
+                "observedMaxSpeedMps": 0,
+                "allowedMaxSpeedMps": 0.1,
+                "presentSeconds": 5.06,
+                "requiredPresentSeconds": 5
+              }
+            }
+          ]
+        },
+        {
+          "id": "legal-cyclist-clearance",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "legal-cyclist"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 2.770189,
+                "atS": 7.14,
+                "requiredMinM": 1.5,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "contraflow-cyclist-clearance",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "wrong-way-rider"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 5.784862,
+                "atS": 18.6,
+                "requiredMinM": 1.5,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "collision-free",
+          "kind": "collision",
+          "required": true,
+          "status": "pass",
+          "reason": "collision budget held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "collision evidence",
+              "values": {
+                "pair": [],
+                "observedCount": 0,
+                "maxCount": 0,
+                "timesS": []
+              }
+            }
+          ]
+        },
+        {
+          "id": "post-pass-observation-time",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "At least one second elapses between the contraflow pass marker and ego beginning final entry.",
+                "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace."
+              }
+            }
+          ]
+        },
+        {
+          "id": "riders-not-forced-to-brake",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "Neither the legal cyclist nor the contraflow rider decelerates in response to ego.",
+                "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace."
+              }
+            }
+          ]
+        },
+        {
+          "id": "bike-lane-encroachment",
+          "kind": "unsupported",
+          "required": false,
+          "status": "unsupported",
+          "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured.",
+          "evidence": [
+            {
+              "source": "rubric",
+              "summary": "criterion is outside the deterministic evaluator vocabulary",
+              "values": {
+                "description": "Before final entry, ego occupies no more than 0.3 metres of the protected bike lane.",
+                "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured."
+              }
+            }
+          ]
+        }
+      ],
+      "behaviorSummary": {
+        "version": 1,
+        "trace": {
+          "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+          "mapId": "yale-street",
+          "clipSeconds": 20,
+          "dt": 0.02,
+          "actorCount": 5
+        },
+        "actors": [
+          {
+            "actorId": "delivery-truck",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 0,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 0,
+            "stationaryIntervals": [
+              [
+                0,
+                20
+              ]
+            ],
+            "lanes": [
+              "92:0:1"
+            ]
+          },
+          {
+            "actorId": "ego",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 1.111111,
+            "finalSpeedMps": 1.111111,
+            "distanceTravelledM": 5.537222,
+            "stationaryIntervals": [
+              [
+                0,
+                4.26
+              ],
+              [
+                7.16,
+                18.76
+              ]
+            ],
+            "lanes": []
+          },
+          {
+            "actorId": "legal-cyclist",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 5,
+            "maxSpeedMps": 5,
+            "finalSpeedMps": 5,
+            "distanceTravelledM": 100.360966,
+            "stationaryIntervals": [],
+            "lanes": [
+              "1145:0:1",
+              "1181:0:1",
+              "1207:0:1",
+              "65:0:1",
+              "92:0:1",
+              "93:0:1",
+              "94:0:1",
+              "95:0:1",
+              "994:0:1"
+            ]
+          },
+          {
+            "actorId": "pedestrian",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 1.111111,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 4.655556,
+            "stationaryIntervals": [
+              [
+                4.38,
+                20
+              ]
+            ],
+            "lanes": []
+          },
+          {
+            "actorId": "wrong-way-rider",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 6.944444,
+            "finalSpeedMps": 6.944444,
+            "distanceTravelledM": 37.871022,
+            "stationaryIntervals": [
+              [
+                0,
+                11.48
+              ]
+            ],
+            "lanes": []
+          }
+        ],
+        "events": [
+          {
+            "t": 4,
+            "kind": "trigger_fired",
+            "actorId": "pedestrian",
+            "interactionId": "pedestrian-clears"
+          },
+          {
+            "t": 4.2,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-first-creep"
+          },
+          {
+            "t": 7.6,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 7.6,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-yields-legal"
+          },
+          {
+            "t": 9,
+            "kind": "trigger_fired",
+            "actorId": "legal-cyclist",
+            "interactionId": "legal-rider-passes"
+          },
+          {
+            "t": 11.2,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 11.2,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-second-creep"
+          },
+          {
+            "t": 11.4,
+            "kind": "trigger_fired",
+            "actorId": "wrong-way-rider",
+            "interactionId": "wrong-way-rider-emerges"
+          },
+          {
+            "t": 13.6,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 13.6,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-stops-for-contraflow"
+          },
+          {
+            "t": 17.5,
+            "kind": "preemption",
+            "actorId": "wrong-way-rider"
+          },
+          {
+            "t": 17.5,
+            "kind": "trigger_fired",
+            "actorId": "wrong-way-rider",
+            "interactionId": "contraflow-rider-passes"
+          },
+          {
+            "t": 18.6,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-final-entry-route"
+          },
+          {
+            "t": 18.7,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 18.7,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-enters-after-bidirectional-check"
+          }
+        ],
+        "metrics": {
+          "collisions": 0,
+          "minTTC": 0.8899610741388394,
+          "minPathTTC": 1.0702706859678437,
+          "minPET": 0,
+          "triggerNeverFired": [],
+          "declaredOcclusion": [
+            {
+              "observer": "ego",
+              "target": "wrong-way-rider",
+              "status": "revealed_before_conflict",
+              "firstBlockedT": 0,
+              "losOpenT": 5.0200000000000005
+            }
+          ]
+        },
+        "truncated": {
+          "actors": false,
+          "events": false,
+          "occlusions": false
+        }
+      }
+    },
+    "review": {
+      "pass": true,
+      "observed": {
+        "durationS": 20,
+        "eventTimes": {
+          "pedestrian-clears": 4,
+          "ego-first-creep": 4.2,
+          "ego-yields-legal": 7.6000000000000005,
+          "legal-rider-passes": 9,
+          "ego-second-creep": 11.200000000000001,
+          "wrong-way-rider-emerges": 11.4,
+          "ego-stops-for-contraflow": 13.6,
+          "contraflow-rider-passes": 17.5,
+          "ego-final-entry-route": 18.6,
+          "ego-enters-after-bidirectional-check": 18.7
+        },
+        "collisions": [],
+        "triggerNeverFired": [],
+        "initialHoldMaxMps": 0,
+        "firstCreepMaxKph": 4,
+        "secondCreepMaxKph": 0,
+        "stopHoldMaxMps": 0,
+        "legalCyclistClearanceM": 2.770188848404523,
+        "contraflowCyclistClearanceM": 5.784862234399988,
+        "legalCyclistPeakDecelMps2": 0,
+        "contraflowCyclistPeakDecelMps2": 0,
+        "postPassObservationSeconds": 1.1999999999999993,
+        "bikeLaneEncroachment": {
+          "status": "authored-route-proof-not-trace-measured",
+          "preEntryRouteTerminatesAtBikeLaneEdge": true,
+          "finalCrossingRouteTrigger": "ego-final-entry-route",
+          "finalCrossingRouteFiresAfterPassS": 1.1000000000000014,
+          "continuousEncroachmentDepthM": null
+        }
+      },
+      "limitations": [
+        "The trace lacks a signed continuous bike-lane-boundary distance, so the <=0.3 m encroachment criterion is route-proven but not independently trace-measured."
+      ]
+    },
+    "accepted": true
+  },
+  "robustnessAccepted": true,
+  "accepted": true,
+  "modes": [
+    {
+      "mode": "off",
+      "profile": {
+        "version": 1,
+        "preset": "off",
+        "seed": "edge-case-03-ambient-off-pinned",
+        "maxActors": 0
+      },
+      "pinnedSeed": "edge-case-03-ambient-off-pinned",
+      "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+      "traceDigest": "81e899e561195eed460c03311db4ad2457f517805b464ab68748513a91d135c2",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "off",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-03-ambient-off-pinned",
+          "maxActors": 0,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 0
+        },
+        "profileHash": "beb486788f9fa95149bc94b4380bb5a156e96e55b3ae2b2455c7a52bedde5bba",
+        "baseInputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+        "generatedInputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+        "actors": [],
+        "rejectedSpawnCount": 0,
+        "eligibleLaneKm": 0,
+        "screening": {
+          "count": 0,
+          "actorIds": [],
+          "reasons": []
+        },
+        "warnings": []
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "accept",
+        "findings": [],
+        "tags": [],
+        "summary": {
+          "minTTC": 0.8899610741388394,
+          "minTTCt": 7.140000000000001,
+          "criticalityKind": "ttc",
+          "criticality": 0.8899610741388394,
+          "criticalityT": 7.140000000000001,
+          "requiredDecelMax": 0,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-03-contraflow-cyclist-garage-exit-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pedestrian-clears",
+                    "ego-first-creep",
+                    "ego-yields-legal",
+                    "legal-rider-passes",
+                    "ego-second-creep",
+                    "wrong-way-rider-emerges",
+                    "ego-stops-for-contraflow",
+                    "contraflow-rider-passes",
+                    "ego-final-entry-route",
+                    "ego-enters-after-bidirectional-check"
+                  ],
+                  "matchedTimesS": [
+                    4,
+                    4.2,
+                    7.6,
+                    9,
+                    11.2,
+                    11.4,
+                    13.6,
+                    17.5,
+                    18.6,
+                    18.7
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "initial-pedestrian-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    4.18
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 4.18,
+                  "requiredPresentSeconds": 4.16
+                }
+              }
+            ]
+          },
+          {
+            "id": "first-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    4.2,
+                    7.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 1.111111,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "second-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.2,
+                    13.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-stop-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    13.62,
+                    18.68
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 5.06,
+                  "requiredPresentSeconds": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "legal-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "legal-cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.770189,
+                  "atS": 7.14,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-rider"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.784862,
+                  "atS": 18.6,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "post-pass-observation-time",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "At least one second elapses between the contraflow pass marker and ego beginning final entry.",
+                  "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "riders-not-forced-to-brake",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Neither the legal cyclist nor the contraflow rider decelerates in response to ego.",
+                  "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bike-lane-encroachment",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Before final entry, ego occupies no more than 0.3 metres of the protected bike lane.",
+                  "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+            "mapId": "yale-street",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 5
+          },
+          "actors": [
+            {
+              "actorId": "delivery-truck",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 5.537222,
+              "stationaryIntervals": [
+                [
+                  0,
+                  4.26
+                ],
+                [
+                  7.16,
+                  18.76
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "legal-cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5,
+              "maxSpeedMps": 5,
+              "finalSpeedMps": 5,
+              "distanceTravelledM": 100.360966,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1145:0:1",
+                "1181:0:1",
+                "1207:0:1",
+                "65:0:1",
+                "92:0:1",
+                "93:0:1",
+                "94:0:1",
+                "95:0:1",
+                "994:0:1"
+              ]
+            },
+            {
+              "actorId": "pedestrian",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 4.655556,
+              "stationaryIntervals": [
+                [
+                  4.38,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "wrong-way-rider",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 6.944444,
+              "finalSpeedMps": 6.944444,
+              "distanceTravelledM": 37.871022,
+              "stationaryIntervals": [
+                [
+                  0,
+                  11.48
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "pedestrian",
+              "interactionId": "pedestrian-clears"
+            },
+            {
+              "t": 4.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-first-creep"
+            },
+            {
+              "t": 7.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-yields-legal"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "legal-cyclist",
+              "interactionId": "legal-rider-passes"
+            },
+            {
+              "t": 11.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 11.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-second-creep"
+            },
+            {
+              "t": 11.4,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "wrong-way-rider-emerges"
+            },
+            {
+              "t": 13.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 13.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-contraflow"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "wrong-way-rider"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "contraflow-rider-passes"
+            },
+            {
+              "t": 18.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-final-entry-route"
+            },
+            {
+              "t": 18.7,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18.7,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-after-bidirectional-check"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 0.8899610741388394,
+            "minPathTTC": 1.0702706859678437,
+            "minPET": 0,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-rider",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 5.0200000000000005
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "pedestrian-clears": 4,
+            "ego-first-creep": 4.2,
+            "ego-yields-legal": 7.6000000000000005,
+            "legal-rider-passes": 9,
+            "ego-second-creep": 11.200000000000001,
+            "wrong-way-rider-emerges": 11.4,
+            "ego-stops-for-contraflow": 13.6,
+            "contraflow-rider-passes": 17.5,
+            "ego-final-entry-route": 18.6,
+            "ego-enters-after-bidirectional-check": 18.7
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "initialHoldMaxMps": 0,
+          "firstCreepMaxKph": 4,
+          "secondCreepMaxKph": 0,
+          "stopHoldMaxMps": 0,
+          "legalCyclistClearanceM": 2.770188848404523,
+          "contraflowCyclistClearanceM": 5.784862234399988,
+          "legalCyclistPeakDecelMps2": 0,
+          "contraflowCyclistPeakDecelMps2": 0,
+          "postPassObservationSeconds": 1.1999999999999993,
+          "bikeLaneEncroachment": {
+            "status": "authored-route-proof-not-trace-measured",
+            "preEntryRouteTerminatesAtBikeLaneEdge": true,
+            "finalCrossingRouteTrigger": "ego-final-entry-route",
+            "finalCrossingRouteFiresAfterPassS": 1.1000000000000014,
+            "continuousEncroachmentDepthM": null
+          }
+        },
+        "limitations": [
+          "The trace lacks a signed continuous bike-lane-boundary distance, so the <=0.3 m encroachment criterion is route-proven but not independently trace-measured."
+        ]
+      },
+      "accepted": true,
+      "failures": []
+    },
+    {
+      "mode": "light",
+      "profile": {
+        "version": 1,
+        "preset": "light",
+        "seed": "edge-case-03-ambient-light-pinned-01",
+        "maxActors": 24
+      },
+      "pinnedSeed": "edge-case-03-ambient-light-pinned-01",
+      "inputHash": "a2a7e0e540207057eba02db01177fd7bad37dc34c0d98cf4b2359913bc9adec7",
+      "traceDigest": "68e70e048a541d28ef90cc66fe72698f8b2693be3ce023b9e8dd0770f92450ce",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "light",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-03-ambient-light-pinned-01",
+          "maxActors": 24,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 3
+        },
+        "profileHash": "4228232cd11b0678f52616fce1f75aa3543a6f0aa1a3c4d4e1197375a99fe9bb",
+        "baseInputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+        "generatedInputHash": "a2a7e0e540207057eba02db01177fd7bad37dc34c0d98cf4b2359913bc9adec7",
+        "actors": [
+          {
+            "id": "ambient:v1:17cae8197a20a65d:000",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "22:0:-2",
+              "1003:0:-2",
+              "23:0:-2",
+              "873:0:-1",
+              "47:0:-3",
+              "1335:0:-1",
+              "32:0:-3",
+              "182:0:-1",
+              "15:0:-2"
+            ],
+            "seedKey": "17cae8197a20a65d"
+          },
+          {
+            "id": "ambient:v1:07b6cb87772a6f18:001",
+            "kind": "car",
+            "routeLaneRsls": [
+              "66:0:1",
+              "257:0:1",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "116:0:1",
+              "108:0:1",
+              "1022:0:1",
+              "101:0:1",
+              "428:0:1",
+              "79:0:-1"
+            ],
+            "seedKey": "07b6cb87772a6f18"
+          },
+          {
+            "id": "ambient:v1:924ac7d9d6b3c729:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "106:0:1",
+              "782:0:1",
+              "100:0:-3",
+              "149:0:-1",
+              "0:0:-4",
+              "248:0:-4",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "348:0:-1",
+              "67:0:-1",
+              "403:0:-1"
+            ],
+            "seedKey": "924ac7d9d6b3c729"
+          },
+          {
+            "id": "ambient:v1:78fde5c3d3a295d9:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "100:0:-3",
+              "149:0:-1",
+              "0:0:-4",
+              "248:0:-4",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "348:0:-1",
+              "67:0:-1",
+              "403:0:-1",
+              "68:0:-1",
+              "1105:0:-1",
+              "41:0:1"
+            ],
+            "seedKey": "78fde5c3d3a295d9"
+          },
+          {
+            "id": "ambient:v1:a13ef0353f34fae2:004",
+            "kind": "car",
+            "routeLaneRsls": [
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "344:0:1",
+              "87:0:-4",
+              "1040:0:-1",
+              "26:0:-5"
+            ],
+            "seedKey": "a13ef0353f34fae2"
+          },
+          {
+            "id": "ambient:v1:d789c9575f27c044:005",
+            "kind": "bus",
+            "routeLaneRsls": [
+              "1:0:-2",
+              "262:0:-1",
+              "30:0:-3",
+              "483:0:-1",
+              "31:0:-2",
+              "1112:0:-1",
+              "70:0:-3",
+              "1377:0:-3",
+              "71:0:-3",
+              "376:0:-1",
+              "27:0:2",
+              "128:0:1",
+              "109:0:3",
+              "342:0:1",
+              "87:0:-2"
+            ],
+            "seedKey": "d789c9575f27c044"
+          },
+          {
+            "id": "ambient:v1:61412c008de33902:007",
+            "kind": "car",
+            "routeLaneRsls": [
+              "72:0:-1",
+              "862:0:-1",
+              "89:0:-1",
+              "1299:0:-1",
+              "110:0:1",
+              "1061:0:1",
+              "51:0:-1",
+              "573:0:-1",
+              "52:0:-1",
+              "511:0:-1",
+              "41:0:-1",
+              "1100:0:-1",
+              "42:0:-1",
+              "935:0:-1",
+              "58:0:-1"
+            ],
+            "seedKey": "61412c008de33902"
+          }
+        ],
+        "rejectedSpawnCount": 36,
+        "eligibleLaneKm": 2.967162277601276,
+        "screening": {
+          "count": 2,
+          "actorIds": [
+            "ambient:v1:58eee18c97d287d6:006",
+            "ambient:v1:c2d568d24555e387:008"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:58eee18c97d287d6:006",
+              "reason": "collision",
+              "detail": "collision with ego"
+            },
+            {
+              "actorId": "ambient:v1:c2d568d24555e387:008",
+              "reason": "collision",
+              "detail": "collision with ego"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 2 ambient actor(s) during full-clip safety screening (2 collision, 0 required-deceleration)."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "accept",
+        "findings": [],
+        "tags": [],
+        "summary": {
+          "minTTC": 0.8899610741388394,
+          "minTTCt": 7.140000000000001,
+          "criticalityKind": "ttc",
+          "criticality": 0.8899610741388394,
+          "criticalityT": 7.140000000000001,
+          "requiredDecelMax": 4.175153364701383,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-03-contraflow-cyclist-garage-exit-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pedestrian-clears",
+                    "ego-first-creep",
+                    "ego-yields-legal",
+                    "legal-rider-passes",
+                    "ego-second-creep",
+                    "wrong-way-rider-emerges",
+                    "ego-stops-for-contraflow",
+                    "contraflow-rider-passes",
+                    "ego-final-entry-route",
+                    "ego-enters-after-bidirectional-check"
+                  ],
+                  "matchedTimesS": [
+                    4,
+                    4.2,
+                    7.6,
+                    9,
+                    11.2,
+                    11.4,
+                    13.6,
+                    17.5,
+                    18.6,
+                    18.7
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "initial-pedestrian-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    4.18
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 4.18,
+                  "requiredPresentSeconds": 4.16
+                }
+              }
+            ]
+          },
+          {
+            "id": "first-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    4.2,
+                    7.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 1.111111,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "second-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.2,
+                    13.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-stop-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    13.62,
+                    18.68
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 5.06,
+                  "requiredPresentSeconds": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "legal-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "legal-cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.770189,
+                  "atS": 7.14,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-rider"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.784862,
+                  "atS": 18.6,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "post-pass-observation-time",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "At least one second elapses between the contraflow pass marker and ego beginning final entry.",
+                  "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "riders-not-forced-to-brake",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Neither the legal cyclist nor the contraflow rider decelerates in response to ego.",
+                  "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bike-lane-encroachment",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Before final entry, ego occupies no more than 0.3 metres of the protected bike lane.",
+                  "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "a2a7e0e540207057eba02db01177fd7bad37dc34c0d98cf4b2359913bc9adec7",
+            "mapId": "yale-street",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 12
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:07b6cb87772a6f18:001",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 14.674954,
+              "maxSpeedMps": 14.674954,
+              "finalSpeedMps": 14.674954,
+              "distanceTravelledM": 293.500546,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1122:0:-1",
+                "1377:0:-5",
+                "1:0:-4",
+                "257:0:1",
+                "264:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "374:0:-1",
+                "489:0:-1",
+                "66:0:1",
+                "70:0:-5",
+                "71:0:-5"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:17cae8197a20a65d:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.637257,
+              "maxSpeedMps": 5.637257,
+              "finalSpeedMps": 5.637257,
+              "distanceTravelledM": 112.745143,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1003:0:-2",
+                "1335:0:-1",
+                "22:0:-2",
+                "23:0:-2",
+                "32:0:-3",
+                "47:0:-3",
+                "873:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:61412c008de33902:007",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.20584,
+              "maxSpeedMps": 16.20584,
+              "finalSpeedMps": 16.20584,
+              "distanceTravelledM": 324.086185,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1061:0:1",
+                "1100:0:-1",
+                "110:0:1",
+                "1299:0:-1",
+                "41:0:-1",
+                "42:0:-1",
+                "511:0:-1",
+                "51:0:-1",
+                "52:0:-1",
+                "573:0:-1",
+                "72:0:-1",
+                "862:0:-1",
+                "89:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:78fde5c3d3a295d9:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 14.714197,
+              "maxSpeedMps": 18.860444,
+              "finalSpeedMps": 17.898931,
+              "distanceTravelledM": 319.616351,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:-4",
+                "100:0:-3",
+                "1122:0:-1",
+                "1377:0:-5",
+                "149:0:-1",
+                "1:0:-4",
+                "248:0:-4",
+                "264:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "489:0:-1",
+                "70:0:-5",
+                "71:0:-5"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:924ac7d9d6b3c729:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.110461,
+              "maxSpeedMps": 15.320292,
+              "finalSpeedMps": 15.320292,
+              "distanceTravelledM": 306.286957,
+              "stationaryIntervals": [],
+              "lanes": [
+                "0:0:-4",
+                "100:0:-3",
+                "106:0:1",
+                "1122:0:-1",
+                "149:0:-1",
+                "1:0:-4",
+                "248:0:-4",
+                "264:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "489:0:-1",
+                "782:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:a13ef0353f34fae2:004",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.712025,
+              "maxSpeedMps": 15.712025,
+              "finalSpeedMps": 15.712025,
+              "distanceTravelledM": 314.244329,
+              "stationaryIntervals": [],
+              "lanes": [
+                "109:0:5",
+                "1122:0:-1",
+                "127:0:1",
+                "1377:0:-5",
+                "27:0:4",
+                "30:0:-5",
+                "31:0:-4",
+                "344:0:1",
+                "374:0:-1",
+                "489:0:-1",
+                "70:0:-5",
+                "71:0:-5",
+                "87:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:d789c9575f27c044:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.865965,
+              "maxSpeedMps": 18.865965,
+              "finalSpeedMps": 18.865965,
+              "distanceTravelledM": 377.330153,
+              "stationaryIntervals": [],
+              "lanes": [
+                "109:0:3",
+                "1112:0:-1",
+                "128:0:1",
+                "1377:0:-3",
+                "1:0:-2",
+                "262:0:-1",
+                "27:0:2",
+                "30:0:-3",
+                "31:0:-2",
+                "342:0:1",
+                "376:0:-1",
+                "483:0:-1",
+                "70:0:-3",
+                "71:0:-3",
+                "87:0:-2"
+              ]
+            },
+            {
+              "actorId": "delivery-truck",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 5.537222,
+              "stationaryIntervals": [
+                [
+                  0,
+                  4.26
+                ],
+                [
+                  7.16,
+                  18.76
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "legal-cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5,
+              "maxSpeedMps": 5,
+              "finalSpeedMps": 5,
+              "distanceTravelledM": 100.360966,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1145:0:1",
+                "1181:0:1",
+                "1207:0:1",
+                "65:0:1",
+                "92:0:1",
+                "93:0:1",
+                "94:0:1",
+                "95:0:1",
+                "994:0:1"
+              ]
+            },
+            {
+              "actorId": "pedestrian",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 4.655556,
+              "stationaryIntervals": [
+                [
+                  4.38,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "wrong-way-rider",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 6.944444,
+              "finalSpeedMps": 6.944444,
+              "distanceTravelledM": 37.871022,
+              "stationaryIntervals": [
+                [
+                  0,
+                  11.48
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "pedestrian",
+              "interactionId": "pedestrian-clears"
+            },
+            {
+              "t": 4.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-first-creep"
+            },
+            {
+              "t": 7.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-yields-legal"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "legal-cyclist",
+              "interactionId": "legal-rider-passes"
+            },
+            {
+              "t": 11.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 11.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-second-creep"
+            },
+            {
+              "t": 11.4,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "wrong-way-rider-emerges"
+            },
+            {
+              "t": 13.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 13.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-contraflow"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "wrong-way-rider"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "contraflow-rider-passes"
+            },
+            {
+              "t": 18.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-final-entry-route"
+            },
+            {
+              "t": 18.7,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18.7,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-after-bidirectional-check"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 0.8899610741388394,
+            "minPathTTC": 1.0702706859678437,
+            "minPET": 0,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-rider",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 5.0200000000000005
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "pedestrian-clears": 4,
+            "ego-first-creep": 4.2,
+            "ego-yields-legal": 7.6000000000000005,
+            "legal-rider-passes": 9,
+            "ego-second-creep": 11.200000000000001,
+            "wrong-way-rider-emerges": 11.4,
+            "ego-stops-for-contraflow": 13.6,
+            "contraflow-rider-passes": 17.5,
+            "ego-final-entry-route": 18.6,
+            "ego-enters-after-bidirectional-check": 18.7
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "initialHoldMaxMps": 0,
+          "firstCreepMaxKph": 4,
+          "secondCreepMaxKph": 0,
+          "stopHoldMaxMps": 0,
+          "legalCyclistClearanceM": 2.770188848404523,
+          "contraflowCyclistClearanceM": 5.784862234399988,
+          "legalCyclistPeakDecelMps2": 0,
+          "contraflowCyclistPeakDecelMps2": 0,
+          "postPassObservationSeconds": 1.1999999999999993,
+          "bikeLaneEncroachment": {
+            "status": "authored-route-proof-not-trace-measured",
+            "preEntryRouteTerminatesAtBikeLaneEdge": true,
+            "finalCrossingRouteTrigger": "ego-final-entry-route",
+            "finalCrossingRouteFiresAfterPassS": 1.1000000000000014,
+            "continuousEncroachmentDepthM": null
+          }
+        },
+        "limitations": [
+          "The trace lacks a signed continuous bike-lane-boundary distance, so the <=0.3 m encroachment criterion is route-proven but not independently trace-measured."
+        ]
+      },
+      "accepted": true,
+      "failures": []
+    },
+    {
+      "mode": "moderate",
+      "profile": {
+        "version": 1,
+        "preset": "moderate",
+        "seed": "edge-case-03-ambient-moderate-pinned-08",
+        "maxActors": 40
+      },
+      "pinnedSeed": "edge-case-03-ambient-moderate-pinned-08",
+      "inputHash": "aa23735fc59c9d862d7f975748bb65e9988ad78a06b3c20d7b64acc2581000ac",
+      "traceDigest": "17c5a361817ff82fbd27c73a8095c2cb8984da9fa2138b299c7c320d2db3d085",
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "moderate",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-case-03-ambient-moderate-pinned-08",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 8
+        },
+        "profileHash": "f4e167e40fe73049394e6ecb43f9b45ffccbd8965638f8fd011f56161e791fd1",
+        "baseInputHash": "e3a2079de4b8533714f152150d7acf864c26bc162618696412e093be927a618f",
+        "generatedInputHash": "aa23735fc59c9d862d7f975748bb65e9988ad78a06b3c20d7b64acc2581000ac",
+        "actors": [
+          {
+            "id": "ambient:v1:274ee3354732ecf2:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "1:0:-3",
+              "266:0:-1",
+              "30:0:-4",
+              "487:0:-1",
+              "31:0:-3",
+              "1120:0:-1",
+              "70:0:-4",
+              "1377:0:-4",
+              "71:0:-4",
+              "373:0:-1",
+              "27:0:3",
+              "133:0:1",
+              "109:0:4",
+              "343:0:1",
+              "87:0:-3"
+            ],
+            "seedKey": "274ee3354732ecf2"
+          },
+          {
+            "id": "ambient:v1:41c6d452967b31a0:003",
+            "kind": "car",
+            "routeLaneRsls": [
+              "48:0:-1",
+              "950:0:-1",
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "116:0:1",
+              "108:0:1",
+              "1022:0:1",
+              "101:0:1",
+              "428:0:1",
+              "79:0:-1"
+            ],
+            "seedKey": "41c6d452967b31a0"
+          },
+          {
+            "id": "ambient:v1:c9da52022eb0a26c:005",
+            "kind": "truck",
+            "routeLaneRsls": [
+              "23:0:-2",
+              "875:0:-1",
+              "47:0:-2",
+              "1337:0:-1",
+              "32:0:-2",
+              "195:0:-1",
+              "100:0:1",
+              "786:0:1",
+              "34:0:-1",
+              "1089:0:-1",
+              "66:0:1",
+              "257:0:1",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1"
+            ],
+            "seedKey": "c9da52022eb0a26c"
+          },
+          {
+            "id": "ambient:v1:880f95ac4f68f19f:006",
+            "kind": "car",
+            "routeLaneRsls": [
+              "34:0:-1",
+              "1089:0:-1",
+              "66:0:1",
+              "257:0:1",
+              "1:0:-4",
+              "264:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5"
+            ],
+            "seedKey": "880f95ac4f68f19f"
+          },
+          {
+            "id": "ambient:v1:0fc2ca916f12d6c4:008",
+            "kind": "car",
+            "routeLaneRsls": [
+              "38:0:-1",
+              "1320:0:-1",
+              "39:0:-1",
+              "1412:0:-1",
+              "39:0:1",
+              "1321:0:1",
+              "48:0:-1",
+              "950:0:-1",
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5"
+            ],
+            "seedKey": "0fc2ca916f12d6c4"
+          },
+          {
+            "id": "ambient:v1:f77172fcff05ffa6:009",
+            "kind": "car",
+            "routeLaneRsls": [
+              "37:0:-1",
+              "952:0:-1",
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "344:0:1"
+            ],
+            "seedKey": "f77172fcff05ffa6"
+          },
+          {
+            "id": "ambient:v1:d306e1bd7bc48114:010",
+            "kind": "car",
+            "routeLaneRsls": [
+              "3:0:1",
+              "574:0:1",
+              "51:0:1",
+              "1073:0:1",
+              "78:0:1",
+              "491:0:1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "344:0:1",
+              "87:0:-4"
+            ],
+            "seedKey": "d306e1bd7bc48114"
+          },
+          {
+            "id": "ambient:v1:e31b2534759d37f0:012",
+            "kind": "van",
+            "routeLaneRsls": [
+              "52:0:1",
+              "572:0:1",
+              "51:0:1",
+              "1067:0:1",
+              "37:0:-1",
+              "952:0:-1",
+              "49:0:-1",
+              "276:0:-1"
+            ],
+            "seedKey": "e31b2534759d37f0"
+          },
+          {
+            "id": "ambient:v1:12a9a1fe462b44a9:013",
+            "kind": "car",
+            "routeLaneRsls": [
+              "49:0:1",
+              "949:0:1",
+              "48:0:1",
+              "1322:0:1",
+              "39:0:-1",
+              "1412:0:-1",
+              "39:0:1",
+              "1319:0:1",
+              "38:0:1",
+              "1194:0:1",
+              "88:0:-1"
+            ],
+            "seedKey": "12a9a1fe462b44a9"
+          },
+          {
+            "id": "ambient:v1:bfaa8c9323c5a5bb:015",
+            "kind": "car",
+            "routeLaneRsls": [
+              "65:0:-1",
+              "1196:0:-1",
+              "38:0:-1",
+              "1320:0:-1",
+              "39:0:-1",
+              "1412:0:-1",
+              "39:0:1",
+              "1319:0:1",
+              "38:0:1",
+              "1194:0:1",
+              "88:0:-1"
+            ],
+            "seedKey": "bfaa8c9323c5a5bb"
+          },
+          {
+            "id": "ambient:v1:1cd6a41aff5989ab:016",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "1:0:-2",
+              "262:0:-1",
+              "30:0:-3",
+              "483:0:-1",
+              "31:0:-2",
+              "1115:0:-1",
+              "70:0:-2",
+              "1377:0:-2",
+              "71:0:-2",
+              "359:0:-1",
+              "102:0:-1",
+              "1383:0:-1",
+              "113:0:-1",
+              "1295:0:-1",
+              "14:0:1",
+              "1284:0:1",
+              "18:0:-8",
+              "380:0:-1",
+              "114:0:-4"
+            ],
+            "seedKey": "1cd6a41aff5989ab"
+          },
+          {
+            "id": "ambient:v1:73350bf8d6ede9e6:018",
+            "kind": "car",
+            "routeLaneRsls": [
+              "48:0:-1",
+              "950:0:-1",
+              "49:0:-1",
+              "276:0:-1",
+              "30:0:-5",
+              "489:0:-1",
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "374:0:-1",
+              "27:0:4",
+              "127:0:1",
+              "109:0:5",
+              "344:0:1",
+              "87:0:-4"
+            ],
+            "seedKey": "73350bf8d6ede9e6"
+          },
+          {
+            "id": "ambient:v1:bbbf6e4e87ec9d40:019",
+            "kind": "car",
+            "routeLaneRsls": [
+              "31:0:-4",
+              "1122:0:-1",
+              "70:0:-5",
+              "1377:0:-5",
+              "71:0:-5",
+              "348:0:-1",
+              "67:0:-1",
+              "403:0:-1",
+              "68:0:-1",
+              "1105:0:-1",
+              "41:0:1",
+              "514:0:1",
+              "52:0:1",
+              "572:0:1",
+              "51:0:1",
+              "1073:0:1",
+              "78:0:1",
+              "491:0:1"
+            ],
+            "seedKey": "bbbf6e4e87ec9d40"
+          },
+          {
+            "id": "ambient:v1:fefaf9dfa4e931b9:022",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "85:0:1",
+              "231:0:1",
+              "100:0:1",
+              "771:1:1",
+              "771:0:1",
+              "95:3:1",
+              "95:2:1",
+              "95:1:1",
+              "95:0:1",
+              "994:0:1",
+              "94:0:1",
+              "1145:0:1",
+              "93:0:1",
+              "1228:0:1",
+              "64:0:-1"
+            ],
+            "seedKey": "fefaf9dfa4e931b9"
+          }
+        ],
+        "rejectedSpawnCount": 126,
+        "eligibleLaneKm": 2.967162277601276,
+        "screening": {
+          "count": 10,
+          "actorIds": [
+            "ambient:v1:3e37e232495b4128:014",
+            "ambient:v1:480384d483d90205:001",
+            "ambient:v1:6f106b89f00420b2:011",
+            "ambient:v1:8120996b42933368:004",
+            "ambient:v1:90fa8623e68a556b:020",
+            "ambient:v1:aeb5eec364712346:007",
+            "ambient:v1:c19c05a5e64ccdf4:000",
+            "ambient:v1:c640f74ae78b2ee6:021",
+            "ambient:v1:decebc38616e2e8f:023",
+            "ambient:v1:8e605613b5c1fc4e:017"
+          ],
+          "reasons": [
+            {
+              "actorId": "ambient:v1:3e37e232495b4128:014",
+              "reason": "required_decel",
+              "requiredDecelMps2": 25.29082208916458,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "25.291 m/s² exceeds 7.848 m/s²"
+            },
+            {
+              "actorId": "ambient:v1:480384d483d90205:001",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:6f106b89f00420b2:011"
+            },
+            {
+              "actorId": "ambient:v1:6f106b89f00420b2:011",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:480384d483d90205:001"
+            },
+            {
+              "actorId": "ambient:v1:8120996b42933368:004",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:c640f74ae78b2ee6:021"
+            },
+            {
+              "actorId": "ambient:v1:90fa8623e68a556b:020",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:decebc38616e2e8f:023"
+            },
+            {
+              "actorId": "ambient:v1:aeb5eec364712346:007",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:c640f74ae78b2ee6:021"
+            },
+            {
+              "actorId": "ambient:v1:c19c05a5e64ccdf4:000",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:90fa8623e68a556b:020"
+            },
+            {
+              "actorId": "ambient:v1:c640f74ae78b2ee6:021",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:8120996b42933368:004"
+            },
+            {
+              "actorId": "ambient:v1:decebc38616e2e8f:023",
+              "reason": "collision",
+              "detail": "collision with ambient:v1:90fa8623e68a556b:020"
+            },
+            {
+              "actorId": "ambient:v1:8e605613b5c1fc4e:017",
+              "reason": "required_decel",
+              "requiredDecelMps2": 8.107361601181626,
+              "maxAchievableDecelMps2": 7.848000000000001,
+              "detail": "8.107 m/s² exceeds 7.848 m/s²"
+            }
+          ]
+        },
+        "warnings": [
+          "Removed 10 ambient actor(s) during full-clip safety screening (8 collision, 2 required-deceleration)."
+        ]
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredTriggerCompletionPreserved": true,
+      "ambientCollisions": 0,
+      "robustnessEvaluation": {
+        "verdict": "accept",
+        "findings": [],
+        "tags": [],
+        "summary": {
+          "minTTC": 0.8899610741388394,
+          "minTTCt": 7.140000000000001,
+          "criticalityKind": "ttc",
+          "criticality": 0.8899610741388394,
+          "criticalityT": 7.140000000000001,
+          "requiredDecelMax": 3.882128156119423,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "robustnessAccepted": true,
+      "robustnessFailures": [],
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-03-contraflow-cyclist-garage-exit-v1",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 3
+        },
+        "criteria": [
+          {
+            "id": "required-event-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pedestrian-clears",
+                    "ego-first-creep",
+                    "ego-yields-legal",
+                    "legal-rider-passes",
+                    "ego-second-creep",
+                    "wrong-way-rider-emerges",
+                    "ego-stops-for-contraflow",
+                    "contraflow-rider-passes",
+                    "ego-final-entry-route",
+                    "ego-enters-after-bidirectional-check"
+                  ],
+                  "matchedTimesS": [
+                    4,
+                    4.2,
+                    7.6,
+                    9,
+                    11.2,
+                    11.4,
+                    13.6,
+                    17.5,
+                    18.6,
+                    18.7
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "initial-pedestrian-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    4.18
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 4.18,
+                  "requiredPresentSeconds": 4.16
+                }
+              }
+            ]
+          },
+          {
+            "id": "first-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    4.2,
+                    7.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 1.111111,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "second-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    11.2,
+                    13.6
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 1.388889
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-stop-hold",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    13.62,
+                    18.68
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 5.06,
+                  "requiredPresentSeconds": 5
+                }
+              }
+            ]
+          },
+          {
+            "id": "legal-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "legal-cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 2.770189,
+                  "atS": 7.14,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "contraflow-cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "wrong-way-rider"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 5.784862,
+                  "atS": 18.6,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "post-pass-observation-time",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "At least one second elapses between the contraflow pass marker and ego beginning final entry.",
+                  "reason": "The typed intent evaluator has no event-interval criterion; the unchanged scenario-specific gate evaluates the interval on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "riders-not-forced-to-brake",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Neither the legal cyclist nor the contraflow rider decelerates in response to ego.",
+                  "reason": "The typed intent evaluator has no acceleration criterion; the unchanged scenario-specific gate evaluates peak deceleration on every trace."
+                }
+              }
+            ]
+          },
+          {
+            "id": "bike-lane-encroachment",
+            "kind": "unsupported",
+            "required": false,
+            "status": "unsupported",
+            "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured.",
+            "evidence": [
+              {
+                "source": "rubric",
+                "summary": "criterion is outside the deterministic evaluator vocabulary",
+                "values": {
+                  "description": "Before final entry, ego occupies no more than 0.3 metres of the protected bike lane.",
+                  "reason": "The trace does not expose a continuous signed bike-lane-boundary distance. The scenario-specific gate preserves the authored pre-entry route-boundary proof and reports this as route-proven rather than trace-measured."
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "aa23735fc59c9d862d7f975748bb65e9988ad78a06b3c20d7b64acc2581000ac",
+            "mapId": "yale-street",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 19
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:0fc2ca916f12d6c4:008",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 19.872457,
+              "maxSpeedMps": 19.872457,
+              "finalSpeedMps": 19.872457,
+              "distanceTravelledM": 397.316439,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1320:0:-1",
+                "1321:0:1",
+                "1412:0:-1",
+                "276:0:-1",
+                "38:0:-1",
+                "39:0:-1",
+                "39:0:1",
+                "48:0:-1",
+                "49:0:-1",
+                "950:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:12a9a1fe462b44a9:013",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.119412,
+              "maxSpeedMps": 18.119412,
+              "finalSpeedMps": 18.119412,
+              "distanceTravelledM": 362.271038,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1319:0:1",
+                "1322:0:1",
+                "1412:0:-1",
+                "38:0:1",
+                "39:0:-1",
+                "39:0:1",
+                "48:0:1",
+                "49:0:1",
+                "949:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1cd6a41aff5989ab:016",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.317713,
+              "maxSpeedMps": 5.317713,
+              "finalSpeedMps": 5.317713,
+              "distanceTravelledM": 106.354267,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1:0:-2",
+                "262:0:-1",
+                "30:0:-3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:274ee3354732ecf2:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.402663,
+              "maxSpeedMps": 16.402663,
+              "finalSpeedMps": 16.402663,
+              "distanceTravelledM": 328.053098,
+              "stationaryIntervals": [],
+              "lanes": [
+                "109:0:4",
+                "1120:0:-1",
+                "133:0:1",
+                "1377:0:-4",
+                "1:0:-3",
+                "266:0:-1",
+                "27:0:3",
+                "30:0:-4",
+                "31:0:-3",
+                "373:0:-1",
+                "487:0:-1",
+                "70:0:-4",
+                "71:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:41c6d452967b31a0:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 7.529612,
+              "maxSpeedMps": 16.177947,
+              "finalSpeedMps": 16.177947,
+              "distanceTravelledM": 289.401476,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1122:0:-1",
+                "276:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "489:0:-1",
+                "48:0:-1",
+                "49:0:-1",
+                "70:0:-5",
+                "950:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:73350bf8d6ede9e6:018",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.81408,
+              "maxSpeedMps": 18.81408,
+              "finalSpeedMps": 18.81408,
+              "distanceTravelledM": 376.282798,
+              "stationaryIntervals": [],
+              "lanes": [
+                "109:0:5",
+                "1122:0:-1",
+                "127:0:1",
+                "1377:0:-5",
+                "276:0:-1",
+                "27:0:4",
+                "30:0:-5",
+                "31:0:-4",
+                "374:0:-1",
+                "489:0:-1",
+                "48:0:-1",
+                "49:0:-1",
+                "70:0:-5",
+                "71:0:-5",
+                "950:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:880f95ac4f68f19f:006",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 11.282784,
+              "maxSpeedMps": 17.23058,
+              "finalSpeedMps": 17.23058,
+              "distanceTravelledM": 330.357645,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1089:0:-1",
+                "1122:0:-1",
+                "1377:0:-5",
+                "1:0:-4",
+                "257:0:1",
+                "264:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "34:0:-1",
+                "374:0:-1",
+                "489:0:-1",
+                "66:0:1",
+                "70:0:-5",
+                "71:0:-5"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:bbbf6e4e87ec9d40:019",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 19.202038,
+              "maxSpeedMps": 19.202038,
+              "finalSpeedMps": 19.202038,
+              "distanceTravelledM": 384.031912,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1073:0:1",
+                "1105:0:-1",
+                "1122:0:-1",
+                "1377:0:-5",
+                "31:0:-4",
+                "348:0:-1",
+                "403:0:-1",
+                "41:0:1",
+                "514:0:1",
+                "51:0:1",
+                "52:0:1",
+                "572:0:1",
+                "67:0:-1",
+                "68:0:-1",
+                "70:0:-5",
+                "71:0:-5",
+                "78:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:bfaa8c9323c5a5bb:015",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.412176,
+              "maxSpeedMps": 15.918605,
+              "finalSpeedMps": 15.918605,
+              "distanceTravelledM": 293.256738,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1196:0:-1",
+                "1319:0:1",
+                "1320:0:-1",
+                "1412:0:-1",
+                "38:0:-1",
+                "38:0:1",
+                "39:0:-1",
+                "39:0:1",
+                "65:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:c9da52022eb0a26c:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 11.62187,
+              "maxSpeedMps": 19.263908,
+              "finalSpeedMps": 14.44987,
+              "distanceTravelledM": 360.387155,
+              "stationaryIntervals": [],
+              "lanes": [
+                "100:0:1",
+                "1089:0:-1",
+                "1337:0:-1",
+                "195:0:-1",
+                "1:0:-4",
+                "23:0:-2",
+                "257:0:1",
+                "264:0:-1",
+                "32:0:-2",
+                "34:0:-1",
+                "47:0:-2",
+                "66:0:1",
+                "786:0:1",
+                "875:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:d306e1bd7bc48114:010",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.227217,
+              "maxSpeedMps": 16.227217,
+              "finalSpeedMps": 16.227217,
+              "distanceTravelledM": 324.543977,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1073:0:1",
+                "109:0:5",
+                "1122:0:-1",
+                "127:0:1",
+                "1377:0:-5",
+                "27:0:4",
+                "31:0:-4",
+                "344:0:1",
+                "374:0:-1",
+                "3:0:1",
+                "491:0:1",
+                "51:0:1",
+                "574:0:1",
+                "70:0:-5",
+                "71:0:-5",
+                "78:0:1",
+                "87:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:e31b2534759d37f0:012",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.733906,
+              "maxSpeedMps": 11.191386,
+              "finalSpeedMps": 11.191364,
+              "distanceTravelledM": 216.15498,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1067:0:1",
+                "37:0:-1",
+                "49:0:-1",
+                "51:0:1",
+                "52:0:1",
+                "572:0:1",
+                "952:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f77172fcff05ffa6:009",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 8.077408,
+              "maxSpeedMps": 18.919121,
+              "finalSpeedMps": 16.72981,
+              "distanceTravelledM": 284.469642,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1122:0:-1",
+                "276:0:-1",
+                "30:0:-5",
+                "31:0:-4",
+                "37:0:-1",
+                "489:0:-1",
+                "49:0:-1",
+                "952:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:fefaf9dfa4e931b9:022",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.394597,
+              "maxSpeedMps": 6.013657,
+              "finalSpeedMps": 5.893963,
+              "distanceTravelledM": 112.637715,
+              "stationaryIntervals": [],
+              "lanes": [
+                "100:0:1",
+                "231:0:1",
+                "771:0:1",
+                "771:1:1",
+                "85:0:1"
+              ]
+            },
+            {
+              "actorId": "delivery-truck",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "92:0:1"
+              ]
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 1.111111,
+              "distanceTravelledM": 5.537222,
+              "stationaryIntervals": [
+                [
+                  0,
+                  4.26
+                ],
+                [
+                  7.16,
+                  18.76
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "legal-cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5,
+              "maxSpeedMps": 5,
+              "finalSpeedMps": 5,
+              "distanceTravelledM": 100.360966,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1145:0:1",
+                "1181:0:1",
+                "1207:0:1",
+                "65:0:1",
+                "92:0:1",
+                "93:0:1",
+                "94:0:1",
+                "95:0:1",
+                "994:0:1"
+              ]
+            },
+            {
+              "actorId": "pedestrian",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.111111,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 4.655556,
+              "stationaryIntervals": [
+                [
+                  4.38,
+                  20
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "wrong-way-rider",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 6.944444,
+              "finalSpeedMps": 6.944444,
+              "distanceTravelledM": 37.871022,
+              "stationaryIntervals": [
+                [
+                  0,
+                  11.48
+                ]
+              ],
+              "lanes": []
+            }
+          ],
+          "events": [
+            {
+              "t": 4,
+              "kind": "trigger_fired",
+              "actorId": "pedestrian",
+              "interactionId": "pedestrian-clears"
+            },
+            {
+              "t": 4.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-first-creep"
+            },
+            {
+              "t": 7.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 7.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-yields-legal"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "legal-cyclist",
+              "interactionId": "legal-rider-passes"
+            },
+            {
+              "t": 11.2,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 11.2,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-second-creep"
+            },
+            {
+              "t": 11.4,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "wrong-way-rider-emerges"
+            },
+            {
+              "t": 13.6,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 13.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-stops-for-contraflow"
+            },
+            {
+              "t": 17.5,
+              "kind": "preemption",
+              "actorId": "wrong-way-rider"
+            },
+            {
+              "t": 17.5,
+              "kind": "trigger_fired",
+              "actorId": "wrong-way-rider",
+              "interactionId": "contraflow-rider-passes"
+            },
+            {
+              "t": 18.6,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-final-entry-route"
+            },
+            {
+              "t": 18.7,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18.7,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-enters-after-bidirectional-check"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 0.8899610741388394,
+            "minPathTTC": 1.0702706859678437,
+            "minPET": 0,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "wrong-way-rider",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 5.0200000000000005
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "review": {
+        "pass": true,
+        "observed": {
+          "durationS": 20,
+          "eventTimes": {
+            "pedestrian-clears": 4,
+            "ego-first-creep": 4.2,
+            "ego-yields-legal": 7.6000000000000005,
+            "legal-rider-passes": 9,
+            "ego-second-creep": 11.200000000000001,
+            "wrong-way-rider-emerges": 11.4,
+            "ego-stops-for-contraflow": 13.6,
+            "contraflow-rider-passes": 17.5,
+            "ego-final-entry-route": 18.6,
+            "ego-enters-after-bidirectional-check": 18.7
+          },
+          "collisions": [],
+          "triggerNeverFired": [],
+          "initialHoldMaxMps": 0,
+          "firstCreepMaxKph": 4,
+          "secondCreepMaxKph": 0,
+          "stopHoldMaxMps": 0,
+          "legalCyclistClearanceM": 2.770188848404523,
+          "contraflowCyclistClearanceM": 5.784862234399988,
+          "legalCyclistPeakDecelMps2": 0,
+          "contraflowCyclistPeakDecelMps2": 0,
+          "postPassObservationSeconds": 1.1999999999999993,
+          "bikeLaneEncroachment": {
+            "status": "authored-route-proof-not-trace-measured",
+            "preEntryRouteTerminatesAtBikeLaneEdge": true,
+            "finalCrossingRouteTrigger": "ego-final-entry-route",
+            "finalCrossingRouteFiresAfterPassS": 1.1000000000000014,
+            "continuousEncroachmentDepthM": null
+          }
+        },
+        "limitations": [
+          "The trace lacks a signed continuous bike-lane-boundary distance, so the <=0.3 m encroachment criterion is route-proven but not independently trace-measured."
+        ]
+      },
+      "accepted": true,
+      "failures": []
+    }
+  ]
+}

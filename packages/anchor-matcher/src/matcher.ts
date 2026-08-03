@@ -20,8 +20,9 @@
  * fan-out is iterated in sorted order.
  */
 
-import { aggregateScore, evaluateAnchor } from './clauses.js';
+import { aggregateScore, evaluateAnchor, laneCountTransitions, sampleCorridor } from './clauses.js';
 import { bindRoles } from './bind.js';
+import { crossSectionAt } from './cross-section.js';
 import { degrade } from './degradation.js';
 import { buildCorridorFrame, buildJunctionFrames } from './frame.js';
 import { mirrorAnchor, mirrorRoleBindings } from './mirror.js';
@@ -33,6 +34,80 @@ import type { AnchorFeature, JunctionControl, LogicalAnchor } from './types/anch
 import type { DerivedMapIndex, LaneRsl } from './types/map-index.js';
 import type { RoleBinding } from './types/roles.js';
 import type { AnchorFrame, MatchReport, MatchStats, MatchedSite } from './types/site.js';
+
+/**
+ * Corridor segments are indexed from their head, while merge/lane-drop and
+ * work-zone templates state actor poses relative to a physical feature.
+ * Recenter those structural origins before evaluating runway and role bindings. This makes
+ * `s=0` mean the mechanism site (as it already does for junction anchors), and
+ * keeps the segment id as the stable map feature used by catalog closure.
+ */
+function recenterStructuralCorridor(
+  index: DerivedMapIndex,
+  anchor: LogicalAnchor,
+  frame: AnchorFrame,
+): AnchorFrame {
+  if (frame.origin.kind !== 'corridor') return frame;
+  const origin = originFeature(anchor);
+  let shift: number;
+  if (!origin) {
+    // A featureless corridor template still needs a meaningful zero station:
+    // place it after the requested approach runway so negative actor poses are
+    // genuine drivable positions rather than falling before the segment head.
+    shift = anchor.corridor?.runwayUpstreamM?.value ?? 0;
+    if (shift <= frame.sRange[0] || shift >= frame.sRange[1]) return frame;
+  } else if (origin.kind === 'merge' || origin.kind === 'lane_drop') {
+    const transitions = laneCountTransitions(index, sampleCorridor(index, frame, frame.sRange[0], frame.sRange[1]), frame)
+      .filter((transition) => transition.kind === origin.kind);
+    const selected = transitions.sort((left, right) => left.s - right.s)[0];
+    if (!selected) return frame;
+    shift = selected.s;
+  } else if (origin.kind === 'work_zone_suitable') {
+    const wantedAt = (origin.atM.value[0] + origin.atM.value[1]) / 2;
+    const pathLanes = new Set(frame.referencePath.map((span) => span.laneRsl));
+    const candidates = index.pointFeatures
+      .filter((feature) => feature.kind === 'work_zone_suitable' && pathLanes.has(feature.laneRsl))
+      .map((feature) => {
+        const span = frame.referencePath.find((candidate) => candidate.laneRsl === feature.laneRsl)!;
+        const featureS = span.sStart + Math.max(0, Math.min(span.lengthM, feature.s));
+        return { feature, featureS, shift: featureS - wantedAt };
+      })
+      .filter((candidate) => candidate.shift > frame.sRange[0] && candidate.shift < frame.sRange[1])
+      .sort((left, right) => left.featureS - right.featureS || left.feature.id.localeCompare(right.feature.id));
+    const selected = candidates[0];
+    if (!selected) return frame;
+    shift = selected.shift;
+  } else {
+    return frame;
+  }
+  const originSpan = frame.referencePath.find((span) => shift >= span.sStart && shift <= span.sEnd);
+  const originLane = originSpan ? index.lanes[originSpan.laneRsl] : undefined;
+  const localS = originSpan ? Math.max(0, Math.min(originSpan.lengthM, shift - originSpan.sStart)) : 0;
+  const crossSection = originLane ? crossSectionAt(index.lanes, originLane.rsl, localS) : null;
+  const lateralLanes: Record<number, LaneRsl> = {};
+  if (crossSection) {
+    for (const [k, rsl] of [...crossSection.sameDirDriving.entries()].sort((a, b) => a[0] - b[0])) {
+      lateralLanes[k] = rsl;
+    }
+  }
+
+  return {
+    ...frame,
+    referencePath: frame.referencePath.map((span) => ({
+      ...span,
+      sStart: span.sStart - shift,
+      sEnd: span.sEnd - shift,
+    })),
+    sOfLane: Object.fromEntries(
+      Object.entries(frame.sOfLane).map(([rsl, s]) => [rsl, s - shift]),
+    ),
+    sRange: [frame.sRange[0] - shift, frame.sRange[1] - shift],
+    lateralLanes: crossSection ? lateralLanes : frame.lateralLanes,
+    opposingLanes: crossSection ? [...crossSection.opposingDriving] : frame.opposingLanes,
+    runwayUpstreamM: shift - frame.sRange[0],
+    runwayDownstreamM: frame.sRange[1] - shift,
+  };
+}
 
 export interface MatchOptions {
   /** Roles to bind structurally at each site. Optional: clauses alone still match. */
@@ -162,6 +237,7 @@ function evaluateFrame(
   roles: RoleBinding[],
   frame: AnchorFrame,
 ): MatchedSite {
+  frame = recenterStructuralCorridor(index, anchor, frame);
   const evaluation = evaluateAnchor({ index, frame, anchor });
   const bindings = bindRoles(index, frame, roles, evaluation.featureMatches);
   const { score: softScore, failedRequired } = aggregateScore(evaluation.clauses);
@@ -209,6 +285,30 @@ function evaluateFrame(
     matchedReasons,
     alternateFrames: 0,
   };
+}
+
+/**
+ * Resolve one persisted corridor origin without enumerating unrelated map
+ * segments. This is for deterministic replay of a previously audited site;
+ * it still runs the ordinary frame evaluation and role binding pipeline.
+ */
+export function resolveExactCorridorSite(
+  anchor: LogicalAnchor,
+  index: DerivedMapIndex,
+  segmentId: string,
+  options: Pick<MatchOptions, 'roles'> = {},
+): MatchedSite | null {
+  const origin = originFeature(anchor);
+  if (origin?.kind === 'junction') return null;
+  const downstreamNeed = anchor.corridor?.runwayDownstreamM?.value;
+  const frameDownstreamNeed = downstreamNeed === undefined
+    ? undefined
+    : downstreamNeed + (anchor.corridor?.runwayUpstreamM?.value ?? 0);
+  const frame = buildCorridorFrame(index, segmentId, {
+    anchorFeatureId: origin?.id ?? 'corridor',
+    ...(frameDownstreamNeed === undefined ? {} : { runwayDownstreamM: frameDownstreamNeed }),
+  });
+  return frame === null ? null : evaluateFrame(index, anchor, options.roles ?? [], frame);
 }
 
 function diversityKey(
@@ -281,15 +381,23 @@ export function matchAnchorReport(
     for (const segmentId of ids) {
       if (frames.length >= maxFrames) break;
       const downstreamNeed = anchor.corridor?.runwayDownstreamM?.value;
+      // Corridor frames are initially built from the segment head and only
+      // then recentered on the authored structural zero. Reserve the approach
+      // distance as well, otherwise a featureless `100 m upstream + 180 m
+      // downstream` anchor is built as 180 m total and necessarily loses its
+      // downstream runway when shifted by 100 m.
+      const frameDownstreamNeed = downstreamNeed === undefined
+        ? undefined
+        : downstreamNeed + (anchor.corridor?.runwayUpstreamM?.value ?? 0);
       const frame = buildCorridorFrame(index, segmentId, {
         anchorFeatureId,
-        ...(downstreamNeed !== undefined ? { runwayDownstreamM: downstreamNeed } : {}),
+        ...(frameDownstreamNeed !== undefined ? { runwayDownstreamM: frameDownstreamNeed } : {}),
       });
       if (frame) frames.push(frame);
       if (mirroredAnchor) {
         const mirroredFrame = buildCorridorFrame(index, segmentId, {
           anchorFeatureId,
-          ...(downstreamNeed !== undefined ? { runwayDownstreamM: downstreamNeed } : {}),
+          ...(frameDownstreamNeed !== undefined ? { runwayDownstreamM: frameDownstreamNeed } : {}),
           mirrored: true,
         });
         if (mirroredFrame) mirroredFrames.push(mirroredFrame);
@@ -392,6 +500,12 @@ export function matchAnchorReport(
   }
   if (!index.capabilities.crossings) {
     warnings.push('map index carries no crossing layer: crossing features and on_crossing roles cannot bind');
+  }
+  if (!index.capabilities.workZones && anchor.features.some((feature) => feature.kind === 'work_zone_suitable')) {
+    warnings.push('map index carries no work-zone suitability layer: rebuild locations with work-zone densification');
+  }
+  if (!index.capabilities.occlusionZones && anchor.features.some((feature) => feature.kind === 'occlusion_zone')) {
+    warnings.push('map index carries no occlusion-zone layer: provide catalog sight-line/occluder evidence');
   }
 
   return {

@@ -1,0 +1,4766 @@
+{
+  "version": 1,
+  "scenario": "double-turn-mobility-scooter",
+  "baseline": {
+    "engineEvaluation": {
+      "verdict": "reject",
+      "findings": [
+        {
+          "code": "no_interaction",
+          "reason": "no pair produced finite TTC or crossing path-TTC — the episode has no interaction at all"
+        }
+      ],
+      "tags": [],
+      "summary": {
+        "minTTC": null,
+        "minTTCt": null,
+        "criticalityKind": null,
+        "criticality": null,
+        "criticalityT": null,
+        "requiredDecelMax": 2.6513088636250077,
+        "collisions": 0,
+        "neverFired": 0,
+        "occlusionUnproven": 0
+      }
+    },
+    "trace": {
+      "inputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+      "traceDigest": "1fcdfe5b8fdc82bd2614d3137139756833a771a721ff85f7b28606448ef40385",
+      "ticks": 1001,
+      "durationS": 20,
+      "collisions": 0,
+      "missedTriggers": []
+    },
+    "intentEvaluation": {
+      "version": 1,
+      "intentId": "edge-09-double-turn-mobility-scooter",
+      "verdict": "accept",
+      "counts": {
+        "pass": 8,
+        "fail": 0,
+        "unchecked": 0,
+        "unsupported": 0
+      },
+      "criteria": [
+        {
+          "id": "ego-stationary",
+          "kind": "stationary_success",
+          "required": true,
+          "status": "pass",
+          "reason": "stationary compliance succeeded",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stationary actor evidence",
+              "values": {
+                "actorId": "ego",
+                "window": [
+                  0,
+                  20
+                ],
+                "observedMaxSpeedMps": 0,
+                "allowedMaxSpeedMps": 0.1,
+                "presentSeconds": 20,
+                "requiredPresentSeconds": 20
+              }
+            }
+          ]
+        },
+        {
+          "id": "pickup-creep-cap",
+          "kind": "speed_band",
+          "required": true,
+          "status": "pass",
+          "reason": "speed remained inside the authored band",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "speed extrema in window",
+              "values": {
+                "actorId": "outer-pickup",
+                "window": [
+                  0,
+                  20
+                ],
+                "minSpeedMps": 0,
+                "maxSpeedMps": 0.833333,
+                "requiredMinMps": null,
+                "requiredMaxMps": 0.85
+              }
+            }
+          ]
+        },
+        {
+          "id": "layered-order",
+          "kind": "event_order",
+          "required": true,
+          "status": "pass",
+          "reason": "required event-order condition held",
+          "evidence": [
+            {
+              "source": "trace_event",
+              "summary": "ordered trigger evidence",
+              "values": {
+                "interactionIds": [
+                  "pickup-creeps",
+                  "pickup-blocks-crosswalk",
+                  "cyclist-emerges",
+                  "destination-conflict-enters",
+                  "scooter-leaves-refuge",
+                  "ego-confirms-wait"
+                ],
+                "matchedTimesS": [
+                  5,
+                  8,
+                  9,
+                  12,
+                  16.5,
+                  18
+                ],
+                "complete": true
+              }
+            }
+          ]
+        },
+        {
+          "id": "scooter-pause-resume",
+          "kind": "stop_hold_resume",
+          "required": true,
+          "status": "pass",
+          "reason": "stop/hold/resume behavior held",
+          "evidence": [
+            {
+              "source": "actor_track",
+              "summary": "stop interval and resume evidence",
+              "values": {
+                "actorId": "mobility-scooter",
+                "longestStop": [
+                  5.66,
+                  16.6
+                ],
+                "longestStopSeconds": 10.94,
+                "requiredHoldSeconds": 2,
+                "resumedAtS": 17.06,
+                "resumeByS": 20
+              }
+            }
+          ]
+        },
+        {
+          "id": "cyclist-clearance",
+          "kind": "clearance",
+          "required": true,
+          "status": "pass",
+          "reason": "minimum clearance held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "engine minimum shape clearance",
+              "values": {
+                "pair": [
+                  "ego",
+                  "cyclist"
+                ],
+                "measure": "metric_gap",
+                "minDistanceM": 16.840338,
+                "atS": 20,
+                "requiredMinM": 1.5,
+                "window": [
+                  0,
+                  20
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "id": "pickup-reveal",
+          "kind": "occlusion",
+          "required": true,
+          "status": "pass",
+          "reason": "occlusion outcome held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "declared occlusion result",
+              "values": {
+                "observer": "ego",
+                "target": "cyclist",
+                "expectedStatus": "revealed_before_conflict",
+                "observedStatuses": [
+                  "revealed_before_conflict"
+                ],
+                "firstBlockedT": 0,
+                "losOpenT": 1.96
+              }
+            }
+          ]
+        },
+        {
+          "id": "collision-free",
+          "kind": "collision",
+          "required": true,
+          "status": "pass",
+          "reason": "collision budget held",
+          "evidence": [
+            {
+              "source": "metric",
+              "summary": "collision evidence",
+              "values": {
+                "pair": [],
+                "observedCount": 0,
+                "maxCount": 0,
+                "timesS": []
+              }
+            }
+          ]
+        },
+        {
+          "id": "all-triggers-fired",
+          "kind": "trigger",
+          "required": true,
+          "status": "pass",
+          "reason": "trigger fired",
+          "evidence": [
+            {
+              "source": "trace_event",
+              "summary": "trigger outcome evidence",
+              "values": {
+                "interactionId": "ego-confirms-wait",
+                "outcome": "fired",
+                "timesS": [
+                  18
+                ]
+              }
+            }
+          ]
+        }
+      ],
+      "behaviorSummary": {
+        "version": 1,
+        "trace": {
+          "inputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+          "mapId": "el-camino-road",
+          "clipSeconds": 20,
+          "dt": 0.02,
+          "actorCount": 5
+        },
+        "actors": [
+          {
+            "actorId": "cyclist",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 4.693468,
+            "finalSpeedMps": 2.49189,
+            "distanceTravelledM": 22.221096,
+            "stationaryIntervals": [
+              [
+                0,
+                9.08
+              ]
+            ],
+            "lanes": []
+          },
+          {
+            "actorId": "ego",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 0,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 0,
+            "stationaryIntervals": [
+              [
+                0,
+                20
+              ]
+            ],
+            "lanes": [
+              "128:0:-3"
+            ]
+          },
+          {
+            "actorId": "mobility-scooter",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 1.25,
+            "finalSpeedMps": 0.555556,
+            "distanceTravelledM": 8.458333,
+            "stationaryIntervals": [
+              [
+                5.66,
+                16.6
+              ]
+            ],
+            "lanes": []
+          },
+          {
+            "actorId": "opposing-left-turner",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 1.453793,
+            "maxSpeedMps": 4.83105,
+            "finalSpeedMps": 1.453793,
+            "distanceTravelledM": 62.806731,
+            "stationaryIntervals": [],
+            "lanes": [
+              "365:0:-6",
+              "73:0:-6",
+              "74:0:-6"
+            ]
+          },
+          {
+            "actorId": "outer-pickup",
+            "presentFromS": 0,
+            "presentToS": 20,
+            "minSpeedMps": 0,
+            "maxSpeedMps": 0.833333,
+            "finalSpeedMps": 0,
+            "distanceTravelledM": 3.951318,
+            "stationaryIntervals": [
+              [
+                0,
+                5.1
+              ],
+              [
+                8.72,
+                20
+              ]
+            ],
+            "lanes": [
+              "627:0:-1"
+            ]
+          }
+        ],
+        "events": [
+          {
+            "t": 0,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-holds"
+          },
+          {
+            "t": 5,
+            "kind": "trigger_fired",
+            "actorId": "outer-pickup",
+            "interactionId": "pickup-creeps"
+          },
+          {
+            "t": 5,
+            "kind": "trigger_fired",
+            "actorId": "mobility-scooter",
+            "interactionId": "scooter-pauses-at-refuge"
+          },
+          {
+            "t": 8,
+            "kind": "preemption",
+            "actorId": "outer-pickup"
+          },
+          {
+            "t": 8,
+            "kind": "trigger_fired",
+            "actorId": "outer-pickup",
+            "interactionId": "pickup-blocks-crosswalk"
+          },
+          {
+            "t": 9,
+            "kind": "trigger_fired",
+            "actorId": "cyclist",
+            "interactionId": "cyclist-emerges"
+          },
+          {
+            "t": 12,
+            "kind": "trigger_fired",
+            "actorId": "opposing-left-turner",
+            "interactionId": "destination-conflict-enters"
+          },
+          {
+            "t": 16.5,
+            "kind": "preemption",
+            "actorId": "mobility-scooter"
+          },
+          {
+            "t": 16.5,
+            "kind": "trigger_fired",
+            "actorId": "mobility-scooter",
+            "interactionId": "scooter-leaves-refuge"
+          },
+          {
+            "t": 18,
+            "kind": "preemption",
+            "actorId": "ego"
+          },
+          {
+            "t": 18,
+            "kind": "trigger_fired",
+            "actorId": "ego",
+            "interactionId": "ego-confirms-wait"
+          }
+        ],
+        "metrics": {
+          "collisions": 0,
+          "minTTC": null,
+          "minPathTTC": null,
+          "minPET": null,
+          "triggerNeverFired": [],
+          "declaredOcclusion": [
+            {
+              "observer": "ego",
+              "target": "cyclist",
+              "status": "revealed_before_conflict",
+              "firstBlockedT": 0,
+              "losOpenT": 1.96
+            }
+          ]
+        },
+        "truncated": {
+          "actors": false,
+          "events": false,
+          "occlusions": false
+        }
+      }
+    }
+  },
+  "accepted": true,
+  "cases": [
+    {
+      "label": "off",
+      "profile": {
+        "version": 1,
+        "preset": "off",
+        "seed": "edge-09-off"
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "off",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-09-off",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 0
+        },
+        "profileHash": "a3429e4b96ca53b6564e5590ec1f0f482113da7c092f1b4d1dae544abc8bf6e4",
+        "baseInputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+        "generatedInputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+        "actors": [],
+        "rejectedSpawnCount": 0,
+        "eligibleLaneKm": 0,
+        "warnings": []
+      },
+      "ambientCounts": {
+        "requested": 0,
+        "generatedBeforeScreening": 0,
+        "retained": 0,
+        "removedByFullClipScreening": 0
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "no_interaction",
+            "reason": "no pair produced finite TTC or crossing path-TTC — the episode has no interaction at all"
+          }
+        ],
+        "tags": [],
+        "summary": {
+          "minTTC": null,
+          "minTTCt": null,
+          "criticalityKind": null,
+          "criticality": null,
+          "criticalityT": null,
+          "requiredDecelMax": 2.6513088636250077,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-09-double-turn-mobility-scooter",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "ego-stationary",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 20,
+                  "requiredPresentSeconds": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "outer-pickup",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0.833333,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 0.85
+                }
+              }
+            ]
+          },
+          {
+            "id": "layered-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pickup-creeps",
+                    "pickup-blocks-crosswalk",
+                    "cyclist-emerges",
+                    "destination-conflict-enters",
+                    "scooter-leaves-refuge",
+                    "ego-confirms-wait"
+                  ],
+                  "matchedTimesS": [
+                    5,
+                    8,
+                    9,
+                    12,
+                    16.5,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "scooter-pause-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "mobility-scooter",
+                  "longestStop": [
+                    5.66,
+                    16.6
+                  ],
+                  "longestStopSeconds": 10.94,
+                  "requiredHoldSeconds": 2,
+                  "resumedAtS": 17.06,
+                  "resumeByS": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 16.840338,
+                  "atS": 20,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-reveal",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "cyclist",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0,
+                  "losOpenT": 1.96
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "all-triggers-fired",
+            "kind": "trigger",
+            "required": true,
+            "status": "pass",
+            "reason": "trigger fired",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "trigger outcome evidence",
+                "values": {
+                  "interactionId": "ego-confirms-wait",
+                  "outcome": "fired",
+                  "timesS": [
+                    18
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+            "mapId": "el-camino-road",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 5
+          },
+          "actors": [
+            {
+              "actorId": "cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 4.693468,
+              "finalSpeedMps": 2.49189,
+              "distanceTravelledM": 22.221096,
+              "stationaryIntervals": [
+                [
+                  0,
+                  9.08
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "128:0:-3"
+              ]
+            },
+            {
+              "actorId": "mobility-scooter",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.25,
+              "finalSpeedMps": 0.555556,
+              "distanceTravelledM": 8.458333,
+              "stationaryIntervals": [
+                [
+                  5.66,
+                  16.6
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "opposing-left-turner",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.453793,
+              "maxSpeedMps": 4.83105,
+              "finalSpeedMps": 1.453793,
+              "distanceTravelledM": 62.806731,
+              "stationaryIntervals": [],
+              "lanes": [
+                "365:0:-6",
+                "73:0:-6",
+                "74:0:-6"
+              ]
+            },
+            {
+              "actorId": "outer-pickup",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0.833333,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 3.951318,
+              "stationaryIntervals": [
+                [
+                  0,
+                  5.1
+                ],
+                [
+                  8.72,
+                  20
+                ]
+              ],
+              "lanes": [
+                "627:0:-1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-holds"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-creeps"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-pauses-at-refuge"
+            },
+            {
+              "t": 8,
+              "kind": "preemption",
+              "actorId": "outer-pickup"
+            },
+            {
+              "t": 8,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-blocks-crosswalk"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "cyclist",
+              "interactionId": "cyclist-emerges"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "opposing-left-turner",
+              "interactionId": "destination-conflict-enters"
+            },
+            {
+              "t": 16.5,
+              "kind": "preemption",
+              "actorId": "mobility-scooter"
+            },
+            {
+              "t": 16.5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-leaves-refuge"
+            },
+            {
+              "t": 18,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-confirms-wait"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": null,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "cyclist",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 1.96
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+        "traceDigest": "1fcdfe5b8fdc82bd2614d3137139756833a771a721ff85f7b28606448ef40385",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    },
+    {
+      "label": "light",
+      "profile": {
+        "version": 1,
+        "preset": "light",
+        "seed": "edge-09-light"
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "light",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-09-light",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 3
+        },
+        "profileHash": "56bbdc82d8bdf1fbeef6a155c4b249c42ae758d554f08dcaa2f40aae5fc91de8",
+        "baseInputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+        "generatedInputHash": "04973a7b8c1c5301ab5b4c54c73256b26afcfccd659626c49ecdb683ee2dbb59",
+        "actors": [
+          {
+            "id": "ambient:v1:bd45a47838a1c716:000",
+            "kind": "van",
+            "routeLaneRsls": [
+              "80:0:-2",
+              "860:0:-1",
+              "9:0:-3",
+              "1982:0:-1",
+              "15:0:-2",
+              "2026:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1",
+              "2005:0:-1",
+              "14:0:-1",
+              "2010:0:-1",
+              "48:0:1",
+              "1767:0:1",
+              "15:0:-4",
+              "2027:0:-1"
+            ],
+            "seedKey": "bd45a47838a1c716"
+          },
+          {
+            "id": "ambient:v1:d045eb45cec3f8f0:002",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "101:0:-1",
+              "2118:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "342:0:-1",
+              "67:0:-1",
+              "766:0:-1",
+              "112:0:-1",
+              "1014:0:-1",
+              "113:0:-1",
+              "933:0:-1",
+              "114:0:-1",
+              "221:0:-1",
+              "115:0:-1",
+              "2181:0:-1",
+              "119:0:-1",
+              "977:0:-1",
+              "88:0:-1",
+              "2132:0:-1",
+              "89:0:-1",
+              "584:0:-1",
+              "106:0:-1"
+            ],
+            "seedKey": "d045eb45cec3f8f0"
+          },
+          {
+            "id": "ambient:v1:993605c6dba1e061:003",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "49:0:1",
+              "488:0:1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "350:0:-1",
+              "43:0:-1",
+              "948:0:-1",
+              "10:0:1",
+              "199:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "898:0:1",
+              "120:0:-1",
+              "2126:0:-1"
+            ],
+            "seedKey": "993605c6dba1e061"
+          },
+          {
+            "id": "ambient:v1:4fe2035ae31eaf0d:004",
+            "kind": "car",
+            "routeLaneRsls": [
+              "107:1:-3",
+              "2225:0:-1",
+              "60:0:-4",
+              "250:0:-1",
+              "26:0:-4",
+              "612:0:-1",
+              "0:0:-3",
+              "775:0:-3",
+              "1:0:-3"
+            ],
+            "seedKey": "4fe2035ae31eaf0d"
+          },
+          {
+            "id": "ambient:v1:10ba4a85de1dd291:005",
+            "kind": "car",
+            "routeLaneRsls": [
+              "75:0:-1",
+              "75:1:-1",
+              "47:0:-1",
+              "2211:0:-1",
+              "125:0:-1",
+              "171:0:-1",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1"
+            ],
+            "seedKey": "10ba4a85de1dd291"
+          },
+          {
+            "id": "ambient:v1:ef6521f321c706de:006",
+            "kind": "van",
+            "routeLaneRsls": [
+              "87:0:1",
+              "2106:0:1",
+              "86:0:1",
+              "942:0:1",
+              "85:0:1",
+              "1075:0:1",
+              "84:0:1",
+              "1050:0:1",
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2163:0:1",
+              "58:0:-1",
+              "2195:0:-1",
+              "45:0:-1",
+              "2147:0:-1",
+              "83:0:-1",
+              "1049:0:-1",
+              "84:0:-1",
+              "1076:0:-1",
+              "85:0:-1",
+              "936:0:-1",
+              "8:0:1",
+              "928:0:1",
+              "114:0:-1",
+              "221:0:-1",
+              "115:0:-1",
+              "2173:0:-1",
+              "116:0:-1",
+              "1057:0:-1"
+            ],
+            "seedKey": "ef6521f321c706de"
+          },
+          {
+            "id": "ambient:v1:600f485e210a9324:007",
+            "kind": "car",
+            "routeLaneRsls": [
+              "124:0:1",
+              "863:0:1",
+              "2:0:-1",
+              "871:0:-1",
+              "3:0:-1",
+              "182:0:-1",
+              "4:0:-1",
+              "888:0:-1",
+              "5:0:-1",
+              "905:0:-1",
+              "6:0:-1",
+              "204:0:-1",
+              "55:0:-1",
+              "2157:0:-1",
+              "39:0:-1",
+              "2205:0:-1",
+              "82:0:-1",
+              "2150:0:-1",
+              "83:0:-1",
+              "1049:0:-1",
+              "84:0:-1",
+              "1076:0:-1",
+              "85:0:-1",
+              "943:0:-1",
+              "86:0:-1",
+              "2107:0:-1",
+              "87:0:-1",
+              "983:0:-1",
+              "88:0:-1",
+              "2132:0:-1",
+              "89:0:-1",
+              "584:0:-1"
+            ],
+            "seedKey": "600f485e210a9324"
+          },
+          {
+            "id": "ambient:v1:1ac9c5876be37dad:008",
+            "kind": "car",
+            "routeLaneRsls": [
+              "70:0:-3",
+              "1988:0:-1",
+              "102:0:-2",
+              "161:0:-2",
+              "103:0:-2",
+              "103:1:-2",
+              "750:0:-1",
+              "128:0:-3",
+              "128:1:-3",
+              "624:0:-1",
+              "0:0:-3",
+              "775:0:-3",
+              "1:0:-3"
+            ],
+            "seedKey": "1ac9c5876be37dad"
+          },
+          {
+            "id": "ambient:v1:0b07e0ed612a5ba2:009",
+            "kind": "car",
+            "routeLaneRsls": [
+              "71:0:3",
+              "815:0:1",
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4",
+              "74:0:-4",
+              "595:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "850:0:-1",
+              "9:0:-2",
+              "1979:0:-1",
+              "52:0:-1",
+              "176:0:-1",
+              "12:0:1",
+              "1020:0:1",
+              "11:0:-1",
+              "1026:0:-1",
+              "70:0:-5",
+              "1995:0:-1"
+            ],
+            "seedKey": "0b07e0ed612a5ba2"
+          },
+          {
+            "id": "ambient:v1:0b06481c765b9e9c:010",
+            "kind": "car",
+            "routeLaneRsls": [
+              "13:0:-1",
+              "127:0:-2",
+              "2140:0:-1",
+              "35:0:-1",
+              "1134:0:-1",
+              "61:0:1",
+              "1926:0:1",
+              "15:0:-4",
+              "2027:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1",
+              "2005:0:-1",
+              "14:0:-1",
+              "2010:0:-1",
+              "48:0:1",
+              "1138:0:1",
+              "59:0:-1"
+            ],
+            "seedKey": "0b06481c765b9e9c"
+          },
+          {
+            "id": "ambient:v1:0ed0055323ccd43c:011",
+            "kind": "car",
+            "routeLaneRsls": [
+              "112:0:1",
+              "770:0:1",
+              "27:0:-1",
+              "1054:0:-1",
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2154:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "887:0:1",
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "870:0:1",
+              "2:0:1",
+              "865:0:1",
+              "124:0:-1",
+              "567:0:-1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2116:0:-1",
+              "101:0:1",
+              "184:0:1",
+              "4:0:-1"
+            ],
+            "seedKey": "0ed0055323ccd43c"
+          },
+          {
+            "id": "ambient:v1:812a3826a606bdc5:012",
+            "kind": "car",
+            "routeLaneRsls": [
+              "70:0:-5",
+              "1987:0:-1",
+              "102:0:-4",
+              "173:0:-1",
+              "125:0:1",
+              "2212:0:1",
+              "47:0:1",
+              "75:1:1",
+              "75:0:1",
+              "998:0:1",
+              "66:0:-3",
+              "2087:0:-1",
+              "94:0:-3",
+              "94:1:-3"
+            ],
+            "seedKey": "812a3826a606bdc5"
+          },
+          {
+            "id": "ambient:v1:173b99f03dff8ae4:013",
+            "kind": "van",
+            "routeLaneRsls": [
+              "115:0:1",
+              "220:0:1",
+              "114:0:1",
+              "924:0:1",
+              "8:0:-1",
+              "935:0:-1",
+              "85:0:1",
+              "1072:0:1",
+              "68:0:1",
+              "1009:0:1",
+              "112:0:1",
+              "770:0:1",
+              "27:0:-1",
+              "1054:0:-1",
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2163:0:1",
+              "58:0:-1",
+              "2195:0:-1",
+              "45:0:-1",
+              "2147:0:-1",
+              "83:0:-1",
+              "1049:0:-1",
+              "84:0:-1",
+              "1076:0:-1",
+              "85:0:-1",
+              "943:0:-1",
+              "86:0:-1",
+              "2107:0:-1"
+            ],
+            "seedKey": "173b99f03dff8ae4"
+          },
+          {
+            "id": "ambient:v1:b86f535b1ff7f9ea:014",
+            "kind": "car",
+            "routeLaneRsls": [
+              "12:0:1",
+              "1020:0:1",
+              "11:0:-1",
+              "1026:0:-1",
+              "70:0:-5",
+              "1987:0:-1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "652:0:-1",
+              "652:1:-1",
+              "62:0:-3",
+              "2090:0:-3",
+              "2090:1:-3",
+              "63:0:-3"
+            ],
+            "seedKey": "b86f535b1ff7f9ea"
+          },
+          {
+            "id": "ambient:v1:e65b9fccb0e363bf:015",
+            "kind": "car",
+            "routeLaneRsls": [
+              "12:0:-1",
+              "177:0:-1",
+              "52:0:1",
+              "1997:0:1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1"
+            ],
+            "seedKey": "e65b9fccb0e363bf"
+          },
+          {
+            "id": "ambient:v1:20938fc4d63ab83c:016",
+            "kind": "car",
+            "routeLaneRsls": [
+              "125:0:1",
+              "2212:0:1",
+              "47:0:1",
+              "75:1:1",
+              "75:0:1",
+              "998:0:1",
+              "66:0:-3",
+              "2087:0:-1",
+              "94:0:-3",
+              "94:1:-3"
+            ],
+            "seedKey": "20938fc4d63ab83c"
+          },
+          {
+            "id": "ambient:v1:965b7e7ceacc8d92:017",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "74:0:-6",
+              "598:0:-1",
+              "79:0:-4",
+              "146:0:-4",
+              "80:0:-4",
+              "852:0:-1",
+              "9:0:-5",
+              "1985:0:-1",
+              "15:0:-4",
+              "2027:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1",
+              "2006:0:-1",
+              "51:0:1",
+              "2011:0:1",
+              "48:0:1"
+            ],
+            "seedKey": "965b7e7ceacc8d92"
+          },
+          {
+            "id": "ambient:v1:7b76acc07510cf37:018",
+            "kind": "van",
+            "routeLaneRsls": [
+              "98:0:-1",
+              "340:0:-1",
+              "67:0:-1",
+              "766:0:-1",
+              "112:0:-1",
+              "1014:0:-1",
+              "113:0:-1",
+              "933:0:-1",
+              "114:0:-1",
+              "221:0:-1",
+              "115:0:-1",
+              "2173:0:-1",
+              "116:0:-1",
+              "1057:0:-1",
+              "126:0:-1",
+              "2133:0:-1",
+              "88:0:1",
+              "976:0:1",
+              "119:0:1",
+              "2182:0:1",
+              "115:0:1",
+              "220:0:1",
+              "114:0:1",
+              "932:0:1",
+              "113:0:1",
+              "1015:0:1",
+              "68:0:-1",
+              "1067:0:-1",
+              "84:0:1",
+              "1041:0:1",
+              "27:0:1",
+              "762:0:1"
+            ],
+            "seedKey": "7b76acc07510cf37"
+          },
+          {
+            "id": "ambient:v1:b80d77673f580616:020",
+            "kind": "car",
+            "routeLaneRsls": [
+              "60:0:-2",
+              "252:0:-1",
+              "26:0:-2",
+              "593:0:-1",
+              "79:0:-3",
+              "146:0:-3",
+              "80:0:-3",
+              "854:0:-1",
+              "9:0:-4",
+              "1980:0:-1",
+              "15:0:-3",
+              "2028:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1"
+            ],
+            "seedKey": "b80d77673f580616"
+          },
+          {
+            "id": "ambient:v1:23f10a3ac8164f55:021",
+            "kind": "car",
+            "routeLaneRsls": [
+              "10:0:-1",
+              "949:0:-1",
+              "44:0:-1",
+              "2198:0:-1",
+              "45:0:-1",
+              "2152:0:-1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2154:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "887:0:1",
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "881:0:1",
+              "36:0:-1",
+              "134:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2124:0:-1",
+              "120:0:1",
+              "893:0:1"
+            ],
+            "seedKey": "23f10a3ac8164f55"
+          },
+          {
+            "id": "ambient:v1:961d2f7bc0df5d63:022",
+            "kind": "car",
+            "routeLaneRsls": [
+              "43:0:-1",
+              "948:0:-1",
+              "10:0:1",
+              "207:0:1",
+              "55:0:-1",
+              "2164:0:-1",
+              "58:0:-1",
+              "2195:0:-1",
+              "45:0:-1",
+              "2147:0:-1",
+              "83:0:-1",
+              "1051:0:-1",
+              "27:0:1",
+              "762:0:1",
+              "67:0:1",
+              "341:0:1",
+              "24:1:1",
+              "24:0:1",
+              "2121:0:1",
+              "22:1:1",
+              "22:0:1",
+              "2114:2:1",
+              "2114:1:1",
+              "2114:0:1",
+              "21:0:1",
+              "140:1:1",
+              "140:0:1",
+              "19:1:1",
+              "19:0:1",
+              "482:0:1",
+              "49:0:-1",
+              "968:0:-1"
+            ],
+            "seedKey": "961d2f7bc0df5d63"
+          }
+        ],
+        "rejectedSpawnCount": 94,
+        "eligibleLaneKm": 7.658992544615169,
+        "warnings": [
+          "Removed 2 ambient actor(s) whose full-clip simulation intersected authored choreography, collidable props, or other ambient traffic."
+        ]
+      },
+      "ambientCounts": {
+        "requested": 23,
+        "generatedBeforeScreening": 23,
+        "retained": 21,
+        "removedByFullClipScreening": 2
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 3.42 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 3.422947809645449,
+              "kind": "ttc",
+              "pair": [
+                "ambient:v1:1ac9c5876be37dad:008",
+                "ego"
+              ]
+            }
+          },
+          {
+            "code": "physically_unavoidable",
+            "reason": "ambient:v1:0b07e0ed612a5ba2:009 needed 8.00 m/s², above the 7.85 m/s² friction ceiling",
+            "detail": {
+              "actorId": "ambient:v1:0b07e0ed612a5ba2:009",
+              "requiredDecel": 8,
+              "ceiling": 7.848000000000001
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 3.422947809645449,
+          "minTTCt": 11.48,
+          "criticalityKind": "ttc",
+          "criticality": 3.422947809645449,
+          "criticalityT": 11.48,
+          "requiredDecelMax": 8,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-09-double-turn-mobility-scooter",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "ego-stationary",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 20,
+                  "requiredPresentSeconds": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "outer-pickup",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0.833333,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 0.85
+                }
+              }
+            ]
+          },
+          {
+            "id": "layered-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pickup-creeps",
+                    "pickup-blocks-crosswalk",
+                    "cyclist-emerges",
+                    "destination-conflict-enters",
+                    "scooter-leaves-refuge",
+                    "ego-confirms-wait"
+                  ],
+                  "matchedTimesS": [
+                    5,
+                    8,
+                    9,
+                    12,
+                    16.5,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "scooter-pause-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "mobility-scooter",
+                  "longestStop": [
+                    5.66,
+                    16.6
+                  ],
+                  "longestStopSeconds": 10.94,
+                  "requiredHoldSeconds": 2,
+                  "resumedAtS": 17.06,
+                  "resumeByS": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 16.840338,
+                  "atS": 20,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-reveal",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "cyclist",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0,
+                  "losOpenT": 1.96
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "all-triggers-fired",
+            "kind": "trigger",
+            "required": true,
+            "status": "pass",
+            "reason": "trigger fired",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "trigger outcome evidence",
+                "values": {
+                  "interactionId": "ego-confirms-wait",
+                  "outcome": "fired",
+                  "timesS": [
+                    18
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "04973a7b8c1c5301ab5b4c54c73256b26afcfccd659626c49ecdb683ee2dbb59",
+            "mapId": "el-camino-road",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 26
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:0b06481c765b9e9c:010",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.960193,
+              "maxSpeedMps": 15.693273,
+              "finalSpeedMps": 15.693267,
+              "distanceTravelledM": 298.500024,
+              "stationaryIntervals": [],
+              "lanes": [
+                "100:0:-1",
+                "1134:0:-1",
+                "127:0:-2",
+                "132:0:1",
+                "14:0:-1",
+                "15:0:-4",
+                "1926:0:1",
+                "2005:0:-1",
+                "2010:0:-1",
+                "2027:0:-1",
+                "2094:0:1",
+                "2140:0:-1",
+                "35:0:-1",
+                "48:0:1",
+                "61:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:0b07e0ed612a5ba2:009",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 25.736742,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 191.807343,
+              "stationaryIntervals": [
+                [
+                  10.52,
+                  20
+                ]
+              ],
+              "lanes": [
+                "365:0:-4",
+                "71:0:3",
+                "735:0:-1",
+                "73:0:-4",
+                "74:0:-4",
+                "7:0:-2",
+                "815:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:0ed0055323ccd43c:011",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.953574,
+              "maxSpeedMps": 15.832473,
+              "finalSpeedMps": 15.832473,
+              "distanceTravelledM": 309.515101,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1054:0:-1",
+                "124:0:-1",
+                "183:0:1",
+                "201:0:1",
+                "2149:0:1",
+                "2154:0:1",
+                "2204:0:1",
+                "27:0:-1",
+                "2:0:1",
+                "39:0:1",
+                "3:0:1",
+                "4:0:1",
+                "55:0:1",
+                "567:0:-1",
+                "5:0:1",
+                "6:0:1",
+                "770:0:1",
+                "82:0:1",
+                "83:0:1",
+                "865:0:1",
+                "870:0:1",
+                "887:0:1",
+                "904:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:10ba4a85de1dd291:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.219554,
+              "maxSpeedMps": 16.855747,
+              "finalSpeedMps": 9.219554,
+              "distanceTravelledM": 326.817523,
+              "stationaryIntervals": [],
+              "lanes": [
+                "103:0:-4",
+                "103:1:-4",
+                "125:0:-1",
+                "128:0:-6",
+                "171:0:-1",
+                "2211:0:-1",
+                "47:0:-1",
+                "751:0:-1",
+                "75:0:-1",
+                "75:1:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:173b99f03dff8ae4:013",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.633808,
+              "maxSpeedMps": 16.633808,
+              "finalSpeedMps": 16.633808,
+              "distanceTravelledM": 332.633293,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1009:0:1",
+                "1054:0:-1",
+                "1072:0:1",
+                "112:0:1",
+                "114:0:1",
+                "2149:0:1",
+                "2163:0:1",
+                "2195:0:-1",
+                "2204:0:1",
+                "220:0:1",
+                "27:0:-1",
+                "39:0:1",
+                "45:0:-1",
+                "58:0:-1",
+                "68:0:1",
+                "770:0:1",
+                "82:0:1",
+                "83:0:1",
+                "85:0:1",
+                "8:0:-1",
+                "924:0:1",
+                "935:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1ac9c5876be37dad:008",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.101979,
+              "maxSpeedMps": 16.932292,
+              "finalSpeedMps": 0.101979,
+              "distanceTravelledM": 163.048514,
+              "stationaryIntervals": [],
+              "lanes": [
+                "102:0:-2",
+                "103:0:-2",
+                "103:1:-2",
+                "128:0:-3",
+                "161:0:-2",
+                "1988:0:-1",
+                "750:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:20938fc4d63ab83c:016",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.208972,
+              "maxSpeedMps": 16.208972,
+              "finalSpeedMps": 16.208972,
+              "distanceTravelledM": 324.165941,
+              "stationaryIntervals": [],
+              "lanes": [
+                "2087:0:-1",
+                "2212:0:1",
+                "47:0:1",
+                "66:0:-3",
+                "75:0:1",
+                "75:1:1",
+                "94:0:-3",
+                "998:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:23f10a3ac8164f55:021",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.947359,
+              "maxSpeedMps": 15.787015,
+              "finalSpeedMps": 15.786964,
+              "distanceTravelledM": 311.979957,
+              "stationaryIntervals": [],
+              "lanes": [
+                "120:0:1",
+                "134:0:-1",
+                "183:0:1",
+                "201:0:1",
+                "2115:0:-1",
+                "2124:0:-1",
+                "2152:0:-1",
+                "2154:0:1",
+                "2198:0:-1",
+                "21:0:-1",
+                "2204:0:1",
+                "22:0:-1",
+                "22:1:-1",
+                "36:0:-1",
+                "39:0:1",
+                "3:0:1",
+                "44:0:-1",
+                "45:0:-1",
+                "4:0:1",
+                "55:0:1",
+                "5:0:1",
+                "6:0:1",
+                "82:0:1",
+                "881:0:1",
+                "887:0:1",
+                "904:0:1",
+                "949:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:4fe2035ae31eaf0d:004",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 16.736242,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 166.045957,
+              "stationaryIntervals": [
+                [
+                  14.54,
+                  20
+                ]
+              ],
+              "lanes": [
+                "107:1:-3",
+                "2225:0:-1",
+                "250:0:-1",
+                "26:0:-4",
+                "60:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:600f485e210a9324:007",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.02752,
+              "maxSpeedMps": 16.02752,
+              "finalSpeedMps": 16.02752,
+              "distanceTravelledM": 320.546513,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1049:0:-1",
+                "1076:0:-1",
+                "124:0:1",
+                "182:0:-1",
+                "204:0:-1",
+                "2107:0:-1",
+                "2150:0:-1",
+                "2157:0:-1",
+                "2205:0:-1",
+                "2:0:-1",
+                "39:0:-1",
+                "3:0:-1",
+                "4:0:-1",
+                "55:0:-1",
+                "5:0:-1",
+                "6:0:-1",
+                "82:0:-1",
+                "83:0:-1",
+                "84:0:-1",
+                "85:0:-1",
+                "863:0:1",
+                "86:0:-1",
+                "871:0:-1",
+                "87:0:-1",
+                "888:0:-1",
+                "905:0:-1",
+                "943:0:-1",
+                "983:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:7b76acc07510cf37:018",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 18.064216,
+              "maxSpeedMps": 18.248771,
+              "finalSpeedMps": 18.248771,
+              "distanceTravelledM": 365.037342,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1014:0:-1",
+                "1015:0:1",
+                "1057:0:-1",
+                "1067:0:-1",
+                "112:0:-1",
+                "113:0:-1",
+                "113:0:1",
+                "114:0:-1",
+                "114:0:1",
+                "115:0:-1",
+                "115:0:1",
+                "116:0:-1",
+                "119:0:1",
+                "126:0:-1",
+                "2133:0:-1",
+                "2173:0:-1",
+                "2182:0:1",
+                "220:0:1",
+                "221:0:-1",
+                "340:0:-1",
+                "67:0:-1",
+                "68:0:-1",
+                "766:0:-1",
+                "88:0:1",
+                "932:0:1",
+                "933:0:-1",
+                "976:0:1",
+                "98:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:812a3826a606bdc5:012",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 13.955435,
+              "maxSpeedMps": 18.191742,
+              "finalSpeedMps": 17.357951,
+              "distanceTravelledM": 348.489332,
+              "stationaryIntervals": [],
+              "lanes": [
+                "102:0:-4",
+                "125:0:1",
+                "173:0:-1",
+                "1987:0:-1",
+                "2087:0:-1",
+                "2212:0:1",
+                "47:0:1",
+                "66:0:-3",
+                "75:0:1",
+                "75:1:1",
+                "998:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:961d2f7bc0df5d63:022",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 15.568315,
+              "maxSpeedMps": 16.788061,
+              "finalSpeedMps": 16.788061,
+              "distanceTravelledM": 333.506035,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1051:0:-1",
+                "10:0:1",
+                "140:0:1",
+                "140:1:1",
+                "19:0:1",
+                "19:1:1",
+                "207:0:1",
+                "2114:0:1",
+                "2114:1:1",
+                "2114:2:1",
+                "2121:0:1",
+                "2147:0:-1",
+                "2164:0:-1",
+                "2195:0:-1",
+                "21:0:1",
+                "22:0:1",
+                "22:1:1",
+                "24:0:1",
+                "24:1:1",
+                "27:0:1",
+                "341:0:1",
+                "45:0:-1",
+                "482:0:1",
+                "55:0:-1",
+                "58:0:-1",
+                "67:0:1",
+                "762:0:1",
+                "83:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:965b7e7ceacc8d92:017",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 4.239083,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 7.424282,
+              "stationaryIntervals": [
+                [
+                  3.36,
+                  20
+                ]
+              ],
+              "lanes": [
+                "74:0:-6"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:993605c6dba1e061:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.962415,
+              "maxSpeedMps": 5.962415,
+              "finalSpeedMps": 5.962415,
+              "distanceTravelledM": 119.24683,
+              "stationaryIntervals": [],
+              "lanes": [
+                "139:0:-1",
+                "19:0:-1",
+                "19:1:-1",
+                "2115:0:-1",
+                "2122:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "350:0:-1",
+                "488:0:1",
+                "49:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b80d77673f580616:020",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 18.086705,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 66.495406,
+              "stationaryIntervals": [
+                [
+                  7.28,
+                  20
+                ]
+              ],
+              "lanes": [
+                "252:0:-1",
+                "26:0:-2"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b86f535b1ff7f9ea:014",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.102898,
+              "maxSpeedMps": 17.102646,
+              "finalSpeedMps": 3.102898,
+              "distanceTravelledM": 297.086457,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1020:0:1",
+                "1026:0:-1",
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "11:0:-1",
+                "128:0:-6",
+                "161:0:-4",
+                "1987:0:-1",
+                "70:0:-5",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:bd45a47838a1c716:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.548853,
+              "maxSpeedMps": 16.548853,
+              "finalSpeedMps": 16.548853,
+              "distanceTravelledM": 330.957908,
+              "stationaryIntervals": [],
+              "lanes": [
+                "100:0:-1",
+                "132:0:1",
+                "14:0:-1",
+                "15:0:-2",
+                "1767:0:1",
+                "1982:0:-1",
+                "2005:0:-1",
+                "2010:0:-1",
+                "2026:0:-1",
+                "2094:0:1",
+                "48:0:1",
+                "860:0:-1",
+                "9:0:-3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:d045eb45cec3f8f0:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 3.902986,
+              "maxSpeedMps": 5.122493,
+              "finalSpeedMps": 4.731834,
+              "distanceTravelledM": 95.343979,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1014:0:-1",
+                "101:0:-1",
+                "112:0:-1",
+                "2118:0:-1",
+                "2122:0:-1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "342:0:-1",
+                "67:0:-1",
+                "766:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:e65b9fccb0e363bf:015",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 17.131641,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 264.659112,
+              "stationaryIntervals": [
+                [
+                  19.96,
+                  20
+                ]
+              ],
+              "lanes": [
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "128:0:-6",
+                "128:1:-6",
+                "12:0:-1",
+                "161:0:-4",
+                "177:0:-1",
+                "1997:0:1",
+                "52:0:1",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:ef6521f321c706de:006",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.122649,
+              "maxSpeedMps": 17.818184,
+              "finalSpeedMps": 17.818184,
+              "distanceTravelledM": 280.990131,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1049:0:-1",
+                "1050:0:1",
+                "1075:0:1",
+                "1076:0:-1",
+                "2147:0:-1",
+                "2149:0:1",
+                "2163:0:1",
+                "2195:0:-1",
+                "2204:0:1",
+                "39:0:1",
+                "45:0:-1",
+                "58:0:-1",
+                "82:0:1",
+                "83:0:-1",
+                "83:0:1",
+                "84:0:-1",
+                "84:0:1",
+                "85:0:-1",
+                "85:0:1",
+                "86:0:1",
+                "936:0:-1",
+                "942:0:1"
+              ]
+            },
+            {
+              "actorId": "cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 4.693468,
+              "finalSpeedMps": 2.49189,
+              "distanceTravelledM": 22.221096,
+              "stationaryIntervals": [
+                [
+                  0,
+                  9.08
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "128:0:-3"
+              ]
+            },
+            {
+              "actorId": "mobility-scooter",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.25,
+              "finalSpeedMps": 0.555556,
+              "distanceTravelledM": 8.458333,
+              "stationaryIntervals": [
+                [
+                  5.66,
+                  16.6
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "opposing-left-turner",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.855186,
+              "maxSpeedMps": 4.83105,
+              "finalSpeedMps": 0.855186,
+              "distanceTravelledM": 62.102908,
+              "stationaryIntervals": [],
+              "lanes": [
+                "365:0:-6",
+                "73:0:-6",
+                "74:0:-6"
+              ]
+            },
+            {
+              "actorId": "outer-pickup",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0.833333,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 3.951318,
+              "stationaryIntervals": [
+                [
+                  0,
+                  5.1
+                ],
+                [
+                  8.72,
+                  20
+                ]
+              ],
+              "lanes": [
+                "627:0:-1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-holds"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-creeps"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-pauses-at-refuge"
+            },
+            {
+              "t": 8,
+              "kind": "preemption",
+              "actorId": "outer-pickup"
+            },
+            {
+              "t": 8,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-blocks-crosswalk"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "cyclist",
+              "interactionId": "cyclist-emerges"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "opposing-left-turner",
+              "interactionId": "destination-conflict-enters"
+            },
+            {
+              "t": 16.5,
+              "kind": "preemption",
+              "actorId": "mobility-scooter"
+            },
+            {
+              "t": 16.5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-leaves-refuge"
+            },
+            {
+              "t": 18,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-confirms-wait"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 2.250925382507064,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "cyclist",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 1.96
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "04973a7b8c1c5301ab5b4c54c73256b26afcfccd659626c49ecdb683ee2dbb59",
+        "traceDigest": "a687200f7781ddda0f2d2e6efd815b8e26d10c7dd2a11fc0459662a93435fe23",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    },
+    {
+      "label": "moderate",
+      "profile": {
+        "version": 1,
+        "preset": "moderate",
+        "seed": "edge-09-moderate"
+      },
+      "provenance": {
+        "version": 1,
+        "profile": {
+          "version": 1,
+          "preset": "moderate",
+          "flows": {
+            "through": 0.7,
+            "left": 0.12,
+            "right": 0.16,
+            "uTurn": 0.02
+          },
+          "vehicleMix": {
+            "car": 0.72,
+            "van": 0.1,
+            "truck": 0.08,
+            "bus": 0.04,
+            "motorcycle": 0.06
+          },
+          "pedestrianShare": 0,
+          "cyclistShare": 0.04,
+          "aggressiveness": 0.35,
+          "speedVariance": 0.12,
+          "seed": "edge-09-moderate",
+          "maxActors": 40,
+          "radiusM": 250,
+          "exclusionRadiusM": 12,
+          "densityVehiclesPerKm": 8
+        },
+        "profileHash": "8618fc11ba498f9f8b60c567b9f274d8780926c8f08f35777498b2e6b4e83917",
+        "baseInputHash": "534f04a2a866a4e04bf8cb4d57febd0fb42ba22c7e3a9d01fd1c7d95bbfc7da3",
+        "generatedInputHash": "4529448fa59a04d1b0f35aac52bf81688b6f0135b9a6f7b76db833a98957c0a0",
+        "actors": [
+          {
+            "id": "ambient:v1:b58f63b9964bb0e5:000",
+            "kind": "truck",
+            "routeLaneRsls": [
+              "82:0:-1",
+              "2151:0:-1",
+              "45:0:1",
+              "2194:0:1",
+              "58:0:1",
+              "2167:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "887:0:1",
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "870:0:1",
+              "2:0:1",
+              "865:0:1",
+              "124:0:-1",
+              "439:0:-1",
+              "49:0:-1",
+              "968:0:-1",
+              "50:0:-1"
+            ],
+            "seedKey": "b58f63b9964bb0e5"
+          },
+          {
+            "id": "ambient:v1:1640a0bca3860e58:001",
+            "kind": "van",
+            "routeLaneRsls": [
+              "7:0:-3",
+              "732:0:-1",
+              "73:0:-5",
+              "365:0:-5",
+              "74:0:-5",
+              "600:0:-1",
+              "79:0:-3",
+              "146:0:-3",
+              "80:0:-3",
+              "854:0:-1",
+              "9:0:-4",
+              "1980:0:-1",
+              "15:0:-3",
+              "2028:0:-1"
+            ],
+            "seedKey": "1640a0bca3860e58"
+          },
+          {
+            "id": "ambient:v1:89fb0ef276e99128:002",
+            "kind": "car",
+            "routeLaneRsls": [
+              "107:1:-3",
+              "2225:0:-1",
+              "60:0:-4",
+              "250:0:-1",
+              "26:0:-4",
+              "612:0:-1",
+              "0:0:-3",
+              "775:0:-3",
+              "1:0:-3"
+            ],
+            "seedKey": "89fb0ef276e99128"
+          },
+          {
+            "id": "ambient:v1:29e35f7cbd99008d:003",
+            "kind": "van",
+            "routeLaneRsls": [
+              "19:0:1",
+              "560:0:1",
+              "111:0:2",
+              "335:0:2",
+              "110:0:2",
+              "818:0:1",
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4",
+              "74:0:-4",
+              "595:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "860:0:-1"
+            ],
+            "seedKey": "29e35f7cbd99008d"
+          },
+          {
+            "id": "ambient:v1:4af9e97443b9796a:004",
+            "kind": "car",
+            "routeLaneRsls": [
+              "71:0:3",
+              "815:0:1",
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4",
+              "74:0:-4",
+              "595:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "850:0:-1",
+              "9:0:-2",
+              "1979:0:-1",
+              "52:0:-1",
+              "176:0:-1",
+              "12:0:1",
+              "1020:0:1",
+              "11:0:-1",
+              "1026:0:-1",
+              "70:0:-5",
+              "1987:0:-1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1"
+            ],
+            "seedKey": "4af9e97443b9796a"
+          },
+          {
+            "id": "ambient:v1:be1d44b3d18a2ca9:005",
+            "kind": "car",
+            "routeLaneRsls": [
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1",
+              "46:0:-5",
+              "840:0:-1",
+              "28:0:-4",
+              "1083:0:-1",
+              "99:0:-1"
+            ],
+            "seedKey": "be1d44b3d18a2ca9"
+          },
+          {
+            "id": "ambient:v1:bfb7d1766068d994:006",
+            "kind": "motorcycle",
+            "routeLaneRsls": [
+              "33:0:-2",
+              "403:0:-1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "342:0:-1",
+              "67:0:-1",
+              "764:0:-1",
+              "27:0:-1",
+              "1054:0:-1",
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2154:0:1",
+              "55:0:1",
+              "211:0:1",
+              "10:0:-1",
+              "949:0:-1",
+              "44:0:-1",
+              "2198:0:-1",
+              "45:0:-1",
+              "2147:0:-1",
+              "83:0:-1"
+            ],
+            "seedKey": "bfb7d1766068d994"
+          },
+          {
+            "id": "ambient:v1:7cfa3b7adf62732c:007",
+            "kind": "car",
+            "routeLaneRsls": [
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1",
+              "46:0:-5",
+              "840:0:-1",
+              "28:0:-4",
+              "1083:0:-1",
+              "99:0:-1"
+            ],
+            "seedKey": "7cfa3b7adf62732c"
+          },
+          {
+            "id": "ambient:v1:360e66e39721083d:008",
+            "kind": "bus",
+            "routeLaneRsls": [
+              "74:0:-4",
+              "595:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "850:0:-1",
+              "9:0:-2",
+              "1979:0:-1",
+              "52:0:-1",
+              "176:0:-1",
+              "12:0:1",
+              "1020:0:1",
+              "11:0:-1"
+            ],
+            "seedKey": "360e66e39721083d"
+          },
+          {
+            "id": "ambient:v1:1454ec853f2ce4f5:009",
+            "kind": "car",
+            "routeLaneRsls": [
+              "71:0:4",
+              "817:0:1",
+              "7:0:-3",
+              "732:0:-1",
+              "73:0:-5",
+              "365:0:-5",
+              "74:0:-5",
+              "600:0:-1",
+              "79:0:-3",
+              "146:0:-3",
+              "80:0:-3",
+              "854:0:-1",
+              "9:0:-4",
+              "1980:0:-1",
+              "15:0:-3",
+              "2028:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1",
+              "2005:0:-1",
+              "14:0:-1",
+              "2010:0:-1",
+              "48:0:1",
+              "1138:0:1",
+              "59:0:-1"
+            ],
+            "seedKey": "1454ec853f2ce4f5"
+          },
+          {
+            "id": "ambient:v1:938e526d5850a968:010",
+            "kind": "car",
+            "routeLaneRsls": [
+              "11:0:1",
+              "1021:0:1",
+              "12:0:-1",
+              "177:0:-1",
+              "52:0:1",
+              "1997:0:1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1"
+            ],
+            "seedKey": "938e526d5850a968"
+          },
+          {
+            "id": "ambient:v1:9cc893aa97ad537c:011",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "121:0:1",
+              "2050:0:1",
+              "54:0:-1",
+              "2209:0:-1",
+              "42:0:-1",
+              "2077:0:-1",
+              "17:0:1",
+              "2072:0:1",
+              "122:0:1",
+              "158:0:1"
+            ],
+            "seedKey": "9cc893aa97ad537c"
+          },
+          {
+            "id": "ambient:v1:5254986986403434:012",
+            "kind": "van",
+            "routeLaneRsls": [
+              "50:0:1",
+              "969:0:1",
+              "49:0:1",
+              "488:0:1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "350:0:-1",
+              "43:0:-1",
+              "956:0:-1",
+              "44:0:-1",
+              "2198:0:-1",
+              "45:0:-1",
+              "2147:0:-1",
+              "83:0:-1",
+              "1051:0:-1",
+              "27:0:1",
+              "773:0:1",
+              "112:0:-1",
+              "1014:0:-1",
+              "113:0:-1",
+              "933:0:-1",
+              "114:0:-1",
+              "221:0:-1",
+              "115:0:-1"
+            ],
+            "seedKey": "5254986986403434"
+          },
+          {
+            "id": "ambient:v1:f10a65119c30e876:013",
+            "kind": "car",
+            "routeLaneRsls": [
+              "70:0:-5",
+              "1987:0:-1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "652:0:-1",
+              "652:1:-1",
+              "62:0:-3",
+              "2090:0:-3",
+              "2090:1:-3",
+              "63:0:-3",
+              "986:0:-3",
+              "66:0:-3",
+              "2087:0:-1",
+              "94:0:-3",
+              "94:1:-3"
+            ],
+            "seedKey": "f10a65119c30e876"
+          },
+          {
+            "id": "ambient:v1:a4b198eefcee0e33:014",
+            "kind": "car",
+            "routeLaneRsls": [
+              "26:0:-1",
+              "591:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "860:0:-1",
+              "9:0:-3",
+              "1982:0:-1",
+              "15:0:-2",
+              "2026:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1",
+              "2005:0:-1",
+              "14:0:-1",
+              "2010:0:-1",
+              "48:0:1",
+              "1138:0:1"
+            ],
+            "seedKey": "a4b198eefcee0e33"
+          },
+          {
+            "id": "ambient:v1:12ce86d5dc64e263:015",
+            "kind": "car",
+            "routeLaneRsls": [
+              "107:1:-2",
+              "2224:0:-1",
+              "60:0:-2",
+              "252:0:-1",
+              "26:0:-2",
+              "593:0:-1",
+              "79:0:-3",
+              "146:0:-3",
+              "80:0:-3",
+              "854:0:-1",
+              "9:0:-4",
+              "1980:0:-1",
+              "15:0:-3"
+            ],
+            "seedKey": "12ce86d5dc64e263"
+          },
+          {
+            "id": "ambient:v1:bc796a1089099cfd:016",
+            "kind": "car",
+            "routeLaneRsls": [
+              "90:0:-2",
+              "90:1:-2",
+              "2188:0:-1",
+              "37:0:-2",
+              "2021:0:-1",
+              "72:0:-3",
+              "648:0:-1",
+              "62:0:-2",
+              "2090:0:-2",
+              "2090:1:-2",
+              "63:0:-2",
+              "986:0:-2",
+              "66:0:-2",
+              "2079:0:-1",
+              "94:0:-2",
+              "94:1:-2"
+            ],
+            "seedKey": "bc796a1089099cfd"
+          },
+          {
+            "id": "ambient:v1:924d066e81333345:017",
+            "kind": "van",
+            "routeLaneRsls": [
+              "75:0:-1",
+              "75:1:-1",
+              "47:0:-1",
+              "2211:0:-1",
+              "125:0:-1",
+              "171:0:-1",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "652:0:-1",
+              "652:1:-1",
+              "62:0:-3"
+            ],
+            "seedKey": "924d066e81333345"
+          },
+          {
+            "id": "ambient:v1:66ad53883e1ced3f:019",
+            "kind": "car",
+            "routeLaneRsls": [
+              "107:0:-3",
+              "107:1:-3",
+              "2225:0:-1",
+              "60:0:-4",
+              "250:0:-1",
+              "26:0:-4",
+              "612:0:-1",
+              "0:0:-3",
+              "775:0:-3",
+              "1:0:-3"
+            ],
+            "seedKey": "66ad53883e1ced3f"
+          },
+          {
+            "id": "ambient:v1:0b8eab3a7414dde2:020",
+            "kind": "car",
+            "routeLaneRsls": [
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2154:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "887:0:1",
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "870:0:1",
+              "2:0:1",
+              "865:0:1",
+              "124:0:-1",
+              "439:0:-1",
+              "49:0:-1",
+              "968:0:-1",
+              "50:0:-1"
+            ],
+            "seedKey": "0b8eab3a7414dde2"
+          },
+          {
+            "id": "ambient:v1:1b0775625d8f67dd:022",
+            "kind": "car",
+            "routeLaneRsls": [
+              "37:0:-2",
+              "2021:0:-1",
+              "72:0:-3",
+              "648:0:-1",
+              "62:0:-2",
+              "2090:0:-2",
+              "2090:1:-2",
+              "63:0:-2",
+              "986:0:-2",
+              "66:0:-2",
+              "2086:0:-1",
+              "94:0:-1",
+              "94:1:-1"
+            ],
+            "seedKey": "1b0775625d8f67dd"
+          },
+          {
+            "id": "ambient:v1:ab574e635557c649:023",
+            "kind": "car",
+            "routeLaneRsls": [
+              "8:0:-1",
+              "935:0:-1",
+              "85:0:1",
+              "1075:0:1",
+              "84:0:1",
+              "1050:0:1",
+              "83:0:1",
+              "2149:0:1",
+              "82:0:1",
+              "2204:0:1",
+              "39:0:1",
+              "2154:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "915:0:1",
+              "98:0:-1",
+              "347:0:-1",
+              "24:1:1",
+              "24:0:1",
+              "2121:0:1",
+              "22:1:1",
+              "22:0:1",
+              "2114:2:1",
+              "2114:1:1",
+              "2114:0:1",
+              "21:0:1",
+              "140:1:1",
+              "140:0:1",
+              "19:1:1",
+              "19:0:1",
+              "477:0:1"
+            ],
+            "seedKey": "ab574e635557c649"
+          },
+          {
+            "id": "ambient:v1:b913d0215e663b26:024",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "58:0:1",
+              "2167:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "904:0:1",
+              "5:0:1",
+              "887:0:1",
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "870:0:1",
+              "2:0:1",
+              "865:0:1",
+              "124:0:-1",
+              "439:0:-1",
+              "49:0:-1",
+              "968:0:-1",
+              "50:0:-1"
+            ],
+            "seedKey": "b913d0215e663b26"
+          },
+          {
+            "id": "ambient:v1:031223d3bbf3f833:025",
+            "kind": "van",
+            "routeLaneRsls": [
+              "12:0:-1",
+              "177:0:-1",
+              "52:0:1",
+              "1997:0:1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1"
+            ],
+            "seedKey": "031223d3bbf3f833"
+          },
+          {
+            "id": "ambient:v1:90d7d8cbb727b412:026",
+            "kind": "van",
+            "routeLaneRsls": [
+              "2:0:1",
+              "865:0:1",
+              "124:0:-1",
+              "567:0:-1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2116:0:-1",
+              "101:0:1",
+              "184:0:1",
+              "4:0:-1",
+              "888:0:-1",
+              "5:0:-1",
+              "905:0:-1",
+              "6:0:-1",
+              "204:0:-1",
+              "55:0:-1",
+              "2157:0:-1",
+              "39:0:-1",
+              "2205:0:-1",
+              "82:0:-1",
+              "2150:0:-1",
+              "83:0:-1",
+              "1049:0:-1",
+              "84:0:-1",
+              "1076:0:-1",
+              "85:0:-1",
+              "943:0:-1",
+              "86:0:-1",
+              "2107:0:-1",
+              "87:0:-1"
+            ],
+            "seedKey": "90d7d8cbb727b412"
+          },
+          {
+            "id": "ambient:v1:b709a2411a646a10:027",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "120:0:-1",
+              "2126:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "350:0:-1",
+              "43:0:-1",
+              "956:0:-1",
+              "44:0:-1",
+              "2202:0:-1",
+              "58:0:1",
+              "2167:0:1",
+              "55:0:1",
+              "201:0:1",
+              "6:0:1",
+              "915:0:1",
+              "98:0:-1",
+              "343:0:-1"
+            ],
+            "seedKey": "b709a2411a646a10"
+          },
+          {
+            "id": "ambient:v1:efd5f3ae5aa5de14:028",
+            "kind": "car",
+            "routeLaneRsls": [
+              "11:0:-1",
+              "1026:0:-1",
+              "70:0:-5",
+              "1987:0:-1",
+              "102:0:-4",
+              "161:0:-4",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1"
+            ],
+            "seedKey": "efd5f3ae5aa5de14"
+          },
+          {
+            "id": "ambient:v1:f77e8ae1b3319528:029",
+            "kind": "motorcycle",
+            "routeLaneRsls": [
+              "38:0:-3",
+              "1036:0:-1",
+              "70:0:-4",
+              "1986:0:-1",
+              "102:0:-3",
+              "161:0:-3",
+              "103:0:-3",
+              "103:1:-3",
+              "753:0:-1",
+              "128:0:-5",
+              "128:1:-5",
+              "693:0:-1",
+              "69:0:-3",
+              "2038:0:-1",
+              "46:0:-4",
+              "839:0:-1"
+            ],
+            "seedKey": "f77e8ae1b3319528"
+          },
+          {
+            "id": "ambient:v1:c17833f0e9255b7e:031",
+            "kind": "car",
+            "routeLaneRsls": [
+              "4:0:1",
+              "183:0:1",
+              "3:0:1",
+              "881:0:1",
+              "36:0:-1",
+              "134:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "346:0:-1",
+              "98:0:1",
+              "911:0:1",
+              "6:0:-1",
+              "204:0:-1",
+              "55:0:-1",
+              "2157:0:-1",
+              "39:0:-1",
+              "2205:0:-1",
+              "82:0:-1",
+              "2151:0:-1",
+              "45:0:1",
+              "2199:0:1",
+              "44:0:1",
+              "951:0:1",
+              "10:0:1",
+              "199:0:1",
+              "6:0:1",
+              "915:0:1"
+            ],
+            "seedKey": "c17833f0e9255b7e"
+          },
+          {
+            "id": "ambient:v1:0eba1c36f914b4be:032",
+            "kind": "car",
+            "routeLaneRsls": [
+              "52:0:1",
+              "1997:0:1",
+              "102:0:-4",
+              "173:0:-1",
+              "125:0:1",
+              "2212:0:1",
+              "47:0:1",
+              "75:1:1",
+              "75:0:1",
+              "998:0:1",
+              "66:0:-3",
+              "2087:0:-1",
+              "94:0:-3"
+            ],
+            "seedKey": "0eba1c36f914b4be"
+          },
+          {
+            "id": "ambient:v1:21403332c538cccb:033",
+            "kind": "motorcycle",
+            "routeLaneRsls": [
+              "60:0:-1",
+              "251:0:-1",
+              "26:0:-1",
+              "591:0:-1",
+              "79:0:-2",
+              "146:0:-2",
+              "80:0:-2",
+              "860:0:-1",
+              "9:0:-3",
+              "1982:0:-1",
+              "15:0:-2",
+              "2026:0:-1",
+              "132:0:1",
+              "2094:0:1",
+              "100:0:-1"
+            ],
+            "seedKey": "21403332c538cccb"
+          },
+          {
+            "id": "ambient:v1:29d13339b152554d:034",
+            "kind": "van",
+            "routeLaneRsls": [
+              "105:0:-1",
+              "156:0:-1",
+              "122:0:-1",
+              "2065:0:-1",
+              "16:0:1",
+              "972:0:1",
+              "49:0:1",
+              "488:0:1",
+              "19:0:-1",
+              "19:1:-1",
+              "139:0:-1",
+              "21:0:-1",
+              "2115:0:-1",
+              "22:0:-1",
+              "22:1:-1",
+              "2122:0:-1",
+              "24:0:-1",
+              "24:1:-1",
+              "350:0:-1",
+              "43:0:-1",
+              "956:0:-1",
+              "44:0:-1",
+              "2202:0:-1",
+              "58:0:1",
+              "2160:0:1",
+              "39:0:-1",
+              "2205:0:-1",
+              "82:0:-1",
+              "2150:0:-1",
+              "83:0:-1",
+              "1049:0:-1",
+              "84:0:-1"
+            ],
+            "seedKey": "29d13339b152554d"
+          },
+          {
+            "id": "ambient:v1:8e9b4d637f7885fa:036",
+            "kind": "car",
+            "routeLaneRsls": [
+              "125:0:-1",
+              "171:0:-1",
+              "103:0:-4",
+              "103:1:-4",
+              "751:0:-1",
+              "128:0:-6",
+              "128:1:-6",
+              "713:0:-1",
+              "69:0:-4",
+              "2033:0:-1",
+              "46:0:-5",
+              "840:0:-1",
+              "28:0:-4",
+              "1083:0:-1",
+              "99:0:-1"
+            ],
+            "seedKey": "8e9b4d637f7885fa"
+          },
+          {
+            "id": "ambient:v1:7acd0ef65b7a36a0:038",
+            "kind": "bicycle",
+            "routeLaneRsls": [
+              "113:0:-1",
+              "933:0:-1",
+              "114:0:-1",
+              "221:0:-1",
+              "115:0:-1",
+              "2173:0:-1",
+              "116:0:-1",
+              "1057:0:-1",
+              "126:0:-1",
+              "2129:0:-1",
+              "89:0:-1",
+              "587:0:-1",
+              "123:0:1",
+              "228:0:1",
+              "118:0:-1"
+            ],
+            "seedKey": "7acd0ef65b7a36a0"
+          }
+        ],
+        "rejectedSpawnCount": 243,
+        "eligibleLaneKm": 7.658992544615169,
+        "warnings": [
+          "Removed 6 ambient actor(s) whose full-clip simulation intersected authored choreography, collidable props, or other ambient traffic."
+        ]
+      },
+      "ambientCounts": {
+        "requested": 40,
+        "generatedBeforeScreening": 40,
+        "retained": 34,
+        "removedByFullClipScreening": 6
+      },
+      "engineEvaluation": {
+        "verdict": "reject",
+        "findings": [
+          {
+            "code": "trivially_safe",
+            "reason": "min ttc 7.70 s exceeds the 3 s triviality threshold",
+            "detail": {
+              "criticality": 7.704279246874691,
+              "kind": "ttc",
+              "pair": [
+                "ambient:v1:bfb7d1766068d994:006",
+                "ego"
+              ]
+            }
+          },
+          {
+            "code": "physically_unavoidable",
+            "reason": "ambient:v1:b58f63b9964bb0e5:000 needed 45.63 m/s², above the 7.85 m/s² friction ceiling",
+            "detail": {
+              "actorId": "ambient:v1:b58f63b9964bb0e5:000",
+              "requiredDecel": 45.6301338075911,
+              "ceiling": 7.848000000000001
+            }
+          }
+        ],
+        "tags": [
+          "negative-control"
+        ],
+        "summary": {
+          "minTTC": 7.704279246874691,
+          "minTTCt": 10.58,
+          "criticalityKind": "ttc",
+          "criticality": 7.704279246874691,
+          "criticalityT": 10.58,
+          "requiredDecelMax": 45.6301338075911,
+          "collisions": 0,
+          "neverFired": 0,
+          "occlusionUnproven": 0
+        }
+      },
+      "intentEvaluation": {
+        "version": 1,
+        "intentId": "edge-09-double-turn-mobility-scooter",
+        "verdict": "accept",
+        "counts": {
+          "pass": 8,
+          "fail": 0,
+          "unchecked": 0,
+          "unsupported": 0
+        },
+        "criteria": [
+          {
+            "id": "ego-stationary",
+            "kind": "stationary_success",
+            "required": true,
+            "status": "pass",
+            "reason": "stationary compliance succeeded",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stationary actor evidence",
+                "values": {
+                  "actorId": "ego",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "observedMaxSpeedMps": 0,
+                  "allowedMaxSpeedMps": 0.1,
+                  "presentSeconds": 20,
+                  "requiredPresentSeconds": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-creep-cap",
+            "kind": "speed_band",
+            "required": true,
+            "status": "pass",
+            "reason": "speed remained inside the authored band",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "speed extrema in window",
+                "values": {
+                  "actorId": "outer-pickup",
+                  "window": [
+                    0,
+                    20
+                  ],
+                  "minSpeedMps": 0,
+                  "maxSpeedMps": 0.833333,
+                  "requiredMinMps": null,
+                  "requiredMaxMps": 0.85
+                }
+              }
+            ]
+          },
+          {
+            "id": "layered-order",
+            "kind": "event_order",
+            "required": true,
+            "status": "pass",
+            "reason": "required event-order condition held",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "ordered trigger evidence",
+                "values": {
+                  "interactionIds": [
+                    "pickup-creeps",
+                    "pickup-blocks-crosswalk",
+                    "cyclist-emerges",
+                    "destination-conflict-enters",
+                    "scooter-leaves-refuge",
+                    "ego-confirms-wait"
+                  ],
+                  "matchedTimesS": [
+                    5,
+                    8,
+                    9,
+                    12,
+                    16.5,
+                    18
+                  ],
+                  "complete": true
+                }
+              }
+            ]
+          },
+          {
+            "id": "scooter-pause-resume",
+            "kind": "stop_hold_resume",
+            "required": true,
+            "status": "pass",
+            "reason": "stop/hold/resume behavior held",
+            "evidence": [
+              {
+                "source": "actor_track",
+                "summary": "stop interval and resume evidence",
+                "values": {
+                  "actorId": "mobility-scooter",
+                  "longestStop": [
+                    5.66,
+                    16.6
+                  ],
+                  "longestStopSeconds": 10.94,
+                  "requiredHoldSeconds": 2,
+                  "resumedAtS": 17.06,
+                  "resumeByS": 20
+                }
+              }
+            ]
+          },
+          {
+            "id": "cyclist-clearance",
+            "kind": "clearance",
+            "required": true,
+            "status": "pass",
+            "reason": "minimum clearance held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "engine minimum shape clearance",
+                "values": {
+                  "pair": [
+                    "ego",
+                    "cyclist"
+                  ],
+                  "measure": "metric_gap",
+                  "minDistanceM": 16.840338,
+                  "atS": 20,
+                  "requiredMinM": 1.5,
+                  "window": [
+                    0,
+                    20
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "id": "pickup-reveal",
+            "kind": "occlusion",
+            "required": true,
+            "status": "pass",
+            "reason": "occlusion outcome held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "declared occlusion result",
+                "values": {
+                  "observer": "ego",
+                  "target": "cyclist",
+                  "expectedStatus": "revealed_before_conflict",
+                  "observedStatuses": [
+                    "revealed_before_conflict"
+                  ],
+                  "firstBlockedT": 0,
+                  "losOpenT": 1.96
+                }
+              }
+            ]
+          },
+          {
+            "id": "collision-free",
+            "kind": "collision",
+            "required": true,
+            "status": "pass",
+            "reason": "collision budget held",
+            "evidence": [
+              {
+                "source": "metric",
+                "summary": "collision evidence",
+                "values": {
+                  "pair": [],
+                  "observedCount": 0,
+                  "maxCount": 0,
+                  "timesS": []
+                }
+              }
+            ]
+          },
+          {
+            "id": "all-triggers-fired",
+            "kind": "trigger",
+            "required": true,
+            "status": "pass",
+            "reason": "trigger fired",
+            "evidence": [
+              {
+                "source": "trace_event",
+                "summary": "trigger outcome evidence",
+                "values": {
+                  "interactionId": "ego-confirms-wait",
+                  "outcome": "fired",
+                  "timesS": [
+                    18
+                  ]
+                }
+              }
+            ]
+          }
+        ],
+        "behaviorSummary": {
+          "version": 1,
+          "trace": {
+            "inputHash": "4529448fa59a04d1b0f35aac52bf81688b6f0135b9a6f7b76db833a98957c0a0",
+            "mapId": "el-camino-road",
+            "clipSeconds": 20,
+            "dt": 0.02,
+            "actorCount": 39
+          },
+          "actors": [
+            {
+              "actorId": "ambient:v1:031223d3bbf3f833:025",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.803506,
+              "maxSpeedMps": 19.853288,
+              "finalSpeedMps": 0.803506,
+              "distanceTravelledM": 232.512665,
+              "stationaryIntervals": [],
+              "lanes": [
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "128:0:-6",
+                "12:0:-1",
+                "161:0:-4",
+                "177:0:-1",
+                "1997:0:1",
+                "52:0:1",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:0b8eab3a7414dde2:020",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 17.94536,
+              "maxSpeedMps": 19.067546,
+              "finalSpeedMps": 19.067546,
+              "distanceTravelledM": 380.102664,
+              "stationaryIntervals": [],
+              "lanes": [
+                "124:0:-1",
+                "183:0:1",
+                "201:0:1",
+                "2149:0:1",
+                "2154:0:1",
+                "2204:0:1",
+                "2:0:1",
+                "39:0:1",
+                "3:0:1",
+                "439:0:-1",
+                "49:0:-1",
+                "4:0:1",
+                "50:0:-1",
+                "55:0:1",
+                "5:0:1",
+                "6:0:1",
+                "82:0:1",
+                "865:0:1",
+                "870:0:1",
+                "887:0:1",
+                "904:0:1",
+                "968:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:0eba1c36f914b4be:032",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 19.398841,
+              "maxSpeedMps": 19.398841,
+              "finalSpeedMps": 19.398841,
+              "distanceTravelledM": 387.952191,
+              "stationaryIntervals": [],
+              "lanes": [
+                "102:0:-4",
+                "125:0:1",
+                "173:0:-1",
+                "1997:0:1",
+                "2087:0:-1",
+                "2212:0:1",
+                "47:0:1",
+                "52:0:1",
+                "66:0:-3",
+                "75:0:1",
+                "75:1:1",
+                "94:0:-3",
+                "998:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:12ce86d5dc64e263:015",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 15.79481,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 162.179977,
+              "stationaryIntervals": [
+                [
+                  15.16,
+                  20
+                ]
+              ],
+              "lanes": [
+                "107:1:-2",
+                "2224:0:-1",
+                "252:0:-1",
+                "26:0:-2",
+                "60:0:-2"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1454ec853f2ce4f5:009",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 27.600164,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 169.373282,
+              "stationaryIntervals": [
+                [
+                  15.38,
+                  20
+                ]
+              ],
+              "lanes": [
+                "365:0:-5",
+                "732:0:-1",
+                "73:0:-5",
+                "74:0:-5",
+                "7:0:-3",
+                "817:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1640a0bca3860e58:001",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 18.939875,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 118.770356,
+              "stationaryIntervals": [
+                [
+                  10.4,
+                  20
+                ]
+              ],
+              "lanes": [
+                "365:0:-5",
+                "732:0:-1",
+                "73:0:-5",
+                "74:0:-5"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:1b0775625d8f67dd:022",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 16.346568,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 73.046741,
+              "stationaryIntervals": [
+                [
+                  6,
+                  20
+                ]
+              ],
+              "lanes": [
+                "2021:0:-1",
+                "37:0:-2",
+                "72:0:-3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:21403332c538cccb:033",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 16.77427,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 73.515504,
+              "stationaryIntervals": [
+                [
+                  8.66,
+                  20
+                ]
+              ],
+              "lanes": [
+                "251:0:-1",
+                "26:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:29d13339b152554d:034",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 4.501089,
+              "maxSpeedMps": 18.543185,
+              "finalSpeedMps": 4.501089,
+              "distanceTravelledM": 244.337342,
+              "stationaryIntervals": [],
+              "lanes": [
+                "105:0:-1",
+                "122:0:-1",
+                "139:0:-1",
+                "156:0:-1",
+                "16:0:1",
+                "19:0:-1",
+                "2065:0:-1",
+                "2115:0:-1",
+                "2122:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "350:0:-1",
+                "43:0:-1",
+                "488:0:1",
+                "49:0:1",
+                "972:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:29e35f7cbd99008d:003",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.664763,
+              "maxSpeedMps": 18.913894,
+              "finalSpeedMps": 1.664763,
+              "distanceTravelledM": 277.85731,
+              "stationaryIntervals": [],
+              "lanes": [
+                "110:0:2",
+                "111:0:2",
+                "335:0:2",
+                "365:0:-4",
+                "560:0:1",
+                "735:0:-1",
+                "73:0:-4",
+                "74:0:-4",
+                "7:0:-2",
+                "818:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:360e66e39721083d:008",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 9.598641,
+              "maxSpeedMps": 18.288372,
+              "finalSpeedMps": 18.288372,
+              "distanceTravelledM": 323.075359,
+              "stationaryIntervals": [],
+              "lanes": [
+                "146:0:-2",
+                "176:0:-1",
+                "1979:0:-1",
+                "52:0:-1",
+                "595:0:-1",
+                "74:0:-4",
+                "79:0:-2",
+                "80:0:-2",
+                "850:0:-1",
+                "9:0:-2"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:4af9e97443b9796a:004",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 27.505958,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 194.482492,
+              "stationaryIntervals": [
+                [
+                  9.94,
+                  20
+                ]
+              ],
+              "lanes": [
+                "365:0:-4",
+                "71:0:3",
+                "735:0:-1",
+                "73:0:-4",
+                "74:0:-4",
+                "7:0:-2",
+                "815:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:5254986986403434:012",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 7.111453,
+              "maxSpeedMps": 17.055743,
+              "finalSpeedMps": 11.815453,
+              "distanceTravelledM": 237.64332,
+              "stationaryIntervals": [],
+              "lanes": [
+                "139:0:-1",
+                "19:0:-1",
+                "19:1:-1",
+                "2115:0:-1",
+                "2122:0:-1",
+                "2198:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "350:0:-1",
+                "43:0:-1",
+                "44:0:-1",
+                "488:0:1",
+                "49:0:1",
+                "50:0:1",
+                "956:0:-1",
+                "969:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:66ad53883e1ced3f:019",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.028587,
+              "maxSpeedMps": 17.377899,
+              "finalSpeedMps": 0.028587,
+              "distanceTravelledM": 183.4269,
+              "stationaryIntervals": [
+                [
+                  18.38,
+                  20
+                ]
+              ],
+              "lanes": [
+                "107:1:-3",
+                "2225:0:-1",
+                "250:0:-1",
+                "26:0:-4",
+                "60:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:7acd0ef65b7a36a0:038",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.775385,
+              "maxSpeedMps": 5.775385,
+              "finalSpeedMps": 5.775385,
+              "distanceTravelledM": 115.825382,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1057:0:-1",
+                "114:0:-1",
+                "115:0:-1",
+                "116:0:-1",
+                "126:0:-1",
+                "2129:0:-1",
+                "2173:0:-1",
+                "221:0:-1",
+                "933:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:7cfa3b7adf62732c:007",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 14.713689,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 59.639674,
+              "stationaryIntervals": [
+                [
+                  7.98,
+                  20
+                ]
+              ],
+              "lanes": [
+                "128:0:-6",
+                "128:1:-6"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:89fb0ef276e99128:002",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 17.360895,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 147.083562,
+              "stationaryIntervals": [
+                [
+                  12.94,
+                  20
+                ]
+              ],
+              "lanes": [
+                "2225:0:-1",
+                "250:0:-1",
+                "26:0:-4",
+                "60:0:-4"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:8e9b4d637f7885fa:036",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 17.302013,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 128.879247,
+              "stationaryIntervals": [
+                [
+                  15.7,
+                  20
+                ]
+              ],
+              "lanes": [
+                "103:1:-4",
+                "128:0:-6",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:90d7d8cbb727b412:026",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 11.166882,
+              "maxSpeedMps": 17.447631,
+              "finalSpeedMps": 17.447631,
+              "distanceTravelledM": 331.545995,
+              "stationaryIntervals": [],
+              "lanes": [
+                "101:0:1",
+                "1049:0:-1",
+                "124:0:-1",
+                "139:0:-1",
+                "184:0:1",
+                "19:0:-1",
+                "204:0:-1",
+                "2116:0:-1",
+                "2150:0:-1",
+                "2157:0:-1",
+                "21:0:-1",
+                "2205:0:-1",
+                "39:0:-1",
+                "4:0:-1",
+                "55:0:-1",
+                "567:0:-1",
+                "5:0:-1",
+                "6:0:-1",
+                "82:0:-1",
+                "83:0:-1",
+                "888:0:-1",
+                "905:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:924d066e81333345:017",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 2.871917,
+              "maxSpeedMps": 17.94373,
+              "finalSpeedMps": 2.871917,
+              "distanceTravelledM": 296.489928,
+              "stationaryIntervals": [],
+              "lanes": [
+                "103:0:-4",
+                "103:1:-4",
+                "125:0:-1",
+                "128:0:-6",
+                "171:0:-1",
+                "2211:0:-1",
+                "47:0:-1",
+                "751:0:-1",
+                "75:0:-1",
+                "75:1:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:938e526d5850a968:010",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.054849,
+              "maxSpeedMps": 16.074049,
+              "finalSpeedMps": 5.054849,
+              "distanceTravelledM": 265.512412,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1021:0:1",
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "11:0:1",
+                "128:0:-6",
+                "12:0:-1",
+                "161:0:-4",
+                "177:0:-1",
+                "1997:0:1",
+                "52:0:1",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:9cc893aa97ad537c:011",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.609991,
+              "maxSpeedMps": 5.609991,
+              "finalSpeedMps": 5.609991,
+              "distanceTravelledM": 112.197206,
+              "stationaryIntervals": [],
+              "lanes": [
+                "121:0:1",
+                "2050:0:1",
+                "2209:0:-1",
+                "42:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:a4b198eefcee0e33:014",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 16.842994,
+              "maxSpeedMps": 19.342994,
+              "finalSpeedMps": 19.342994,
+              "distanceTravelledM": 385.471551,
+              "stationaryIntervals": [],
+              "lanes": [
+                "100:0:-1",
+                "132:0:1",
+                "146:0:-2",
+                "15:0:-2",
+                "1982:0:-1",
+                "2005:0:-1",
+                "2026:0:-1",
+                "2094:0:1",
+                "591:0:-1",
+                "79:0:-2",
+                "80:0:-2",
+                "860:0:-1",
+                "9:0:-3"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:ab574e635557c649:023",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.211411,
+              "maxSpeedMps": 15.723494,
+              "finalSpeedMps": 13.529533,
+              "distanceTravelledM": 217.811254,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1050:0:1",
+                "1075:0:1",
+                "201:0:1",
+                "2149:0:1",
+                "2154:0:1",
+                "2204:0:1",
+                "347:0:-1",
+                "39:0:1",
+                "55:0:1",
+                "6:0:1",
+                "82:0:1",
+                "83:0:1",
+                "84:0:1",
+                "85:0:1",
+                "915:0:1",
+                "935:0:-1",
+                "98:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b58f63b9964bb0e5:000",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 4.709517,
+              "maxSpeedMps": 16.546323,
+              "finalSpeedMps": 5.701365,
+              "distanceTravelledM": 148.928107,
+              "stationaryIntervals": [],
+              "lanes": [
+                "183:0:1",
+                "201:0:1",
+                "2151:0:-1",
+                "2167:0:1",
+                "2194:0:1",
+                "45:0:1",
+                "4:0:1",
+                "55:0:1",
+                "58:0:1",
+                "5:0:1",
+                "6:0:1",
+                "887:0:1",
+                "904:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b709a2411a646a10:027",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 2.269033,
+              "maxSpeedMps": 5.588787,
+              "finalSpeedMps": 5.588787,
+              "distanceTravelledM": 99.184725,
+              "stationaryIntervals": [],
+              "lanes": [
+                "120:0:-1",
+                "2126:0:-1",
+                "2202:0:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "350:0:-1",
+                "43:0:-1",
+                "44:0:-1",
+                "58:0:1",
+                "956:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:b913d0215e663b26:024",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 4.720236,
+              "maxSpeedMps": 5.582437,
+              "finalSpeedMps": 5.582437,
+              "distanceTravelledM": 110.264179,
+              "stationaryIntervals": [],
+              "lanes": [
+                "183:0:1",
+                "201:0:1",
+                "2167:0:1",
+                "4:0:1",
+                "55:0:1",
+                "58:0:1",
+                "5:0:1",
+                "6:0:1",
+                "887:0:1",
+                "904:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:bc796a1089099cfd:016",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.043148,
+              "maxSpeedMps": 16.60877,
+              "finalSpeedMps": 0.043148,
+              "distanceTravelledM": 138.257894,
+              "stationaryIntervals": [
+                [
+                  18.7,
+                  20
+                ]
+              ],
+              "lanes": [
+                "2021:0:-1",
+                "2188:0:-1",
+                "37:0:-2",
+                "72:0:-3",
+                "90:1:-2"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:be1d44b3d18a2ca9:005",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.003711,
+              "maxSpeedMps": 18.115658,
+              "finalSpeedMps": 0.003711,
+              "distanceTravelledM": 115.974988,
+              "stationaryIntervals": [
+                [
+                  15.52,
+                  20
+                ]
+              ],
+              "lanes": [
+                "128:0:-6",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:bfb7d1766068d994:006",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 10.412758,
+              "maxSpeedMps": 17.4886,
+              "finalSpeedMps": 10.495152,
+              "distanceTravelledM": 330.496457,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1054:0:-1",
+                "10:0:-1",
+                "139:0:-1",
+                "19:0:-1",
+                "2115:0:-1",
+                "211:0:1",
+                "2122:0:-1",
+                "2149:0:1",
+                "2154:0:1",
+                "21:0:-1",
+                "2204:0:1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "27:0:-1",
+                "33:0:-2",
+                "342:0:-1",
+                "39:0:1",
+                "403:0:-1",
+                "55:0:1",
+                "67:0:-1",
+                "764:0:-1",
+                "82:0:1",
+                "83:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:c17833f0e9255b7e:031",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 5.97401,
+              "maxSpeedMps": 16.582196,
+              "finalSpeedMps": 16.380856,
+              "distanceTravelledM": 245.032307,
+              "stationaryIntervals": [],
+              "lanes": [
+                "134:0:-1",
+                "183:0:1",
+                "204:0:-1",
+                "2115:0:-1",
+                "2122:0:-1",
+                "2157:0:-1",
+                "21:0:-1",
+                "22:0:-1",
+                "22:1:-1",
+                "24:0:-1",
+                "24:1:-1",
+                "346:0:-1",
+                "36:0:-1",
+                "39:0:-1",
+                "3:0:1",
+                "55:0:-1",
+                "6:0:-1",
+                "881:0:1",
+                "911:0:1",
+                "98:0:1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:efd5f3ae5aa5de14:028",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.188218,
+              "maxSpeedMps": 17.508126,
+              "finalSpeedMps": 0.188218,
+              "distanceTravelledM": 213.686984,
+              "stationaryIntervals": [],
+              "lanes": [
+                "1026:0:-1",
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "128:0:-6",
+                "161:0:-4",
+                "1987:0:-1",
+                "70:0:-5",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f10a65119c30e876:013",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0.04659,
+              "maxSpeedMps": 17.6077,
+              "finalSpeedMps": 0.04659,
+              "distanceTravelledM": 173.456659,
+              "stationaryIntervals": [
+                [
+                  19.14,
+                  20
+                ]
+              ],
+              "lanes": [
+                "102:0:-4",
+                "103:0:-4",
+                "103:1:-4",
+                "128:0:-6",
+                "161:0:-4",
+                "1987:0:-1",
+                "70:0:-5",
+                "751:0:-1"
+              ]
+            },
+            {
+              "actorId": "ambient:v1:f77e8ae1b3319528:029",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 19.059137,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 231.926716,
+              "stationaryIntervals": [
+                [
+                  16.24,
+                  20
+                ]
+              ],
+              "lanes": [
+                "102:0:-3",
+                "1036:0:-1",
+                "103:0:-3",
+                "103:1:-3",
+                "128:0:-5",
+                "128:1:-5",
+                "161:0:-3",
+                "1986:0:-1",
+                "70:0:-4",
+                "753:0:-1"
+              ]
+            },
+            {
+              "actorId": "cyclist",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 4.693468,
+              "finalSpeedMps": 2.49189,
+              "distanceTravelledM": 22.221096,
+              "stationaryIntervals": [
+                [
+                  0,
+                  9.08
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "ego",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 0,
+              "stationaryIntervals": [
+                [
+                  0,
+                  20
+                ]
+              ],
+              "lanes": [
+                "128:0:-3"
+              ]
+            },
+            {
+              "actorId": "mobility-scooter",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 1.25,
+              "finalSpeedMps": 0.555556,
+              "distanceTravelledM": 8.458333,
+              "stationaryIntervals": [
+                [
+                  5.66,
+                  16.6
+                ]
+              ],
+              "lanes": []
+            },
+            {
+              "actorId": "opposing-left-turner",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 1.453793,
+              "maxSpeedMps": 4.83105,
+              "finalSpeedMps": 1.453793,
+              "distanceTravelledM": 62.806731,
+              "stationaryIntervals": [],
+              "lanes": [
+                "365:0:-6",
+                "73:0:-6",
+                "74:0:-6"
+              ]
+            },
+            {
+              "actorId": "outer-pickup",
+              "presentFromS": 0,
+              "presentToS": 20,
+              "minSpeedMps": 0,
+              "maxSpeedMps": 0.833333,
+              "finalSpeedMps": 0,
+              "distanceTravelledM": 3.951318,
+              "stationaryIntervals": [
+                [
+                  0,
+                  5.1
+                ],
+                [
+                  8.72,
+                  20
+                ]
+              ],
+              "lanes": [
+                "627:0:-1"
+              ]
+            }
+          ],
+          "events": [
+            {
+              "t": 0,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-holds"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-creeps"
+            },
+            {
+              "t": 5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-pauses-at-refuge"
+            },
+            {
+              "t": 8,
+              "kind": "preemption",
+              "actorId": "outer-pickup"
+            },
+            {
+              "t": 8,
+              "kind": "trigger_fired",
+              "actorId": "outer-pickup",
+              "interactionId": "pickup-blocks-crosswalk"
+            },
+            {
+              "t": 9,
+              "kind": "trigger_fired",
+              "actorId": "cyclist",
+              "interactionId": "cyclist-emerges"
+            },
+            {
+              "t": 12,
+              "kind": "trigger_fired",
+              "actorId": "opposing-left-turner",
+              "interactionId": "destination-conflict-enters"
+            },
+            {
+              "t": 16.5,
+              "kind": "preemption",
+              "actorId": "mobility-scooter"
+            },
+            {
+              "t": 16.5,
+              "kind": "trigger_fired",
+              "actorId": "mobility-scooter",
+              "interactionId": "scooter-leaves-refuge"
+            },
+            {
+              "t": 18,
+              "kind": "preemption",
+              "actorId": "ego"
+            },
+            {
+              "t": 18,
+              "kind": "trigger_fired",
+              "actorId": "ego",
+              "interactionId": "ego-confirms-wait"
+            }
+          ],
+          "metrics": {
+            "collisions": 0,
+            "minTTC": 2.099294143769108,
+            "minPathTTC": null,
+            "minPET": null,
+            "triggerNeverFired": [],
+            "declaredOcclusion": [
+              {
+                "observer": "ego",
+                "target": "cyclist",
+                "status": "revealed_before_conflict",
+                "firstBlockedT": 0,
+                "losOpenT": 1.96
+              }
+            ]
+          },
+          "truncated": {
+            "actors": false,
+            "events": false,
+            "occlusions": false
+          }
+        }
+      },
+      "deterministic": true,
+      "authoredEventOrderPreserved": true,
+      "authoredNeverFiredPreserved": true,
+      "ambientCollisions": 0,
+      "accepted": true,
+      "failures": [],
+      "trace": {
+        "inputHash": "4529448fa59a04d1b0f35aac52bf81688b6f0135b9a6f7b76db833a98957c0a0",
+        "traceDigest": "5175623c2d6c6485949b9dd17052a392057c1e69a6fb9040ffeecdec5cdf6282",
+        "ticks": 1001,
+        "durationS": 20,
+        "collisions": 0,
+        "missedTriggers": []
+      }
+    }
+  ]
+}

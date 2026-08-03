@@ -184,6 +184,9 @@ const LOCATION_KIND_MAP: Record<string, PointFeature['kind']> = {
   parking_lane: 'parking_zone',
   bus_stop: 'bus_stop',
   driveway: 'driveway',
+  school_zone: 'school_zone',
+  work_zone_suitable: 'work_zone_suitable',
+  occlusion_zone: 'occlusion_zone',
 };
 
 /** Adapt `locations.json` into {@link PointFeature}s (crossings, parking, …). */
@@ -198,6 +201,18 @@ export function pointFeaturesFromLocations(locations: unknown): PointFeature[] {
     const laneRsl = str(road['rsl'], '');
     if (!laneRsl) continue;
     const offset = num(road['offsetM'], 0);
+    const facts = isRecord(item['facts'])
+      ? Object.fromEntries(Object.entries(item['facts'] as AnyRecord)
+          .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) as Record<string, string | number | boolean>
+      : undefined;
+    const extent = isRecord(item['extent']) ? item['extent'] as AnyRecord : undefined;
+    const radiusM = extent ? num(extent['radiusM'], Number.NaN) : Number.NaN;
+    const enrichedFacts = {
+      ...(facts ?? {}),
+      ...(kind === 'crossing' && Number.isFinite(radiusM) && radiusM > 0 && facts?.['crossing_length_m'] === undefined
+        ? { crossing_length_m: radiusM * 2 }
+        : {}),
+    };
     out.push({
       id: str(item['id'], `${kind}:${laneRsl}`),
       kind,
@@ -206,6 +221,7 @@ export function pointFeaturesFromLocations(locations: unknown): PointFeature[] {
       ...(sceneAnchorPoint(item as AnyRecord) ? { point: sceneAnchorPoint(item as AnyRecord) } : {}),
       side: offset > 0 ? 'left' : offset < 0 ? 'right' : 'both',
       ...(typeof road['junctionId'] === 'string' ? { junctionId: road['junctionId'] } : {}),
+      ...(Object.keys(enrichedFacts).length > 0 ? { facts: enrichedFacts } : {}),
     });
   }
   out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -235,6 +251,10 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
       const laneRsl = str(item['laneRsl'] ?? item['rsl'], '');
       if (!laneRsl) continue;
       const side = str(item['side'], '');
+      const facts = isRecord(item['facts'])
+        ? Object.fromEntries(Object.entries(item['facts'] as AnyRecord)
+            .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) as Record<string, string | number | boolean>
+        : undefined;
       out.push({
         id: str(item['id'], `${kind}:${laneRsl}@${num(item['s'], 0).toFixed(1)}`),
         kind,
@@ -243,6 +263,7 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
         ...(pointFromRecord(item) ? { point: pointFromRecord(item) } : {}),
         ...(side === 'left' || side === 'right' || side === 'both' ? { side } : {}),
         ...(typeof item['junctionId'] === 'string' ? { junctionId: item['junctionId'] } : {}),
+        ...(facts && Object.keys(facts).length > 0 ? { facts } : {}),
       });
     }
   };
@@ -250,11 +271,14 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
   push('parking_zone', asArray(input['parkingZones'] ?? input['parking_zones']));
   push('bus_stop', asArray(input['busStops'] ?? input['bus_stops']));
   push('driveway', asArray(input['driveways']));
+  push('school_zone', asArray(input['schoolZones'] ?? input['school_zones']));
+  push('work_zone_suitable', asArray(input['workZones'] ?? input['work_zones']));
+  push('occlusion_zone', asArray(input['occlusionZones'] ?? input['occlusion_zones']));
   const explicit = asArray(input['pointFeatures']);
   for (const item of explicit) {
     if (!isRecord(item)) continue;
     const kind = str(item['kind'], '');
-    if (kind === 'crossing' || kind === 'parking_zone' || kind === 'bus_stop' || kind === 'driveway') {
+    if (kind === 'crossing' || kind === 'parking_zone' || kind === 'bus_stop' || kind === 'driveway' || kind === 'school_zone' || kind === 'work_zone_suitable' || kind === 'occlusion_zone') {
       push(kind, [item]);
     }
   }
@@ -658,6 +682,8 @@ export function normalizeDerivedMapIndex(
       ...base.capabilities,
       crossings: hasCrossings,
       parkingZones: pointFeatures.some((p) => p.kind === 'parking_zone'),
+      workZones: pointFeatures.some((p) => p.kind === 'work_zone_suitable'),
+      occlusionZones: pointFeatures.some((p) => p.kind === 'occlusion_zone'),
       junctionControl: Object.values(base.junctionDescriptors).some((d) => d.control !== 'unknown'),
     },
     provenance: {

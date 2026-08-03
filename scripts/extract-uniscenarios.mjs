@@ -21,12 +21,12 @@ import {
   readFileSync,
   readlinkSync,
   realpathSync,
-  renameSync,
   rmSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
+import { dirname, isAbsolute, join, resolve, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 function run(command, args, options = {}) {
@@ -43,9 +43,9 @@ function run(command, args, options = {}) {
   return result.stdout;
 }
 
-function parseArgs(argv) {
+export function parseArgs(argv) {
   const options = {
-    destination: '/Users/maikyon/Documents/Programming/UniScenarios',
+    destination: undefined,
     linkDevAssets: false,
     commit: false,
   };
@@ -76,6 +76,7 @@ function parseArgs(argv) {
       throw new Error(`unknown option: ${arg}`);
     }
   }
+  if (!options.destination) throw new Error('--destination is required');
   return options;
 }
 
@@ -179,10 +180,10 @@ function configureCli(destination) {
   writeFileSync(gitignorePath, gitignore);
 }
 
-function writeTransitionDocuments(destination, sourceRoot, sourceHead, sourceBranch, status, files) {
-  const migrationManifest = {
-    schema: 'uniscenarios.repository-extraction.v1',
-    capturedAt: new Date().toISOString(),
+export function createMigrationManifest({ sourceRoot, sourceHead, sourceBranch, status, files, capturedAt = new Date().toISOString() }) {
+  return {
+    schema: 'uniscenarios.repository-extraction.v2',
+    capturedAt,
     source: {
       repositoryName: sourceRoot.split(sep).at(-1),
       head: sourceHead,
@@ -196,8 +197,42 @@ function writeTransitionDocuments(destination, sourceRoot, sourceHead, sourceBra
       compatibilityAlias: 'scen',
     },
     excludedIgnoredState: ['node_modules/', 'dist/', 'dev-assets/'],
+    provenance: {
+      reproducibility: {
+        classification: 'verification-only-non-reconstructible',
+        exactDirtySnapshotReconstructibleFromManifest: false,
+        statement: 'The committed HEAD may be recoverable from an independently available Git repository, but this manifest does not contain the modified and untracked file bytes needed to reconstruct the captured dirty snapshot. SHA-256 digests identify bytes; they cannot recover them.',
+      },
+      sourceLocator: {
+        kind: 'not-recorded',
+        value: null,
+        policy: 'A source checkout must be supplied explicitly by the verifier\'s caller. No public URL, private URL, filesystem path, or assurance of continued source availability is asserted by this manifest.',
+      },
+      verification: {
+        command: 'node scripts/verify-migration-source.mjs --source <source-checkout>',
+        checks: [
+          'gitHead',
+          'gitBranch',
+          'gitStatusPorcelainV1',
+          'materialPathSet',
+          'fileKind',
+          'posixMode',
+          'sha256',
+        ],
+      },
+    },
     files,
   };
+}
+
+function writeTransitionDocuments(destination, sourceRoot, sourceHead, sourceBranch, status, files) {
+  const migrationManifest = createMigrationManifest({
+    sourceRoot,
+    sourceHead,
+    sourceBranch,
+    status,
+    files,
+  });
   writeFileSync(
     join(destination, 'MIGRATION-SOURCE.json'),
     `${JSON.stringify(migrationManifest, null, 2)}\n`,
@@ -220,16 +255,56 @@ The \`apps/studio\` directory name describes the authoring surface; it is not a
 legacy product name. Public UI, schemas, package metadata, and documentation use
 UniScenarios naming.
 
+The naming contract is executable:
+
+\`\`\`sh
+pnpm verify:naming
+\`\`\`
+
+The audit checks the root name, every workspace package scope, the primary and
+compatibility CLI names, duplicate workspace names, and public documentation.
+Legacy product naming is allowed only in these transition and extraction
+documents, where it identifies historical provenance rather than the current
+product.
+
 ## Provenance and local-only state
 
-\`MIGRATION-SOURCE.json\` records the exact source commit, dirty status, and a
-SHA-256 digest for every copied source file. The extraction preserves committed
-history but intentionally configures no Git remote, so publishing requires an
-explicit remote choice.
+\`MIGRATION-SOURCE.json\` is an integrity inventory of the extraction input. It
+records the source commit and branch, the dirty status, and the file kind,
+POSIX mode, and SHA-256 digest of every tracked or non-ignored untracked source
+file copied by the extractor.
 
-Ignored dependencies, generated build output, and proprietary/local map assets
-are not committed. For local development, provide \`dev-assets/\` separately or
-use the extraction command's \`--link-dev-assets\` option on the source machine.
+The provenance classification is **verification-only, non-reconstructible**.
+The manifest can prove that an independently obtained source checkout matches
+the captured input, but it cannot create that checkout. In particular, hashes
+do not contain the modified or untracked file bytes from the dirty working tree.
+The committed \`HEAD\` alone is therefore insufficient to reproduce the exact
+extraction input.
+
+No source URL or source filesystem path is recorded. This is deliberate: no
+public source location or continuing availability has been established, and a
+machine-local path would expose local information without making the snapshot
+portable. A caller that already has a candidate source checkout can verify it:
+
+\`\`\`sh
+node scripts/verify-migration-source.mjs \\
+  --source /path/to/candidate-source-checkout
+\`\`\`
+
+The verifier fails closed unless the Git \`HEAD\`, branch, complete porcelain
+status, complete tracked/non-ignored path set, file kinds, modes, and SHA-256
+digests all match. A successful check establishes identity with the recorded
+snapshot; it does not establish how the checkout was obtained or that it will
+remain available.
+
+The extraction preserves committed history but intentionally configures no Git
+remote, so publishing requires an explicit remote choice.
+
+Ignored dependencies, generated build output, local render evidence, and
+proprietary/local map assets are not committed. Publish selected evidence through
+Git LFS or an external artifact store. For local development, provide
+\`dev-assets/\` separately or use the extraction command's \`--link-dev-assets\`
+option on the source machine.
 
 ## Compatibility
 
@@ -273,7 +348,7 @@ function main() {
     files.push({
       path,
       kind: stat.isSymbolicLink() ? 'symlink' : 'file',
-      mode: `0${(stat.mode & 0o777).toString(8)}`,
+      mode: `0${(stat.mode & 0o777).toString(8).padStart(3, '0')}`,
       sha256: stat.isSymbolicLink()
         ? createHash('sha256').update(readlinkSync(sourcePath)).digest('hex')
         : sha256(sourcePath),
@@ -322,4 +397,4 @@ function main() {
   );
 }
 
-main();
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main();

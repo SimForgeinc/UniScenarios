@@ -129,6 +129,34 @@ describe('role binding', () => {
     expect(bindings.find((b) => b.role === 'orphan')!.status).toBe('failed');
   });
 
+  it('binds a lane-drop pair to the exact terminating lane and legal continuing sibling', () => {
+    const terminatingRsl = '1:0:-3';
+    const continuingRsl = '1:0:-2';
+    const laneDropIndex = {
+      ...index,
+      lanes: {
+        ...index.lanes,
+        [terminatingRsl]: { ...index.lanes[terminatingRsl]!, successors: [] },
+      },
+    };
+    const bindings = bindRoles(laneDropIndex, frame, parseRoleBindings([
+      {
+        role: 'ego', kind: 'at_lane_drop', feature: 'drop',
+        lane: 'continuing_sibling', dsM: -50,
+      },
+      {
+        role: 'merger', kind: 'at_lane_drop', feature: 'drop',
+        lane: 'terminating', dsM: -49,
+      },
+    ]), {
+      drop: { mapFeatureId: `lane_drop:${terminatingRsl}@-30`, s: -30, kind: 'lane_drop' },
+    });
+    expect(bindings.map((binding) => binding.status)).toEqual(['bound', 'bound']);
+    expect(bindings[0]).toMatchObject({ laneRsl: continuingRsl, pose: { k: -1, s: -50 } });
+    expect(bindings[1]).toMatchObject({ laneRsl: terminatingRsl, pose: { k: -2, s: -49 } });
+    expect(bindings[1]!.notes.join(' ')).toContain('legal left merge');
+  });
+
   it('ranks conflicting gates by crossing-angle closeness to the template', () => {
     const roles = (angle: number) =>
       parseRoleBindings([
@@ -146,6 +174,27 @@ describe('role binding', () => {
     expect(tbone!.conflict!.gateId).toBe('g_north_straight');
     expect(tbone!.conflict!.angleErrorDeg).toBeLessThan(45);
     expect(tbone!.notes.join(' ')).toContain('template 90°');
+  });
+
+  it('hard-fails a required conflicting gate with insufficient connected approach runway', () => {
+    const [short] = bindRoles(index, frame, parseRoleBindings([
+      {
+        role: 'crosser', kind: 'conflicting_gate', feature: 'jx',
+        from: 'from_left', turn: 'straight', minUpstreamRunwayM: 1_000,
+        arriveAtConflict: { relativeTo: 'ego', deltaT: 1 },
+      },
+    ]), evaluation.featureMatches);
+    expect(short).toMatchObject({ role: 'crosser', status: 'failed' });
+    expect(short!.notes.join(' ')).toContain('connected upstream runway');
+
+    const [supported] = bindRoles(index, frame, parseRoleBindings([
+      {
+        role: 'crosser', kind: 'conflicting_gate', feature: 'jx',
+        from: 'from_left', turn: 'straight', minUpstreamRunwayM: 40,
+        arriveAtConflict: { relativeTo: 'ego', deltaT: 1 },
+      },
+    ]), evaluation.featureMatches);
+    expect(supported).toMatchObject({ role: 'crosser', status: 'bound' });
   });
 
   it('fails on_crossing and in_parking_zone loudly when the layer is missing', () => {
