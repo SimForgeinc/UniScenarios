@@ -304,7 +304,7 @@ export interface PhysicsTraceProvenance {
 
 export interface ActorPhysicsBackendProvenance {
   readonly mode: MotionPhysicsMode;
-  readonly reason: 'selected' | 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | 'ambient-background';
+  readonly reason: 'selected' | 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind';
 }
 
 export interface TraceActorMetadata {

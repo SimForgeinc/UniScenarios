@@ -55,12 +55,15 @@ describe('ambient crossing priority', () => {
   it('never changes authored same-lane motion to follow an ambient leader', () => {
     const graph = syntheticGraph();
     const authored = crossingActor('authored', [{ x: 0, z: 0 }, { x: 80, z: 0 }], 10);
-    const ambientLeader = crossingActor('background', [{ x: 18, z: 0 }, { x: 98, z: 0 }], 3, ['ambient']);
+    // Keep the leader outside physical contact range for the whole assertion;
+    // this test isolates semantic following priority, while contact parity is
+    // covered by the dynamic collision tests.
+    const ambientLeader = crossingActor('background', [{ x: 40, z: 0 }, { x: 120, z: 0 }], 3, ['ambient']);
     const solo = runSimulation(parseSimScenarioInput({
-      mapId: 'ambient-following-priority', clipSeconds: 1, dt: 0.1, actors: [authored],
+      mapId: 'ambient-following-priority', clipSeconds: 1, warmupSeconds: 0, dt: 0.1, actors: [authored],
     }), { graph, guards: 'collect' }).trace;
     const populated = runSimulation(parseSimScenarioInput({
-      mapId: 'ambient-following-priority', clipSeconds: 1, dt: 0.1, actors: [authored, ambientLeader],
+      mapId: 'ambient-following-priority', clipSeconds: 1, warmupSeconds: 0, dt: 0.1, actors: [authored, ambientLeader],
     }), { graph, guards: 'collect' }).trace;
     expect(populated.ticks.actors.authored!.speedMps).toEqual(solo.ticks.actors.authored!.speedMps);
     expect(populated.ticks.actors.authored!.x).toEqual(solo.ticks.actors.authored!.x);

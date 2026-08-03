@@ -19,7 +19,7 @@ export function createAmbientWorldPreviewInput(mapId: string): SimScenarioInput 
       initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
       behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
     }],
-    physics: { mode: 'kinematic-v1' },
+    physics: { mode: 'dynamic-v1' },
   });
   return { ...parsed, actors: [] };
 }
