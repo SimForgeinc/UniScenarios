@@ -23,6 +23,8 @@ IMAGE_DIGEST = re.compile(r"^sha256:[a-f0-9]{64}$")
 REVISION = re.compile(r"^[a-f0-9]{40}$")
 SIGNAL_STATES = {"red", "yellow", "green", "off"}
 LIFECYCLE = {"absent", "spawn", "active", "destroy"}
+ACTOR_LIFECYCLE_POLICIES = {"persist-to-final-frame", "generic-v3"}
+AUTHORED_LIFECYCLE_ERROR = "USC-ACTOR-LIFECYCLE-001"
 EXECUTION_MODES = {"authoritative-trace", "native-dynamics"}
 ACTOR_KINDS = {"vehicle", "pedestrian", "cyclist", "static"}
 MAX_XODR_BYTES = 128 * 1024 * 1024
@@ -76,6 +78,7 @@ def payload_for_digest(job: dict[str, Any]) -> dict[str, Any]:
     return {
         "executionMode": job.get("executionMode"),
         "fixedTimestepS": job.get("fixedTimestepS"),
+        "actorLifecyclePolicy": job.get("actorLifecyclePolicy"),
         "actorBindings": job.get("actorBindings"),
         "signalBindings": job.get("signalBindings"),
         "requiredSemantics": job.get("requiredSemantics"),
@@ -105,6 +108,12 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
     mode = job.get("executionMode")
     if mode not in EXECUTION_MODES:
         _fail("executionMode", "must be authoritative-trace or native-dynamics")
+    lifecycle_policy = job.get("actorLifecyclePolicy")
+    if lifecycle_policy not in ACTOR_LIFECYCLE_POLICIES:
+        _fail(
+            "actorLifecyclePolicy",
+            "must explicitly be persist-to-final-frame for authored exports or generic-v3 for internal lifecycle fixtures",
+        )
 
     runtime = job.get("runtimeContract")
     if not isinstance(runtime, dict):
@@ -210,6 +219,11 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
             if not isinstance(state, dict) or state.get("lifecycle") not in LIFECYCLE:
                 _fail(actor_path, "has an unknown lifecycle state")
             lifecycle = state["lifecycle"]
+            if lifecycle_policy == "persist-to-final-frame" and lifecycle == "destroy":
+                _fail(
+                    actor_path,
+                    f"{AUTHORED_LIFECYCLE_ERROR}: authored actors must remain present through the final captured frame",
+                )
             prior = previous_lifecycle.get(actor_id)
             if prior == "destroy" and lifecycle != "destroy":
                 _fail(actor_path, "cannot become active after destroy")

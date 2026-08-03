@@ -23,6 +23,10 @@ Hard gates:
 - CARLA loads the exact map before the bridge becomes the only synchronous tick
   owner and applies the declared fixed step;
 - every control-stream index is contiguous and its time equals `index * step`;
+- every submitted job declares a hash-bound actor lifecycle policy; authored
+  exports use `persist-to-final-frame`, which rejects `destroy` in every
+  captured frame with diagnostic `USC-ACTOR-LIFECYCLE-001`, while the explicit
+  `generic-v3` policy remains available for worker-internal lifecycle tests;
 - `authoritative-trace` applies exact compiled poses; `native-dynamics` applies
   exact compiled controls while retaining the trace as the comparison target;
 - every expected frame and CARLA readback frame carries complete actor and

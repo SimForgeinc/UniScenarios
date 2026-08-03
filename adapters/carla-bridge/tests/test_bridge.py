@@ -27,6 +27,7 @@ def job(mode="authoritative-trace"):
     value = {
         "schema": "uniscenarios.carla-job/v3",
         "executionMode": mode,
+        "actorLifecyclePolicy": "persist-to-final-frame",
         "runtimeContract": {
             "workerManifestSha256": "8" * 64,
             "workerImageDigest": "sha256:" + "9" * 64,
@@ -77,6 +78,8 @@ def evidence(value=None):
         for actor in frame["actors"].values():
             actor.update({"carlaActorId": 1001, "blueprintId": "vehicle.tesla.model3", "kind": "vehicle"})
             actor["alive"] = actor["lifecycle"] in {"spawn", "active"}
+            if actor["lifecycle"] == "absent":
+                actor["carlaActorId"] = None
             if actor["lifecycle"] in {"spawn", "active"}:
                 actor["teleported"] = False
         frame["signals"] = {
@@ -159,6 +162,29 @@ class FakeBackend:
 
 
 class BridgeTests(unittest.TestCase):
+    def test_authored_policy_rejects_destroy_but_preserves_late_spawn(self):
+        late = job()
+        late["frames"][0]["actors"]["ego"] = {"lifecycle": "absent"}
+        late["frames"][1]["actors"]["ego"]["lifecycle"] = "spawn"
+        late["payloadSha256"] = canonical_sha256(payload_for_digest(late))
+        result = execute_job(late, XODR, OSC, CATALOG, FakeBackend(late))
+        self.assertTrue(result["comparison"]["accepted"])
+
+        destroyed = job()
+        destroyed["frames"][1]["actors"]["ego"] = {"lifecycle": "destroy"}
+        destroyed["payloadSha256"] = canonical_sha256(payload_for_digest(destroyed))
+        with self.assertRaisesRegex(ContractError, "USC-ACTOR-LIFECYCLE-001"):
+            execute_job(destroyed, XODR, OSC, CATALOG, FakeBackend(destroyed))
+
+    def test_generic_v3_policy_retains_destroy_contract_expressiveness(self):
+        destroyed = job()
+        destroyed["actorLifecyclePolicy"] = "generic-v3"
+        destroyed["frames"][1]["actors"]["ego"] = {"lifecycle": "destroy"}
+        destroyed["payloadSha256"] = canonical_sha256(payload_for_digest(destroyed))
+        backend = FakeBackend(destroyed)
+        result = execute_job(destroyed, XODR, OSC, CATALOG, backend)
+        self.assertTrue(result["comparison"]["accepted"])
+
     def test_executes_one_tick_per_authoritative_frame(self):
         backend = FakeBackend()
         result = execute_job(job(), XODR, OSC, CATALOG, backend)
