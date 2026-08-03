@@ -299,16 +299,22 @@ export type {
 export {
   buildSumoRouteDocument,
   sumoActorIdHash,
+  sumoNetworkHeadingToScene,
+  sumoNetworkToScene,
   sumoNumericSeed,
+  sumoSceneHeadingToNetwork,
+  sumoSceneToNetwork,
   sumoVehicleId,
   validateSumoNetworkManifest,
   validateSumoRuntimeManifest,
 } from './ambient/sumo.js';
 export type {
   SumoNetworkManifest,
+  SumoNetworkPoint,
   SumoNetworkWorldTransform,
   SumoRouteDocumentOptions,
   SumoRuntimeManifest,
+  SumoScenePoint,
 } from './ambient/sumo.js';
 export {
   DEFAULT_AMBIENT_ROBUSTNESS_CASES,

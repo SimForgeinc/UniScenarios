@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse } from './protocol';
-import { toNetwork, transformPackedStatesToWorld } from './coordinateTransform';
+import { externalActorToNetwork, transformPackedStatesToWorld } from './coordinateTransform';
 
 interface SumoModule {
   HEAPU8: Uint8Array;
@@ -119,17 +119,15 @@ function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTraffic
   }
   mirroredIds.clear();
   for (const actor of actors) {
-    const position = toNetwork(actor.x, actor.y, transform);
-    const worldRelativeHeading = actor.headingDegrees - transform.rotationDegrees;
-    const networkHeading = transform.invertY ? 180 - worldRelativeHeading : worldRelativeHeading;
+    const network = externalActorToNetwork({ x: actor.x, z: actor.y, headingDegrees: actor.headingDegrees }, transform);
     withString(sumo, actor.id, (idPointer) => withString(sumo, actor.routeId, (routePointer) => {
       assertOk(sumo._us_sumo_upsert_external(
         idPointer,
         kindCode(actor.kind),
         routePointer,
-        position.x,
-        position.y,
-        networkHeading,
+        network.x,
+        network.y,
+        network.headingDegrees,
         actor.speedMetersPerSecond,
         actor.lengthMeters,
         actor.widthMeters,

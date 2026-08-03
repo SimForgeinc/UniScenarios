@@ -9,6 +9,78 @@ export interface SumoNetworkWorldTransform {
   readonly invertY: boolean;
 }
 
+/**
+ * Provider-neutral scene coordinates used by the simulator, CLI and Studio.
+ *
+ * `x` is scene east/right and `z` is scene south/forward.  In particular this
+ * is *not* an intermediate mathematical `y`: callers must never negate `z`
+ * before or after these functions.  `invertY` in the generated sidecar is the
+ * single place where SUMO/OpenDRIVE +y is reflected into scene +z.
+ */
+export interface SumoScenePoint {
+  readonly x: number;
+  readonly z: number;
+}
+
+export interface SumoNetworkPoint {
+  readonly x: number;
+  readonly y: number;
+}
+
+export function sumoNetworkToScene(
+  point: SumoNetworkPoint,
+  transform: SumoNetworkWorldTransform,
+): SumoScenePoint {
+  assertUsableTransform(transform);
+  const radians = transform.rotationDegrees * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const reflectedY = transform.invertY ? -point.y : point.y;
+  return {
+    x: (point.x * cosine - reflectedY * sine) * transform.scale + transform.translationX,
+    z: (point.x * sine + reflectedY * cosine) * transform.scale + transform.translationY,
+  };
+}
+
+export function sumoSceneToNetwork(
+  point: SumoScenePoint,
+  transform: SumoNetworkWorldTransform,
+): SumoNetworkPoint {
+  assertUsableTransform(transform);
+  const radians = -transform.rotationDegrees * Math.PI / 180;
+  const cosine = Math.cos(radians);
+  const sine = Math.sin(radians);
+  const translatedX = (point.x - transform.translationX) / transform.scale;
+  const translatedZ = (point.z - transform.translationY) / transform.scale;
+  return {
+    x: translatedX * cosine - translatedZ * sine,
+    y: (translatedX * sine + translatedZ * cosine) * (transform.invertY ? -1 : 1),
+  };
+}
+
+/** SUMO navigation degrees -> scene navigation degrees. */
+export function sumoNetworkHeadingToScene(
+  headingDegrees: number,
+  transform: SumoNetworkWorldTransform,
+): number {
+  return (transform.invertY ? 180 - headingDegrees : headingDegrees) + transform.rotationDegrees;
+}
+
+/** Scene navigation degrees -> SUMO navigation degrees. */
+export function sumoSceneHeadingToNetwork(
+  headingDegrees: number,
+  transform: SumoNetworkWorldTransform,
+): number {
+  const relative = headingDegrees - transform.rotationDegrees;
+  return transform.invertY ? 180 - relative : relative;
+}
+
+function assertUsableTransform(transform: SumoNetworkWorldTransform): void {
+  if (!Number.isFinite(transform.scale) || transform.scale === 0) {
+    throw new RangeError('SUMO scene transform scale must be finite and non-zero');
+  }
+}
+
 /** Versioned generated sidecar consumed by every SUMO runtime surface. */
 export interface SumoNetworkManifest {
   readonly schema: 'uniscenarios.sumo-network.v1';

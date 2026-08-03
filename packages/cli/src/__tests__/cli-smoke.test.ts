@@ -20,7 +20,7 @@ import { readTraceFile, writeTraceFile } from '../template-io.js';
 const BIN = path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js');
 const LTAP = path.join(REPO_ROOT, 'examples', 'ltap-opposing.template.json');
 const MAP = 'yale-street';
-const SUMO_SCENARIO = path.join(REPO_ROOT, 'examples', 'edge-cases', '05-ambulance-gridlocked-intersection', 'instance.baseline.json');
+const SUMO_SCENARIO = path.join(REPO_ROOT, 'examples', 'edge-cases', '03-red-light-ambulance-preemption', 'scenario.instance.json');
 const haveArtifacts =
   existsSync(path.join(DEV_ASSETS, MAP, 'derived', 'topology-derived.json.gz')) && existsSync(LTAP);
 const haveSumo = haveArtifacts
@@ -183,11 +183,22 @@ describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
     expect(summary.performance.sumo.version).toBe('1.27.1');
     expect(summary.performance.sumo.stepMilliseconds.p95).toBeGreaterThanOrEqual(0);
     const report = JSON.parse(await readFile(path.join(out, 'report.json'), 'utf8')) as {
-      ambientActors: Record<string, Array<{ t: number; x: number; speedMps: number; accelerationMps2: number; lanePositionM: number }>>;
+      actors: Record<string, Array<{ x: number; z: number }>>;
+      ambientActors: Record<string, Array<{ t: number; x: number; z: number; speedMps: number; accelerationMps2: number; lanePositionM: number }>>;
       performance: { sumo: { heapBytes: number } };
     };
     expect(Object.values(report.ambientActors)[0]?.[0]).toEqual(expect.objectContaining({ t: 0 }));
     expect(report.performance.sumo.heapBytes).toBeGreaterThan(0);
+    const authoredPoints = Object.values(report.actors).flat();
+    const ambientPoints = Object.values(report.ambientActors).flat();
+    const nearest = Math.min(...ambientPoints.flatMap((ambient) => authoredPoints.map((actor) => Math.hypot(
+      ambient.x - actor.x,
+      ambient.z - actor.z,
+    ))));
+    // A sign mismatch used to put Yale ambient traffic 3+ km from authored
+    // actors. Routes are map-local and need not intersect in a one-second
+    // smoke, but both populations must occupy the same few-hundred-metre area.
+    expect(nearest).toBeLessThan(300);
   }, 180_000);
 
   it('exports a concrete instance through the real CLI in native and esmini-compatible ASAM formats', async () => {

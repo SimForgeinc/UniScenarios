@@ -8,7 +8,11 @@ import {
   buildSumoRouteDocument,
   resolveAmbientTrafficProfile,
   sumoActorIdHash,
+  sumoNetworkHeadingToScene,
+  sumoNetworkToScene,
   sumoNumericSeed,
+  sumoSceneHeadingToNetwork,
+  sumoSceneToNetwork,
   sumoVehicleId,
   validateSumoNetworkManifest,
   validateSumoRuntimeManifest,
@@ -177,14 +181,16 @@ export async function runHeadlessSumo(options: {
       for (let offset = 0; offset < view.byteLength; offset += 32) {
         const id = generatedIds.get(view.getUint32(offset, true));
         if (!id) continue;
-        const world = toWorld(view.getFloat32(offset + 4, true), view.getFloat32(offset + 8, true), manifest.worldFromNetwork);
+        const scene = sumoNetworkToScene({
+          x: view.getFloat32(offset + 4, true),
+          y: view.getFloat32(offset + 8, true),
+        }, manifest.worldFromNetwork);
         const networkHeading = view.getFloat32(offset + 12, true);
-        const headingDegrees = (manifest.worldFromNetwork.invertY ? 180 - networkHeading : networkHeading)
-          + manifest.worldFromNetwork.rotationDegrees;
+        const headingDegrees = sumoNetworkHeadingToScene(networkHeading, manifest.worldFromNetwork);
         paths[id]!.push({
           t: round(t),
-          x: round(world.x),
-          z: round(-world.y),
+          x: round(scene.x),
+          z: round(scene.z),
           headingRad: round(normalizeRadians((headingDegrees - 90) * Math.PI / 180)),
           speedMps: round(view.getFloat32(offset + 16, true)),
           accelerationMps2: round(view.getFloat32(offset + 20, true)),
@@ -231,10 +237,9 @@ function mirrorAuthoredActors(
     }
     const meta = trace.header.actorMetadata?.[actorId];
     if (meta?.static || meta?.kind === 'pedestrian' || meta?.kind === 'animal' || meta?.kind === 'static_object') continue;
-    const network = toNetwork(track.x[sampleIndex]!, -track.z[sampleIndex]!, transform);
+    const network = sumoSceneToNetwork({ x: track.x[sampleIndex]!, z: track.z[sampleIndex]! }, transform);
     const sceneHeadingDegrees = track.headingRad[sampleIndex]! * 180 / Math.PI + 90;
-    const relativeHeading = sceneHeadingDegrees - transform.rotationDegrees;
-    const networkHeading = transform.invertY ? 180 - relativeHeading : relativeHeading;
+    const networkHeading = sumoSceneHeadingToNetwork(sceneHeadingDegrees, transform);
     withString(sumo, `authored:${actorId}`, (id) => withString(sumo, 'proxy-route', (route) => {
       assertSumoOk(sumo, sumo._us_sumo_upsert_external(
         id,
@@ -283,28 +288,6 @@ function withString<T>(sumo: SumoModule, value: string, callback: (pointer: numb
 function assertSumoOk(sumo: SumoModule, code: number): void {
   if (code === 0) return;
   throw new CliError('sumo_runtime_failed', sumo.UTF8ToString(sumo._us_sumo_last_error()) || `SUMO failed (${code})`);
-}
-
-function toWorld(x: number, y: number, transform: SumoNetworkWorldTransform): { x: number; y: number } {
-  const radians = transform.rotationDegrees * Math.PI / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  return {
-    x: (x * cosine - (transform.invertY ? -y : y) * sine) * transform.scale + transform.translationX,
-    y: (x * sine + (transform.invertY ? -y : y) * cosine) * transform.scale + transform.translationY,
-  };
-}
-
-function toNetwork(x: number, y: number, transform: SumoNetworkWorldTransform): { x: number; y: number } {
-  const radians = -transform.rotationDegrees * Math.PI / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  const translatedX = (x - transform.translationX) / transform.scale;
-  const translatedY = (y - transform.translationY) / transform.scale;
-  return {
-    x: translatedX * cosine - translatedY * sine,
-    y: (translatedX * sine + translatedY * cosine) * (transform.invertY ? -1 : 1),
-  };
 }
 
 function summarizeTimes(values: readonly number[]): { p50: number; p95: number; p99: number; max: number; total: number } {

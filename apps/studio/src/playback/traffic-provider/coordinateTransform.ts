@@ -1,24 +1,28 @@
+import {
+  sumoNetworkHeadingToScene,
+  sumoNetworkToScene,
+  sumoSceneHeadingToNetwork,
+  sumoSceneToNetwork,
+} from '@uniscenarios/sim-engine';
 import type { NetworkWorldTransform } from './protocol';
 
 export function toWorld(x: number, y: number, transform: NetworkWorldTransform): { x: number; y: number } {
-  const radians = transform.rotationDegrees * Math.PI / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  return {
-    x: (x * cosine - (transform.invertY ? -y : y) * sine) * transform.scale + transform.translationX,
-    y: (x * sine + (transform.invertY ? -y : y) * cosine) * transform.scale + transform.translationY,
-  };
+  const scene = sumoNetworkToScene({ x, y }, transform);
+  // Compatibility wrapper for existing Studio call sites. `y` here is scene
+  // z; the shared API above deliberately names it z to prevent sign mistakes.
+  return { x: scene.x, y: scene.z };
 }
 export function toNetwork(x: number, y: number, transform: NetworkWorldTransform): { x: number; y: number } {
-  const radians = -transform.rotationDegrees * Math.PI / 180;
-  const cosine = Math.cos(radians);
-  const sine = Math.sin(radians);
-  const translatedX = (x - transform.translationX) / transform.scale;
-  const translatedY = (y - transform.translationY) / transform.scale;
-  return {
-    x: translatedX * cosine - translatedY * sine,
-    y: (translatedX * sine + translatedY * cosine) * (transform.invertY ? -1 : 1),
-  };
+  return sumoSceneToNetwork({ x, z: y }, transform);
+}
+
+/** Exact scene -> SUMO conversion used for authored occupancy proxies. */
+export function externalActorToNetwork(
+  actor: { readonly x: number; readonly z: number; readonly headingDegrees: number },
+  transform: NetworkWorldTransform,
+): { readonly x: number; readonly y: number; readonly headingDegrees: number } {
+  const point = sumoSceneToNetwork(actor, transform);
+  return { ...point, headingDegrees: sumoSceneHeadingToNetwork(actor.headingDegrees, transform) };
 }
 
 export function transformPackedStatesToWorld(
@@ -36,6 +40,6 @@ export function transformPackedStatesToWorld(
     floats[offset + 1] = position.x;
     floats[offset + 2] = position.y;
     const heading = floats[offset + 3]!;
-    floats[offset + 3] = (transform.invertY ? 180 - heading : heading) + transform.rotationDegrees;
+    floats[offset + 3] = sumoNetworkHeadingToScene(heading, transform);
   }
 }
