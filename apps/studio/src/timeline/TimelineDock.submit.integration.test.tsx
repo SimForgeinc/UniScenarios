@@ -82,7 +82,7 @@ describe('timeline action dialog submission', () => {
     const result = submitTimelineAction(
       document,
       draft(actorId, 'turn_left'),
-      (_id, turn) => turn === 'left' ? ['5:0:-3', '7:0:-3'] : null,
+      (_id, turn) => turn === 'Left' ? ['5:0:-3', '7:0:-3'] : null,
     );
 
     expect(result.ok).toBe(true);

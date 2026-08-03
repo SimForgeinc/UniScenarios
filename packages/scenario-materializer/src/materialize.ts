@@ -2151,15 +2151,25 @@ class Materializer {
     );
     if (!trigger) return null;
 
-    const until = it.until
-      ? it.until.kind === 'when'
-        ? this.buildCondition(it.until.condition, scope, `${path}.until.condition`)
-        : (this.notes.push({
-            path: `${path}.until`,
-            reason: `the engine releases an axis on a condition; an "${it.until.kind}" until is not expressible and was dropped`,
-          }),
-          undefined)
+    const until = it.until?.kind === 'when'
+      ? this.buildCondition(it.until.condition, scope, `${path}.until.condition`)
       : undefined;
+
+    // Studio clips are strict execution windows, not decoration. Historically
+    // an `until: at(...)` was dropped here, leaving a command active after the
+    // visible clip and allowing spatial actions to happen arbitrarily late.
+    // Preserve exact time bounds in the concrete engine contract.
+    const windowStartS = it.trigger.kind === 'at'
+      ? evalNum(it.trigger.t, scope, `${path}.trigger.t`)
+      : 0;
+    const windowEndS = it.until?.kind === 'at'
+      ? evalNum(it.until.t, scope, `${path}.until.t`)
+      : it.trigger.kind === 'when' && it.trigger.byLatest !== undefined
+        ? evalNum(it.trigger.byLatest, scope, `${path}.trigger.byLatest`)
+        : undefined;
+    const window = windowEndS === undefined
+      ? undefined
+      : { startS: windowStartS, endS: windowEndS };
 
     const base = {
       id: it.id,
@@ -2167,6 +2177,7 @@ class Materializer {
       // concrete actor as an event carrier while the key itself is global.
       actorId: it.actor === '@world' ? this.actors[0]!.id : it.actor,
       trigger,
+      ...(window ? { window } : {}),
       ...(until ? { until } : {}),
     };
 
@@ -2354,12 +2365,6 @@ class Materializer {
       case 'at':
         return { kind: 'at', t: evalNum(trigger.t, scope, `${path}.t`) };
       case 'after': {
-        if (trigger.event === 'end') {
-          this.notes.push({
-            path,
-            reason: 'after(..., event: end) measures from the start in the engine',
-          });
-        }
         const delayS = Math.max(0, evalNum(trigger.delayS, scope, `${path}.delayS`, 0));
         const foldedAt = this.foldedTriggerStart.get(trigger.of);
         if (foldedAt !== undefined) {
@@ -2373,6 +2378,7 @@ class Materializer {
         return {
           kind: 'after',
           interactionId: trigger.of,
+          event: trigger.event,
           delayS,
         };
       }

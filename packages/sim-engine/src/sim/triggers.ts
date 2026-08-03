@@ -140,6 +140,8 @@ export interface TriggerRuntime {
   status: TriggerStatus;
   /** Simulation time the interaction fired. */
   firedAt: number | null;
+  /** Simulation time the declared clip/command completed. */
+  endedAt: number | null;
   /** `true` when `ifNever: 'fire'` forced it at `byLatest`. */
   forced: boolean;
   /** Resolved absolute time for `at` / solved `arrival` triggers. */
@@ -151,6 +153,7 @@ export function makeTriggerRuntime(interaction: Interaction): TriggerRuntime {
     interaction,
     status: 'pending',
     firedAt: null,
+    endedAt: null,
     forced: false,
     fixedTime: interaction.trigger.kind === 'at' ? interaction.trigger.t : null,
   };
@@ -182,8 +185,9 @@ export function shouldFire(
       const ref = byId.get(trigger.interactionId);
       if (!ref) return { fire: false, forced: false, skip: false };
       if (ref.status === 'skipped') return { fire: false, forced: false, skip: true };
-      if (ref.firedAt === null) return { fire: false, forced: false, skip: false };
-      const target = ref.firedAt + trigger.delayS;
+      const referenceTime = trigger.event === 'end' ? ref.endedAt : ref.firedAt;
+      if (referenceTime === null) return { fire: false, forced: false, skip: false };
+      const target = referenceTime + trigger.delayS;
       return { fire: ctx.t >= target - 1e-9, forced: false, skip: false };
     }
     case 'when': {

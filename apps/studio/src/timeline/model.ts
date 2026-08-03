@@ -45,10 +45,17 @@ export function packActionLanes(items: readonly TimelineItem[]): TimelineActionL
 }
 
 export function conflictingAction(candidate: TimelineItem, items: readonly TimelineItem[], ignoreId?: string): TimelineItem | undefined {
-  if (candidate.resource !== 'longitudinal' && candidate.resource !== 'lateral') return undefined;
   return items.find((item) => item.interaction.id !== ignoreId && item.resource === candidate.resource && overlaps(candidate, item));
 }
-export function moveInteraction(interaction: Interaction, time: number): Interaction { return { ...interaction, trigger: { kind: 'at', t: Math.max(0, Number(time.toFixed(3))) } } as Interaction; }
+export function moveInteraction(interaction: Interaction, time: number): Interaction {
+  const start = Math.max(0, Number(time.toFixed(3)));
+  const oldStart = interaction.trigger.kind === 'at' ? numeric(interaction.trigger.t) : null;
+  const oldEnd = interaction.until?.kind === 'at' ? numeric(interaction.until.t) : null;
+  const until = oldStart !== null && oldEnd !== null
+    ? { kind: 'at' as const, t: Number((start + Math.max(.1, oldEnd - oldStart)).toFixed(3)) }
+    : interaction.until;
+  return { ...interaction, trigger: { kind: 'at', t: start }, ...(until ? { until } : {}) } as Interaction;
+}
 /** Compatibility helper for non-UI session tests; speed commands now render as actions. */
 export function newSpeedInteraction(actorId: string, time: number, ordinal: number): Interaction { return { id: `speed_${actorId}_${ordinal}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64), actor: actorId, trigger: { kind: 'at', t: Math.max(0, Number(time.toFixed(3))) }, verb: 'speed', target: { mode: 'absolute', valueKph: 30 }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } }; }
 export function triggerLabel(trigger: Trigger): string { if (trigger.kind === 'at') return `at ${formatNumeric(trigger.t)}s`; if (trigger.kind === 'after') return `after ${trigger.of}`; if (trigger.kind === 'when') return `when ${trigger.condition.kind}`; return `arrival ${trigger.of} ↔ ${trigger.syncWith}`; }

@@ -64,7 +64,7 @@ describe('byLatest / ifNever', () => {
         },
       ],
     });
-    const { trace } = runSimulation(input, { graph });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
     expect(trace.metrics.triggerNeverFired).toEqual(['late']);
   });
 });
@@ -92,7 +92,7 @@ describe('after and until', () => {
         },
       ],
     });
-    const { trace } = runSimulation(input, { graph });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
     const times = trace.events.filter((e) => e.kind === 'trigger_fired').map((e) => e.t);
     expect(times[0]).toBeCloseTo(3, 2);
     expect(times[1]).toBeCloseTo(7, 2);
@@ -116,11 +116,92 @@ describe('after and until', () => {
         },
       ],
     });
-    const { trace } = runSimulation(input, { graph });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
     const released = trace.events.find((e) => e.kind === 'released');
     expect(released).toMatchObject({ axis: 'longitudinal', interactionId: 'creep', reason: 'until' });
     // Back on the default cruise law, it returns to 12 m/s.
     expect(trace.ticks.actors['ego']!.speedMps.at(-1)!).toBeCloseTo(12, 1);
+  });
+
+  it('after(end) measures from the source window end, not its start', () => {
+    const input = scenario(graph, {
+      clipSeconds: 10,
+      actors: [vehicle(graph, { id: 'ego', s: 20, speedMps: 12, cruiseSpeedMps: 12 })],
+      interactions: [
+        { id: 'source', actorId: 'ego', trigger: { kind: 'at', t: 2 }, window: { startS: 2, endS: 5 }, verb: 'speed', target: { mode: 'absolute', value: 8 }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } },
+        { id: 'after-end', actorId: 'ego', trigger: { kind: 'after', interactionId: 'source', event: 'end', delayS: 0 }, verb: 'set', target: { key: 'audio.horn', value: true } },
+      ],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.events.find((event) => event.kind === 'trigger_fired' && event.interactionId === 'after-end')).toMatchObject({ t: 5 });
+  });
+});
+
+describe('strict interaction windows', () => {
+  const actor = () => vehicle(graph, { id: 'ego', s: 20, speedMps: 12, cruiseSpeedMps: 12 });
+
+  it('waits for the inclusive start, fires at an exact endpoint, and releases at the end', () => {
+    const input = scenario(graph, {
+      clipSeconds: 8,
+      actors: [actor()],
+      interactions: [{
+        id: 'windowed', actorId: 'ego',
+        trigger: { kind: 'when', condition: { kind: 'speed', actorId: 'ego', cmp: 'gte', value: 0 }, byLatest: 7, ifNever: 'skip' },
+        window: { startS: 3, endS: 5 },
+        verb: 'speed', target: { mode: 'absolute', value: 2 },
+        dynamics: { shape: 'linear', constraint: 'time', value: .5 },
+      }],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.events.find((event) => event.kind === 'trigger_fired')).toMatchObject({ interactionId: 'windowed', t: 3 });
+    expect(trace.events.find((event) => event.kind === 'released' && event.interactionId === 'windowed')).toMatchObject({ t: 5, reason: 'window' });
+    const at = (time: number) => trace.ticks.t.findIndex((sample) => sample >= time - 1e-9);
+    expect(trace.ticks.actors.ego!.speedMps[at(2.9)]!).toBeGreaterThan(10);
+  });
+
+  it('marks a missed precondition at the end tick and never executes it later', () => {
+    const input = scenario(graph, {
+      clipSeconds: 8,
+      actors: [actor()],
+      interactions: [{
+        id: 'missed', actorId: 'ego',
+        trigger: { kind: 'when', condition: { kind: 'speed', actorId: 'ego', cmp: 'gte', value: 200 }, byLatest: 7, ifNever: 'fire' },
+        window: { startS: 2, endS: 4 },
+        verb: 'speed', target: { mode: 'stop' },
+        dynamics: { shape: 'linear', constraint: 'time', value: .5 },
+      }],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.events).toContainEqual(expect.objectContaining({ kind: 'trigger_skipped', interactionId: 'missed', t: 4, reason: 'window_elapsed' }));
+    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'missed')).toBe(false);
+    expect(trace.metrics.triggerNeverFired).toContain('missed');
+  });
+
+  it('allows an exact end-point trigger', () => {
+    const input = scenario(graph, {
+      clipSeconds: 7, actors: [actor()], interactions: [{
+        id: 'endpoint', actorId: 'ego', trigger: { kind: 'at', t: 5 }, window: { startS: 3, endS: 5 },
+        verb: 'set', target: { key: 'audio.horn', value: true },
+      }],
+    });
+    const { trace } = runSimulation(input, { graph });
+    expect(trace.events).toContainEqual(expect.objectContaining({ kind: 'trigger_fired', interactionId: 'endpoint', t: 5 }));
+  });
+
+  it('resolves incompatible same-axis actions deterministically by sorted id while independent state keys stack', () => {
+    const input = scenario(graph, {
+      clipSeconds: 5, actors: [actor()], interactions: [
+        { id: 'z-fast', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'speed', target: { mode: 'absolute', value: 15 }, dynamics: { shape: 'step', constraint: 'time', value: .1 } },
+        { id: 'a-slow', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'speed', target: { mode: 'absolute', value: 4 }, dynamics: { shape: 'step', constraint: 'time', value: .1 } },
+        { id: 'horn', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'set', target: { key: 'audio.horn', value: true } },
+        { id: 'lights', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'set', target: { key: 'lights.headlights', value: 'low' } },
+      ],
+    });
+    const first = runSimulation(input, { graph, guards: 'collect' }).trace;
+    const second = runSimulation(input, { graph, guards: 'collect' }).trace;
+    expect(first.events).toEqual(second.events);
+    expect(first.events).toContainEqual(expect.objectContaining({ kind: 'preemption', byInteractionId: 'z-fast', preemptedInteractionId: 'a-slow' }));
+    expect(first.events.filter((event) => event.kind === 'state_set' && event.t === 1)).toHaveLength(2);
   });
 });
 

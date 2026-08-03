@@ -273,6 +273,8 @@ class Simulation {
   private readonly attachedPropsByActor = new Map<string, StaticProp[]>();
   private readonly attachedOccluderIds: ReadonlySet<string>;
   private readonly events: SimEvent[] = [];
+  /** Windows already released, so their terminal tick is idempotent. */
+  private readonly releasedWindows = new Set<string>();
   private readonly issues: SimIssue[] = [];
   private readonly tracks = new Map<string, ActorTrack>();
   private readonly signalTracks = new Map<string, SignalTrack>();
@@ -618,8 +620,13 @@ class Simulation {
       this.updateDoorTransitions(t);
       const collisions = this.detectCollisions(t);
       if (t >= 0) {
+        // Close prior commands first so after(end, delay=0) is eligible on the
+        // exact shared endpoint. The second pass below handles a command that
+        // itself first fires on its end tick.
+        this.evaluateWindowEnds(t);
         this.evaluateTriggers(t, collisions);
         this.evaluateUntil(t, collisions);
+        this.evaluateWindowEnds(t);
       }
       if (t >= 0 || this.opts.includeWarmupTrace === true) {
         // Record the state *at* `t`, before this tick's integration step, so
@@ -957,6 +964,8 @@ class Simulation {
     const ctx = this.conditionContext(t, collisions);
     for (const tr of this.triggers) {
       if (tr.status !== 'pending') continue;
+      const window = tr.interaction.window;
+      if (window && t < window.startS - 1e-9) continue;
       const verdict = shouldFire(ctx, tr, this.triggerById);
       if (verdict.skip) {
         tr.status = 'skipped';
@@ -970,7 +979,27 @@ class Simulation {
         this.metrics.triggerNeverFired.push(tr.interaction.id);
         continue;
       }
-      if (!verdict.fire) continue;
+      // A lane-path turn is a commitment at its intended junction, not an
+      // immediate re-route when the clip begins. Hold it until the actor is on
+      // the final shared approach leg; if that never occurs inside the clip it
+      // is missed below instead of executing later.
+      const routeReady = tr.interaction.verb !== 'route'
+        || !window
+        || this.routeCommitReady(tr.interaction);
+      if (!verdict.fire || !routeReady) {
+        if (window && t >= window.endS - 1e-9) {
+          tr.status = 'skipped';
+          this.events.push({
+            t,
+            kind: 'trigger_skipped',
+            interactionId: tr.interaction.id,
+            actorId: tr.interaction.actorId,
+            reason: 'window_elapsed',
+          });
+          this.metrics.triggerNeverFired.push(tr.interaction.id);
+        }
+        continue;
+      }
       const targetActor = this.byId.get(tr.interaction.actorId);
       // A material crash disables every command capable of moving or
       // respawning the body, but evidence-only state changes (lights, horn,
@@ -1001,7 +1030,36 @@ class Simulation {
         forced: verdict.forced,
       });
       this.applyInteraction(tr.interaction, t);
+      const axis = axisOf(tr.interaction);
+      if (axis === 'route' || axis === 'existence' || axis.startsWith('state:')) tr.endedAt = t;
     }
+  }
+
+  /** Whether a route action has reached the junction where its target path
+   * diverges from the actor's current path. Identical paths are ready now. */
+  private routeCommitReady(it: Interaction & { verb: 'route' }): boolean {
+    const actor = this.byId.get(it.actorId);
+    if (!actor || actor.route.isFreeform || it.target.kind !== 'lanePath') return true;
+    const target = buildRoute(this.graph, it.target);
+    if (!target.ok || target.route.isFreeform) return true;
+    const currentIndex = actor.route.legIndexAt(actor.routeS);
+    const currentRsl = actor.route.legs[currentIndex]?.rsl;
+    if (!currentRsl) return true;
+    const targetIndex = target.route.legs.findIndex((leg) => leg.rsl === currentRsl);
+    if (targetIndex < 0) return true;
+    let shared = 0;
+    while (
+      actor.route.legs[currentIndex + shared]?.rsl
+      && actor.route.legs[currentIndex + shared]?.rsl === target.route.legs[targetIndex + shared]?.rsl
+    ) shared += 1;
+    if (shared === 0 || (
+      currentIndex + shared >= actor.route.legs.length
+      && targetIndex + shared >= target.route.legs.length
+    )) return true;
+    const lastShared = actor.route.legs[currentIndex + shared - 1]!;
+    const commitS = lastShared.sStart + lastShared.lengthM;
+    const lookaheadM = clamp(actor.speedMps * 1.5, 5, 20);
+    return actor.routeS >= commitS - lookaheadM;
   }
 
   private evaluateUntil(t: number, collisions: ReadonlySet<string>): void {
@@ -1017,15 +1075,35 @@ class Simulation {
     }
   }
 
+  private evaluateWindowEnds(t: number): void {
+    for (const tr of this.triggers) {
+      const window = tr.interaction.window;
+      if (tr.status !== 'fired' || !window || t < window.endS - 1e-9 || this.releasedWindows.has(tr.interaction.id)) continue;
+      this.releasedWindows.add(tr.interaction.id);
+      tr.endedAt ??= t;
+      const actor = this.byId.get(tr.interaction.actorId);
+      if (!actor) continue;
+      const axis = axisOf(tr.interaction);
+      const owner = axis === 'longitudinal'
+        ? actor.longCmd?.interactionId
+        : axis === 'lateral'
+          ? actor.latCmd?.interactionId
+          : undefined;
+      if (owner === tr.interaction.id) this.releaseAxis(actor, axis, t, tr.interaction.id, 'window');
+    }
+  }
+
   private releaseAxis(
     a: ActorRuntime,
     axis: AxisId,
     t: number,
     interactionId: string,
-    reason: 'until' | 'complete',
+    reason: 'until' | 'complete' | 'window',
   ): void {
     if (axis === 'longitudinal') a.longCmd = null;
     else if (axis === 'lateral') a.latCmd = null;
+    const trigger = this.triggerById.get(interactionId);
+    if (trigger) trigger.endedAt ??= t;
     this.events.push({ t, kind: 'released', actorId: a.id, axis, interactionId, reason });
   }
 
@@ -1970,6 +2048,13 @@ class Simulation {
       if (tr.status === 'pending') {
         tr.status = 'skipped';
         this.metrics.triggerNeverFired.push(tr.interaction.id);
+        this.events.push({
+          t: this.resolvedInput.clipSeconds,
+          kind: 'trigger_skipped',
+          interactionId: tr.interaction.id,
+          actorId: tr.interaction.actorId,
+          reason: 'clip_ended',
+        });
       }
     }
     this.metrics.triggerNeverFired.sort();

@@ -414,7 +414,7 @@ export type ArrivalSpec = z.infer<typeof arrivalSpecSchema>;
  */
 export const triggerSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('at'), t: finite }),
-  z.object({ kind: z.literal('after'), interactionId: idSchema, delayS: nonNeg.default(0) }),
+  z.object({ kind: z.literal('after'), interactionId: idSchema, event: z.enum(['start', 'end']).optional(), delayS: nonNeg.default(0) }),
   z.object({
     kind: z.literal('when'),
     condition: conditionSchema,
@@ -432,6 +432,15 @@ export const interactionSchema = z.intersection(
     id: idSchema,
     actorId: idSchema,
     trigger: triggerSchema,
+    /**
+     * Inclusive editor eligibility window. The trigger is not evaluated before
+     * `startS`; if it has not fired on the `endS` tick it is permanently
+     * skipped. A command that does fire is released no later than `endS`.
+     */
+    window: z.object({ startS: finite, endS: finite }).refine(
+      (value) => value.startS <= value.endS,
+      { message: 'interaction window startS must be <= endS' },
+    ).optional(),
     /** Releases the axis back to default behaviour when satisfied. */
     until: conditionSchema.optional(),
   }),

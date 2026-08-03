@@ -89,7 +89,7 @@ export type SimEvent =
       byInteractionId: string;
       preemptedInteractionId: string;
     }
-  | { t: number; kind: 'released'; actorId: string; axis: string; interactionId: string; reason: 'until' | 'complete' }
+  | { t: number; kind: 'released'; actorId: string; axis: string; interactionId: string; reason: 'until' | 'complete' | 'window' }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
   | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }

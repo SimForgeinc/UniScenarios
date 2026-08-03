@@ -118,6 +118,9 @@ interface TopologyFile {
       successors?: string[];
       speedLimitKph?: number | null;
       representativeWidthM?: number | null;
+      widthSamples?: Array<{ s: number; widthM: number }>;
+      adjacentLanes?: TopologyIndex['lanes'][string]['adjacentLanes'];
+      laneChangePermissions?: TopologyIndex['lanes'][string]['laneChangePermissions'];
       polyline?: Array<{ x: number; y: number }> | number[][];
     }
   >;
@@ -431,6 +434,9 @@ export class LaneIndex {
         ...(lane.representativeWidthM && lane.representativeWidthM > 0
           ? { representativeWidthM: lane.representativeWidthM }
           : {}),
+        ...(lane.widthSamples ? { widthSamples: lane.widthSamples } : {}),
+        ...(lane.adjacentLanes ? { adjacentLanes: lane.adjacentLanes } : {}),
+        ...(lane.laneChangePermissions ? { laneChangePermissions: lane.laneChangePermissions } : {}),
         polyline: (lane.polyline ?? []).flatMap((point) => {
           const value = vertexOf(point);
           return value ? [value] : [];

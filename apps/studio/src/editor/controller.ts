@@ -1116,7 +1116,7 @@ export class EditorController {
 
   /** Materialize a timeline turn into an exact map-bound lane path. Unlike a
    * lane change, this is an explicit request to replace downstream intent. */
-  planTimelineTurn(actorId: string, turn: 'left' | 'right'): readonly string[] | null {
+  planTimelineTurn(actorId: string, turn: 'Straight' | 'Left' | 'Right'): readonly string[] | null {
     const actor = this.doc.actor(actorId);
     if (!actor?.laneRef) return null;
     const startRsl = `${actor.laneRef.roadId}:${actor.laneRef.section}:${actor.laneRef.laneId}`;
@@ -1125,7 +1125,7 @@ export class EditorController {
     const built = buildFollowRoute(
       this.laneIndex.graph,
       startRsl,
-      [turn === 'left' ? 'Left' : 'Right'],
+      [turn],
       Math.max(100, (speedKph / 3.6) * duration + 10),
     );
     return built.ok ? built.route.legs.map((leg) => leg.rsl) : null;
