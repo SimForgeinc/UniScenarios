@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {
-  analyzeRoadTiling, atomicWrite, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, readGlb, sha256, subsetSceneRoots,
+  analyzeRoadTiling, atomicWrite, classifyRoadsOnlySceneRoots, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, readGlb, sha256, subsetSceneNodes, subsetSceneRoots,
 } from './map-derivatives-lib.mjs';
 import { inspectPinnedToolchain, pinnedToolEnvironment } from './map-derivative-toolchain.mjs';
 import { buildStaticColliderArtifact, serializeStaticColliderArtifact } from './static-map-colliders-lib.mjs';
@@ -33,7 +33,7 @@ const mode = arg('mode', 'dry-run');
 const variant = arg('variant', 'all');
 if (!mapId || !/^[a-z0-9-]+$/.test(mapId)) throw new Error('Pass a safe map id with --map <id>');
 if (!['dry-run', 'build'].includes(mode)) throw new Error('--mode must be dry-run or build');
-if (!['all', 'geometry-only', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, ktx2, or static-colliders');
+if (!['all', 'geometry-only', 'roads-only', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, roads-only, ktx2, or static-colliders');
 
 const repository = path.resolve(import.meta.dirname, '..');
 const mapRoot = path.join(repository, 'dev-assets', mapId, '3d');
@@ -47,7 +47,8 @@ const sourceBytes = sourceFiles.reduce((sum, file) => sum + fs.statSync(path.joi
 const outputRoot = path.join(mapRoot, 'variants');
 if (!outputRoot.startsWith(`${mapRoot}${path.sep}`)) throw new Error('Derivative output escaped the selected map');
 
-const localGltfTransform = path.join(repository, '.tools', 'map-derivatives', 'node_modules', '.bin', 'gltf-transform');
+const localGltfTransform = process.env.UNISCENARIOS_GLTF_TRANSFORM
+  || path.join(repository, '.tools', 'map-derivatives', 'node_modules', '.bin', 'gltf-transform');
 const gltfTransformCommand = localGltfTransform;
 const tool = childProcess.spawnSync(gltfTransformCommand, ['--version'], { encoding: 'utf8' });
 const gltfVersion = tool.status === 0 ? tool.stdout.trim() : '';
@@ -130,6 +131,32 @@ if (variant === 'geometry-only' || variant === 'all') {
     geometryVariant.staticLayers = [{ id: 'road', files: tiledFiles, bounds: tiledBounds }];
   }
   variants['geometry-only'] = geometryVariant;
+}
+if (variant === 'roads-only' || variant === 'all') {
+  if (!road) throw new Error('Roads Only requires a road static layer');
+  if (tool.status !== 0) throw new Error('Roads Only build requires the pinned gltf-transform prune executable');
+  const source = fs.readFileSync(path.join(mapRoot, road.file));
+  const { output: geometryRoad } = await makeGeometryOnlyGlb(source);
+  const selection = classifyRoadsOnlySceneRoots(geometryRoad);
+  if (selection.selectedNodeIndices.length === 0) throw new Error(`Roads Only selected no road or signal roots for ${mapId}`);
+  const directory = `roads-only-v1-${generatedAt.replace(/[^0-9]/g, '')}`;
+  const relative = path.posix.join('variants', directory, road.file);
+  const outputPath = path.join(mapRoot, relative);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const intermediate = `${outputPath}.unpruned-${process.pid}.glb`;
+  const temporary = `${outputPath}.tmp-${process.pid}.glb`;
+  fs.writeFileSync(intermediate, subsetSceneNodes(geometryRoad, selection.selectedNodeIndices));
+  const result = childProcess.spawnSync(gltfTransformCommand, ['prune', intermediate, temporary], { stdio: 'inherit', env: toolEnvironment ?? process.env });
+  fs.rmSync(intermediate);
+  if (result.status !== 0) throw new Error('Roads Only road prune failed');
+  fs.renameSync(temporary, outputPath);
+  const output = fs.readFileSync(outputPath);
+  variants['roads-only'] = {
+    id: 'roads-only', generatedAt,
+    generator: { name: 'uniscenarios-map-derivatives', version: '1.0.0', command: process.argv.join(' ') },
+    files: { [road.file]: { file: relative, sourceSha256: sha256(source), outputSha256: sha256(output), bytes: output.length } },
+    audit: { keptRoots: selection.kept, droppedRootCount: selection.dropped.length },
+  };
 }
 if (variant === 'static-colliders' || variant === 'all') {
   const topologyFile = ['topology-index.json.gz', 'topology-index.json']

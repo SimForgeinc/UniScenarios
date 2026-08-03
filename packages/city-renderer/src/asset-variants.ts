@@ -1,4 +1,4 @@
-export type CityAssetVariantPreference = 'auto' | 'original' | 'ktx2' | 'geometry-only';
+export type CityAssetVariantPreference = 'auto' | 'original' | 'ktx2' | 'geometry-only' | 'roads-only';
 export type CityAssetVariantId = Exclude<CityAssetVariantPreference, 'auto' | 'original'>;
 
 export interface CityAssetVariantFile {
@@ -40,11 +40,11 @@ export function selectAssetVariant(
   manifest: CityAssetVariantManifest | null,
   sourceFile: string,
   preference: CityAssetVariantPreference,
-  options: { ultraLow: boolean; ktx2Ready: boolean },
+  options: { ultraLow: boolean; roadsOnly?: boolean; ktx2Ready: boolean },
 ): { variant: CityAssetVariantId | 'original'; file: string } {
   if (!manifest || preference === 'original') return { variant: 'original', file: sourceFile };
   const requested: CityAssetVariantId | null = preference === 'auto'
-    ? (options.ultraLow ? 'geometry-only' : options.ktx2Ready ? 'ktx2' : null)
+    ? (options.roadsOnly ? 'roads-only' : options.ultraLow ? 'geometry-only' : options.ktx2Ready ? 'ktx2' : null)
     : preference;
   if (!requested || (requested === 'ktx2' && !options.ktx2Ready)) {
     return { variant: 'original', file: sourceFile };

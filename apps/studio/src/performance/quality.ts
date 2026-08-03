@@ -1,11 +1,12 @@
 import type { CityViewerLiveQuality } from '@uniscenarios/city-renderer';
 
-export type QualityPresetId = 'simulation-only' | 'ultra-low-3d' | 'minimal' | 'performance' | 'balanced' | 'high' | 'presentation' | 'custom';
+export type QualityPresetId = 'simulation-only' | 'roads-only' | 'ultra-low-3d' | 'minimal' | 'performance' | 'balanced' | 'high' | 'presentation' | 'custom';
 
 export interface QualityRuntime {
   renderScene: boolean;
   vegetation: boolean;
   ultraLow3d: boolean;
+  roadsOnly: boolean;
 }
 
 export interface QualityPreset {
@@ -19,7 +20,7 @@ export interface QualityPreset {
 }
 
 export interface StarterQualityChoice {
-  id: 'ultra-low-3d' | 'minimal' | 'high';
+  id: 'roads-only' | 'ultra-low-3d' | 'minimal' | 'high';
   label: string;
   guidance: string;
   downloadGuidance: string;
@@ -44,7 +45,19 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 0,
       exposure: 1,
     },
-    runtime: { renderScene: false, vegetation: false, ultraLow3d: false },
+    runtime: { renderScene: false, vegetation: false, ultraLow3d: false, roadsOnly: false },
+    recreate: { antialias: false },
+  },
+  {
+    id: 'roads-only',
+    label: 'Roads Only',
+    description: 'Authoring-only roads, lanes, intersections, signals and actors. City, vegetation and decorative street furniture are not streamed.',
+    live: {
+      maxPixelRatio: 0.5, maxScreenSpaceError: 5000, vegetationScreenSpaceError: 10000,
+      byteBudget: 512 * MB, uploadBudgetMs: 0.35, uploadPixelsPerFrame: 128e3,
+      vegetationMaxDistance: 0, exposure: 1,
+    },
+    runtime: { renderScene: true, vegetation: false, ultraLow3d: true, roadsOnly: true },
     recreate: { antialias: false },
   },
   {
@@ -56,7 +69,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       byteBudget: 640 * MB, uploadBudgetMs: 0.5, uploadPixelsPerFrame: 256e3,
       vegetationMaxDistance: 0, exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: false, ultraLow3d: true },
+    runtime: { renderScene: true, vegetation: false, ultraLow3d: true, roadsOnly: false },
     recreate: { antialias: false },
   },
   {
@@ -73,7 +86,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 0,
       exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: false, ultraLow3d: false },
+    runtime: { renderScene: true, vegetation: false, ultraLow3d: false, roadsOnly: false },
     recreate: { antialias: false },
   },
   {
@@ -90,7 +103,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 120,
       exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: true, ultraLow3d: false },
+    runtime: { renderScene: true, vegetation: true, ultraLow3d: false, roadsOnly: false },
     recreate: { antialias: false },
   },
   {
@@ -107,7 +120,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 200,
       exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: true, ultraLow3d: false },
+    runtime: { renderScene: true, vegetation: true, ultraLow3d: false, roadsOnly: false },
     recreate: { antialias: false },
   },
   {
@@ -124,7 +137,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 340,
       exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: true, ultraLow3d: false },
+    runtime: { renderScene: true, vegetation: true, ultraLow3d: false, roadsOnly: false },
     recreate: { antialias: true },
   },
   {
@@ -141,13 +154,21 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
       vegetationMaxDistance: 500,
       exposure: 1,
     },
-    runtime: { renderScene: true, vegetation: true, ultraLow3d: false },
+    runtime: { renderScene: true, vegetation: true, ultraLow3d: false, roadsOnly: false },
     recreate: { antialias: true },
   },
 ] as const;
 
 /** The approachable first-run subset. IDs and labels come from QUALITY_PRESETS. */
 export const STARTER_QUALITY_CHOICES: readonly StarterQualityChoice[] = [
+  {
+    id: 'roads-only',
+    label: presetById('roads-only').label,
+    guidance: 'Lightest interactive authoring view. Keeps roads, signals and actors while omitting the city and vegetation.',
+    downloadGuidance: 'Measured cold load: 13–23 MB',
+    gpuMemoryGuidance: 'Resident estimate: 3–14 MB · 1 GB GPU recommended',
+    recommended: false,
+  },
   {
     id: 'ultra-low-3d',
     label: presetById('ultra-low-3d').label,
@@ -228,6 +249,7 @@ function parseQualityPreference(raw: string): QualityPreference | null {
         renderScene: parsed.runtime?.renderScene !== false,
         vegetation: parsed.runtime?.vegetation !== false,
         ultraLow3d: parsed.runtime?.ultraLow3d === true,
+        roadsOnly: parsed.runtime?.roadsOnly === true,
       },
       recreate: { antialias: parsed.recreate?.antialias !== false },
     };

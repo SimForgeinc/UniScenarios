@@ -10,6 +10,11 @@ const manifest: CityAssetVariantManifest = {
       generator: { name: 'test', version: '1', command: 'test' },
       files: { 'tiles/road.glb': { file: 'variants/geometry-only/road.glb', sourceSha256: 'a', outputSha256: 'b', bytes: 12 } },
     },
+    'roads-only': {
+      id: 'roads-only', generatedAt: '2026-01-01T00:00:00Z',
+      generator: { name: 'test', version: '1', command: 'test' },
+      files: { 'tiles/road.glb': { file: 'variants/roads-only/road.glb', sourceSha256: 'a', outputSha256: 'r', bytes: 6 } },
+    },
     ktx2: {
       id: 'ktx2', generatedAt: '2026-01-01T00:00:00Z',
       generator: { name: 'test', version: '1', command: 'test' },
@@ -23,6 +28,12 @@ describe('city asset variants', () => {
     expect(selectAssetVariant(manifest, 'tiles/road.glb', 'auto', { ultraLow: true, ktx2Ready: false }).variant).toBe('geometry-only');
     expect(selectAssetVariant(manifest, 'tiles/missing.glb', 'auto', { ultraLow: true, ktx2Ready: false })).toEqual({ variant: 'original', file: 'tiles/missing.glb' });
     expect(selectAssetVariant(null, 'tiles/road.glb', 'geometry-only', { ultraLow: true, ktx2Ready: false }).variant).toBe('original');
+  });
+
+  it('selects the dedicated fail-closed derivative for Roads Only', () => {
+    expect(selectAssetVariant(manifest, 'tiles/road.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false }).variant).toBe('roads-only');
+    expect(selectAssetVariant(manifest, 'tiles/missing.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false }).variant).toBe('original');
+    expect(allowsSourceAssetFallback('roads-only', true)).toBe(false);
   });
 
   it('never selects KTX2 without an initialized transcoder', () => {

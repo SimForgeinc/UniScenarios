@@ -19,11 +19,13 @@ for (let index = 2; index < process.argv.length; index += 2) {
 const baseUrl = args.get('url') ?? 'http://127.0.0.1:5199/';
 const output = args.get('out') ?? '/tmp/uniscenarios-first-run-graphics.json';
 const maps = (args.get('maps') ?? 'easterbrook-discovery-school,yale-street').split(',');
-const presets = ['ultra-low-3d', 'minimal', 'high'];
-const conditions = [
+const presets = (args.get('presets') ?? 'roads-only,ultra-low-3d,minimal,high').split(',');
+const allConditions = [
   { id: 'hardware-enabled', launchArgs: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization'] },
   { id: 'software-requested', launchArgs: ['--disable-gpu', '--use-gl=swiftshader', '--enable-unsafe-swiftshader'] },
 ];
+const requestedConditions = new Set((args.get('conditions') ?? allConditions.map(({ id }) => id).join(',')).split(','));
+const conditions = allConditions.filter(({ id }) => requestedConditions.has(id));
 
 function processMemoryMB(processIds) {
   try {
@@ -59,7 +61,14 @@ for (const condition of conditions) {
         await cdp.send('Network.setCacheDisabled', { cacheDisabled: true });
         let transferredBytes = 0;
         let tracking = false;
-        cdp.on('Network.loadingFinished', (event) => { if (tracking) transferredBytes += event.encodedDataLength; });
+        const requestUrls = new Map();
+        const completedRequests = [];
+        cdp.on('Network.requestWillBeSent', (event) => requestUrls.set(event.requestId, event.request.url));
+        cdp.on('Network.loadingFinished', (event) => {
+          if (!tracking) return;
+          transferredBytes += event.encodedDataLength;
+          completedRequests.push({ url: requestUrls.get(event.requestId) ?? '', encodedBytes: event.encodedDataLength });
+        });
         const errors = [];
         page.on('pageerror', (error) => errors.push(error.message));
         page.on('response', (response) => { if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`); });
@@ -115,6 +124,14 @@ for (const condition of conditions) {
             p95Ms: sample.benchmark.p95FrameMs,
             p99Ms: sample.benchmark.p99FrameMs,
           },
+          requestInventory: completedRequests.map((entry) => {
+            const pathname = (() => { try { return new URL(entry.url).pathname; } catch { return entry.url; } })();
+            const category = /\/tiles\/veg_|\.instances\.json$/.test(pathname) ? 'vegetation'
+              : /\/tiles\/tile_/.test(pathname) ? 'city'
+                : /\/roads-only-v\d|\/tiles\/road\.glb$/.test(pathname) ? 'road'
+                  : 'application-or-overlay';
+            return { pathname, category, encodedBytes: entry.encodedBytes };
+          }),
           errors,
         });
         console.log(`${condition.id} ${map} ${preset}: ${roadVisibleMs.toFixed(0)} ms, ${(transferredBytes / 1048576).toFixed(1)} MB, ${sample.benchmark.displayFps.toFixed(1)} fps`);

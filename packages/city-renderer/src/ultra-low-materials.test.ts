@@ -1,6 +1,7 @@
 import { BoxGeometry, Color, DoubleSide, Mesh, MeshStandardMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
 import { classifyUltraLowColor, UltraLowMaterialCache } from './ultra-low-materials';
+import { LOW_FIDELITY_HIDDEN_ROLE } from './roads-only';
 
 describe('UltraLowMaterialCache', () => {
   it('retains authored colors and caches equivalent unlit materials', () => {
@@ -40,5 +41,16 @@ describe('UltraLowMaterialCache', () => {
     source.userData.uniscenariosGeometryOnly = { version: 2 };
     const material = new UltraLowMaterialCache().materialFor(new Mesh(new BoxGeometry(), source), source, 'city');
     expect(material.color.getHex()).toBe(0xffffff);
+  });
+
+  it('never turns a tagged transparent contact-shadow quad into an opaque plate', () => {
+    const source = new MeshStandardMaterial({ transparent: true, opacity: 0.55 });
+    const shadow = new Mesh(new BoxGeometry(), source);
+    shadow.userData.uniscenariosRole = LOW_FIDELITY_HIDDEN_ROLE;
+    const originals = new Map();
+    new UltraLowMaterialCache().apply(shadow, 'actor', originals);
+    expect(shadow.material).toBe(source);
+    expect(originals.size).toBe(0);
+    expect(source.transparent).toBe(true);
   });
 });

@@ -19,6 +19,7 @@ export type { CameraControlPreferences, CameraDragButton, EyeOrbitDelta } from '
 export { FrameStats } from './frame-stats';
 export { GroundIndex, isGroundSurfaceMesh } from './ground-index';
 export type { GroundIndexOptions, GroundIndexStats } from './ground-index';
+export { keepInRoadsOnly, isTrafficSignalMesh, isLowFidelityHiddenHelper, isRoadsOnlyHiddenHelper, LOW_FIDELITY_HIDDEN_ROLE, ROADS_ONLY_HIDDEN_ROLE } from './roads-only';
 export { ShadowAtlas } from './shadow-atlas';
 export { isCityAssetVariantManifest, selectAssetVariant } from './asset-variants';
 export type {

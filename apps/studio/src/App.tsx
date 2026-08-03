@@ -128,6 +128,7 @@ function optionsFromUrl(quality: QualityPreference): CityViewerOptions {
     maxPixelRatio: num('dpr') ?? quality.live.maxPixelRatio,
     assetVariant,
     ultraLowFidelity: quality.runtime.ultraLow3d,
+    roadsOnlyFidelity: quality.runtime.roadsOnly,
   };
 }
 

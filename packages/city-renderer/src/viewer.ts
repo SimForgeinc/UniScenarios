@@ -26,6 +26,7 @@ import {
 } from './gltf';
 import { createSun, loadEnvironment } from './environment';
 import { GroundIndex, type GroundIndexOptions } from './ground-index';
+import { isLowFidelityHiddenHelper, keepInRoadsOnly } from './roads-only';
 import { boundsToBox3, normalizeLods, resolveUrl } from './manifest';
 import { patchTree, type ShadowPatchOptions } from './materials';
 import { SurfaceMaterialRegistry, type SurfaceMaterialProfile } from './surface-materials';
@@ -102,6 +103,7 @@ const DEFAULTS = {
   cameraBoundsInset: 2,
   assetVariant: 'auto' as const,
   ultraLowFidelity: false,
+  roadsOnlyFidelity: false,
   variantManifestUrl: '',
   ktx2TranscoderPath: '',
 };
@@ -187,13 +189,16 @@ export class CityViewer {
   private canvasVisibility = '';
   private benchmarkFrameHook: (() => void) | null = null;
   private ultraLowFidelity = false;
+  private roadsOnlyFidelity = false;
   private readonly originalMaterials = new Map<Object3D, Material | Material[]>();
+  private readonly roadsOnlyVisibility = new Map<Object3D, boolean>();
+  private readonly ultraLowVisibility = new Map<Object3D, boolean>();
   private readonly ultraLowMaterials = new UltraLowMaterialCache();
   private savedEnvironment: Scene['environment'] = null;
   private savedBackground: Scene['background'] = null;
   private ultraRefreshCounter = 0;
   private readonly surfaceMaterials = new SurfaceMaterialRegistry();
-  private readonly variantLoads = { original: 0, 'geometry-only': 0, ktx2: 0 };
+  private readonly variantLoads = { original: 0, 'geometry-only': 0, 'roads-only': 0, ktx2: 0 };
   private variantFallbacks = 0;
   private assetVariantReloadGeneration = 0;
 
@@ -224,7 +229,8 @@ export class CityViewer {
       Object.entries(options).filter(([, value]) => value !== undefined),
     ) as CityViewerOptions;
     this.options = { ...DEFAULTS, baseUrl: '', ...provided };
-    this.ultraLowFidelity = this.options.ultraLowFidelity;
+    this.roadsOnlyFidelity = this.options.roadsOnlyFidelity;
+    this.ultraLowFidelity = this.options.ultraLowFidelity || this.roadsOnlyFidelity;
 
     this.renderer = new WebGLRenderer({
       canvas,
@@ -325,13 +331,15 @@ export class CityViewer {
 
     const visualResourcesPromise = this.ultraLowFidelity ? Promise.resolve() : this.ensureVisualResources();
     if (this.sun) this.sun.visible = !this.ultraLowFidelity;
-    const vegetationPromise = this.loadVegetationInstances(manifest);
+    const vegetationPromise = this.roadsOnlyFidelity
+      ? Promise.resolve()
+      : this.loadVegetationInstances(manifest);
 
     this.createRoadLayer(manifest);
     this.createCityLayer(manifest);
     await vegetationPromise;
     if (this.disposed) return;
-    this.createVegetationLayer(manifest);
+    if (!this.roadsOnlyFidelity) this.createVegetationLayer(manifest);
 
     await visualResourcesPromise;
   }
@@ -508,11 +516,13 @@ export class CityViewer {
       || (declaredKtxPath ? resolveUrl(this.assetBase, declaredKtxPath) : '');
     const selected = selectAssetVariant(this.variantManifest, sourceFile, this.options.assetVariant, {
       ultraLow: this.ultraLowFidelity,
+      roadsOnly: this.roadsOnlyFidelity,
       ktx2Ready: Boolean(ktx2TranscoderPath),
     });
-    if (this.ultraLowFidelity && selected.variant !== 'geometry-only') {
-      this.canvas.dataset.assetVariant = 'geometry-only-unavailable';
-      throw new Error(`Ultra Low requires a geometry-only derivative for ${sourceFile}`);
+    const requiredVariant = this.roadsOnlyFidelity ? 'roads-only' : this.ultraLowFidelity ? 'geometry-only' : null;
+    if (requiredVariant && selected.variant !== requiredVariant) {
+      this.canvas.dataset.assetVariant = `${requiredVariant}-unavailable`;
+      throw new Error(`${this.roadsOnlyFidelity ? 'Roads Only' : 'Ultra Low'} requires a ${requiredVariant} derivative for ${sourceFile}`);
     }
     const loader = getGLTFLoader(this.renderer, ktx2TranscoderPath);
     try {
@@ -593,6 +603,7 @@ export class CityViewer {
         this.surfaceMaterials.registerTree(root, 'road');
         const resources = collectResources(root);
         if (this.ultraLowFidelity) this.simplifyTree(root, 'road');
+        if (this.roadsOnlyFidelity) this.applyRoadsOnlyVisibility(root);
         return {
           object: root,
           resources,
@@ -622,6 +633,7 @@ export class CityViewer {
       maxConcurrent: this.options.maxConcurrentLoads,
       memory: this.memory,
       pinCoarsest: true,
+      want: () => !this.roadsOnlyFidelity,
       build: async (def, lod, signal) => {
         const gltf = await this.parseAsset(lod.file, signal);
         const root = gltf.scene;
@@ -665,6 +677,7 @@ export class CityViewer {
   }
 
   private createVegetationLayer(manifest: CityManifest): void {
+    if (this.vegLayer) return;
     const tiles = manifest.vegetationTiles ?? [];
     if (tiles.length === 0) return;
     const defs: StreamTileDef[] = tiles
@@ -683,7 +696,7 @@ export class CityViewer {
       maxConcurrent: 2,
       memory: this.memory,
       pinCoarsest: false,
-      want: (_def, distance) => distance <= this.options.vegetationMaxDistance,
+      want: (_def, distance) => !this.roadsOnlyFidelity && distance <= this.options.vegetationMaxDistance,
       build: async (def, lod, signal) => {
         const data = this.vegetationData.get(def.id);
         if (!data) throw new Error(`no instance data for ${def.id}`);
@@ -914,6 +927,7 @@ export class CityViewer {
       cameraMode: this.controls.mode,
       renderingSuspended: this.renderingSuspended,
       ultraLowFidelity: this.ultraLowFidelity,
+      roadsOnlyFidelity: this.roadsOnlyFidelity,
       roadVisible: this.roadReady && this.roadGroup.visible,
       uiTicksPerSecond: this.fps,
       surfaceMaterials: this.surfaceMaterials.report(),
@@ -985,9 +999,31 @@ export class CityViewer {
 
   /** Swap expensive PBR/textured materials for shared unlit colors, reversibly. */
   setUltraLowFidelity(enabled: boolean): void {
-    if (enabled === this.ultraLowFidelity) return;
+    this.setFidelityModes(enabled, this.roadsOnlyFidelity);
+  }
+
+  /**
+   * Keep only authoring-critical roads, signal infrastructure and editor content.
+   * Roads Only implies the existing texture-free Ultra Low treatment, but is a
+   * distinct persisted preset and never changes saved Ultra Low preferences.
+   */
+  setRoadsOnlyFidelity(enabled: boolean): void {
+    this.setFidelityModes(this.ultraLowFidelity, enabled);
+  }
+
+  /** Atomically change related modes so one preference switch causes one asset reset. */
+  setAuthoringFidelity(modes: { ultraLow: boolean; roadsOnly: boolean }): void {
+    this.setFidelityModes(modes.ultraLow, modes.roadsOnly);
+  }
+
+  private setFidelityModes(requestedUltraLow: boolean, roadsOnly: boolean): void {
+    const enabled = requestedUltraLow || roadsOnly;
+    const ultraChanged = enabled !== this.ultraLowFidelity;
+    const roadsChanged = roadsOnly !== this.roadsOnlyFidelity;
+    if (!ultraChanged && !roadsChanged) return;
     this.ultraLowFidelity = enabled;
-    if (enabled) {
+    this.roadsOnlyFidelity = roadsOnly;
+    if (ultraChanged && enabled) {
       this.simplifyTree(this.cityGroup, 'city');
       this.simplifyTree(this.roadGroup, 'road');
       // Actors and editor helpers are scene children outside the map groups.
@@ -999,12 +1035,14 @@ export class CityViewer {
       this.disableEnvironment();
       if (this.sun) this.sun.visible = false;
       this.vegetationGroup.visible = false;
-    } else {
+    } else if (ultraChanged) {
       for (const [object, material] of this.originalMaterials) {
         const mesh = object as Mesh;
         if (mesh.isMesh) mesh.material = material;
       }
       this.originalMaterials.clear();
+      for (const [object, visible] of this.ultraLowVisibility) object.visible = visible;
+      this.ultraLowVisibility.clear();
       this.scene.environment = this.savedEnvironment;
       this.scene.background = this.savedBackground ?? new Color(0x14181e);
       if (this.sun) this.sun.visible = true;
@@ -1014,12 +1052,64 @@ export class CityViewer {
             void this.reloadAssetVariant();
           }
         });
+        // The pending visual-resource callback performs the variant reload.
+        this.applyRoadsOnlyMode();
         return;
       }
     }
-    if (this.variantManifest?.variants['geometry-only']) {
+    this.applyRoadsOnlyMode();
+    if (ultraChanged && this.variantManifest?.variants['geometry-only']) {
       void this.reloadAssetVariant();
+    } else if (roadsChanged) {
+      void this.reloadRoadsOnlyLayers();
     }
+  }
+
+  private applyRoadsOnlyMode(): void {
+    if (this.roadsOnlyFidelity) {
+      this.cityGroup.visible = false;
+      this.vegetationGroup.visible = false;
+      this.applyRoadsOnlyVisibility(this.roadGroup);
+      return;
+    }
+    for (const [object, visible] of this.roadsOnlyVisibility) object.visible = visible;
+    this.roadsOnlyVisibility.clear();
+    this.cityGroup.visible = true;
+    void this.ensureVegetationLayer();
+  }
+
+  private async ensureVegetationLayer(): Promise<void> {
+    if (this.vegLayer || !this.manifest || this.roadsOnlyFidelity || this.disposed) return;
+    await this.loadVegetationInstances(this.manifest);
+    if (this.vegLayer || this.roadsOnlyFidelity || this.disposed) return;
+    this.createVegetationLayer(this.manifest);
+    this.lastStreamUpdate = 0;
+  }
+
+  private applyRoadsOnlyVisibility(root: Object3D): void {
+    root.traverse((object) => {
+      const mesh = object as Mesh;
+      const hide = mesh.isMesh && !keepInRoadsOnly(mesh);
+      if (!hide) return;
+      if (!this.roadsOnlyVisibility.has(object)) this.roadsOnlyVisibility.set(object, object.visible);
+      object.visible = false;
+    });
+  }
+
+  private async reloadRoadsOnlyLayers(): Promise<void> {
+    const generation = ++this.assetVariantReloadGeneration;
+    const view = this.captureView();
+    // The road itself switches between geometry-only and the pruned roads-only
+    // derivative, so reset it alongside excluded optional layers.
+    const layers = [this.roadLayer, this.cityLayer, this.vegLayer].filter(
+      (layer): layer is TileStreamLayer => layer !== null,
+    );
+    await Promise.all(layers.map((layer) => layer.resetAssets()));
+    if (this.disposed || generation !== this.assetVariantReloadGeneration) return;
+    this.applyView(view);
+    this.lastStreamUpdate = 0;
+    this.camera.getWorldPosition(_cameraPos);
+    this.updateStreaming(_cameraPos);
   }
 
   private async reloadAssetVariant(): Promise<void> {
@@ -1042,6 +1132,10 @@ export class CityViewer {
     return this.ultraLowFidelity;
   }
 
+  get isRoadsOnlyFidelity(): boolean {
+    return this.roadsOnlyFidelity;
+  }
+
   /** Select a reversible, visual-only material treatment for streamed map surfaces. */
   setSurfaceMaterialProfile(profile: SurfaceMaterialProfile): ReturnType<SurfaceMaterialRegistry['report']> {
     return this.surfaceMaterials.apply(profile);
@@ -1052,11 +1146,22 @@ export class CityViewer {
   }
 
   private simplifyTree(root: Object3D, layer: UltraLowLayer): void {
+    if (layer === 'actor') {
+      root.traverse((object) => {
+        if (!isLowFidelityHiddenHelper(object)) return;
+        if (!this.ultraLowVisibility.has(object)) this.ultraLowVisibility.set(object, object.visible);
+        object.visible = false;
+      });
+    }
     this.ultraLowMaterials.apply(root, layer, this.originalMaterials);
   }
 
   private releaseSimplifiedTree(root: Object3D): void {
-    root.traverse((object) => this.originalMaterials.delete(object));
+    root.traverse((object) => {
+      this.originalMaterials.delete(object);
+      this.roadsOnlyVisibility.delete(object);
+      this.ultraLowVisibility.delete(object);
+    });
   }
 
   private disableEnvironment(): void {
@@ -1125,8 +1230,8 @@ export class CityViewer {
   }
 
   setLayerVisible(layer: keyof CityViewerLayers | 'road', visible: boolean): void {
-    if (layer === 'city') this.cityGroup.visible = visible;
-    else if (layer === 'vegetation') this.vegetationGroup.visible = visible;
+    if (layer === 'city') this.cityGroup.visible = this.roadsOnlyFidelity ? false : visible;
+    else if (layer === 'vegetation') this.vegetationGroup.visible = this.roadsOnlyFidelity ? false : visible;
     else this.roadGroup.visible = visible;
   }
 
@@ -1283,6 +1388,7 @@ export class CityViewer {
       simulationTicksPerSecond: null,
       cpuUtilizationProxy: Math.min(100, 100 * phaseMs / Math.max(0.001, stats.avg())),
       ultraLowFidelity: this.ultraLowFidelity,
+      roadsOnlyFidelity: this.roadsOnlyFidelity,
     };
   }
 

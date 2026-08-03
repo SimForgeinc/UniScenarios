@@ -113,6 +113,7 @@ describe('ActorRenderer semantic transforms', () => {
       ]);
       const body = renderer.pickables().find((object) => object.name.startsWith('actor-batch.'));
       expect(body?.userData.actorIds).toEqual(['alpha', 'zebra']);
+      expect(renderer.group.children.find((object) => object.name === 'actor-contact-shadows')?.userData.uniscenariosRole).toBe('low-fidelity-hidden');
 
       renderer.sync([{ ...sedan, id: 'reverse-car', kind: 'car', reversing: true }]);
       const reverseLights = renderer.pickables().find((object) => object.name === 'actor-reverse-lights');

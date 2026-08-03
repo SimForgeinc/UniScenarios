@@ -267,6 +267,67 @@ export function subsetSceneRoots(sourceBuffer, selectedNodeIndices) {
   return writeGlb(json, bin);
 }
 
+/** Preserve selected nodes and their ancestor transforms, dropping other branches. */
+export function subsetSceneNodes(sourceBuffer, selectedNodeIndices) {
+  const { json: source, bin } = readGlb(sourceBuffer);
+  const selected = new Set(selectedNodeIndices);
+  const json = structuredClone(source);
+  const keepTree = (index) => {
+    const node = json.nodes?.[index];
+    if (!node) return false;
+    const children = (node.children ?? []).filter(keepTree);
+    if (children.length) node.children = children;
+    else delete node.children;
+    return selected.has(index) || children.length > 0;
+  };
+  json.scenes = (json.scenes ?? []).map((scene) => ({ ...scene, nodes: (scene.nodes ?? []).filter(keepTree) }));
+  if (!(json.scenes ?? []).some((scene) => scene.nodes?.length)) throw new Error('Node subset selected no scene nodes');
+  return writeGlb(json, bin);
+}
+
+const ROAD_SURFACE = /^(?:roads?|terrain)[_ .-](?:(?:road|bridge|curb|gutter|ground|marking|sidewalk|terrain|uncategorized)[_ .-])?layer\d*(?:[_ .-]|$)/i;
+const TRAFFIC_SIGNAL = /traffic[_ .-]?(?:light|signal)|signal(?:[_ .-]|\w)*(?:head|post|pole|mast|light)|pole(?:[_ .-]|\w)*signal|^(?:walk[_ .-]?)?light[_ .-]?(?:red|yellow|green|walk)(?:\d|[_ .-]|$)/i;
+
+/**
+ * Select authoring-critical road and traffic-signal scene roots for a compact
+ * Roads Only derivative. Structured extras are preferred. The regex fallback
+ * is deliberately allow-list based and audited in the generated manifest;
+ * unknown furniture is dropped instead of silently bloating the preset.
+ */
+export function classifyRoadsOnlySceneRoots(sourceBuffer) {
+  const { json } = readGlb(sourceBuffer);
+  const nodes = json.nodes ?? [];
+  const meshes = json.meshes ?? [];
+  const kept = [];
+  const dropped = [];
+  const reasonFor = (node) => {
+    const mesh = Number.isInteger(node.mesh) ? meshes[node.mesh] : null;
+    const extras = { ...(mesh?.extras ?? {}), ...(node.extras ?? {}) };
+    const category = [extras.category, extras.kind, extras.role, extras.semantic, extras.class]
+      .filter((value) => typeof value === 'string').join(' ');
+    const text = `${node.name ?? ''} ${mesh?.name ?? ''} ${category}`;
+    if (/traffic[_ .-]?(?:light|signal)|signal[_ .-]?(?:head|post|pole|mast)/i.test(category)) return 'signal-metadata';
+    if (ROAD_SURFACE.test(node.name ?? '') || ROAD_SURFACE.test(mesh?.name ?? '')) return 'road-surface';
+    if (TRAFFIC_SIGNAL.test(text)) return 'signal-name-fallback';
+    return null;
+  };
+  const visited = new Set();
+  const visitNode = (index) => {
+    if (visited.has(index)) return;
+    visited.add(index);
+    const node = nodes[index] ?? {};
+    if (Number.isInteger(node.mesh)) {
+      const reason = reasonFor(node);
+      (reason ? kept : dropped).push({ node: index, name: node.name ?? '', mesh: meshes[node.mesh]?.name ?? '', reason: reason ?? 'not-authoring-critical' });
+    }
+    for (const child of node.children ?? []) visitNode(child);
+  };
+  for (const root of json.scenes?.[json.scene ?? 0]?.nodes ?? []) {
+    visitNode(root);
+  }
+  return { selectedNodeIndices: kept.map((entry) => entry.node), kept, dropped };
+}
+
 function accessorBounds(json, meshIndex) {
   const mesh = json.meshes?.[meshIndex];
   const boxes = (mesh?.primitives ?? []).map((primitive) => json.accessors?.[primitive.attributes?.POSITION]).filter((a) => a?.min && a?.max);

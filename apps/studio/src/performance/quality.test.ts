@@ -30,8 +30,9 @@ describe('render quality preferences', () => {
     expect(shouldDeferWorldLoading('stored')).toBe(false);
   });
 
-  it('uses exactly the three canonical starter presets with one recommendation', () => {
+  it('retains the three canonical starter presets and adds Roads Only with one recommendation', () => {
     expect(STARTER_QUALITY_CHOICES.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: 'roads-only', label: 'Roads Only' },
       { id: 'ultra-low-3d', label: 'Ultra Low' },
       { id: 'minimal', label: 'Minimal' },
       { id: 'high', label: 'High' },
@@ -45,6 +46,17 @@ describe('render quality preferences', () => {
       expect(choice.gpuMemoryGuidance).toMatch(/^Resident estimate: .* · \d GB GPU recommended$/);
       expect(choice.downloadGuidance).not.toContain('pending');
     }
+  });
+
+  it('keeps saved Ultra Low distinct from Roads Only', () => {
+    const ultra = preferenceForPreset('ultra-low-3d');
+    const roads = preferenceForPreset('roads-only');
+    expect(ultra.runtime.roadsOnly).toBe(false);
+    expect(roads.runtime).toMatchObject({ renderScene: true, vegetation: false, ultraLow3d: true, roadsOnly: true });
+    const legacyUltra = JSON.parse(JSON.stringify(ultra));
+    delete legacyUltra.runtime.roadsOnly;
+    expect(loadQualityPreference({ getItem: () => JSON.stringify(legacyUltra) }).preset).toBe('ultra-low-3d');
+    expect(loadQualityPreference({ getItem: () => JSON.stringify(legacyUltra) }).runtime.roadsOnly).toBe(false);
   });
 
   it('creates independent preset values', () => {

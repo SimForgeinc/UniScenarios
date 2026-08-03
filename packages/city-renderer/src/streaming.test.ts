@@ -34,6 +34,50 @@ describe('essential streaming assets', () => {
     layer.dispose();
   });
 
+  it('does not fetch an excluded layer and never reuses disposed assets after a mode reset', async () => {
+    let wanted = false;
+    const assets: PreparedAsset[] = [];
+    const disposals: ReturnType<typeof vi.fn>[] = [];
+    const build = vi.fn(async () => {
+      const asset = emptyAsset();
+      const dispose = vi.fn();
+      asset.dispose = dispose;
+      assets.push(asset);
+      disposals.push(dispose);
+      return asset;
+    });
+    const layer = new TileStreamLayer({
+      name: 'optional-city-layer',
+      renderer: { compileAsync: async () => undefined } as never,
+      scene: new Scene(),
+      defs: [{
+        id: 'city', box: new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+        lods: [{ level: 0, file: 'city.glb', triangles: 1, fileSize: 1, geometricError: 0 }],
+      }],
+      build, maxConcurrent: 1,
+      memory: { admit: () => true, maxAssetBytes: () => 100 },
+      pinCoarsest: false,
+      want: () => wanted,
+    });
+
+    layer.update(new Vector3(), 1, 9999);
+    expect(build).not.toHaveBeenCalled();
+    wanted = true;
+    layer.update(new Vector3(), 1, 9999);
+    await Promise.resolve();
+    layer.pumpUploads(performance.now() + 100, { remaining: 1 }, {} as never);
+    await layer.whenCompilationIdle();
+    expect(build).toHaveBeenCalledOnce();
+    await layer.resetAssets();
+    expect(disposals[0]).toHaveBeenCalledOnce();
+
+    layer.update(new Vector3(), 1, 9999);
+    await Promise.resolve();
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(assets[1]).not.toBe(assets[0]);
+    layer.dispose();
+  });
+
   it('keeps compilation observable through disposal so the renderer can be torn down afterward', async () => {
     let resolveCompile!: () => void;
     const compile = new Promise<void>((resolve) => { resolveCompile = resolve; });

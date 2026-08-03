@@ -52,6 +52,7 @@ import {
   type Material,
   type Object3D,
 } from 'three';
+import { LOW_FIDELITY_HIDDEN_ROLE } from '@uniscenarios/city-renderer';
 import { buildProp, getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { ActorKind } from '@uniscenarios/sim-engine';
 
@@ -626,6 +627,7 @@ export class ActorRenderer {
         this.shadowCapacity,
       );
       this.shadows.name = 'actor-contact-shadows';
+      this.shadows.userData.uniscenariosRole = LOW_FIDELITY_HIDDEN_ROLE;
       // After the lane overlay (10), so the shadow reads as contact with the
       // road rather than as something seen through 28% cyan.
       this.shadows.renderOrder = 12;

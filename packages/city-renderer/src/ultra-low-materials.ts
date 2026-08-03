@@ -7,6 +7,7 @@ import {
   MeshBasicMaterial,
   type Side,
 } from 'three';
+import { isLowFidelityHiddenHelper } from './roads-only';
 
 export type UltraLowLayer = 'road' | 'city' | 'vegetation' | 'actor';
 
@@ -102,6 +103,9 @@ export class UltraLowMaterialCache {
     root.traverse((object) => {
       const mesh = object as Mesh;
       if (!mesh.isMesh) return;
+      // Transparent contact-shadow helpers are disabled by the viewer in low
+      // fidelity. Never replace their alpha texture with an opaque flat quad.
+      if (isLowFidelityHiddenHelper(mesh)) return;
       if (!originals.has(mesh)) originals.set(mesh, mesh.material);
       const source = originals.get(mesh) ?? mesh.material;
       mesh.material = Array.isArray(source)

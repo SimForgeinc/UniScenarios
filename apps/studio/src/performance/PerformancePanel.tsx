@@ -28,7 +28,7 @@ export function PerformancePanel({ viewer, overlays = null, actorCount = 0, defa
     if (!viewer) return;
     viewer.setLiveQuality(preference.live);
     viewer.setRenderingSuspended(!preference.runtime.renderScene);
-    viewer.setUltraLowFidelity(preference.runtime.ultraLow3d);
+    viewer.setAuthoringFidelity({ ultraLow: preference.runtime.ultraLow3d, roadsOnly: preference.runtime.roadsOnly });
     viewer.setLayerVisible('vegetation', preference.runtime.vegetation);
   }, [viewer, overlays, preference]);
 
@@ -77,7 +77,7 @@ export function PerformancePanel({ viewer, overlays = null, actorCount = 0, defa
     if (!viewer) return;
     viewer.setLiveQuality(next.live);
     viewer.setRenderingSuspended(!next.runtime.renderScene);
-    viewer.setUltraLowFidelity(next.runtime.ultraLow3d);
+    viewer.setAuthoringFidelity({ ultraLow: next.runtime.ultraLow3d, roadsOnly: next.runtime.roadsOnly });
     viewer.setLayerVisible('vegetation', next.runtime.vegetation);
   };
 

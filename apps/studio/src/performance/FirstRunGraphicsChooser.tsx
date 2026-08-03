@@ -104,7 +104,7 @@ const styles: Record<string, CSSProperties> = {
   eyebrow: { color: '#f39a58', fontSize: 10, fontWeight: 800, letterSpacing: '.17em' },
   title: { margin: '8px 0 0', fontSize: 'clamp(26px, 4vw, 38px)', lineHeight: 1.1, letterSpacing: '-.035em' },
   intro: { maxWidth: 600, margin: '10px 0 24px', color: '#a9b2c0', fontSize: 14, lineHeight: 1.55 },
-  grid: { display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 12 },
+  grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 12 },
   choice: {
     minWidth: 0, minHeight: 245, display: 'flex', flexDirection: 'column', alignItems: 'stretch', textAlign: 'left',
     padding: '18px', borderRadius: 12, border: '1px solid rgba(151,164,181,.24)', cursor: 'pointer',

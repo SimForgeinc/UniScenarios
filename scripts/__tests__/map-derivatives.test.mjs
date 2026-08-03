@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import sharp from 'sharp';
-import { analyzeRoadTiling, geometryIdentity, makeGeometryOnlyGlb, readGlb, representativeImageColor, semanticFallbackColor, subsetSceneRoots, writeGlb } from '../map-derivatives-lib.mjs';
+import { analyzeRoadTiling, classifyRoadsOnlySceneRoots, geometryIdentity, makeGeometryOnlyGlb, readGlb, representativeImageColor, semanticFallbackColor, subsetSceneNodes, subsetSceneRoots, writeGlb } from '../map-derivatives-lib.mjs';
 import { inspectPinnedToolchain } from '../map-derivative-toolchain.mjs';
 
 function fixture({ crossing = false } = {}) {
@@ -91,6 +91,38 @@ test('safe node subsets preserve the selected scene root without rewriting buffe
   const subset = readGlb(subsetSceneRoots(source, [0]));
   assert.deepEqual(subset.json.scenes[0].nodes, [0]);
   assert.equal(subset.bin.length, readGlb(source).bin.length);
+});
+
+test('Roads Only uses an allow-list for road surfaces and signals', () => {
+  const parsed = readGlb(fixture());
+  parsed.json.scenes[0].nodes = [0, 1, 2];
+  parsed.json.nodes = [
+    { name: 'Roads_Road_Layer0', mesh: 0 },
+    { name: 'Signal_3Light_Post01_mesh', mesh: 1 },
+    { name: 'Bench_Decoration', mesh: 2 },
+  ];
+  parsed.json.meshes = [
+    { name: 'Roads_Road_Layer0', primitives: [] },
+    { name: 'Signal_3Light_Post01_mesh', primitives: [] },
+    { name: 'Bench_Decoration', primitives: [] },
+  ];
+  const result = classifyRoadsOnlySceneRoots(writeGlb(parsed.json, parsed.bin));
+  assert.deepEqual(result.selectedNodeIndices, [0, 1]);
+  assert.equal(result.dropped[0].name, 'Bench_Decoration');
+});
+
+test('Roads Only node subsets preserve ancestor transforms and prune sibling furniture', () => {
+  const parsed = readGlb(fixture());
+  parsed.json.scenes[0].nodes = [0];
+  parsed.json.nodes = [
+    { name: 'root', scale: [100, 100, 100], children: [1, 2] },
+    { name: 'Roads_Layer0', mesh: 0 },
+    { name: 'Bench_Decoration', mesh: 0 },
+  ];
+  const subset = readGlb(subsetSceneNodes(writeGlb(parsed.json, parsed.bin), [1]));
+  assert.deepEqual(subset.json.scenes[0].nodes, [0]);
+  assert.deepEqual(subset.json.nodes[0].children, [1]);
+  assert.deepEqual(subset.json.nodes[0].scale, [100, 100, 100]);
 });
 
 test('pinned toolchain rejects a missing or modified executable', () => {
