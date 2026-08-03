@@ -106,6 +106,22 @@ export function SettingsPanel({
       <div style={styles.hint}>
         {`${actorCount} placed · ${laneCount === null ? 'lane index loading…' : `${laneCount} driving lanes`}`}
       </div>
+      <label style={styles.check}>
+        <input type="checkbox" data-testid="route-overlays" checked={settings.routes.visible} onChange={() => onSettingsChange({ ...settings, routes: { ...settings.routes, visible: !settings.routes.visible } })} />
+        <span>Vehicle path guides</span>
+      </label>
+      <label style={styles.check}>
+        <input type="checkbox" data-testid="route-overlays-ambient" checked={settings.routes.ambient} onChange={() => onSettingsChange({ ...settings, routes: { ...settings.routes, ambient: !settings.routes.ambient } })} />
+        <span>Background traffic paths</span>
+      </label>
+      <label style={styles.check}>
+        <input type="checkbox" data-testid="route-overlays-actual" checked={settings.routes.actual} onChange={() => onSettingsChange({ ...settings, routes: { ...settings.routes, actual: !settings.routes.actual } })} />
+        <span>Recorded trajectories</span>
+      </label>
+      <label style={styles.check}>
+        <input type="checkbox" data-testid="route-overlays-playback" checked={settings.routes.duringPlayback} onChange={() => onSettingsChange({ ...settings, routes: { ...settings.routes, duringPlayback: !settings.routes.duringPlayback } })} />
+        <span>Show guides during playback</span>
+      </label>
 
       <div style={{ ...styles.heading, marginTop: 10 }}>Controls</div>
       <div style={styles.buttons}>
