@@ -355,6 +355,41 @@ describe('UniScenarios concrete playback import', () => {
     expect(Math.abs(ego.headingRad)).toBeGreaterThan(3.1);
   });
 
+  it.each([60, 120])('samples a 20 Hz trace smoothly at %s Hz display cadence', (displayHz) => {
+    const fixture = pair();
+    const mutableTrace = fixture.trace as any;
+    mutableTrace.ticks.t = Array.from({ length: 21 }, (_, index) => index / 20);
+    for (const [id, trackValue] of Object.entries(mutableTrace.ticks.actors)) {
+      const track = trackValue as any;
+      const dynamic = id === 'ego';
+      track.x = mutableTrace.ticks.t.map((t: number) => dynamic ? t * 10 : 10);
+      track.y = mutableTrace.ticks.t.map(() => dynamic ? 0 : 20);
+      track.headingRad = mutableTrace.ticks.t.map((t: number) => dynamic ? 3.1 + t * (2 * Math.PI - 6.2) : 0.25);
+      track.speedMps = mutableTrace.ticks.t.map(() => dynamic ? 10 : 0);
+      track.laneRsl = mutableTrace.ticks.t.map(() => null);
+      track.s = mutableTrace.ticks.t.map((t: number) => dynamic ? t * 10 : 0);
+      track.present = mutableTrace.ticks.t.map(() => 1);
+      if (track.motionDirection) track.motionDirection = mutableTrace.ticks.t.map(() => -1);
+    }
+    const bundle = parsePlaybackPair(fixture.instance, fixture.trace);
+    const xs = Array.from({ length: displayHz + 1 }, (_, frame) => (
+      samplePlaybackActors(bundle, frame / displayHz).find((actor) => actor.id === 'ego')!.x
+    ));
+    const deltas = xs.slice(1).map((x, index) => x - xs[index]!);
+    expect(Math.max(...deltas) - Math.min(...deltas)).toBeLessThan(1e-8);
+  });
+
+  it('holds collision discontinuities and clamps exactly at a stopped trace end', () => {
+    const fixture = pair();
+    const mutableTrace = fixture.trace as any;
+    mutableTrace.events = [{ t: 1, kind: 'collision', a: 'ego', b: 'bus' }];
+    mutableTrace.ticks.actors.ego.speedMps = [10, 0];
+    const bundle = parsePlaybackPair(fixture.instance, fixture.trace);
+    expect(samplePlaybackActors(bundle, 0.999).find((actor) => actor.id === 'ego')!.x).toBe(0);
+    expect(samplePlaybackActors(bundle, 1).find((actor) => actor.id === 'ego')!.x).toBe(10);
+    expect(samplePlaybackActors(bundle, 2).find((actor) => actor.id === 'ego')!.x).toBe(10);
+  });
+
   it('keeps a static actor fixed while a dynamic actor moves across samples', () => {
     const fixture = pair();
     const bundle = parsePlaybackPair(fixture.instance, fixture.trace);

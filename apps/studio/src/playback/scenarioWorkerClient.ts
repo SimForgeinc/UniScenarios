@@ -6,11 +6,18 @@ import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerRes
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
 import { RevisionGate } from './mapRuntime';
 
+export interface LivePlaybackCounters {
+  readonly startupMs: number | null;
+  readonly progressMessages: number;
+  readonly demandMessages: number;
+}
+
 export interface LivePlaybackRun {
   readonly bundle: PlaybackBundle;
   readonly completion: Promise<PlaybackBundle>;
   recordedUntil(): number;
-  setPlaying(playing: boolean): void;
+  setPlaying(playing: boolean, time?: number): void;
+  counters(): LivePlaybackCounters;
 }
 
 interface PendingRequest {
@@ -109,30 +116,32 @@ export class ScenarioWorkerClient {
     });
   }
 
-  start(base: PlaybackBundle, _map: MapEntry): Promise<LivePlaybackRun> {
+  start(base: PlaybackBundle, _map: MapEntry): LivePlaybackRun {
     this.cancelLive();
     const worker = this.ensureWorker();
     const id = ++this.sequence;
     const revision = contentHash(base.instance.input);
     const runtimeKey = this.runtimeByInput.get(revision);
-    if (!runtimeKey) return Promise.reject(new Error('This world was not compiled by the active map runtime.'));
+    if (!runtimeKey) throw new Error('This world was not compiled by the active map runtime.');
     this.activeLive = id;
-    let liveBundle: PlaybackBundle | null = null;
-    let available = 0;
+    const startedAt = performance.now();
+    let startupMs: number | null = null;
+    let progressMessages = 0;
+    let demandMessages = 0;
+    let available = base.trace.ticks.t.at(-1) ?? 0;
+    const liveBundle: PlaybackBundle = { ...base, endTime: base.instance.input.clipSeconds };
     let resolveCompletion!: (bundle: PlaybackBundle) => void;
     let rejectCompletion!: (reason: Error) => void;
     const completion = new Promise<PlaybackBundle>((resolve, reject) => {
       resolveCompletion = resolve;
       rejectCompletion = reject;
     });
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { revision, reject, onMessage: (message) => {
+    this.pending.set(id, { revision, reject: rejectCompletion, onMessage: (message) => {
         if (message.revision !== revision) return;
         if (!message.ok) {
           const error = new Error(message.error);
           this.pending.delete(id);
-          reject(error);
-          if (liveBundle) rejectCompletion(error);
+          rejectCompletion(error);
           return;
         }
         if (message.kind !== 'ready' && message.kind !== 'progress' && message.kind !== 'complete') return;
@@ -140,32 +149,26 @@ export class ScenarioWorkerClient {
           instanceName: 'live authored scenario', traceName: 'live fixed-step simulation',
         });
         available = message.recordedUntil;
-        if (!liveBundle) {
-          liveBundle = {
-            ...parsed,
-            endTime: base.instance.input.clipSeconds,
-            ambientTraffic: base.ambientTraffic,
-            mapCollisions: base.mapCollisions,
-          };
-          resolve({
-            bundle: liveBundle,
-            completion,
-            recordedUntil: () => available,
-            setPlaying: (playing) => worker.postMessage({ kind: 'transport', id, playing }),
-          });
-          const pending = this.pending.get(id);
-          if (pending) pending.reject = rejectCompletion;
-        } else {
-          (liveBundle as { trace: PlaybackBundle['trace'] }).trace = parsed.trace;
-        }
+        progressMessages++;
+        if (startupMs === null) startupMs = performance.now() - startedAt;
+        (liveBundle as { trace: PlaybackBundle['trace'] }).trace = parsed.trace;
         if (message.kind === 'complete') {
           this.pending.delete(id);
           if (this.activeLive === id) this.activeLive = null;
           resolveCompletion(liveBundle);
         }
       }});
-      worker.postMessage({ kind: 'start', id, revision, runtimeKey, input: base.instance.input } satisfies ScenarioWorkerStartRequest);
-    });
+    worker.postMessage({ kind: 'start', id, revision, runtimeKey, input: base.instance.input } satisfies ScenarioWorkerStartRequest);
+    return {
+      bundle: liveBundle,
+      completion,
+      recordedUntil: () => available,
+      setPlaying: (playing, time) => {
+        if (playing && typeof time === 'number') demandMessages++;
+        worker.postMessage({ kind: 'transport', id, playing, time });
+      },
+      counters: () => ({ startupMs, progressMessages, demandMessages }),
+    };
   }
 
   cancel(): void {

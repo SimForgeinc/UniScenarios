@@ -118,6 +118,11 @@ declare global {
     __setMap?: (mapId: string) => void;
     /** Which map is mounted right now. */
     __mapId?: string;
+    /** Live-play instrumentation for browser performance and underrun checks. */
+    __studioPlaybackMetrics?: () => {
+      transport: ReturnType<NonNullable<ReturnType<typeof useStudioSession>['transportCounters']>>;
+      worker: ReturnType<LivePlaybackRun['counters']> | null;
+    };
   }
 }
 
@@ -364,7 +369,7 @@ export function App(): JSX.Element {
     // Start the canonical fixed-step engine from the exact visible population.
     // Only a small lead is recorded before playback becomes visible.
     const entry = ambientPreviewCache.current.current;
-    const run = await runtimeWorker.current!.start(bundle, map);
+    const run = runtimeWorker.current!.start(bundle, map);
     throwIfPreparationAborted(signal);
     livePlayback.current = run;
     setAuthoredPlayback(run.bundle);
@@ -398,6 +403,15 @@ export function App(): JSX.Element {
     editorController?.doc.data.choreography.clipSeconds ?? 20,
     sessionOptions,
   );
+  useEffect(() => {
+    window.__studioPlaybackMetrics = () => ({
+      transport: studioSession.transportCounters?.() ?? {
+        frames: 0, uiPublishes: 0, starts: 0, cancelledFrames: 0, underruns: 0, underrunFrames: 0,
+      },
+      worker: livePlayback.current?.counters() ?? null,
+    });
+    return () => { delete window.__studioPlaybackMetrics; };
+  }, [studioSession.transportCounters]);
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
@@ -642,7 +656,9 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
-    studioSession.setFrameDriver?.((time) => playbackController.renderAt(time));
+    studioSession.setFrameDriver?.((time) => {
+      playbackController.renderAt(time);
+    });
     playbackController.renderAt(studioSession.state.time);
     return () => studioSession.setFrameDriver?.(null);
   }, [authoredPlayback, playbackController, studioSession.setFrameDriver]);
@@ -650,10 +666,17 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
     const playing = studioSession.state.mode === 'playing';
-    livePlayback.current?.setPlaying(playing);
+    livePlayback.current?.setPlaying(playing, studioSession.state.time);
     if (playing) playbackController.play();
     else playbackController.pause();
   }, [authoredPlayback, playbackController, studioSession.state.mode]);
+
+  // A seek is authoritative for worker lookahead too. This message is tiny and
+  // follows the already-throttled 20 Hz UI publication; physics remains fixed-step.
+  useEffect(() => {
+    if (studioSession.state.mode !== 'playing') return;
+    livePlayback.current?.setPlaying(true, studioSession.state.time);
+  }, [studioSession.state.mode, studioSession.state.time]);
 
   // Playback is a viewport mode, not an editor mutation. Keep the autosave
   // document intact but hide its actors until the imported evidence is closed.
