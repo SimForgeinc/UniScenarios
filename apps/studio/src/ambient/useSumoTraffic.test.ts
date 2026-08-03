@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildSumoCatchUpRequests, classifySumoTimelineStep, externalTrafficActors, trafficMetrics } from './useSumoTraffic';
+import { buildSumoCatchUpRequests, classifySumoTimelineStep, externalTrafficActors, isCurrentSumoGeneration, shouldResetSumoForModeTransition, trafficMetrics } from './useSumoTraffic';
 
 function packed(actors: readonly { id: number; x: number; z: number; speed: number; acceleration: number }[]): ArrayBuffer {
   const result = new ArrayBuffer(actors.length * 32);
@@ -37,6 +37,22 @@ describe('SUMO live product metrics', () => {
     expect(classifySumoTimelineStep(5.01)).toBe('reset');
   });
 
+  it('resets only after playback actually advanced traffic', () => {
+    expect(shouldResetSumoForModeTransition('playing', 'authoring', true)).toBe(true);
+    expect(shouldResetSumoForModeTransition('paused', 'authoring', true)).toBe(true);
+    expect(shouldResetSumoForModeTransition('preparing', 'authoring', false)).toBe(false);
+    expect(shouldResetSumoForModeTransition('error', 'authoring', false)).toBe(false);
+    expect(shouldResetSumoForModeTransition('playing', 'paused', true)).toBe(false);
+    expect(shouldResetSumoForModeTransition('paused', 'playing', true)).toBe(false);
+    expect(shouldResetSumoForModeTransition('authoring', 'authoring', true)).toBe(false);
+  });
+
+  it('rejects results from either side of a reset generation boundary', () => {
+    expect(isCurrentSumoGeneration(2, 2, 2)).toBe(true);
+    expect(isCurrentSumoGeneration(1, 2, 1)).toBe(false);
+    expect(isCurrentSumoGeneration(2, 2, 1)).toBe(false);
+  });
+
   it('splits a delayed 3.33 m frame into physically aligned SUMO proxy steps', () => {
     const before = {
       id: 'external:fire-engine', kind: 'vehicle' as const, routeId: 'proxy-route',
@@ -46,8 +62,9 @@ describe('SUMO live product metrics', () => {
     const after = { ...before, x: 3.33 };
     expect((after.x - before.x) / .05).toBeCloseTo(66.6, 1);
 
-    const requests = buildSumoCatchUpRequests(7, 3.33 / 10.62, [before], [after]);
+    const requests = buildSumoCatchUpRequests(3, 7, 3.33 / 10.62, [before], [after]);
     expect(requests).toHaveLength(7);
+    expect(requests.every((request) => request.generation === 3)).toBe(true);
     expect(requests.map((request) => request.sequence)).toEqual([7, 8, 9, 10, 11, 12, 13]);
     let prior: (typeof requests)[number]['externalActors'][number] = before;
     for (const request of requests) {
@@ -65,7 +82,7 @@ describe('SUMO live product metrics', () => {
       x: 10, z: 5, headingDegrees: 0, speedMetersPerSecond: 0,
       lengthMeters: 2, widthMeters: .5,
     };
-    const requests = buildSumoCatchUpRequests(0, .15, [obstacle], []);
+    const requests = buildSumoCatchUpRequests(0, 0, .15, [obstacle], []);
     expect(requests).toHaveLength(3);
     expect(requests[0]!.externalActors).toEqual([obstacle]);
     expect(requests[1]!.externalActors).toEqual([obstacle]);

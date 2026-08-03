@@ -38,6 +38,7 @@ describe('SUMO browser assets', () => {
     view.setFloat32(8, 20, true);
     view.setFloat32(12, 90, true);
     const [actor] = decodeSumoActorViews({
+      generation: 0,
       sequence: 1,
       simulationSeconds: .1,
       states,

@@ -46,8 +46,59 @@ describe('SUMO provider lifecycle', () => {
     worker.emit({ kind: 'closed', id: close.id });
     await closing;
     expect(worker.terminated).toBe(true);
-    await expect(provider.step({ sequence: 1, deltaSeconds: .05, externalActors: [] }))
+    await expect(provider.step({ generation: 0, sequence: 1, deltaSeconds: .05, externalActors: [] }))
       .rejects.toThrow('SUMO provider is closed');
+  });
+
+  it('resets through the existing worker without retransferring runtime assets', async () => {
+    const worker = new FakeWorker();
+    const provider = new SumoWasmTrafficProvider('/sumo.mjs', () => worker as unknown as Worker);
+    const initializing = provider.initialize(payload);
+    const init = worker.messages[0]!;
+    worker.emit({ kind: 'ready', id: init.id, initMilliseconds: 1, heapBytes: 64 });
+    await initializing;
+
+    const resetting = provider.reset({ generation: 4, sequence: 0, deltaSeconds: 1, externalActors: [] });
+    const reset = worker.messages[1]!;
+    expect(reset.kind).toBe('reset');
+    expect(worker.transfers[1]).toHaveLength(0);
+    worker.emit({
+      kind: 'state', id: reset.id, generation: 4, sequence: 0, simulationSeconds: 1,
+      states: new ArrayBuffer(0), actorCount: 0, simulatedActorCount: 0,
+      signalStates: new ArrayBuffer(0), signalLinkCount: 0, stepMilliseconds: 2,
+    });
+    await expect(resetting).resolves.toMatchObject({ generation: 4, simulationSeconds: 1 });
+    expect(worker.terminated).toBe(false);
+    expect(worker.messages.map((message) => message.kind)).toEqual(['init', 'reset']);
+  });
+
+  it('keeps one worker across repeated resets and still closes it authoritatively', async () => {
+    const worker = new FakeWorker();
+    const factory = vi.fn(() => worker as unknown as Worker);
+    const provider = new SumoWasmTrafficProvider('/sumo.mjs', factory);
+    const initializing = provider.initialize(payload);
+    worker.emit({ kind: 'ready', id: worker.messages[0]!.id, initMilliseconds: 1, heapBytes: 64 });
+    await initializing;
+
+    for (let generation = 1; generation <= 20; generation += 1) {
+      const resetting = provider.reset({ generation, sequence: 0, deltaSeconds: 1, externalActors: [] });
+      const message = worker.messages.at(-1)!;
+      worker.emit({
+        kind: 'state', id: message.id, generation, sequence: 0, simulationSeconds: 1,
+        states: new ArrayBuffer(0), actorCount: 0, simulatedActorCount: 0,
+        signalStates: new ArrayBuffer(0), signalLinkCount: 0, stepMilliseconds: 1,
+      });
+      await resetting;
+    }
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(worker.terminated).toBe(false);
+
+    const closing = provider.close();
+    const close = worker.messages.at(-1)!;
+    expect(close.kind).toBe('close');
+    worker.emit({ kind: 'closed', id: close.id });
+    await closing;
+    expect(worker.terminated).toBe(true);
   });
 
   it('terminates a worker that stops responding instead of leaving it alive behind fallback', async () => {
@@ -55,6 +106,21 @@ describe('SUMO provider lifecycle', () => {
     const worker = new FakeWorker();
     const provider = new SumoWasmTrafficProvider('/sumo.mjs', () => worker as unknown as Worker);
     const rejection = expect(provider.initialize(payload)).rejects.toThrow('SUMO worker init exceeded 30 seconds');
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+    expect(worker.terminated).toBe(true);
+  });
+
+  it('keeps the watchdog active for a reset that stops responding', async () => {
+    vi.useFakeTimers();
+    const worker = new FakeWorker();
+    const provider = new SumoWasmTrafficProvider('/sumo.mjs', () => worker as unknown as Worker);
+    const initializing = provider.initialize(payload);
+    worker.emit({ kind: 'ready', id: worker.messages[0]!.id, initMilliseconds: 1, heapBytes: 64 });
+    await initializing;
+
+    const rejection = expect(provider.reset({ generation: 1, sequence: 0, deltaSeconds: 1, externalActors: [] }))
+      .rejects.toThrow('SUMO worker reset exceeded 30 seconds');
     await vi.advanceTimersByTimeAsync(30_000);
     await rejection;
     expect(worker.terminated).toBe(true);

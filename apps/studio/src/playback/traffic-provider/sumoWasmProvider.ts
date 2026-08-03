@@ -46,6 +46,12 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
     return response;
   }
 
+  async reset(request: TrafficStepRequest): Promise<TrafficStepResult> {
+    const response = await this.send({ kind: 'reset', id: this.nextId++, request });
+    if (response.kind !== 'state') throw new Error(`Unexpected SUMO response: ${response.kind}`);
+    return response;
+  }
+
   close(): Promise<void> {
     if (this.closePromise) return this.closePromise;
     this.closed = true;

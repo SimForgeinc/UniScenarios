@@ -44,12 +44,15 @@ export interface ExternalTrafficActor {
 }
 
 export interface TrafficStepRequest {
+  /** Monotonic run identity. Results from an older generation are stale after reset. */
+  readonly generation: number;
   readonly sequence: number;
   readonly deltaSeconds: number;
   readonly externalActors: readonly ExternalTrafficActor[];
 }
 
 export interface TrafficStepResult {
+  readonly generation: number;
   readonly sequence: number;
   readonly simulationSeconds: number;
   /** Eight 32-bit words per actor; see SUMO_WASM_STATE_WORDS. */
@@ -77,6 +80,7 @@ export function boundedTrafficActorCount(simulatedCount: number, maximum: number
 export type SumoWorkerRequest =
   | { readonly kind: 'init'; readonly id: number; readonly moduleUrl: string; readonly payload: TrafficNetworkPayload }
   | { readonly kind: 'step'; readonly id: number; readonly request: TrafficStepRequest }
+  | { readonly kind: 'reset'; readonly id: number; readonly request: TrafficStepRequest }
   | { readonly kind: 'close'; readonly id: number };
 
 export type SumoWorkerResponse =
@@ -88,5 +92,7 @@ export type SumoWorkerResponse =
 export interface TrafficProvider {
   initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization>;
   step(request: TrafficStepRequest): Promise<TrafficStepResult>;
+  /** Restart the deterministic simulation while retaining the loaded worker/WASM runtime. */
+  reset(request: TrafficStepRequest): Promise<TrafficStepResult>;
   close(): Promise<void>;
 }

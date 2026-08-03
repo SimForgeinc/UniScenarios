@@ -39,18 +39,28 @@ export interface UseSumoTrafficOptions {
  */
 export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatus {
   const [status, setStatus] = useState<SumoTrafficStatus>(DISABLED_SUMO_STATUS);
-  const [resetOrdinal, setResetOrdinal] = useState(0);
   const run = useRef<SumoTrafficRun | null>(null);
   const externals = useRef(options.externalActors);
   const previousMode = useRef(options.mode);
   externals.current = options.externalActors;
 
   useEffect(() => {
-    if (options.mode === 'authoring' && previousMode.current !== 'authoring') {
-      setResetOrdinal((value) => value + 1);
+    const active = run.current;
+    if (shouldResetSumoForModeTransition(previousMode.current, options.mode, active?.timelineAdvanced ?? false)
+      && active?.occupancyRoads) {
+      resetSumoRun(active, {
+        targetTime: options.time,
+        externalActors: externalTrafficActors(externals.current, active.occupancyRoads),
+        focus: options.focus,
+        renderer: options.renderer,
+        sampleHeight: options.sampleHeight,
+        phaseAfterReset: 'ready',
+        setStatus,
+        onFallback: options.onFallback,
+      });
     }
     previousMode.current = options.mode;
-  }, [options.mode]);
+  }, [options.focus, options.mode, options.onFallback, options.renderer, options.sampleHeight, options.time]);
 
   useEffect(() => {
     if (!options.enabled || !options.renderer || !options.sampleHeight || options.profile.preset === 'off') {
@@ -62,6 +72,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     const provider = new SumoWasmTrafficProvider(SUMO_RUNTIME_MODULE_URL);
     const active: SumoTrafficRun = {
       provider,
+      generation: 0,
       sequence: 0,
       // The provider may be created while the author is scrubbed away from t=0.
       // Establish the proxy baseline at that same editor instant; a later
@@ -74,6 +85,9 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       completedActorIds: new Set(),
       occupancyRoads: null,
       lastExternalActors: [],
+      timelineAdvanced: false,
+      resetting: false,
+      disposed: false,
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0, reason: 'loading runtime and map assets' });
@@ -108,12 +122,22 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         wasmBytes: runtime.wasmBytes,
       });
       const initialExternalActors = externalTrafficActors(externals.current, occupancyRoads);
-      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: initialExternalActors });
+      const first = await provider.step({ generation: active.generation, sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: initialExternalActors });
       if (cancelled) return;
       active.signalTopology = signalTopology;
       active.adjustedSignalControllers = adjustedSignalControllers;
       active.occupancyRoads = occupancyRoads;
       active.lastExternalActors = initialExternalActors;
+      active.warmupSeconds = demand.warmupSeconds;
+      active.statusBase = {
+        initMilliseconds: initialized.initMilliseconds,
+        heapBytes: initialized.heapBytes,
+        wasmBytes: runtime.wasmBytes,
+        requestedActorCount: demand.requestedActors,
+        nearbyRouteStarts: demand.nearbyRouteStarts,
+        detailedSafetyMetricsAvailable: false,
+        adjustedSignalControllers,
+      };
       active.stepSamples.push(first.stepMilliseconds);
       const firstMetrics = trafficMetrics(first, options.focus, active);
       options.renderer!.syncLayer('sumo-traffic', decodeSumoActorViews(first, options.sampleHeight!));
@@ -144,22 +168,33 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     });
     return () => {
       cancelled = true;
+      active.disposed = true;
+      active.generation += 1;
       if (run.current === active) run.current = null;
       options.renderer?.clearLayer('sumo-traffic');
       void provider.close();
     };
-  }, [options.enabled, options.map, options.profile, options.renderer, options.sampleHeight, options.onFallback, options.focus?.x, options.focus?.z, resetOrdinal]);
+  }, [options.enabled, options.map, options.profile, options.renderer, options.sampleHeight, options.onFallback, options.focus?.x, options.focus?.z]);
 
   useEffect(() => {
     const active = run.current;
-    if (!active || !active.occupancyRoads || options.mode !== 'playing') return;
+    if (!active || !active.occupancyRoads || active.resetting || options.mode !== 'playing') return;
     const occupancyRoads = active.occupancyRoads;
     const delta = options.time - active.lastRequestedTime;
     const timing = classifySumoTimelineStep(delta);
     if (timing === 'wait') return;
     active.lastRequestedTime = options.time;
     if (timing === 'reset') {
-      setResetOrdinal((value) => value + 1);
+      resetSumoRun(active, {
+        targetTime: options.time,
+        externalActors: externalTrafficActors(externals.current, occupancyRoads),
+        focus: options.focus,
+        renderer: options.renderer,
+        sampleHeight: options.sampleHeight,
+        phaseAfterReset: 'running',
+        setStatus,
+        onFallback: options.onFallback,
+      });
       return;
     }
     // Capture the pose at the same editor instant as `delta`. Reading the
@@ -168,6 +203,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     // TraCI report physically impossible implied speeds.
     const targetExternalActors = externalTrafficActors(externals.current, occupancyRoads);
     const requests = buildSumoCatchUpRequests(
+      active.generation,
       active.sequence,
       Math.max(.001, delta),
       active.lastExternalActors,
@@ -175,13 +211,18 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     );
     active.sequence += requests.length;
     active.lastExternalActors = targetExternalActors;
+    active.timelineAdvanced = true;
+    const generation = active.generation;
     active.stepping = active.stepping.then(async () => {
       let result: TrafficStepResult | null = null;
+      const stepSamples: number[] = [];
       for (const request of requests) {
         result = await active.provider.step(request);
-        active.stepSamples.push(result.stepMilliseconds);
+        stepSamples.push(result.stepMilliseconds);
       }
       if (!result) return;
+      if (active.disposed || run.current !== active || !isCurrentSumoGeneration(generation, active.generation, result.generation)) return;
+      active.stepSamples.push(...stepSamples);
       while (active.stepSamples.length > 120) active.stepSamples.shift();
       const p95 = percentile(active.stepSamples, .95);
       const requestedStepSeconds = Math.max(...requests.map((request) => request.deltaSeconds));
@@ -205,12 +246,79 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         adjustedSignalControllers: active.adjustedSignalControllers,
       }));
     }).catch((reason: unknown) => {
+      if (active.disposed || run.current !== active || active.generation !== generation) return;
       const message = reason instanceof Error ? reason.message : String(reason);
       options.renderer?.clearLayer('sumo-traffic');
       setStatus({ phase: 'fallback', actorCount: 0, reason: message });
       options.onFallback(message);
     });
-  }, [options.mode, options.onFallback, options.renderer, options.sampleHeight, options.time]);
+  }, [options.focus, options.mode, options.onFallback, options.renderer, options.sampleHeight, options.time]);
+
+  function resetSumoRun(active: SumoTrafficRun, reset: SumoResetRequest): void {
+    if (active.disposed || !active.signalTopology || !active.warmupSeconds) return;
+    if (active.resetting) {
+      // A Stop can arrive while a rewind reset is already in flight. Retain the
+      // latest authoring baseline and run it next without ever publishing the
+      // superseded reset result.
+      active.pendingReset = reset;
+      return;
+    }
+    const generation = active.generation + 1;
+    active.generation = generation;
+    active.sequence = 1;
+    active.lastRequestedTime = reset.targetTime;
+    active.lastExternalActors = reset.externalActors;
+    active.stepSamples.length = 0;
+    active.missedDeadlines = 0;
+    active.seenActorIds.clear();
+    active.completedActorIds.clear();
+    active.timelineAdvanced = false;
+    active.resetting = true;
+    reset.setStatus({
+      phase: 'loading',
+      actorCount: 0,
+      reason: 'resetting traffic',
+      ...active.statusBase,
+    });
+    active.stepping = active.stepping.then(async () => {
+      const result = await active.provider.reset({
+        generation,
+        sequence: 0,
+        deltaSeconds: active.warmupSeconds!,
+        externalActors: reset.externalActors,
+      });
+      if (active.disposed || run.current !== active || !isCurrentSumoGeneration(generation, active.generation, result.generation)) return;
+      const pendingReset = active.pendingReset;
+      if (pendingReset) {
+        active.pendingReset = undefined;
+        active.resetting = false;
+        resetSumoRun(active, pendingReset);
+        return;
+      }
+      active.resetting = false;
+      active.stepSamples.push(result.stepMilliseconds);
+      reset.renderer?.syncLayer('sumo-traffic', decodeSumoActorViews(result, reset.sampleHeight!));
+      const signals = decodeSumoSignalSnapshot(result.signalStates, result.signalLinkCount, active.signalTopology!);
+      reset.setStatus({
+        phase: reset.phaseAfterReset,
+        actorCount: result.actorCount,
+        stepP95Milliseconds: result.stepMilliseconds,
+        ...active.statusBase,
+        ...trafficMetrics(result, reset.focus, active),
+        simulatedActorCount: result.simulatedActorCount,
+        signalStates: signals.heads,
+        mappedSignalHeads: signals.mappedHeadCount,
+        unmappedSignalLinks: signals.unmappedLinkCount,
+      });
+    }).catch((reason: unknown) => {
+      if (active.disposed || run.current !== active || active.generation !== generation) return;
+      active.resetting = false;
+      const message = reason instanceof Error ? reason.message : String(reason);
+      reset.renderer?.clearLayer('sumo-traffic');
+      reset.setStatus({ phase: 'fallback', actorCount: 0, reason: message });
+      reset.onFallback(message);
+    });
+  }
 
   return status;
 }
@@ -220,8 +328,17 @@ export function classifySumoTimelineStep(deltaSeconds: number): 'wait' | 'step' 
   return deltaSeconds >= .04 ? 'step' : 'wait';
 }
 
+export function shouldResetSumoForModeTransition(previousMode: StudioSessionMode, mode: StudioSessionMode, timelineAdvanced: boolean): boolean {
+  return mode === 'authoring' && previousMode !== 'authoring' && timelineAdvanced;
+}
+
+export function isCurrentSumoGeneration(expected: number, active: number, result: number): boolean {
+  return expected === active && result === active;
+}
+
 interface SumoTrafficRun {
   readonly provider: SumoWasmTrafficProvider;
+  generation: number;
   sequence: number;
   lastRequestedTime: number;
   stepping: Promise<void>;
@@ -233,6 +350,25 @@ interface SumoTrafficRun {
   adjustedSignalControllers?: number;
   occupancyRoads: SumoRoadOccupancyIndex | null;
   lastExternalActors: readonly ExternalTrafficActor[];
+  warmupSeconds?: number;
+  statusBase?: Pick<SumoTrafficStatus,
+    'initMilliseconds' | 'heapBytes' | 'wasmBytes' | 'requestedActorCount' | 'nearbyRouteStarts'
+    | 'detailedSafetyMetricsAvailable' | 'adjustedSignalControllers'>;
+  timelineAdvanced: boolean;
+  resetting: boolean;
+  pendingReset?: SumoResetRequest;
+  disposed: boolean;
+}
+
+interface SumoResetRequest {
+  readonly targetTime: number;
+  readonly externalActors: readonly ExternalTrafficActor[];
+  readonly focus: SumoDemandFocus | null;
+  readonly renderer: ActorRenderer | null | undefined;
+  readonly sampleHeight: ((x: number, z: number) => number | null) | null;
+  readonly phaseAfterReset: 'ready' | 'running';
+  readonly setStatus: (status: SumoTrafficStatus) => void;
+  readonly onFallback: (reason: string) => void;
 }
 
 export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly actorCount: number }, focus: SumoDemandFocus | null, run: Pick<SumoTrafficRun, 'seenActorIds' | 'completedActorIds'>): Pick<SumoTrafficStatus, 'nearbyActorCount' | 'queuedActorCount' | 'completedActorCount' | 'emergencyStoppingActorCount'> {
@@ -284,6 +420,7 @@ const SUMO_PROXY_SUBSTEP_SECONDS = .05;
  * first substep. Actor births/removals occur only on the final boundary.
  */
 export function buildSumoCatchUpRequests(
+  generation: number,
   firstSequence: number,
   deltaSeconds: number,
   previous: readonly ExternalTrafficActor[],
@@ -309,6 +446,7 @@ export function buildSumoCatchUpRequests(
       for (const after of current) if (!previousById.has(after.id)) externalActors.push(after);
     }
     return {
+      generation,
       sequence: firstSequence + index,
       deltaSeconds: stepSeconds,
       externalActors,

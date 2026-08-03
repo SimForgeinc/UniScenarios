@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse } from './protocol';
+import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse, type TrafficNetworkPayload } from './protocol';
 import { externalActorToNetwork, transformPackedStatesToWorld } from './coordinateTransform';
 import { compileSumoRuntime, type InstantiateWasm } from './sumoRuntimeInstantiation';
 
@@ -42,6 +42,7 @@ type SumoFactory = (options?: {
 }) => Promise<SumoModule>;
 
 let module: SumoModule | undefined;
+let restartPayload: TrafficNetworkPayload | undefined;
 let worldFromNetwork: NetworkWorldTransform | undefined;
 let maxActorStates = Number.POSITIVE_INFINITY;
 const mirroredIds = new Set<string>();
@@ -81,16 +82,10 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
         else console.error(message);
       },
     });
-    worldFromNetwork = message.payload.worldFromNetwork;
-    maxActorStates = message.payload.maxActorStates;
-    const net = copyBytes(module, new Uint8Array(message.payload.network));
-    const routes = copyBytes(module, new Uint8Array(message.payload.routes));
-    try {
-      assertOk(module._us_sumo_start(net.pointer, net.length, routes.pointer, routes.length, message.payload.stepSeconds, message.payload.seed));
-    } finally {
-      module._free(net.pointer);
-      module._free(routes.pointer);
-    }
+    // Retain only the immutable simulation inputs. The much larger WASM binary
+    // is already compiled into `module` and need not be kept a second time.
+    restartPayload = { ...message.payload, wasmBinary: undefined };
+    startSimulation(module, restartPayload);
     post({ kind: 'ready', id: message.id, initMilliseconds: performance.now() - started, heapBytes: module.HEAPU8.buffer.byteLength });
     return;
   }
@@ -98,6 +93,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   if (message.kind === 'close') {
     module?._us_sumo_close();
     module = undefined;
+    restartPayload = undefined;
     worldFromNetwork = undefined;
     maxActorStates = Number.POSITIVE_INFINITY;
     mirroredIds.clear();
@@ -107,6 +103,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
 
   const sumo = requireModule();
   const started = performance.now();
+  if (message.kind === 'reset') startSimulation(sumo, requireRestartPayload());
   mirrorExternalActors(sumo, message.request.externalActors);
   assertOk(sumo._us_sumo_step(message.request.deltaSeconds));
   const simulatedCount = sumo._us_sumo_state_count();
@@ -121,6 +118,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   post({
     kind: 'state',
     id: message.id,
+    generation: message.request.generation,
     sequence: message.request.sequence,
     simulationSeconds: sumo._us_sumo_time(),
     states,
@@ -130,6 +128,22 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     signalLinkCount,
     stepMilliseconds: performance.now() - started,
   }, [states, signalStates]);
+}
+
+function startSimulation(sumo: SumoModule, payload: TrafficNetworkPayload): void {
+  worldFromNetwork = payload.worldFromNetwork;
+  maxActorStates = payload.maxActorStates;
+  mirroredIds.clear();
+  const net = copyBytes(sumo, new Uint8Array(payload.network));
+  const routes = copyBytes(sumo, new Uint8Array(payload.routes));
+  try {
+    // The bridge closes a currently loaded libsumo world before starting this
+    // one. The Emscripten module and its compiled WASM heap stay alive.
+    assertOk(sumo._us_sumo_start(net.pointer, net.length, routes.pointer, routes.length, payload.stepSeconds, payload.seed));
+  } finally {
+    sumo._free(net.pointer);
+    sumo._free(routes.pointer);
+  }
 }
 
 function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTrafficActor[]): void {
@@ -187,6 +201,11 @@ function requireModule(): SumoModule {
 function requireTransform(): NetworkWorldTransform {
   if (!worldFromNetwork) throw new Error('SUMO coordinate transform is not initialized');
   return worldFromNetwork;
+}
+
+function requireRestartPayload(): TrafficNetworkPayload {
+  if (!restartPayload) throw new Error('SUMO reset inputs are unavailable');
+  return restartPayload;
 }
 
 function assertOk(code: number): void {
