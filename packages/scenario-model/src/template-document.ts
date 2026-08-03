@@ -2,7 +2,8 @@
 
 import { applyPatches, enablePatches, produceWithPatches, type Patch } from 'immer';
 
-import { ScenarioMigrationError, ScenarioOperationError, ScenarioValidationError } from './errors.js';
+import { AuthoredActorLimitError, ScenarioMigrationError, ScenarioOperationError, ScenarioValidationError } from './errors.js';
+import { MAX_AUTHORED_ACTORS, authoredActorCount } from './actor-limits.js';
 import { parseTemplate, serializeTemplate, deepFreeze } from './serialize.js';
 import type { Interaction } from './schema/v2/interactions.js';
 import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
@@ -50,6 +51,23 @@ interface HistoryEntry {
   op: TemplateOp;
   patches: Patch[];
   inverse: Patch[];
+}
+
+/** Cleanup operations remain available so legacy over-limit documents are recoverable. */
+function isOverLimitRecoveryOp(op: TemplateOp): boolean {
+  switch (op.type) {
+    case 'removeRole':
+    case 'removeInteraction':
+    case 'removeMapSignalPlan':
+    case 'removeProp':
+    case 'removeInvariant':
+    case 'removeVariant':
+      return true;
+    case 'setMetricSubject':
+      return op.roleId === null;
+    default:
+      return false;
+  }
 }
 
 /** Generate a schema-legal v2 id. Callers may supply semantic ids instead. */
@@ -152,6 +170,13 @@ export class TemplateDocument {
   validate(map?: MapContext): ValidationReport { return validateTemplate(this.#state, map); }
 
   apply(op: TemplateOp): boolean {
+    const currentActors = authoredActorCount(this.#state);
+    if (currentActors > MAX_AUTHORED_ACTORS && !isOverLimitRecoveryOp(op)) {
+      throw new AuthoredActorLimitError(currentActors);
+    }
+    if (op.type === 'addRole' && currentActors >= MAX_AUTHORED_ACTORS) {
+      throw new AuthoredActorLimitError(currentActors + 1);
+    }
     const [afterOp, opPatches, opInverse] = produceWithPatches(this.#state, (draft) => {
       applyTemplateOp(draft as ScenarioTemplateV2, op);
     });

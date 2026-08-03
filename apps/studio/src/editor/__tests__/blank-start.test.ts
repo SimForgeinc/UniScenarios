@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   MemoryStorage,
+  AuthoredActorLimitError,
+  AUTHORED_ACTOR_LIMIT_CODE,
+  MAX_AUTHORED_ACTORS,
   TemplateDocument,
   WebTemplateFileStore,
   defaultDashCamera,
@@ -46,6 +49,56 @@ function expectCompletelyBlank(template: ScenarioTemplateV2): void {
 }
 
 describe('fresh page-load authoring document', () => {
+  it('rejects a multi-actor placement atomically when it would exceed 32 actors', async () => {
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const document = await EditorDocument.openBlank(map, { store, autosaveMs: 60_000 });
+    const actor = (index: number) => ({
+      id: `actor-${index}`,
+      catalogId: 'vehicle.sedan' as const,
+      x: index,
+      y: 0,
+      z: 0,
+      headingRad: 0,
+    });
+    document.add(Array.from({ length: MAX_AUTHORED_ACTORS - 1 }, (_, index) => actor(index)));
+
+    expect(() => document.add([actor(31), actor(32)])).toThrow(AuthoredActorLimitError);
+    expect(document.actors).toHaveLength(MAX_AUTHORED_ACTORS - 1);
+    expect(document.data.roles.some((role) => role.id === 'actor-31')).toBe(false);
+    document.dispose();
+  });
+
+  it('imports legacy over-limit scenarios read-only while delete and undo remain available', async () => {
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const source = await EditorDocument.openBlank(map, { store, autosaveMs: 60_000 });
+    source.add(Array.from({ length: MAX_AUTHORED_ACTORS }, (_, index) => ({
+      id: `legacy-${index}`,
+      catalogId: 'vehicle.sedan' as const,
+      x: index,
+      y: 0,
+      z: 0,
+      headingRad: 0,
+    })));
+    const extra = structuredClone(source.data.roles[0]!);
+    extra.id = 'legacy-32';
+    const legacy = { ...structuredClone(source.data), roles: [...source.data.roles, extra] };
+    const document = await EditorDocument.openBlank(map, { store, autosaveMs: 60_000 });
+
+    document.importTemplate(legacy);
+    expect(document.actors).toHaveLength(MAX_AUTHORED_ACTORS + 1);
+    expect(document.validation.issues.some((issue) => issue.code === AUTHORED_ACTOR_LIMIT_CODE)).toBe(true);
+    expect(() => document.rename('Blocked')).toThrow(AuthoredActorLimitError);
+
+    document.remove(['legacy-32']);
+    expect(document.actors).toHaveLength(MAX_AUTHORED_ACTORS);
+    expect(document.undo()).toBe(true);
+    expect(document.actors).toHaveLength(MAX_AUTHORED_ACTORS + 1);
+    expect(document.redo()).toBe(true);
+    expect(document.actors).toHaveLength(MAX_AUTHORED_ACTORS);
+    source.dispose();
+    document.dispose();
+  });
+
   it('starts untitled and completely blank instead of restoring the map autosave', async () => {
     const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
     await populatedTemplate(store);

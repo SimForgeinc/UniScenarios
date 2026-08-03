@@ -50,6 +50,7 @@ export const ISSUE_CODES = [
   'set_value_range',
   'set_actor_mismatch',
   // --- document coherence ---------------------------------------------------
+  'authored_actor_limit_exceeded',
   'metric_subject_unknown',
   'metric_subject_missing',
   'derived_param_cycle',

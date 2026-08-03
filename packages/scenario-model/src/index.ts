@@ -113,6 +113,13 @@ export {
 } from './template-document.js';
 
 export {
+  AUTHORED_ACTOR_LIMIT_CODE,
+  MAX_AUTHORED_ACTORS,
+  authoredActorCount,
+  authoredActorLimitMessage,
+} from './actor-limits.js';
+
+export {
   applyTemplateOp,
   describeTemplateOp,
   type TemplateMetaPatch,
@@ -249,6 +256,7 @@ export { buildJsonSchema, JSON_SCHEMA_ID, JSON_SCHEMA_PATH } from './json-schema
 
 export {
   ScenarioValidationError,
+  AuthoredActorLimitError,
   ScenarioMigrationError,
   ScenarioOperationError,
   ScenarioNotFoundError,
