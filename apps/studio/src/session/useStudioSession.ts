@@ -18,6 +18,8 @@ export interface StudioSessionOptions {
   cancel?: () => void;
   /** Another transport (for example an imported verified trace) owns Space. */
   keyboardEnabled?: boolean;
+  /** Latest recorded live tick; seeking beyond it would inspect invented time. */
+  seekLimit?: () => number;
 }
 
 export function useStudioSession(
@@ -109,6 +111,9 @@ export function useStudioSession(
     state,
     playPause,
     stop,
-    seek: useCallback((time: number) => dispatch({ type: 'seek', time }), []),
+    seek: useCallback((time: number) => {
+      const limit = optionsRef.current.seekLimit?.() ?? duration;
+      dispatch({ type: 'seek', time: Math.min(time, limit) });
+    }, [duration]),
   };
 }

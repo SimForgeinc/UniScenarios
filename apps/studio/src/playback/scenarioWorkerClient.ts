@@ -23,6 +23,8 @@ export class ScenarioWorkerClient {
       staticCollisionMode?: 'skip' | 'bounded';
       timeoutMs?: number;
       ambientPopulation?: AmbientPopulationSnapshot;
+      /** Build only the warmed t=0 authoring world; Play streams the trace live. */
+      materializeOnly?: boolean;
     } = {},
   ): Promise<PlaybackBundle> {
     this.cancel();
@@ -83,7 +85,7 @@ export class ScenarioWorkerClient {
         ambientTraffic,
         ...(baseInstance ? { baseInstance } : {}),
         ...(options.ambientPopulation ? { ambientPopulation: options.ambientPopulation } : {}),
-        operation: 'prepare',
+        operation: options.materializeOnly ? 'materialize' : 'prepare',
         staticCollisionMode: options.staticCollisionMode ?? 'bounded',
         map: {
           id: map.id,

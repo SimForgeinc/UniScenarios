@@ -18,7 +18,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { Rng } from '../core/rng.js';
-import { runSimulation } from '../sim/engine.js';
+import { createFixedStepSimulation, runSimulation } from '../sim/engine.js';
 import { serializeTrace, traceDigest } from '../trace/gzip.js';
 import { LANE_LEFT, LANE_RIGHT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
 import type { SimScenarioInput } from '../schema/input.js';
@@ -91,6 +91,36 @@ describe('determinism', () => {
     const b = serializeTrace(runSimulation(input, { graph, guards: 'collect' }).trace);
     expect(a.length).toBe(b.length);
     expect(Buffer.from(a).equals(Buffer.from(b))).toBe(true);
+  });
+
+  it.each([1, 3, 10, 97])('streamed fixed-step batches of %i ticks equal the offline trace', (batch) => {
+    const input = busyScenario();
+    const expected = serializeTrace(runSimulation(input, { graph, guards: 'collect' }).trace);
+    const live = createFixedStepSimulation(input, { graph, guards: 'collect' });
+    let progress = live.advance(batch);
+    while (!progress.done) progress = live.advance(batch);
+    const actual = serializeTrace(progress.trace);
+    expect(Buffer.from(actual).equals(Buffer.from(expected))).toBe(true);
+    expect(progress.recordedUntil).toBe(input.clipSeconds);
+  });
+
+  it('exposes a valid warmed prefix without completing the 20-second clip', () => {
+    const input: SimScenarioInput = { ...busyScenario(), physics: { mode: 'dynamic-v1' } };
+    const live = createFixedStepSimulation(input, { graph, guards: 'collect' });
+    const prefix = live.advance(Math.round(input.warmupSeconds / input.dt) + Math.ceil(0.25 / input.dt));
+    expect(prefix.done).toBe(false);
+    expect(prefix.recordedUntil).toBeGreaterThanOrEqual(0.15);
+    expect(prefix.recordedUntil).toBeLessThan(0.5);
+    expect(prefix.trace.header.physics.mode).toBe('dynamic-v1');
+  });
+
+  it('never mutates or drops state from the authored input while streaming', () => {
+    const input = busyScenario();
+    const before = structuredClone(input);
+    const live = createFixedStepSimulation(input, { graph, guards: 'collect' });
+    live.advance(73);
+    live.advance(29);
+    expect(input).toEqual(before);
   });
 
   it('is independent of actor and interaction declaration order', () => {

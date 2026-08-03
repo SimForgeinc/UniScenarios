@@ -23,6 +23,7 @@ import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
 import { defaultSpeedKph } from './timeline/actions';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient } from './playback/scenarioWorkerClient';
+import { LiveSimulationClient, type LivePlaybackRun } from './playback/liveSimulationClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
 import { loadQualityPreference } from './performance/quality';
@@ -143,6 +144,7 @@ export function App(): JSX.Element {
   const [campaignPlaybackTitle, setCampaignPlaybackTitle] = useState<string | null>(null);
   const [campaignCameras, setCampaignCameras] = useState<CameraPresentation>(EMPTY_CAMERA_PRESENTATION);
   const [authoredPlayback, setAuthoredPlayback] = useState<PlaybackBundle | null>(null);
+  const livePlayback = useRef<LivePlaybackRun | null>(null);
   const [campaignSource, setCampaignSource] = useState<{
     templateHash: string;
     evidence: PlaybackBundle;
@@ -170,6 +172,8 @@ export function App(): JSX.Element {
   if (!exportWorker.current) exportWorker.current = new ScenarioWorkerClient();
   const ambientPreviewWorker = useRef<ScenarioWorkerClient | null>(null);
   if (!ambientPreviewWorker.current) ambientPreviewWorker.current = new ScenarioWorkerClient();
+  const liveSimulationWorker = useRef<LiveSimulationClient | null>(null);
+  if (!liveSimulationWorker.current) liveSimulationWorker.current = new LiveSimulationClient();
   const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
   const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
@@ -328,19 +332,43 @@ export function App(): JSX.Element {
     if (pending?.materializationKey === materializationKey) await pending.promise;
     throwIfPreparationAborted(signal);
     const bundle = ambientWorld.current.playback();
-    if (!bundle) throw new Error('Traffic is still preparing. Press Play again when the map population is ready.');
-    // This is the exact immutable object rendered at t=0; Play never generates
-    // or substitutes a second background population.
+    if (!bundle) throw new Error('Traffic is still loading. Press Play again when the map population is visible.');
+    const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
+    if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
+      // A completed live trace is immutable cache data and replays instantly.
+      livePlayback.current = null;
+      setAuthoredPlayback(bundle);
+      return;
+    }
+    // Start the canonical fixed-step engine from the exact visible population.
+    // Only a small lead is recorded before playback becomes visible.
+    const entry = ambientWorld.current.current;
+    const run = await liveSimulationWorker.current!.start(bundle, map);
     throwIfPreparationAborted(signal);
-    setAuthoredPlayback(bundle);
-  }, [ambientTrafficProfile, editorController, map.id]);
+    livePlayback.current = run;
+    setAuthoredPlayback(run.bundle);
+    void run.completion.then((completed) => {
+      if (!entry || ambientWorld.current.current?.value !== bundle) return;
+      const token = ambientWorld.current.begin();
+      ambientWorld.current.commit(token, { ...entry, value: completed });
+    }).catch((reason: unknown) => {
+      if ((reason as { name?: string } | null)?.name !== 'AbortError') {
+        setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
+      }
+    });
+  }, [ambientTrafficProfile, editorController, map]);
   const cancelAuthoredPlayback = useCallback(() => {
+    liveSimulationWorker.current?.cancel();
+    livePlayback.current = null;
     setAuthoredPlayback(null);
     setCameraPlaybackRequested(false);
   }, []);
   const sessionOptions = useMemo(() => ({
     prepare: prepareAuthoredPlayback,
     cancel: cancelAuthoredPlayback,
+    seekLimit: () => livePlayback.current?.recordedUntil()
+      ?? editorController?.doc.data.choreography.clipSeconds
+      ?? 20,
     keyboardEnabled: playbackBundle === null,
   }), [prepareAuthoredPlayback, cancelAuthoredPlayback, playbackBundle]);
   const studioSession = useStudioSession(
@@ -409,10 +437,10 @@ export function App(): JSX.Element {
       map,
       ambientTrafficProfile,
       verifiedFallback?.instance,
-      // Build the trace once in the background and reuse it for Play. Static
-      // map collider extraction is intentionally not on this interactive path;
-      // dynamic actor collision handling remains enabled and identical.
-      { staticCollisionMode: 'skip', timeoutMs: 30_000, ...(reusablePopulation ? { ambientPopulation: reusablePopulation } : {}) },
+      // Build only the warmed t=0 world in the background. Static map collider
+      // extraction is intentionally not on this interactive path; dynamic
+      // actor collision handling remains enabled and identical.
+      { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true, ...(reusablePopulation ? { ambientPopulation: reusablePopulation } : {}) },
     );
     ambientPreparation.current = { materializationKey, promise };
     void promise.then(
@@ -434,6 +462,7 @@ export function App(): JSX.Element {
   }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle]);
 
   useEffect(() => () => ambientPreviewWorker.current?.cancel(), []);
+  useEffect(() => () => liveSimulationWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {
     if (!editorController || ambientRobustnessBusy) return;
     setAmbientRobustnessBusy(true);
@@ -558,6 +587,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
+    livePlayback.current?.setPlaying(studioSession.state.mode === 'playing');
     playbackController.seek(studioSession.state.time);
     if (studioSession.state.mode === 'playing') playbackController.play();
     else playbackController.pause();
