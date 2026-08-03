@@ -7,9 +7,17 @@ import {
   cameraPanDrag,
   cameraWheelDollyScale,
   crossedCameraDragThreshold,
+  DEFAULT_CAMERA_CONTROL_PREFERENCES,
 } from './camera-drag';
 
 describe('eye-orbit and inverted camera drags', () => {
+  it('defaults both look axes to 40%', () => {
+    expect(DEFAULT_CAMERA_CONTROL_PREFERENCES).toMatchObject({
+      horizontalLookSensitivity: 40,
+      verticalLookSensitivity: 40,
+    });
+  });
+
   it('keeps the camera eye byte-for-byte invariant while changing orientation and target', () => {
     const camera = new PerspectiveCamera(55, 1.6, 0.1, 1000);
     camera.position.set(12, 30, 45);
