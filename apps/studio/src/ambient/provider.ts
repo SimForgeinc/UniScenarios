@@ -18,6 +18,14 @@ export interface SumoTrafficStatus {
   readonly heapBytes?: number;
   readonly wasmBytes?: number;
   readonly reason?: string;
+  readonly nearbyActorCount?: number;
+  readonly queuedActorCount?: number;
+  readonly completedActorCount?: number;
+  readonly emergencyStoppingActorCount?: number;
+  readonly requestedActorCount?: number;
+  readonly nearbyRouteStarts?: number;
+  /** The lean bridge does not currently expose SUMO's teleport/collision counters. */
+  readonly detailedSafetyMetricsAvailable?: boolean;
 }
 
 export const DISABLED_SUMO_STATUS: SumoTrafficStatus = Object.freeze({

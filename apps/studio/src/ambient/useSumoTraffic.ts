@@ -9,6 +9,7 @@ import { SumoWasmTrafficProvider } from '../playback/traffic-provider/sumoWasmPr
 import type { StudioSessionMode } from '../session/model';
 import { DISABLED_SUMO_STATUS, type SumoTrafficStatus } from './provider';
 import { decodeSumoActorViews, loadSumoAssets, SUMO_RUNTIME_MODULE_URL } from './sumoAssets';
+import type { SumoDemandFocus } from './sumoAssets';
 
 export interface SumoExternalActorView {
   readonly id: string;
@@ -30,6 +31,7 @@ export interface UseSumoTrafficOptions {
   readonly mode: StudioSessionMode;
   readonly time: number;
   readonly externalActors: readonly SumoExternalActorView[];
+  readonly focus: SumoDemandFocus | null;
   readonly onFallback: (reason: string) => void;
 }
 
@@ -69,10 +71,12 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       stepping: Promise.resolve(),
       stepSamples: [],
       missedDeadlines: 0,
+      seenActorIds: new Set(),
+      completedActorIds: new Set(),
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0 });
-    void loadSumoAssets(options.map, options.profile).then(async ({ payload, runtime }) => {
+    void loadSumoAssets(options.map, options.profile, fetch, options.focus).then(async ({ payload, runtime, demand }) => {
       if (cancelled) return;
       const initialized = await provider.initialize(payload);
       if (cancelled) return;
@@ -84,10 +88,13 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         requestedStepMilliseconds: payload.stepSeconds * 1_000,
       });
       if (!initialGate.useSumo) throw new Error(`capability gate: ${initialGate.reason}`);
-      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: payload.stepSeconds, externalActors: externalTrafficActors(externals.current) });
+      // Warm the staggered departures before publishing the authoring preview.
+      // This keeps the city populated before Play without a visible spawn burst.
+      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current) });
       if (cancelled) return;
       active.simulationTime = first.simulationSeconds;
       active.stepSamples.push(first.stepMilliseconds);
+      const firstMetrics = trafficMetrics(first, options.focus, active);
       options.renderer!.syncLayer('sumo-traffic', decodeSumoActorViews(first, options.sampleHeight!));
       setStatus({
         phase: 'ready',
@@ -96,6 +103,10 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         heapBytes: initialized.heapBytes,
         wasmBytes: runtime.wasmBytes,
         stepP95Milliseconds: first.stepMilliseconds,
+        ...firstMetrics,
+        requestedActorCount: demand.requestedActors,
+        nearbyRouteStarts: demand.nearbyRouteStarts,
+        detailedSafetyMetricsAvailable: false,
       });
     }).catch((reason: unknown) => {
       if (cancelled) return;
@@ -110,7 +121,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       options.renderer?.clearLayer('sumo-traffic');
       void provider.close();
     };
-  }, [options.enabled, options.map, options.profile, options.renderer, options.sampleHeight, options.onFallback, resetOrdinal]);
+  }, [options.enabled, options.map, options.profile, options.renderer, options.sampleHeight, options.onFallback, options.focus?.x, options.focus?.z, resetOrdinal]);
 
   useEffect(() => {
     const active = run.current;
@@ -136,7 +147,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       else active.missedDeadlines = 0;
       if (active.missedDeadlines >= 3) throw new Error(`performance gate: ${p95.toFixed(1)} ms p95 exceeds realtime headroom`);
       options.renderer?.syncLayer('sumo-traffic', decodeSumoActorViews(result, options.sampleHeight!));
-      setStatus((current) => ({ ...current, phase: 'running', actorCount: result.actorCount, stepP95Milliseconds: p95 }));
+      setStatus((current) => ({ ...current, phase: 'running', actorCount: result.actorCount, stepP95Milliseconds: p95, ...trafficMetrics(result, options.focus, active) }));
     }).catch((reason: unknown) => {
       const message = reason instanceof Error ? reason.message : String(reason);
       options.renderer?.clearLayer('sumo-traffic');
@@ -156,6 +167,31 @@ interface SumoTrafficRun {
   stepping: Promise<void>;
   readonly stepSamples: number[];
   missedDeadlines: number;
+  readonly seenActorIds: Set<number>;
+  readonly completedActorIds: Set<number>;
+}
+
+export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly actorCount: number }, focus: SumoDemandFocus | null, run: Pick<SumoTrafficRun, 'seenActorIds' | 'completedActorIds'>): Pick<SumoTrafficStatus, 'nearbyActorCount' | 'queuedActorCount' | 'completedActorCount' | 'emergencyStoppingActorCount'> {
+  const view = new DataView(result.states);
+  const current = new Set<number>();
+  let nearbyActorCount = 0;
+  let queuedActorCount = 0;
+  let emergencyStoppingActorCount = 0;
+  for (let index = 0; index < result.actorCount; index += 1) {
+    const offset = index * 32;
+    const id = view.getUint32(offset, true);
+    const x = view.getFloat32(offset + 4, true);
+    const z = view.getFloat32(offset + 8, true);
+    const speed = view.getFloat32(offset + 16, true);
+    const acceleration = view.getFloat32(offset + 20, true);
+    current.add(id);
+    run.seenActorIds.add(id);
+    if (focus && Math.hypot(x - focus.x, z - focus.z) <= 300) nearbyActorCount += 1;
+    if (speed < .5) queuedActorCount += 1;
+    if (acceleration <= -7) emergencyStoppingActorCount += 1;
+  }
+  for (const id of run.seenActorIds) if (!current.has(id)) run.completedActorIds.add(id);
+  return { nearbyActorCount, queuedActorCount, completedActorCount: run.completedActorIds.size, emergencyStoppingActorCount };
 }
 
 function externalTrafficActors(actors: readonly SumoExternalActorView[]): readonly ExternalTrafficActor[] {

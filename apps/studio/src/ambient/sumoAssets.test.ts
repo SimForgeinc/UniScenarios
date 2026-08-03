@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
-import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets } from './sumoAssets';
+import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets, localizeSumoRouteCandidates } from './sumoAssets';
 
 describe('SUMO browser assets', () => {
   it('builds a deterministic bounded population and proxy route', () => {
@@ -9,7 +9,25 @@ describe('SUMO browser assets', () => {
     const first = buildSumoRouteDocument(routes, profile);
     expect(first).toBe(buildSumoRouteDocument(routes, profile));
     expect(first).toContain('id="proxy-route"');
-    expect(first.match(/<vehicle /g)).toHaveLength(2);
+    expect(first.match(/<flow /g)).toHaveLength(1);
+    expect(first.match(/<vehicle /g)).toHaveLength(1);
+    expect(first).toContain('carFollowModel="EIDM"');
+    expect(first).toContain('laneChangeModel="SL2015"');
+    expect(first).toContain('begin="0.00"');
+    expect(first).toContain('depart="1.00"');
+    expect(first).toContain('period="40"');
+  });
+
+  it('ranks departures near the authored action while retaining deterministic fallback coverage', () => {
+    const network = `<net>
+      <edge id="far" shape="1000,1000 1010,1000"/>
+      <edge id="near" shape="10,20 20,20"/>
+      <edge id="mid" shape="200,200 220,200"/>
+    </net>`;
+    const transform = { translationX: 0, translationY: 0, rotationDegrees: 0, scale: 1, invertY: false };
+    const localized = localizeSumoRouteCandidates([['far'], ['near'], ['mid']], network, transform, { x: 16, z: 20 });
+    expect(localized.candidates).toEqual([['near'], ['mid'], ['far']]);
+    expect(localized.nearbyRouteStarts).toBe(2);
   });
 
   it('decodes packed browser state into editor coordinates', () => {

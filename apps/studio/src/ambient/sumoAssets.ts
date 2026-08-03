@@ -2,6 +2,7 @@ import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import type { ActorView } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
 import type { NetworkWorldTransform, TrafficNetworkPayload, TrafficStepResult } from '../playback/traffic-provider/protocol';
+import { toNetwork } from '../playback/traffic-provider/coordinateTransform';
 
 export const SUMO_RUNTIME_MODULE_URL = '/dev-assets/sumo-runtime/sumo.mjs';
 export const SUMO_RUNTIME_MANIFEST_URL = '/dev-assets/sumo-runtime/runtime-manifest.json';
@@ -28,12 +29,24 @@ export interface SumoRuntimeManifest {
 export interface LoadedSumoAssets {
   readonly payload: TrafficNetworkPayload;
   readonly runtime: SumoRuntimeManifest;
+  readonly demand: SumoDemandSummary;
+}
+
+export interface SumoDemandFocus { readonly x: number; readonly z: number }
+export interface SumoDemandSummary {
+  readonly requestedActors: number;
+  readonly selectedRoutes: number;
+  readonly focus: SumoDemandFocus | null;
+  readonly nearbyRouteStarts: number;
+  readonly replenishmentPeriodSeconds: number;
+  readonly warmupSeconds: number;
 }
 
 export async function loadSumoAssets(
   map: MapEntry,
   profile: ResolvedAmbientTrafficProfile,
   fetcher: typeof fetch = fetch,
+  focus: SumoDemandFocus | null = null,
 ): Promise<LoadedSumoAssets> {
   const [mapResponse, runtimeResponse] = await Promise.all([
     fetcher(map.sumoManifest),
@@ -50,7 +63,19 @@ export async function loadSumoAssets(
   if (!networkResponse.ok) throw new Error(`SUMO network is unavailable for ${map.label} (${networkResponse.status})`);
   const network = await networkResponse.arrayBuffer();
   if (network.byteLength === 0) throw new Error(`SUMO network is empty for ${map.label}`);
-  const routeDocument = buildSumoRouteDocument(manifest.routeCandidates, profile);
+  const localized = localizeSumoRouteCandidates(
+    manifest.routeCandidates,
+    new TextDecoder().decode(network),
+    manifest.worldFromNetwork,
+    focus,
+  );
+  // Keep a small deterministic choice pool around the focus. Shuffling this
+  // local pool provides route diversity without scattering demand map-wide.
+  const demandCandidates = focus
+    ? localized.candidates.slice(0, Math.min(localized.candidates.length, Math.max(profile.maxActors, profile.maxActors * 2)))
+    : localized.candidates;
+  const routeDocument = buildSumoRouteDocument(demandCandidates, profile);
+  const selectedRoutes = Math.max(0, Math.min(profile.maxActors, demandCandidates.length));
   return {
     payload: {
       network,
@@ -60,8 +85,21 @@ export async function loadSumoAssets(
       worldFromNetwork: manifest.worldFromNetwork,
     },
     runtime,
+    demand: {
+      requestedActors: profile.maxActors,
+      selectedRoutes,
+      focus,
+      nearbyRouteStarts: localized.nearbyRouteStarts,
+      replenishmentPeriodSeconds: SUMO_REPLENISHMENT_PERIOD_SECONDS,
+      warmupSeconds: SUMO_DEMAND_WARMUP_SECONDS,
+    },
   };
 }
+
+const SUMO_REPLENISHMENT_PERIOD_SECONDS = 40;
+export const SUMO_DEMAND_WARMUP_SECONDS = 1;
+const SUMO_DEPARTURE_WINDOW_SECONDS = SUMO_DEMAND_WARMUP_SECONDS;
+const SUMO_LOCAL_RADIUS_METERS = 300;
 
 export function buildSumoRouteDocument(
   candidates: readonly (readonly string[])[],
@@ -76,8 +114,18 @@ export function buildSumoRouteDocument(
   const sigma = (0.15 + aggression * 0.45).toFixed(2);
   const speedDev = clamp(profile.speedVariance, 0, 0.8).toFixed(2);
   const proxyEdges = candidates[0]!.map(xml).join(' ');
-  const vehicles = shuffled.slice(0, count).map((edges, index) =>
-    `  <vehicle id="sumo-${numericSeed(profile.seed).toString(16)}-${index}" type="ambient" depart="0" departLane="best" departPos="random_free" departSpeed="max"><route edges="${edges.map(xml).join(' ')}"/></vehicle>`,
+  // One long-lived flow per population slot keeps demand stable after short
+  // routes finish. The first departures are intentionally staggered: a real
+  // road does not receive its entire population in the same simulation tick.
+  const vehicles = shuffled.slice(0, count).map((edges, index) => {
+    const depart = count <= 1 ? 0 : index / (count - 1) * SUMO_DEPARTURE_WINDOW_SECONDS;
+    // Replenishing half the slots on a 40-second cadence offsets normal
+    // trip completion without doubling long-running routes. The other half
+    // are one-shot demand, keeping the population bounded at dense tiers.
+    return index % 2 === 0
+      ? `  <flow id="sumo-${numericSeed(profile.seed).toString(16)}-${index}" type="ambient" begin="${depart.toFixed(2)}" end="3600" period="${SUMO_REPLENISHMENT_PERIOD_SECONDS}" departLane="best" departPos="random_free" departSpeed="max"><route edges="${edges.map(xml).join(' ')}"/></flow>`
+      : `  <vehicle id="sumo-${numericSeed(profile.seed).toString(16)}-${index}" type="ambient" depart="${depart.toFixed(2)}" departLane="best" departPos="random_free" departSpeed="max"><route edges="${edges.map(xml).join(' ')}"/></vehicle>`;
+  }
   ).join('\n');
   return `<?xml version="1.0" encoding="UTF-8"?>
 <routes>
@@ -85,6 +133,47 @@ export function buildSumoRouteDocument(
   <route id="proxy-route" edges="${proxyEdges}"/>
 ${vehicles}
 </routes>`;
+}
+
+/**
+ * Prefer routes whose departure edge is close to the authored action/camera.
+ * This is intentionally an offline XML scan during provider initialization;
+ * no network conversion or route finding is moved onto the main frame loop.
+ */
+export function localizeSumoRouteCandidates(
+  candidates: readonly (readonly string[])[],
+  networkXml: string,
+  transform: NetworkWorldTransform,
+  focus: SumoDemandFocus | null,
+): { candidates: readonly (readonly string[])[]; nearbyRouteStarts: number } {
+  const geometry = parseEdgeGeometry(networkXml);
+  if (!focus) return { candidates, nearbyRouteStarts: 0 };
+  const networkFocus = toNetwork(focus.x, focus.z, transform);
+  const ranked = candidates.map((candidate, ordinal) => {
+    const point = geometry.centers.get(candidate[0] ?? '');
+    const distance = point ? Math.hypot(point.x - networkFocus.x, point.y - networkFocus.y) * transform.scale : Number.POSITIVE_INFINITY;
+    return { candidate, ordinal, distance };
+  }).sort((left, right) => left.distance - right.distance || left.ordinal - right.ordinal);
+  return {
+    candidates: ranked.map((item) => item.candidate),
+    nearbyRouteStarts: ranked.filter((item) => item.distance <= SUMO_LOCAL_RADIUS_METERS).length,
+  };
+}
+
+function parseEdgeGeometry(networkXml: string): { centers: Map<string, { x: number; y: number }> } {
+  const centers = new Map<string, { x: number; y: number }>();
+  const edgePattern = /<edge\b[^>]*\bid="([^"]+)"[^>]*\bshape="([^"]+)"[^>]*>/g;
+  for (const match of networkXml.matchAll(edgePattern)) {
+    if (match[1]!.startsWith(':')) continue;
+    const coordinates = match[2]!.trim().split(/\s+/).map((entry) => entry.split(',').map(Number));
+    const valid = coordinates.filter((point) => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    if (valid.length === 0) continue;
+    centers.set(match[1]!, {
+      x: valid.reduce((sum, point) => sum + point[0]!, 0) / valid.length,
+      y: valid.reduce((sum, point) => sum + point[1]!, 0) / valid.length,
+    });
+  }
+  return { centers };
 }
 
 export function decodeSumoActorViews(

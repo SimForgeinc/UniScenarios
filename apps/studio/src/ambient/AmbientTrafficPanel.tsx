@@ -82,7 +82,9 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
           <strong>{sumoStatus.phase === 'fallback' ? 'Native fallback' : `SUMO ${sumoStatus.phase}`}</strong>
           {sumoStatus.reason ? ` · ${sumoStatus.reason}` : null}
           {sumoStatus.phase !== 'fallback' ? <>
-            <div>{sumoStatus.actorCount} visible · {formatBytes(sumoStatus.heapBytes)} heap</div>
+            <div>{sumoStatus.actorCount}/{sumoStatus.requestedActorCount ?? sumoStatus.actorCount} active · {sumoStatus.nearbyRouteStarts ?? 0} local route starts · {formatBytes(sumoStatus.heapBytes)} heap</div>
+            <div>{sumoStatus.nearbyActorCount ?? 0} nearby · {sumoStatus.queuedActorCount ?? 0} queued · {sumoStatus.completedActorCount ?? 0} completed</div>
+            <div>{sumoStatus.emergencyStoppingActorCount ?? 0} emergency braking · safety counters {sumoStatus.detailedSafetyMetricsAvailable ? 'available' : 'not exposed'}</div>
             <div>{formatMs(sumoStatus.initMilliseconds)} init · {formatMs(sumoStatus.stepP95Milliseconds)} step p95</div>
           </> : null}
         </div> : null}

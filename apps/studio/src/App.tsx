@@ -708,6 +708,16 @@ export function App(): JSX.Element {
     }));
   }, [authoredPlayback, playbackController, playbackState?.time, state?.actors, studioSession.state.time]);
   const fallbackToNativeTraffic = useCallback((reason: string) => setSumoFallbackReason(reason), []);
+  const sumoDemandFocus = useMemo(() => {
+    if (state?.actors.length) {
+      return {
+        x: state.actors.reduce((sum, actor) => sum + actor.x, 0) / state.actors.length,
+        z: state.actors.reduce((sum, actor) => sum + actor.z, 0) / state.actors.length,
+      };
+    }
+    const target = viewer?.captureView().target;
+    return target ? { x: target[0], z: target[2] } : null;
+  }, [state?.actors, viewer]);
   const sumoStatus = useSumoTraffic({
     enabled: ambientTrafficProvider === 'sumo' && !sumoFallbackReason && playbackBundle === null,
     map,
@@ -717,6 +727,7 @@ export function App(): JSX.Element {
     mode: studioSession.state.mode,
     time: studioSession.state.time,
     externalActors: sumoExternalActors,
+    focus: sumoDemandFocus,
     onFallback: fallbackToNativeTraffic,
   });
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
