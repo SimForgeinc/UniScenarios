@@ -48,10 +48,51 @@ describe('StudioTransport', () => {
     const transport = new StudioTransport();
     transport.configure((time) => rendered.push(time), (time) => published.push(time));
     transport.play(0, 20);
+    expect(rendered).toEqual([0]);
+    expect(published).toEqual([0]);
     for (let time = 0; time <= 160; time += 16) clock.step(time);
     expect(rendered.length).toBeGreaterThan(8);
     expect(published.length).toBeLessThanOrEqual(4);
     expect(transport.counters.uiPublishes).toBe(published.length);
+  });
+
+  it('publishes t=0 synchronously and freezes at the streamed edge without jumping', () => {
+    const clock = clockHarness();
+    const rendered: number[] = [];
+    let available = 0;
+    const transport = new StudioTransport();
+    transport.configure((time) => rendered.push(time), () => undefined, () => available);
+    transport.play(0, 20);
+    expect(rendered).toEqual([0]);
+    clock.step(50);
+    clock.step(100);
+    expect(rendered.at(-1)).toBe(0);
+    expect(transport.counters).toMatchObject({ underruns: 1, underrunFrames: 2 });
+
+    // Slow-CPU fallback: once a 300 ms batch arrives, advance from the frozen
+    // edge rather than jumping to the old wall-clock position.
+    available = 0.3;
+    clock.step(150);
+    expect(rendered.at(-1)).toBeCloseTo(0.05);
+    clock.step(200);
+    expect(rendered.at(-1)).toBeCloseTo(0.1);
+  });
+
+  it('pause, resume, and cancellation preserve the streamed playhead', () => {
+    const clock = clockHarness();
+    const rendered: number[] = [];
+    const transport = new StudioTransport();
+    transport.configure((time) => rendered.push(time), () => undefined, () => 20);
+    transport.play(0, 20);
+    clock.step(100);
+    transport.pause();
+    clock.step(5_000);
+    expect(rendered.at(-1)).toBeCloseTo(0.1);
+    transport.play(rendered.at(-1)!, 20);
+    clock.step(5_100);
+    expect(rendered.at(-1)).toBeCloseTo(0.2);
+    transport.dispose();
+    expect(clock.frames.size).toBe(0);
   });
 
   it('uses monotonic wall time across jitter, seeks atomically, and ends once', () => {

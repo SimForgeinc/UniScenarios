@@ -107,7 +107,7 @@ describe('simplified editor settings UI', () => {
       'Right-drag pan speed', 'Wheel zoom speed', 'Keyboard movement speed', 'Keyboard turning speed',
     ]) expect(markup).toContain(label);
     expect(markup.match(/type="range"/g)).toHaveLength(7);
-    expect(markup.match(/>50%<\/output>/g)).toHaveLength(2);
+    expect(markup.match(/>40%<\/output>/g)).toHaveLength(2);
     expect(markup.match(/>100%<\/output>/g)).toHaveLength(5);
     expect(markup).toContain('data-testid="reset-camera-controls"');
     expect(markup).not.toContain('data-testid="camera-effective-sensitivities"');

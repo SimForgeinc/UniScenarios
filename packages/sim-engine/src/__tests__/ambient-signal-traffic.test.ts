@@ -33,6 +33,39 @@ function controlledActor(
 }
 
 describe('ambient signal traffic behavior', () => {
+  it('uses one deterministic stop-sign queue for ambient and authored default-route cars', () => {
+    const lead = vehicle(graph, {
+      id: 'ambient-lead', rsl: LANE_LEFT, s: 320, speedMps: 9, cruiseSpeedMps: 10,
+    });
+    const follow = vehicle(graph, {
+      id: 'authored-follow', rsl: LANE_LEFT, s: 302, speedMps: 9, cruiseSpeedMps: 10,
+    });
+    const input = scenario(graph, {
+      clipSeconds: 22,
+      warmupSeconds: 0,
+      dt: 0.05,
+      seed: 'shared-live-driver',
+      physics: { mode: 'dynamic-v1' },
+      actors: [{ ...lead, tags: ['ambient'] }, follow],
+      roadControls: [{
+        id: 'physical-stop-main', kind: 'stop', dwellS: 0.8,
+        stopLines: [{ rsl: LANE_LEFT, s: STOP_LINE_S, connectingLaneRsls: [LANE_LEFT_2] }],
+      }],
+    });
+    const first = runSimulation(input, { graph, guards: 'collect' }).trace;
+    const second = runSimulation(input, { graph, guards: 'collect' }).trace;
+    expect(JSON.stringify(second.ticks)).toBe(JSON.stringify(first.ticks));
+    const leadTrack = first.ticks.actors['ambient-lead']!;
+    const followTrack = first.ticks.actors['authored-follow']!;
+    const leadCross = leadTrack.x.findIndex((x) => x > STOP_LINE_S + 1);
+    const followCross = followTrack.x.findIndex((x) => x > STOP_LINE_S + 1);
+    expect(leadTrack.speedMps.some((speed, index) => speed < 0.05 && leadTrack.x[index]! < STOP_LINE_S)).toBe(true);
+    expect(followTrack.speedMps.some((speed, index) => speed < 0.05 && followTrack.x[index]! < STOP_LINE_S)).toBe(true);
+    expect(leadCross).toBeGreaterThan(0);
+    expect(followCross).toBeGreaterThan(leadCross);
+    expect(first.metrics.collisions).toEqual([]);
+  }, 20_000);
+
   it('stops behind a physical red stop line', () => {
     const trace = runSimulation(controlledActor([{ phase: 'red', durationS: 60 }]), { graph }).trace;
     const track = trace.ticks.actors['ambient-test-car']!;

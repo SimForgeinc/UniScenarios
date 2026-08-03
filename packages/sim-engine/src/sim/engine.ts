@@ -37,6 +37,7 @@ import {
   normalizeSimScenarioInput,
   resolvePhysicsConfig,
   isPedestrianLikeKind,
+  isRoadActorKind,
   type Interaction,
   type SimActor,
   type SimScenarioInput,
@@ -339,6 +340,7 @@ class Simulation {
       }
     }
 
+    this.hasAmbientTraffic = input.actors.some((actor) => actor.tags.includes('ambient'));
     for (const spec of [...input.actors].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       const rt = this.buildActor(spec);
       this.actors.push(rt);
@@ -382,8 +384,6 @@ class Simulation {
         } : {}),
       });
     }
-    this.hasAmbientTraffic = this.actors.some((actor) => actor.tags.includes('ambient'));
-
     for (const it of [...input.interactions].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       const tr = makeTriggerRuntime(it);
       this.triggers.push(tr);
@@ -463,6 +463,7 @@ class Simulation {
       tags: spec.tags,
       static: spec.static,
       rules,
+      driver: this.driverProfile(spec, rules.aggression),
       cruiseSpeedMps: 0,
       cruiseOverrideMps: spec.behavior.cruiseSpeedMps === undefined
         ? null
@@ -491,12 +492,60 @@ class Simulation {
     return rt;
   }
 
+  /** Seeded, actor-local variation used by the lightweight preview driver.
+   * It is independent of actor declaration order and never reads wall time. */
+  private driverProfile(spec: SimActor, aggression: number): NonNullable<ActorRuntime['driver']> {
+    if (!isRoadActorKind(spec.kind) || !this.hasAmbientTraffic) {
+      return {
+        naturalistic: false,
+        desiredSpeedFactor: 1, timeHeadwayS: 1, minimumGapM: 1,
+        accelScale: 1, comfortBrakeScale: 1, reactionTimeS: 0,
+        startDelayS: 0,
+      };
+    }
+    const random = this.rng.fork(`driver:${spec.id}`);
+    return {
+      naturalistic: true,
+      desiredSpeedFactor: random.range(0.9, 1.02) + aggression * 0.06,
+      timeHeadwayS: random.range(1.15, 1.75) - aggression * 0.35,
+      minimumGapM: random.range(2, 3),
+      accelScale: random.range(0.75, 1.05) + aggression * 0.1,
+      comfortBrakeScale: random.range(0.85, 1.1),
+      reactionTimeS: Math.max(0.25, random.range(0.4, 0.8) - aggression * 0.1),
+      startDelayS: random.range(0.25, 0.65),
+    };
+  }
+
   private speedLimitAt(a: ActorRuntime): number {
     const pose = a.route.poseAt(a.routeS);
     const factor = this.resolvedInput.operationalConditions.effects.trafficSpeedFactor;
     if (!pose.rsl) return (isPedestrianLikeKind(a.kind) ? 1.4 : 13.4) * factor;
     const g = this.graph.geometry(pose.rsl);
     return (g ? g.speedLimitMps : 13.4) * factor;
+  }
+
+  /** Preview-speed cap from upcoming route curvature. This is deliberately a
+   * small controller calculation, not a second trajectory planner: dynamic-v1
+   * still owns steering/yaw and the authored route remains authoritative. */
+  private curvatureSpeedCap(a: ActorRuntime, freeFlowMps: number): number {
+    if (this.physicsConfig.mode !== 'dynamic-v1' || a.route.isFreeform) return freeFlowMps;
+    const horizonEnd = a.routeS + 30;
+    const hasUpcomingTurn = a.route.legs.some((leg) => {
+      if (leg.sStart > horizonEnd) return false;
+      if (leg.sStart + leg.lengthM < a.routeS) return false;
+      return leg.turnRelation !== null && leg.turnRelation !== 'Straight';
+    });
+    if (!hasUpcomingTurn) return freeFlowMps;
+    const here = a.route.poseAt(a.routeS).headingRad;
+    let cap = freeFlowMps;
+    // Two look-ahead horizons catch both the connector itself and the braking
+    // approach without turning a 32-car preview into a route-resampling job.
+    for (const distanceM of [10, 22]) {
+      const ahead = a.route.poseAt(Math.min(a.route.lengthM, a.routeS + distanceM)).headingRad;
+      const curvature = Math.abs(normalizeAngle(ahead - here)) / distanceM;
+      if (curvature > 1e-4) cap = Math.min(cap, Math.sqrt(2.4 / curvature));
+    }
+    return Math.max(2.2, cap);
   }
 
   /* -------------------------------------------------------------- main loop */
@@ -1257,6 +1306,35 @@ class Simulation {
     return plans;
   }
 
+  /** All-way-stop arbitration: first complete arrival wins; actor id is the
+   * stable same-tick tie break. Only one movement enters during the short
+   * intersection-clearance window. */
+  private canReleaseStop(controlId: string, coordinationId: string, actorId: string, t: number): boolean {
+    const coordinatedControlIds = new Set(
+      this.signals.stopLines
+        .filter((line) => line.kind === 'stop' && line.coordinationId === coordinationId)
+        .map((line) => line.controlId),
+    );
+    for (const actor of this.actors) {
+      if (actor.id === actorId) continue;
+      for (const id of coordinatedControlIds) {
+        const state = actor.roadControlStates.get(id);
+        if (state?.releasedAtS !== null && state?.releasedAtS !== undefined && t - state.releasedAtS < 2.5) {
+          return false;
+        }
+      }
+    }
+    const waiting = this.actors
+      .flatMap((actor) => [...coordinatedControlIds].map((id) => ({ actor, id, state: actor.roadControlStates.get(id) })))
+      .filter((entry) => entry.state?.arrivedAtS !== null && entry.state?.arrivedAtS !== undefined && !entry.state.released)
+      .sort((a, b) =>
+        a.state!.arrivedAtS! - b.state!.arrivedAtS!
+        || a.actor.id.localeCompare(b.actor.id)
+        || a.id.localeCompare(b.id),
+      );
+    return waiting.length === 0 || (waiting[0]!.actor.id === actorId && waiting[0]!.id === controlId);
+  }
+
   private buildConflictSamples(): void {
     this.conflictSamples.clear();
     this.conflictCandidates.clear();
@@ -1377,7 +1455,7 @@ class Simulation {
     }
 
     const lim = limitsFor(a);
-    const limit = this.speedLimitAt(a);
+    const limit = this.curvatureSpeedCap(a, this.speedLimitAt(a));
 
     // Re-resolve dynamic longitudinal targets (match / gap follow a moving ref).
     if (a.longCmd?.kind === 'speed' && a.longCmd.speedTarget?.target.mode === 'match') {
@@ -1398,7 +1476,10 @@ class Simulation {
       leader: commandedLeader ?? nearestLeader,
     });
 
-    const stopLineDist = distanceToStopLine(a, this.signals, t, LOOKAHEAD_M, nearestLeader);
+    const stopLineDist = distanceToStopLine(
+      a, this.signals, t, LOOKAHEAD_M, nearestLeader,
+      (controlId, coordinationId, actorId, at) => this.canReleaseStop(controlId, coordinationId, actorId, at),
+    );
     const conflict = this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
@@ -1435,13 +1516,38 @@ class Simulation {
         previewHeadingRad: previewPose.headingRad,
       }, this.dt, frictionScale);
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
-      plan.speed = Math.max(0, result.state.longitudinalVelocityMps);
-      plan.accel = result.state.longitudinalAccelerationMps2;
-      plan.routeS = projected.s;
-      plan.lateralOffset = a.route.lateralOffsetAt(projected.s, {
+      const projectedOffset = a.route.lateralOffsetAt(projected.s, {
         x: result.state.x,
         y: result.state.y,
       });
+      const allowedCenterOffsetM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
+      if (a.tags.includes('ambient') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
+        // Never publish the first off-corridor integration. Hold the last valid
+        // map pose and retire this generated actor; a later population refresh
+        // may replace it from a new connected candidate. Authored off-road and
+        // wrong-way edge cases remain explicit opt-in intent.
+        plan.speed = 0;
+        plan.accel = -a.speedMps / this.dt;
+        plan.routeS = a.routeS;
+        plan.lateralOffset = a.lateralOffsetM;
+        plan.lateralRate = 0;
+        plan.position = a.position;
+        plan.heading = a.headingRad;
+        plan.retire = true;
+        this.events.push({
+          t,
+          kind: 'road_departure_prevented',
+          actorId: a.id,
+          laneRsl: a.route.poseAt(a.routeS).rsl,
+          lateralErrorM: Math.abs(projectedOffset),
+          allowedCenterOffsetM,
+        });
+        return plan;
+      }
+      plan.speed = Math.max(0, result.state.longitudinalVelocityMps);
+      plan.accel = result.state.longitudinalAccelerationMps2;
+      plan.routeS = projected.s;
+      plan.lateralOffset = projectedOffset;
       plan.lateralRate = result.state.lateralVelocityMps;
       plan.position = { x: result.state.x, y: result.state.y };
       plan.heading = result.state.yawRad;

@@ -3,7 +3,7 @@
 import { matchAnchorReport, normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
 import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
-import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
+import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
 import {
   buildLaneGraph,
   contentHash,
@@ -26,6 +26,7 @@ import {
   type SimScenarioInput,
   type SimResult,
   type SimTrace,
+  type FixedStepSimulationSession,
   type TopologyIndex,
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
@@ -35,7 +36,7 @@ import { selectPlayableSite } from './site-selection';
 import { withEditablePhysicsDefault } from './physics';
 import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from './staticMapColliders';
 import type { StaticColliderDiagnostics } from './staticMapColliders';
-import { initialLiveTickBudget, liveBatchTickBudget } from './liveSimulationPlan';
+import { initialLiveTickBudget, planLiveRefill } from './liveSimulationPlan';
 import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from './mapRuntime';
 
 export interface ScenarioWorkerMap {
@@ -78,7 +79,13 @@ export interface ScenarioWorkerStartRequest {
   readonly input: SimScenarioInput;
 }
 export interface ScenarioWorkerCancelRequest { readonly kind: 'cancel'; readonly id?: number }
-export interface ScenarioWorkerTransportRequest { readonly kind: 'transport'; readonly id: number; readonly playing: boolean }
+export interface ScenarioWorkerTransportRequest {
+  readonly kind: 'transport';
+  readonly id: number;
+  readonly playing: boolean;
+  /** Authoritative display playhead, including seeks. */
+  readonly time?: number;
+}
 export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest;
 
 export interface AmbientRobustnessSummary {
@@ -129,8 +136,18 @@ interface MapRuntime {
 const runtimesByAsset = new Map<string, Promise<MapRuntime>>();
 const runtimesByKey = new Map<string, MapRuntime>();
 const compiledWorlds = new Map<string, Promise<ScenarioWorkerResponse>>();
+// Interactive compilation already advances the canonical engine through
+// warmup to produce t=0. Hand that exact session to Play once, avoiding a
+// second warmup pass over all dynamic actors.
+const preparedLiveSessions = new Map<string, FixedStepSimulationSession>();
 let liveGeneration = 0;
-let transport: { id: number; playing: boolean; wake: (() => void) | null } | null = null;
+let transport: {
+  id: number;
+  playing: boolean;
+  playheadS: number;
+  wallStartedMs: number | null;
+  wake: (() => void) | null;
+} | null = null;
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -144,14 +161,21 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
   }
   if (request.kind === 'transport') {
     if (transport?.id !== request.id) return;
+    const now = performance.now();
+    if (typeof request.time === 'number') {
+      transport.playheadS = Math.max(0, request.time);
+    } else if (transport.playing && transport.wallStartedMs !== null) {
+      transport.playheadS += Math.max(0, now - transport.wallStartedMs) / 1000;
+    }
     transport.playing = request.playing;
+    transport.wallStartedMs = request.playing ? now : null;
     transport.wake?.();
     transport.wake = null;
     return;
   }
   if (request.kind === 'start') {
     const token = ++liveGeneration;
-    transport = { id: request.id, playing: false, wake: null };
+    transport = { id: request.id, playing: false, playheadS: 0, wallStartedMs: null, wake: null };
     void runLive(request, token).catch((reason: unknown) => postFailure(request.id, request.revision, reason));
     return;
   }
@@ -394,7 +418,8 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
       fetchText(map.xodr),
       fetchJson(map.signals),
     ]);
-    const topologyIndex = topology as TopologyIndex;
+    const signalCatalog = parseMapSignalCatalog(xodr, signals);
+    const topologyIndex = topologyWithMapSpeedLimits(topology as TopologyIndex, signalCatalog);
     const index = normalizeDerivedMapIndex(derived, {
       mapId: map.id,
       topology: topologyIndex as never,
@@ -408,7 +433,7 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
       topology: topologyIndex,
       index,
       graph,
-      signalCatalog: parseMapSignalCatalog(xodr, signals),
+      signalCatalog,
     };
     const controls = buildMapControlPlan(bundle);
     // Start exactly once and reuse the result for validation/export. This does
@@ -442,17 +467,33 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
 async function runLive(request: ScenarioWorkerStartRequest, token: number): Promise<void> {
   const runtime = runtimesByKey.get(request.runtimeKey);
   if (!runtime) throw new Error('The compiled map runtime is no longer available; compile this revision again.');
-  const simulation = createFixedStepSimulation(request.input, { graph: runtime.graph, guards: 'throw' });
-  let progress = simulation.advance(initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
+  const inputKey = contentHash(request.input);
+  const prepared = preparedLiveSessions.get(inputKey);
+  if (prepared) preparedLiveSessions.delete(inputKey);
+  const simulation = prepared ?? createFixedStepSimulation(request.input, { graph: runtime.graph, guards: 'throw' });
+  let progress = simulation.advance(prepared
+    ? 1
+    : initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
   postLive(request, progress.done ? 'complete' : 'ready', progress.trace, progress.recordedUntil ?? 0);
-  const batchTicks = liveBatchTickBudget(request.input.dt);
   while (!progress.done && token === liveGeneration) {
     await waitUntilPlaying(request.id, token);
-    await new Promise<void>((resolve) => setTimeout(resolve, 200));
     if (transport?.id === request.id && !transport.playing) continue;
     if (token !== liveGeneration) return;
-    progress = simulation.advance(batchTicks);
+    const activeTransport = transport;
+    if (!activeTransport || activeTransport.id !== request.id) return;
+    const playhead = activeTransport.playheadS + (activeTransport.wallStartedMs === null
+      ? 0
+      : Math.max(0, performance.now() - activeTransport.wallStartedMs) / 1000);
+    const refill = planLiveRefill(progress.recordedUntil ?? 0, playhead, request.input.dt);
+    if (refill.advanceTicks === 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, refill.waitMs));
+      continue;
+    }
+    progress = simulation.advance(refill.advanceTicks);
     postLive(request, progress.done ? 'complete' : 'progress', progress.trace, progress.recordedUntil ?? 0);
+    // Let cancellation, pause, and a newer document revision preempt long
+    // catch-up work without imposing a fixed delay on normal playback.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -496,6 +537,8 @@ function simulateForRequest(
   // Authoring needs the warmed t=0 world, not a speculative 20-second trace.
   // The same concrete input is handed to the live worker when Play is pressed.
   const progress = session.advance(Math.round(input.warmupSeconds / input.dt) + 1);
+  preparedLiveSessions.clear();
+  preparedLiveSessions.set(contentHash(input), session);
   return { trace: progress.trace, issues: progress.issues, arrival: progress.arrival };
 }
 
