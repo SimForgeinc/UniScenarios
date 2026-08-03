@@ -511,6 +511,25 @@
         "label": "Ambulance enters the refuge opposite the yielding focus vehicle"
       },
       {
+        "id": "ambulance-centers-for-junction",
+        "actor": "ambulance",
+        "verb": "laneOffset",
+        "trigger": {
+          "kind": "at",
+          "t": 17.8
+        },
+        "target": {
+          "tFrac": 0.3,
+          "reference": "lane_center"
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1.8
+        },
+        "label": "Ambulance recenters before entering the narrower junction connector"
+      },
+      {
         "id": "ambulance-passes",
         "actor": "ambulance",
         "verb": "speed",
@@ -627,6 +646,13 @@
       "authoredActorsExcludedFromTimeline": true
     },
     "studio.timeline.windows": [
+      {
+        "interactionId": "ambulance-centers-for-junction",
+        "actorId": "ambulance",
+        "startS": 17.8,
+        "endS": 19.6,
+        "dependent": false
+      },
       {
         "interactionId": "ambulance-enters-refuge",
         "actorId": "ambulance",

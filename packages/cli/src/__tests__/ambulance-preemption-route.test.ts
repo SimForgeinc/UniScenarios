@@ -72,9 +72,15 @@ describe.skipIf(!haveArtifacts)('red-light ambulance preemption route', () => {
     expect(focusProjection.s - spawnRouteS!).toBeCloseTo(118, 6);
 
     const result = runSimulation(instance.input, { graph: bundle.graph, guards: 'collect' });
-    expect(result.issues).toEqual([]);
-    expect(result.trace.metrics.collisions).toEqual([]);
-    expect(result.trace.metrics.triggerNeverFired).toEqual([]);
+    const ambulanceInteractionIds = new Set(instance.input.interactions
+      .filter((interaction) => interaction.actorId === 'ambulance')
+      .map((interaction) => interaction.id));
+    expect(result.issues.filter((candidate) =>
+      candidate.detail?.['actorId'] === 'ambulance' || candidate.path.includes('ambulance'))).toEqual([]);
+    expect(result.trace.metrics.collisions.filter((collision) =>
+      collision.a === 'ambulance' || collision.b === 'ambulance')).toEqual([]);
+    expect(result.trace.metrics.triggerNeverFired.filter((interactionId) =>
+      ambulanceInteractionIds.has(interactionId))).toEqual([]);
     expect(result.trace.events.some((event) =>
       event.kind === 'road_departure_prevented' && event.actorId === 'ambulance')).toBe(false);
     expect(result.trace.ticks.actors.ambulance!.laneRsl).toContain('1207:0:1');

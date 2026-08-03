@@ -3,7 +3,7 @@
   "version": 1,
   "manifest": {
     "instanceId": "ec-03-03-red-light-ambulance-preemption-v2#0",
-    "inputHash": "abcef57d4b847080cbce5b6282060635e4a21efe02ad01c868624a5b61c9b91c",
+    "inputHash": "e53b20eb4c9d134230a2ca3fbab3b99b93367d9d4312d5b851d739ba66f57a58",
     "replayKey": {
       "mapId": "yale-street",
       "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
@@ -349,6 +349,24 @@
       }
     ],
     "interactions": [
+      {
+        "id": "ambulance-centers-for-junction",
+        "actorId": "ambulance",
+        "trigger": {
+          "kind": "at",
+          "t": 17.8
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": 0.3
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1.8
+        }
+      },
       {
         "id": "ambulance-commits",
         "actorId": "ambulance",

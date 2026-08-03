@@ -12,17 +12,17 @@
     "kind": "instance",
     "mapId": "yale-street",
     "provider": "native",
-    "inputHash": "abcef57d4b847080cbce5b6282060635e4a21efe02ad01c868624a5b61c9b91c",
-    "traceDigest": "913b2a1e5613a551e3529b326dc5977ac6b827984fed75d8952761f54d11e4e7",
+    "inputHash": "e53b20eb4c9d134230a2ca3fbab3b99b93367d9d4312d5b851d739ba66f57a58",
+    "traceDigest": "4de7c66066ebdd3b034f78c630e71ab62d67af309f33915139498c474755c74a",
     "durationSeconds": 20,
     "sampleSeconds": 0.1
   },
   "compile": {
-    "milliseconds": 252.45625,
+    "milliseconds": 374.161375,
     "feasible": true,
     "manifest": {
       "instanceId": "ec-03-03-red-light-ambulance-preemption-v2#0",
-      "inputHash": "2a1679f767a6ea19010846ae629cf9f0423fe0db5ec499a304458df00d1c2833",
+      "inputHash": "e53b20eb4c9d134230a2ca3fbab3b99b93367d9d4312d5b851d739ba66f57a58",
       "replayKey": {
         "mapId": "yale-street",
         "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
@@ -83,9 +83,9 @@
     }
   },
   "performance": {
-    "nativeMilliseconds": 143.214333,
-    "nativeTicksPerSecond": 6989.523877,
-    "simulatedSecondsPerWallSecond": 139.650827,
+    "nativeMilliseconds": 156.421916,
+    "nativeTicksPerSecond": 6399.359026,
+    "simulatedSecondsPerWallSecond": 127.859321,
     "sumo": null
   },
   "summary": {
@@ -93,7 +93,7 @@
     "actorCount": 5,
     "ambientActorCount": 0,
     "signalCount": 0,
-    "interactionCount": 18,
+    "interactionCount": 19,
     "collisionCount": 0,
     "roadDepartureCount": 1,
     "neverFiredCount": 0,
@@ -106,12 +106,12 @@
           "laneRsl": "773:0:1"
         },
         "end": {
-          "x": 386.565429,
-          "z": -1810.379646,
+          "x": 385.581858,
+          "z": -1811.182135,
           "laneRsl": "1207:0:1"
         },
-        "displacementM": 135.058137,
-        "maxSpeedMps": 10.445381,
+        "displacementM": 134.994541,
+        "maxSpeedMps": 10.445397,
         "observedLanes": [
           "773:0:1",
           "95:3:1",
@@ -133,11 +133,11 @@
           "laneRsl": "57:0:1"
         },
         "end": {
-          "x": 395.878468,
-          "z": -1809.075534,
+          "x": 395.88666,
+          "z": -1809.082984,
           "laneRsl": "1221:0:1"
         },
-        "displacementM": 14.148883,
+        "displacementM": 14.146288,
         "maxSpeedMps": 9.444444,
         "observedLanes": [
           "57:0:1",
@@ -168,12 +168,12 @@
           "laneRsl": "93:0:1"
         },
         "end": {
-          "x": 393.060448,
-          "z": -1826.372191,
+          "x": 393.091381,
+          "z": -1826.323174,
           "laneRsl": "93:0:1"
         },
-        "displacementM": 3.676321,
-        "maxSpeedMps": 2.134941,
+        "displacementM": 3.684905,
+        "maxSpeedMps": 2.139167,
         "observedLanes": [
           "93:0:1"
         ]
@@ -197,6 +197,49 @@
     }
   },
   "interactions": [
+    {
+      "id": "ambulance-centers-for-junction",
+      "actorId": "ambulance",
+      "trigger": {
+        "kind": "at",
+        "t": 17.8
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": 0.3
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "time",
+        "value": 1.8
+      },
+      "events": [
+        {
+          "t": 17.8,
+          "kind": "trigger_fired",
+          "interactionId": "ambulance-centers-for-junction",
+          "actorId": "ambulance",
+          "verb": "laneOffset",
+          "forced": false
+        },
+        {
+          "t": 17.8,
+          "kind": "preemption",
+          "actorId": "ambulance",
+          "axis": "lateral",
+          "byInteractionId": "ambulance-centers-for-junction",
+          "preemptedInteractionId": "ambulance-enters-refuge"
+        },
+        {
+          "t": 20,
+          "kind": "interaction_aborted",
+          "interactionId": "ambulance-centers-for-junction",
+          "actorId": "ambulance",
+          "reason": "clip_end"
+        }
+      ]
+    },
     {
       "id": "ambulance-commits",
       "actorId": "ambulance",
@@ -245,6 +288,21 @@
           "actorId": "ambulance",
           "verb": "laneOffset",
           "forced": false
+        },
+        {
+          "t": 17.8,
+          "kind": "interaction_aborted",
+          "interactionId": "ambulance-enters-refuge",
+          "actorId": "ambulance",
+          "reason": "preempted"
+        },
+        {
+          "t": 17.8,
+          "kind": "preemption",
+          "actorId": "ambulance",
+          "axis": "lateral",
+          "byInteractionId": "ambulance-centers-for-junction",
+          "preemptedInteractionId": "ambulance-enters-refuge"
         }
       ]
     },
@@ -569,6 +627,13 @@
           "actorId": "focus-vehicle",
           "verb": "laneOffset",
           "forced": false
+        },
+        {
+          "t": 20,
+          "kind": "interaction_aborted",
+          "interactionId": "focus-vehicle-nudges-right",
+          "actorId": "focus-vehicle",
+          "reason": "clip_end"
         }
       ]
     },
@@ -703,7 +768,23 @@
     }
   ],
   "diagnostics": {
-    "issues": [],
+    "issues": [
+      {
+        "code": "lateral_duration_clamped",
+        "severity": "warning",
+        "path": "interactions.focus-vehicle-nudges-right.dynamics.value",
+        "reason": "requested 1.80 s lateral manoeuvre is infeasible for car; clamped to 1.96 s",
+        "detail": {
+          "actorId": "focus-vehicle",
+          "requestedDurationS": 1.8,
+          "effectiveDurationS": 1.9619669120632657,
+          "displacementM": -2.3401024038650617,
+          "lateralRateMaxMps": 2.5,
+          "lateralAccelMaxMps2": 3,
+          "lateralJerkMaxMps3": 6
+        }
+      }
+    ],
     "collisions": [],
     "roadDepartures": [
       {
@@ -711,7 +792,7 @@
         "kind": "road_departure_prevented",
         "actorId": "cross-traffic",
         "laneRsl": "1221:0:1",
-        "lateralErrorM": 0.20166480497836498,
+        "lateralErrorM": 0.2132754374637412,
         "allowedCenterOffsetM": 0.2
       }
     ],
@@ -742,6 +823,14 @@
         "axis": "longitudinal",
         "byInteractionId": "focus-vehicle-stops-pocket",
         "preemptedInteractionId": "focus-vehicle-creeps"
+      },
+      {
+        "t": 17.8,
+        "kind": "preemption",
+        "actorId": "ambulance",
+        "axis": "lateral",
+        "byInteractionId": "ambulance-centers-for-junction",
+        "preemptedInteractionId": "ambulance-enters-refuge"
       }
     ],
     "fallbacks": [],
@@ -779,7 +868,7 @@
           "93:0:1",
           "1207:0:1"
         ],
-        "routeDistanceM": 138.452172,
+        "routeDistanceM": 138.325545,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -811,7 +900,7 @@
           "57:0:1",
           "1221:0:1"
         ],
-        "routeDistanceM": 14.161704,
+        "routeDistanceM": 14.15967,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -856,7 +945,7 @@
         "observedLanes": [
           "93:0:1"
         ],
-        "routeDistanceM": 3.530075,
+        "routeDistanceM": 3.553956,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -890,7 +979,7 @@
   },
   "metrics": {
     "minTTC": {
-      "value": 4.732,
+      "value": 4.747,
       "t": 13.26,
       "pair": [
         "ambulance",
@@ -911,7 +1000,7 @@
           "cross-traffic",
           "focus-vehicle"
         ],
-        "minDistanceM": 14.539,
+        "minDistanceM": 14.531,
         "t": 1.8
       },
       {
@@ -919,13 +1008,13 @@
           "focus-vehicle",
           "pedestrian"
         ],
-        "minDistanceM": 32.098,
+        "minDistanceM": 32.08,
         "t": 20
       }
     ],
     "requiredDecelMax": {
-      "ambulance": 0.698,
-      "cross-traffic": 0.147,
+      "ambulance": 0.696,
+      "cross-traffic": 0.155,
       "downstream-queue": 0,
       "focus-vehicle": 0,
       "pedestrian": 0
