@@ -105,12 +105,24 @@ describe('duration-aware lateral manoeuvres', () => {
     const input = laneChange(3);
     input.actors[0]!.initial.speedMps = 0;
     input.actors[0]!.behavior.cruiseSpeedMps = 0;
+    input.interactions[0] = {
+      ...input.interactions[0]!,
+      until: { kind: 'speed', actorId: 'ego', cmp: 'gte', value: 1 },
+    };
+    input.interactions.push({
+      id: 'accelerate-after-abort', actorId: 'ego', trigger: { kind: 'at', t: 8 },
+      verb: 'speed', target: { mode: 'absolute', value: 4 },
+      dynamics: { shape: 'linear', constraint: 'time', value: 0.5 },
+    });
     const { trace, issues } = runSimulation(input, { graph, guards: 'collect' });
     expect(trace.events).toContainEqual(expect.objectContaining({
       kind: 'interaction_aborted', interactionId: 'lane-3', reason: 'tracking_error',
     }));
     expect(issues).toContainEqual(expect.objectContaining({ code: 'lateral_tracking_failed' }));
     expect(trace.events).not.toContainEqual(expect.objectContaining({ kind: 'lane_change' }));
+    expect(trace.events).not.toContainEqual(expect.objectContaining({
+      kind: 'released', interactionId: 'lane-3', reason: 'until',
+    }));
   });
 
   it('rejects a multi-lane count atomically when the final neighbour is missing', () => {

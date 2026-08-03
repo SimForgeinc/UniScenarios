@@ -2039,6 +2039,8 @@ class Simulation {
           },
           'warning',
         ));
+        const untilOwner = a.untilByAxis.get('lateral');
+        if (untilOwner?.interactionId === cmd.interactionId) a.untilByAxis.delete('lateral');
         a.latCmd = null;
         a.lateralReferenceOffsetM = a.lateralRestOffsetM ?? a.lateralOffsetM;
         a.lateralReferenceRateMps = 0;
