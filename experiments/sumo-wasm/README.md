@@ -191,7 +191,10 @@ so visible lamps and vehicle right-of-way still share one authority and every
 preview can show red-to-green queue release. Run the quantitative acceptance
 check after building with `signal-queue-smoke.mjs <sumo.mjs> <map.net.xml>
 <sumo-network-manifest.json>`. A future authored-program payload should replace
-this documented fallback.
+this documented fallback. On Yale with 64 route candidates, the 20-second check
+observed 69 controlled-link red-to-green transitions, 28 approach-local queue
+releases, and a best queue of five vehicles where all five resumed; worker step
+p95 was 4.134 ms.
 
 Rich pedestrian crossing behavior, semantic construction-lane closure,
 cut-in negotiation, and highway-merge acceptance need dedicated scenario

@@ -116,12 +116,23 @@ function linkStates(sumo) {
 
 function fitCycles(xml, target) {
   return xml.replace(/(<tlLogic\b[^>]*>)([\s\S]*?)(<\/tlLogic>)/g, (whole, open, body, close) => {
-    const durations = [...body.matchAll(/<phase\b[^>]*duration="([\d.]+)"[^>]*>/g)].map((match) => Number(match[1]));
-    const total = durations.reduce((sum, value) => sum + value, 0);
-    if (durations.length < 2 || total <= target) return whole;
+    const phases = [...body.matchAll(/<phase\b([^>]*)\/?\s*>/g)].map((match) => ({
+      duration: Number(attribute(match[1], 'duration')),
+      state: attribute(match[1], 'state') ?? '',
+    }));
+    const total = phases.reduce((sum, phase) => sum + phase.duration, 0);
+    if (phases.length < 2 || total <= target) return whole;
+    const clearance = phases.map((phase) => phase.state.match(/[yY]/) ? 2 : /^[rso]+$/i.test(phase.state) ? 1 : 0);
+    const active = phases.map((phase, index) => clearance[index] === 0 ? phase.duration : 0);
+    const activeTotal = active.reduce((sum, value) => sum + value, 0);
+    const remaining = target - clearance.reduce((sum, value) => sum + value, 0);
+    if (activeTotal <= 0 || remaining < active.filter((value) => value > 0).length * 2) return whole;
     let index = 0;
-    return open + body.replace(/(<phase\b[^>]*duration=")[\d.]+("[^>]*>)/g, (_phase, before, after) =>
-      `${before}${(durations[index++] / total * target).toFixed(3)}${after}`) + close;
+    return open + body.replace(/(<phase\b[^>]*duration=")[\d.]+("[^>]*>)/g, (_phase, before, after) => {
+      const duration = clearance[index] || remaining * active[index] / activeTotal;
+      index += 1;
+      return `${before}${duration.toFixed(2)}${after}`;
+    }) + close;
   });
 }
 
