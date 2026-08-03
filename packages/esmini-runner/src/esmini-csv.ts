@@ -17,7 +17,8 @@ export interface ParseEsminiCsvOptions {
 export type EsminiCsvIssueCode =
   | 'malformed-csv' | 'missing-metadata' | 'version-mismatch' | 'missing-header'
   | 'missing-column' | 'row-width' | 'invalid-number' | 'entity-identity-changed'
-  | 'duplicate-entity' | 'duplicate-sample' | 'nonmonotonic-sample' | 'truncated-clip';
+  | 'duplicate-entity' | 'duplicate-sample' | 'nonmonotonic-sample' | 'truncated-clip'
+  | 'malformed-collision-ids' | 'unknown-collision-target';
 
 export interface EsminiCsvIssue {
   readonly code: EsminiCsvIssueCode;
@@ -122,6 +123,22 @@ function finite(raw: string | undefined, row: number, column: string, issues: Es
   return parsed;
 }
 
+function collisionIds(raw: string | undefined, row: number, issues: EsminiCsvIssue[]): string[] {
+  const value = raw?.trim() ?? '';
+  if (value === '') return [];
+  // esmini 3.6 emits a whitespace-delimited list of signed numeric entity IDs.
+  // A permissive digit search would turn corrupt values such as `actor=7?`
+  // into apparently authoritative contact evidence.
+  if (!/^-?\d+(?:\s+-?\d+)*$/u.test(value)) {
+    issues.push({
+      code: 'malformed-collision-ids', row, column: 'collision_ids',
+      message: `Row ${row}: collision_ids must be a whitespace-delimited list of numeric entity IDs`,
+    });
+    return [];
+  }
+  return value.split(/\s+/u);
+}
+
 /** Strict adapter for the horizontal entity-group format emitted by esmini 3.6.0 `--csv_logger`. */
 export function parseEsminiCsv(csv: string, options: ParseEsminiCsvOptions): RawExternalTrace {
   const rows = parseCsvRows(csv);
@@ -216,7 +233,7 @@ export function parseEsminiCsv(csv: string, options: ParseEsminiCsvOptions): Raw
         laneId, s: s!, offsetM: offsetM!, present: true,
       });
       tracks.set(actorId, track);
-      for (const targetNumericId of (read(row, group, 'collision_ids') ?? '').match(/-?\d+/gu) ?? []) {
+      for (const targetNumericId of collisionIds(read(row, group, 'collision_ids'), rowNumber, issues)) {
         if (targetNumericId !== numericId) collisionRows.push({ t, source: actorId, targetNumericId });
       }
     }
@@ -238,13 +255,21 @@ export function parseEsminiCsv(csv: string, options: ParseEsminiCsvOptions): Raw
   const seenPairs = new Set<string>();
   for (const collision of collisionRows.sort((a, b) => a.t - b.t)) {
     const target = numericToActor.get(collision.targetNumericId);
-    if (!target || target === collision.source) continue;
+    if (!target) {
+      issues.push({
+        code: 'unknown-collision-target', column: 'collision_ids',
+        message: `Collision from ${collision.source} references unknown numeric entity ${collision.targetNumericId} at t=${collision.t}`,
+      });
+      continue;
+    }
+    if (target === collision.source) continue;
     const actorIds = [collision.source, target].sort() as [string, string];
     const key = actorIds.join('\0');
     if (seenPairs.has(key)) continue;
     seenPairs.add(key);
     collisions.push({ t: collision.t, actorIds });
   }
+  if (issues.length > 0) throw new EsminiCsvParseError(issues);
   return {
     format: 'esmini-csv-3.6.0', simulator: { name: 'esmini', version: version! },
     frameTransform: options.frameTransform ?? { translationM: [0, 0, 0], rotationRad: 0 },

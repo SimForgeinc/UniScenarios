@@ -24,12 +24,14 @@ function fixture(options: {
   malformedLastRow?: boolean;
   headerMutator?: (header: string) => string;
   ax?: number;
+  firstCollision?: string;
+  secondCollision?: string;
 } = {}): string {
   const groups = [1, 2].flatMap((ordinal) => FIELDS.map((field) => `#${ordinal} ${field}`));
   const header = options.headerMutator?.(`Index [-], TimeStamp [s], ${groups.join(', ')},`) ?? `Index [-], TimeStamp [s], ${groups.join(', ')},`;
   const times = options.times ?? [0, 20];
   const data = times.map((t, index) => {
-    const row = `${index}, ${t.toFixed(6)}, ${actor('actor_test_car', 0, t * 5, { collisions: index === times.length - 1 ? '1' : '', ax: options.ax })}, ${actor(index === 1 && options.secondRowName ? options.secondRowName : 'other_car', 1, 10 + t * 5, { collisions: index === times.length - 1 ? '0' : '' })},`;
+    const row = `${index}, ${t.toFixed(6)}, ${actor('actor_test_car', 0, t * 5, { collisions: index === times.length - 1 ? (options.firstCollision ?? '1') : '', ax: options.ax })}, ${actor(index === 1 && options.secondRowName ? options.secondRowName : 'other_car', 1, 10 + t * 5, { collisions: index === times.length - 1 ? (options.secondCollision ?? '0') : '' })},`;
     return options.malformedLastRow && index === times.length - 1 ? row.split(',').slice(0, -5).join(',') : row;
   });
   return [
@@ -93,5 +95,15 @@ describe('parseEsminiCsv', () => {
   it('rejects malformed quoted CSV and wrong pinned versions', () => {
     expect(issueCodes(() => parseEsminiCsv(`${fixture()}\n"unfinished`, { durationS: 20 }))).toContain('malformed-csv');
     expect(issueCodes(() => parseEsminiCsv(fixture().replaceAll('3.6.0', '3.7.0'), { durationS: 20 }))).toContain('version-mismatch');
+  });
+
+  it('fails closed on malformed collision fields instead of extracting incidental digits', () => {
+    expect(issueCodes(() => parseEsminiCsv(fixture({ firstCollision: 'actor=1?' }), { durationS: 20 })))
+      .toContain('malformed-collision-ids');
+  });
+
+  it('fails closed when collision evidence references an unknown external entity', () => {
+    expect(issueCodes(() => parseEsminiCsv(fixture({ firstCollision: '7' }), { durationS: 20 })))
+      .toContain('unknown-collision-target');
   });
 });

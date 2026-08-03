@@ -18,12 +18,13 @@ if (!binaryArg || !sourceXodrArg) {
 const binary = path.resolve(binaryArg);
 const sourceXodr = path.resolve(sourceXodrArg);
 const expectedXodrSha256 = 'af763016da63ab2f072e8a6d340bd0136b77c34eb9d6ea7b62db728e07430b5b';
+const sha256 = (value: string | Uint8Array): string => createHash('sha256').update(value).digest('hex');
 
 await createVerifiedMacOsLocalExecutor(binary);
 const root = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-esmini-capability-'));
 const xodr = path.join(root, 'straight_500m.xodr');
 const sourceXodrBytes = await readFile(sourceXodr);
-const sourceXodrSha256 = createHash('sha256').update(sourceXodrBytes).digest('hex');
+const sourceXodrSha256 = sha256(sourceXodrBytes);
 if (sourceXodrSha256 !== expectedXodrSha256) {
   throw new Error(`Pinned straight_500m.xodr digest mismatch: expected ${expectedXodrSha256}, got ${sourceXodrSha256}`);
 }
@@ -97,6 +98,7 @@ const execution = await new Promise<{ code: number | null; stdout: string; stder
 if (execution.code !== 0) throw new Error(`esmini exited ${execution.code}: ${execution.stderr || execution.stdout}`);
 
 const csvText = await readFile(csv, 'utf8');
+const normalizedCsv = csvText.replace(/^Scenario File Name:.*$/mu, 'Scenario File Name: collision.xosc');
 const parsed = parseEsminiCsv(csvText, {
   durationS: input.clipSeconds,
   expectedVersion: '3.6.0',
@@ -136,12 +138,58 @@ if (csvSignalFields.length > 0) {
   throw new Error(`Unexpected signal evidence fields require a reviewed adapter: ${csvSignalFields.join(', ')}`);
 }
 
+const digests = {
+  binarySha256: sha256(await readFile(binary)),
+  inputSha256: sha256(JSON.stringify(input)),
+  scenarioSha256: sha256(exported.content),
+  normalizedOutputCsvSha256: sha256(normalizedCsv),
+};
+const receipt = {
+  schema: 'uniscenarios.esmini-collision-receipt/v1',
+  recordedDate: '2026-08-03',
+  runner: {
+    tag: 'v3.6.0',
+    sourceRevision: '131a5651737fd1e8bd5d800d8e77e89bb3178a1e',
+    binarySha256: digests.binarySha256,
+  },
+  fixture: {
+    xodrSha256: sourceXodrSha256,
+    inputSha256: digests.inputSha256,
+    scenarioSha256: digests.scenarioSha256,
+    normalizedOutputCsvSha256: digests.normalizedOutputCsvSha256,
+  },
+  execution: { durationS: input.clipSeconds, fixedTimestepS: input.dt, externalExitCode: execution.code },
+  collision: {
+    pair: collision.pair,
+    canonicalOnsetS: collision.canonicalT,
+    externalOnsetS: collision.externalT,
+    onsetErrorS: collision.onsetErrorS,
+    toleranceS: input.dt,
+    outcome: 'contact-present',
+  },
+  comparison: {
+    verdict: comparison.verdict,
+    actorCount: comparison.actorMetrics.length,
+    positionP95M: comparison.globalMetrics.xyM.p95,
+    headingP95Deg: comparison.globalMetrics.headingRad.p95 * 180 / Math.PI,
+    speedP95Mps: comparison.globalMetrics.speedMps.p95,
+    laneRslAgreement: comparison.actorMetrics.map((actor) => ({ actorId: actor.actorId, agreement: actor.laneRslAgreement })),
+  },
+  unobservable: { trafficSignalEdges: true, signalCausedStopLineBehavior: true, nativeOpenScenario14: true },
+};
+const pinnedReceipt = JSON.parse(await readFile(new URL('../evidence/esmini-3.6.0-collision-receipt.json', import.meta.url), 'utf8')) as unknown;
+if (JSON.stringify(pinnedReceipt) !== JSON.stringify(receipt)) {
+  throw new Error(`Pinned collision receipt does not reproduce:\n${JSON.stringify(receipt, null, 2)}`);
+}
+
 const report = {
   schema: 'uniscenarios.real-esmini-capability-probe/v1',
   runner: externalRaw.simulator,
   runnerBinaryVerified: true,
   sourceRevision: '131a5651737fd1e8bd5d800d8e77e89bb3178a1e',
   sourceXodrSha256,
+  digests,
+  receiptVerified: true,
   externalExitCode: execution.code,
   outputDirectory: root,
   collision: {

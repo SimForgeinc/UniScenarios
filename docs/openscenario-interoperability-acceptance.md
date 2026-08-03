@@ -104,5 +104,16 @@ macOS universal binary at source revision
 20.000-second trajectory at 0.02-second steps and passed the strict comparator:
 position RMSE `0.0000002083 m`, p95 `0.0000004557 m`, max `0.0000004991 m`,
 heading p95 `0°`, speed p95 `0.03034 m/s`, and 100% presence agreement. That
-one-actor smoke had no signal or collision edges; signal/collision fixtures are
-still required before claiming those external dimensions.
+one-actor smoke had no signal or collision edges.
+
+The pinned two-actor collision capability fixture has now also executed against
+that same verified binary and passed. Its committed receipt is reproduced by
+`run-pinned-capability-probe.ts`: canonical contact began at
+`1.3196458789 s`, esmini reported `1.3200000000 s`, and the
+`0.0003541211 s` error is within one `0.02 s` fixed step. Both actor lanes
+agreed for the full trace and the strict comparator passed. The receipt closes
+over the binary, OpenDRIVE, parsed input, generated scenario, and normalized
+external CSV digests. Traffic-signal identity/state edges and signal-caused
+stop-line behavior remain unobservable in esmini 3.6.0's CSV and therefore
+fail closed; baked stopping motion is not accepted as evidence of signal
+causality. Native OpenSCENARIO 1.4 remains unsupported by this player.
