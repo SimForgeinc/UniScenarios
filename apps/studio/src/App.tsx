@@ -313,14 +313,14 @@ export function App(): JSX.Element {
   // authored vehicles informative while materialization is in flight.
   useEffect(() => {
     if (!viewer) return;
-    const renderer = new VehicleRouteOverlayRenderer();
+    const renderer = new VehicleRouteOverlayRenderer(overlays?.sampleHeight);
     viewer.scene.add(renderer.group);
     routeOverlayRenderer.current = renderer;
     return () => {
       if (routeOverlayRenderer.current === renderer) routeOverlayRenderer.current = null;
       renderer.dispose();
     };
-  }, [viewer]);
+  }, [overlays, viewer]);
 
   // Older portable Gallery saves intentionally contain no scene-absolute
   // poses. Recover their immutable checked-in evidence by catalog identity and

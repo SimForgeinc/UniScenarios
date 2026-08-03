@@ -356,8 +356,6 @@ export function buildSeededPlacementRoute(
     downstreamM: number,
     visited: ReadonlySet<string>,
   ): { lanes: LaneRsl[]; downstreamM: number } | null => {
-    if (downstreamM >= required) return { lanes, downstreamM };
-    if (lanes.length >= maxLegs) return null;
     const candidates = graph.successors(current)
       .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === 'driving')
       .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
@@ -366,6 +364,11 @@ export function buildSeededPlacementRoute(
         const bh = stableRouteHash(`${options.seed}|${options.actorId}|${routeDirectedKey(current)}|${routeDirectedKey(b)}`);
         return ah - bh || routeDirectedKey(a).localeCompare(routeDirectedKey(b));
       });
+    // A long starting lane can satisfy the distance requirement by itself, but
+    // a route ending there provides no visible authored choice. Prefer one
+    // connected continuation whenever one exists. Terminal roads remain valid.
+    if (downstreamM >= required && (lanes.length > 1 || candidates.length === 0)) return { lanes, downstreamM };
+    if (lanes.length >= maxLegs) return null;
     for (const next of candidates) {
       const nextVisited = new Set(visited);
       nextVisited.add(routeDirectedKey(next));
