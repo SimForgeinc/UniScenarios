@@ -3,6 +3,8 @@ export interface StudioTransportCounters {
   readonly uiPublishes: number;
   readonly starts: number;
   readonly cancelledFrames: number;
+  readonly underruns: number;
+  readonly underrunFrames: number;
 }
 
 /**
@@ -19,19 +21,24 @@ export class StudioTransport {
   private lastPublish = -Infinity;
   private renderFrame: (time: number) => void = () => undefined;
   private publishTime: (time: number) => void = () => undefined;
+  private playableUntil: () => number = () => Infinity;
   private frames = 0;
   private uiPublishes = 0;
   private starts = 0;
   private cancelledFrames = 0;
+  private underruns = 0;
+  private underrunFrames = 0;
+  private underrunning = false;
 
   get counters(): StudioTransportCounters {
-    return { frames: this.frames, uiPublishes: this.uiPublishes, starts: this.starts, cancelledFrames: this.cancelledFrames };
+    return { frames: this.frames, uiPublishes: this.uiPublishes, starts: this.starts, cancelledFrames: this.cancelledFrames, underruns: this.underruns, underrunFrames: this.underrunFrames };
   }
   get active(): boolean { return this.running; }
 
-  configure(renderFrame: (time: number) => void, publishTime: (time: number) => void): void {
+  configure(renderFrame: (time: number) => void, publishTime: (time: number) => void, playableUntil: () => number = () => Infinity): void {
     this.renderFrame = renderFrame;
     this.publishTime = publishTime;
+    this.playableUntil = playableUntil;
   }
 
   play(time: number, duration: number): void {
@@ -42,12 +49,18 @@ export class StudioTransport {
     this.wallStart = performance.now();
     this.lastPublish = -Infinity;
     this.starts++;
+    // The compiled world already contains t=0. Hand it to the renderer and UI
+    // in the initiating turn instead of waiting for a worker lead and a RAF.
+    this.renderFrame(this.traceStart);
+    this.publishTime(this.traceStart);
+    this.uiPublishes++;
     this.raf = requestAnimationFrame(this.tick);
   }
 
   pause(): void {
     if (!this.running && !this.raf) return;
     this.running = false;
+    this.underrunning = false;
     if (this.raf) {
       cancelAnimationFrame(this.raf);
       this.cancelledFrames++;
@@ -67,7 +80,19 @@ export class StudioTransport {
 
   private tick = (now: number): void => {
     if (!this.running) return;
-    const time = Math.min(this.duration, this.traceStart + Math.max(0, now - this.wallStart) / 1000);
+    const desired = Math.min(this.duration, this.traceStart + Math.max(0, now - this.wallStart) / 1000);
+    const time = Math.min(desired, this.playableUntil());
+    if (time + 1e-9 < desired) {
+      this.underrunFrames++;
+      if (!this.underrunning) this.underruns++;
+      this.underrunning = true;
+      // Freeze the one authoritative playhead at the recorded edge. Rebasing
+      // prevents a slow producer from causing a jump when data arrives.
+      this.traceStart = time;
+      this.wallStart = now;
+    } else {
+      this.underrunning = false;
+    }
     this.renderFrame(time);
     this.frames++;
     // 20 Hz is responsive for text/scrubbers and avoids per-frame app renders.

@@ -5,12 +5,21 @@ import { parsePlaybackPair, type PlaybackBundle } from './model';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
 import { RevisionGate } from './mapRuntime';
+import { LIVE_DEMAND_QUANTUM_SECONDS, liveDemandUntil } from './liveSimulationPlan';
+
+export interface LivePlaybackCounters {
+  readonly startupMs: number | null;
+  readonly progressMessages: number;
+  readonly demandMessages: number;
+}
 
 export interface LivePlaybackRun {
   readonly bundle: PlaybackBundle;
   readonly completion: Promise<PlaybackBundle>;
   recordedUntil(): number;
   setPlaying(playing: boolean): void;
+  updatePlayhead(time: number): void;
+  counters(): LivePlaybackCounters;
 }
 
 interface PendingRequest {
@@ -109,30 +118,40 @@ export class ScenarioWorkerClient {
     });
   }
 
-  start(base: PlaybackBundle, _map: MapEntry): Promise<LivePlaybackRun> {
+  start(base: PlaybackBundle, _map: MapEntry): LivePlaybackRun {
     this.cancelLive();
     const worker = this.ensureWorker();
     const id = ++this.sequence;
     const revision = contentHash(base.instance.input);
     const runtimeKey = this.runtimeByInput.get(revision);
-    if (!runtimeKey) return Promise.reject(new Error('This world was not compiled by the active map runtime.'));
+    if (!runtimeKey) throw new Error('This world was not compiled by the active map runtime.');
     this.activeLive = id;
-    let liveBundle: PlaybackBundle | null = null;
-    let available = 0;
+    const startedAt = performance.now();
+    let startupMs: number | null = null;
+    let progressMessages = 0;
+    let demandMessages = 0;
+    let lastDemand = -Infinity;
+    let available = base.trace.ticks.t.at(-1) ?? 0;
+    const liveBundle: PlaybackBundle = { ...base, endTime: base.instance.input.clipSeconds };
     let resolveCompletion!: (bundle: PlaybackBundle) => void;
     let rejectCompletion!: (reason: Error) => void;
     const completion = new Promise<PlaybackBundle>((resolve, reject) => {
       resolveCompletion = resolve;
       rejectCompletion = reject;
     });
-    return new Promise((resolve, reject) => {
-      this.pending.set(id, { revision, reject, onMessage: (message) => {
+    const demand = (time: number): void => {
+      const until = liveDemandUntil(time, base.instance.input.clipSeconds);
+      if (until < lastDemand + LIVE_DEMAND_QUANTUM_SECONDS - 1e-9) return;
+      lastDemand = until;
+      demandMessages++;
+      worker.postMessage({ kind: 'demand', id, until });
+    };
+    this.pending.set(id, { revision, reject: rejectCompletion, onMessage: (message) => {
         if (message.revision !== revision) return;
         if (!message.ok) {
           const error = new Error(message.error);
           this.pending.delete(id);
-          reject(error);
-          if (liveBundle) rejectCompletion(error);
+          rejectCompletion(error);
           return;
         }
         if (message.kind !== 'ready' && message.kind !== 'progress' && message.kind !== 'complete') return;
@@ -140,32 +159,27 @@ export class ScenarioWorkerClient {
           instanceName: 'live authored scenario', traceName: 'live fixed-step simulation',
         });
         available = message.recordedUntil;
-        if (!liveBundle) {
-          liveBundle = {
-            ...parsed,
-            endTime: base.instance.input.clipSeconds,
-            ambientTraffic: base.ambientTraffic,
-            mapCollisions: base.mapCollisions,
-          };
-          resolve({
-            bundle: liveBundle,
-            completion,
-            recordedUntil: () => available,
-            setPlaying: (playing) => worker.postMessage({ kind: 'transport', id, playing }),
-          });
-          const pending = this.pending.get(id);
-          if (pending) pending.reject = rejectCompletion;
-        } else {
-          (liveBundle as { trace: PlaybackBundle['trace'] }).trace = parsed.trace;
-        }
+        progressMessages++;
+        if (startupMs === null) startupMs = performance.now() - startedAt;
+        (liveBundle as { trace: PlaybackBundle['trace'] }).trace = parsed.trace;
         if (message.kind === 'complete') {
           this.pending.delete(id);
           if (this.activeLive === id) this.activeLive = null;
           resolveCompletion(liveBundle);
         }
       }});
-      worker.postMessage({ kind: 'start', id, revision, runtimeKey, input: base.instance.input } satisfies ScenarioWorkerStartRequest);
-    });
+    worker.postMessage({ kind: 'start', id, revision, runtimeKey, input: base.instance.input } satisfies ScenarioWorkerStartRequest);
+    return {
+      bundle: liveBundle,
+      completion,
+      recordedUntil: () => available,
+      setPlaying: (playing) => {
+        worker.postMessage({ kind: 'transport', id, playing });
+        if (playing) demand(available);
+      },
+      updatePlayhead: demand,
+      counters: () => ({ startupMs, progressMessages, demandMessages }),
+    };
   }
 
   cancel(): void {

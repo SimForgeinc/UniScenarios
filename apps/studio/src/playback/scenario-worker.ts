@@ -26,6 +26,7 @@ import {
   type SimScenarioInput,
   type SimResult,
   type SimTrace,
+  type FixedStepSimulationSession,
   type TopologyIndex,
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
@@ -79,7 +80,8 @@ export interface ScenarioWorkerStartRequest {
 }
 export interface ScenarioWorkerCancelRequest { readonly kind: 'cancel'; readonly id?: number }
 export interface ScenarioWorkerTransportRequest { readonly kind: 'transport'; readonly id: number; readonly playing: boolean }
-export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest;
+export interface ScenarioWorkerDemandRequest { readonly kind: 'demand'; readonly id: number; readonly until: number }
+export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest | ScenarioWorkerDemandRequest;
 
 export interface AmbientRobustnessSummary {
   readonly version: 1;
@@ -129,8 +131,12 @@ interface MapRuntime {
 const runtimesByAsset = new Map<string, Promise<MapRuntime>>();
 const runtimesByKey = new Map<string, MapRuntime>();
 const compiledWorlds = new Map<string, Promise<ScenarioWorkerResponse>>();
+// Interactive compilation already advances the canonical engine through
+// warmup to produce t=0. Hand that exact session to Play once, avoiding a
+// second warmup pass over all dynamic actors.
+const preparedLiveSessions = new Map<string, FixedStepSimulationSession>();
 let liveGeneration = 0;
-let transport: { id: number; playing: boolean; wake: (() => void) | null } | null = null;
+let transport: { id: number; playing: boolean; demandUntil: number; wake: (() => void) | null } | null = null;
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -149,9 +155,16 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
     transport.wake = null;
     return;
   }
+  if (request.kind === 'demand') {
+    if (transport?.id !== request.id) return;
+    transport.demandUntil = Math.max(transport.demandUntil, request.until);
+    transport.wake?.();
+    transport.wake = null;
+    return;
+  }
   if (request.kind === 'start') {
     const token = ++liveGeneration;
-    transport = { id: request.id, playing: false, wake: null };
+    transport = { id: request.id, playing: false, demandUntil: 0, wake: null };
     void runLive(request, token).catch((reason: unknown) => postFailure(request.id, request.revision, reason));
     return;
   }
@@ -442,24 +455,36 @@ async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
 async function runLive(request: ScenarioWorkerStartRequest, token: number): Promise<void> {
   const runtime = runtimesByKey.get(request.runtimeKey);
   if (!runtime) throw new Error('The compiled map runtime is no longer available; compile this revision again.');
-  const simulation = createFixedStepSimulation(request.input, { graph: runtime.graph, guards: 'throw' });
-  let progress = simulation.advance(initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
+  const inputKey = contentHash(request.input);
+  const prepared = preparedLiveSessions.get(inputKey);
+  if (prepared) preparedLiveSessions.delete(inputKey);
+  const simulation = prepared ?? createFixedStepSimulation(request.input, { graph: runtime.graph, guards: 'throw' });
+  let progress = simulation.advance(prepared
+    ? 1
+    : initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
   postLive(request, progress.done ? 'complete' : 'ready', progress.trace, progress.recordedUntil ?? 0);
-  const batchTicks = liveBatchTickBudget(request.input.dt);
   while (!progress.done && token === liveGeneration) {
-    await waitUntilPlaying(request.id, token);
-    await new Promise<void>((resolve) => setTimeout(resolve, 200));
-    if (transport?.id === request.id && !transport.playing) continue;
+    await waitForDemand(request.id, token, progress.recordedUntil ?? 0);
     if (token !== liveGeneration) return;
-    progress = simulation.advance(batchTicks);
+    const requestedUntil = transport?.id === request.id ? transport.demandUntil : 0;
+    const deficit = requestedUntil - (progress.recordedUntil ?? 0);
+    if (deficit <= request.input.dt / 2) continue;
+    progress = simulation.advance(liveBatchTickBudget(request.input.dt, deficit));
     postLive(request, progress.done ? 'complete' : 'progress', progress.trace, progress.recordedUntil ?? 0);
+    // Let cancellation, pause, and a newer document revision preempt long
+    // catch-up work without imposing a fixed delay on normal playback.
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
   }
 }
 
-async function waitUntilPlaying(id: number, token: number): Promise<void> {
-  while (token === liveGeneration && transport?.id === id && !transport.playing) {
+async function waitForDemand(id: number, token: number, recordedUntil: number): Promise<void> {
+  while (token === liveGeneration && transport?.id === id && (
+    !transport.playing || transport.demandUntil <= recordedUntil + 1e-9
+  )) {
     await new Promise<void>((resolve) => {
-      if (!transport || transport.id !== id || transport.playing) resolve();
+      if (!transport || transport.id !== id || (
+        transport.playing && transport.demandUntil > recordedUntil + 1e-9
+      )) resolve();
       else transport.wake = resolve;
     });
   }
@@ -496,6 +521,8 @@ function simulateForRequest(
   // Authoring needs the warmed t=0 world, not a speculative 20-second trace.
   // The same concrete input is handed to the live worker when Play is pressed.
   const progress = session.advance(Math.round(input.warmupSeconds / input.dt) + 1);
+  preparedLiveSessions.clear();
+  preparedLiveSessions.set(contentHash(input), session);
   return { trace: progress.trace, issues: progress.issues, arrival: progress.arrival };
 }
 

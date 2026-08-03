@@ -42,7 +42,11 @@ export function useStudioSession(
     return () => controller?.setAuthoringEnabled(true);
   }, [controller, state.mode]);
 
-  transport.current.configure((time) => frameDriver.current(time), (time) => dispatch({ type: 'clock', time }));
+  transport.current.configure(
+    (time) => frameDriver.current(time),
+    (time) => dispatch({ type: 'clock', time }),
+    () => optionsRef.current.seekLimit?.() ?? duration,
+  );
   useEffect(() => {
     if (state.mode === 'playing') transport.current.play(state.time, state.duration);
     else transport.current.pause();
