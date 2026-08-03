@@ -738,6 +738,14 @@ export class EditorDocument {
     this.#transaction(() => { this.#doc.setExtension(key, value); });
   }
 
+  /** Persist an execution-bearing Studio ambient-traffic option as one undoable gesture. */
+  setAmbientTrafficExtension(key: string, value?: unknown): void {
+    if (!key.startsWith('studio.ambientTraffic.')) {
+      throw new Error(`ambient traffic extension key must start with "studio.ambientTraffic.": ${key}`);
+    }
+    this.#transaction(() => { this.#doc.setExtension(key, value); });
+  }
+
   undo(): boolean {
     const size = this.#groups.pop();
     if (size === undefined) return false;

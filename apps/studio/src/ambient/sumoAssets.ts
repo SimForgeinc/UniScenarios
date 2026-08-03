@@ -33,6 +33,8 @@ export interface LoadedSumoAssets {
   readonly signalTopology: SumoSignalTopology;
   readonly adjustedSignalControllers: number;
   readonly occupancyRoads: SumoRoadOccupancyIndex;
+  /** Original map network, retained for deterministic in-worker signal-mode switches. */
+  readonly rawNetworkXml: string;
 }
 
 export interface SumoDemandFocus { readonly x: number; readonly z: number }
@@ -50,6 +52,7 @@ export async function loadSumoAssets(
   profile: ResolvedAmbientTrafficProfile,
   fetcher: typeof fetch = fetch,
   focus: SumoDemandFocus | null = null,
+  acceleratedSignalCycles = false,
 ): Promise<LoadedSumoAssets> {
   const [mapResponse, runtimeResponse, wasmResponse] = await Promise.all([
     fetcher(map.sumoManifest),
@@ -71,9 +74,9 @@ export async function loadSumoAssets(
   if (rawNetwork.byteLength === 0) throw new Error(`SUMO network is empty for ${map.label}`);
   const networkXml = new TextDecoder().decode(rawNetwork);
   const signalTopology = parseSumoSignalTopology(networkXml);
-  // Fit imported programs inside the standard scenario so editor previews show
-  // an observable queue/release transition while preserving the link topology.
-  const synchronized = fitSumoSignalProgramsToScenario(networkXml, 20);
+  // Real map timing is authoritative by default. Authors can explicitly opt
+  // into a fitted preview cycle without changing link topology.
+  const synchronized = signalNetworkForScenario(networkXml, acceleratedSignalCycles, 20);
   const network = new TextEncoder().encode(synchronized.xml).buffer;
   const localized = localizeSumoRouteCandidates(
     manifest.routeCandidates,
@@ -110,7 +113,18 @@ export async function loadSumoAssets(
     signalTopology,
     adjustedSignalControllers: synchronized.adjustedControllers,
     occupancyRoads: buildSumoRoadOccupancyIndex(networkXml, manifest.worldFromNetwork),
+    rawNetworkXml: networkXml,
   };
+}
+
+export function signalNetworkForScenario(
+  networkXml: string,
+  acceleratedSignalCycles: boolean,
+  scenarioSeconds = 20,
+): { readonly xml: string; readonly adjustedControllers: number } {
+  return acceleratedSignalCycles
+    ? fitSumoSignalProgramsToScenario(networkXml, scenarioSeconds)
+    : { xml: networkXml, adjustedControllers: 0 };
 }
 
 export function validateSumoRuntimeBinary(binary: ArrayBuffer, runtime: Pick<SumoRuntimeManifest, 'wasmBytes'>): ArrayBuffer {

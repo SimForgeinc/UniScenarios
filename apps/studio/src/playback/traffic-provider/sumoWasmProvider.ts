@@ -52,6 +52,17 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
     return response;
   }
 
+  async reconfigure(payload: TrafficNetworkPayload, request: TrafficStepRequest): Promise<TrafficStepResult> {
+    const network = payload.network.slice(0);
+    const routes = payload.routes.slice(0);
+    const response = await this.send(
+      { kind: 'reconfigure', id: this.nextId++, payload: { ...payload, network, routes, wasmBinary: undefined }, request },
+      [network, routes],
+    );
+    if (response.kind !== 'state') throw new Error(`Unexpected SUMO response: ${response.kind}`);
+    return response;
+  }
+
   close(): Promise<void> {
     if (this.closePromise) return this.closePromise;
     this.closed = true;

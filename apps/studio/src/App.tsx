@@ -42,7 +42,9 @@ import {
 import { FirstRunGraphicsChooser } from './performance/FirstRunGraphicsChooser';
 import { VariationsPanel } from './variations';
 import {
+  ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY,
   AMBIENT_TRAFFIC_EXTENSION_KEY,
+  ambientSignalCycleSettingsFromExtensions,
   ambientTrafficProfileFromExtensions,
   canReuseVerifiedEvidenceForAmbient,
   defaultAmbientTrafficProfile,
@@ -207,6 +209,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   const [pendingCampaignOpen, setPendingCampaignOpen] = useState<CampaignOpenRequest | null>(null);
   const [ambientTrafficProfile, setAmbientTrafficProfile] = useState<ResolvedAmbientTrafficProfile>(() => defaultAmbientTrafficProfile());
   const [ambientTrafficProvider, setAmbientTrafficProvider] = useState<AmbientTrafficProviderId>('sumo');
+  const [acceleratedSignalCycles, setAcceleratedSignalCycles] = useState(false);
   const [sumoFallbackReason, setSumoFallbackReason] = useState<string | null>(null);
   const [ambientPreviewState, setAmbientPreviewState] = useState<RevisionOwnedPreview<PlaybackBundle> | null>(null);
   const [actorDetailsId, setActorDetailsId] = useState<string | null>(null);
@@ -586,6 +589,17 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     setSumoFallbackReason(null);
     editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY, provider);
   }, [editorController]);
+  const changeAcceleratedSignalCycles = useCallback((enabled: boolean) => {
+    // Do not leave the old program's last colors visible while SUMO resets.
+    overlays?.clearSignalStates();
+    setAcceleratedSignalCycles(enabled);
+    setSumoFallbackReason(null);
+    // False is the canonical default; omitting it keeps legacy and new files byte-semantically aligned.
+    editorController?.doc.setAmbientTrafficExtension(
+      ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY,
+      enabled ? true : undefined,
+    );
+  }, [editorController, overlays]);
 
   // Scenario navigation/import is authoritative. Never leak a traffic choice from
   // the previously open map or saved scenario into the next document.
@@ -593,6 +607,8 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   const authoredAmbientHash = contentHash(authoredAmbientValue ?? null);
   const authoredAmbientProviderValue = editorController?.doc.data.extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY];
   const authoredAmbientProviderHash = contentHash(authoredAmbientProviderValue ?? null);
+  const authoredAcceleratedSignalCyclesValue = editorController?.doc.data.extensions?.[ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY];
+  const authoredAcceleratedSignalCyclesHash = contentHash(authoredAcceleratedSignalCyclesValue ?? null);
   // Camera/sensor/presentation edits do not change the physical traffic world.
   // Key expensive generation only to the simulation-bearing authored source;
   // the profile remains its own dependency below.
@@ -617,6 +633,12 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     setAmbientTrafficProvider(next);
     setSumoFallbackReason(null);
   }, [editorController, authoredAmbientProviderHash]);
+  useEffect(() => {
+    const next = ambientSignalCycleSettingsFromExtensions(editorController?.doc.data.extensions).acceleratedSignalCycles;
+    if (acceleratedSignalCycles !== next) overlays?.clearSignalStates();
+    setAcceleratedSignalCycles(next);
+    setSumoFallbackReason(null);
+  }, [acceleratedSignalCycles, editorController, authoredAcceleratedSignalCyclesHash, overlays]);
 
   // One persistent concrete world owns both the authoring preview and playback.
   // Authored edits rematerialize against the existing generated actors; only a
@@ -910,6 +932,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     externalActors: sumoExternalActors,
     focus: sumoDemandFocus,
     onFallback: fallbackToNativeTraffic,
+    acceleratedSignalCycles,
   });
   useEffect(() => {
     if (!sumoOwnsSignalStates || !sumoStatus.signalStates) return;
@@ -1298,6 +1321,8 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
           provenance={ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic ?? null}
           provider={ambientTrafficProvider}
           onProviderChange={changeAmbientTrafficProvider}
+          acceleratedSignalCycles={acceleratedSignalCycles}
+          onAcceleratedSignalCyclesChange={changeAcceleratedSignalCycles}
           sumoStatus={sumoFallbackReason ? { phase: 'fallback', actorCount: 0, reason: sumoFallbackReason } : sumoStatus}
           busy={ambientPreviewBusy || sumoStatus.phase === 'loading'}
           error={ambientTrafficError}

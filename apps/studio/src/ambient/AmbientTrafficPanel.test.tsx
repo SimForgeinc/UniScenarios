@@ -33,6 +33,7 @@ describe('AmbientTrafficPanel', () => {
     const markup = renderToStaticMarkup(<AmbientTrafficPopover
       profile={defaultAmbientTrafficProfile()}
       provenance={null}
+      provider="sumo"
       onChange={vi.fn()}
       onRunRobustness={vi.fn()}
       onClose={vi.fn()}
@@ -42,8 +43,33 @@ describe('AmbientTrafficPanel', () => {
     expect(markup).toContain('data-testid="ambient-traffic-preset"');
     expect(markup).toContain('data-testid="ambient-traffic-seed"');
     expect(markup).toContain('data-testid="ambient-traffic-regenerate"');
+    expect(markup).toContain('data-testid="ambient-traffic-accelerated-signal-cycles"');
+    expect(markup).toContain('Accelerated signal cycles');
+    expect(markup).toContain("Off uses the map&#x27;s original timings.");
     expect(markup).toContain('Test scenario with background traffic');
     expect(markup).toContain('Reset to City');
     expect(markup).not.toContain('ambient-traffic-disclosure');
+  });
+
+  it('keeps accelerated signal cycles off by default and exposes checkbox semantics', () => {
+    const off = renderToStaticMarkup(<AmbientTrafficPanel
+      profile={defaultAmbientTrafficProfile()}
+      provenance={null}
+      provider="sumo"
+      onChange={vi.fn()}
+      defaultOpen
+    />);
+    const checkbox = off.match(/<input[^>]*data-testid="ambient-traffic-accelerated-signal-cycles"[^>]*>/)?.[0];
+    expect(checkbox).toContain('type="checkbox"');
+    expect(checkbox).not.toContain('checked');
+    const on = renderToStaticMarkup(<AmbientTrafficPanel
+      profile={defaultAmbientTrafficProfile()}
+      provenance={null}
+      provider="sumo"
+      acceleratedSignalCycles
+      onChange={vi.fn()}
+      defaultOpen
+    />);
+    expect(on.match(/<input[^>]*data-testid="ambient-traffic-accelerated-signal-cycles"[^>]*>/)?.[0]).toContain('checked');
   });
 });

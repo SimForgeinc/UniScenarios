@@ -103,7 +103,10 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
 
   const sumo = requireModule();
   const started = performance.now();
-  if (message.kind === 'reset') startSimulation(sumo, requireRestartPayload());
+  if (message.kind === 'reconfigure') {
+    restartPayload = { ...message.payload, wasmBinary: undefined };
+    startSimulation(sumo, restartPayload);
+  } else if (message.kind === 'reset') startSimulation(sumo, requireRestartPayload());
   mirrorExternalActors(sumo, message.request.externalActors);
   assertOk(sumo._us_sumo_step(message.request.deltaSeconds));
   const simulatedCount = sumo._us_sumo_state_count();

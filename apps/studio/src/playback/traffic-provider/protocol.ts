@@ -81,6 +81,7 @@ export type SumoWorkerRequest =
   | { readonly kind: 'init'; readonly id: number; readonly moduleUrl: string; readonly payload: TrafficNetworkPayload }
   | { readonly kind: 'step'; readonly id: number; readonly request: TrafficStepRequest }
   | { readonly kind: 'reset'; readonly id: number; readonly request: TrafficStepRequest }
+  | { readonly kind: 'reconfigure'; readonly id: number; readonly payload: TrafficNetworkPayload; readonly request: TrafficStepRequest }
   | { readonly kind: 'close'; readonly id: number };
 
 export type SumoWorkerResponse =
@@ -94,5 +95,7 @@ export interface TrafficProvider {
   step(request: TrafficStepRequest): Promise<TrafficStepResult>;
   /** Restart the deterministic simulation while retaining the loaded worker/WASM runtime. */
   reset(request: TrafficStepRequest): Promise<TrafficStepResult>;
+  /** Replace network/controller inputs while retaining the worker and compiled WASM runtime. */
+  reconfigure(payload: TrafficNetworkPayload, request: TrafficStepRequest): Promise<TrafficStepResult>;
   close(): Promise<void>;
 }

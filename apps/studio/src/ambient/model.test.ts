@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TemplateDocument } from '@uniscenarios/scenario-model';
 import { contentHash } from '@uniscenarios/sim-engine';
 import {
+  ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY,
   AMBIENT_TRAFFIC_EXTENSION_KEY,
   AMBIENT_TRAFFIC_STORAGE_KEY,
   ambientTrafficProfileFromExtensions,
@@ -12,9 +13,19 @@ import {
   profileForPreset,
   saveAmbientTrafficProfile,
   ambientPromotionCapability,
+  ambientSignalCycleSettingsFromExtensions,
 } from './model';
 
 describe('ambient traffic preference', () => {
+  it('migrates missing and malformed signal-cycle settings to real map timing', () => {
+    expect(ambientSignalCycleSettingsFromExtensions(undefined)).toEqual({ acceleratedSignalCycles: false });
+    expect(ambientSignalCycleSettingsFromExtensions({ [ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY]: false }))
+      .toEqual({ acceleratedSignalCycles: false });
+    expect(ambientSignalCycleSettingsFromExtensions({ [ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY]: 'yes' }))
+      .toEqual({ acceleratedSignalCycles: false });
+    expect(ambientSignalCycleSettingsFromExtensions({ [ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY]: true }))
+      .toEqual({ acceleratedSignalCycles: true });
+  });
   it('uses a visible City population by default and recovers from corrupt session storage', () => {
     expect(defaultAmbientTrafficProfile()).toMatchObject({
       preset: 'city',

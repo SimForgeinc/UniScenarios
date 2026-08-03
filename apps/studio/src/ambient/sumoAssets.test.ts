@@ -1,8 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import { resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
-import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets, localizeSumoRouteCandidates, validateSumoRuntimeBinary } from './sumoAssets';
+import { buildSumoRouteDocument, decodeSumoActorViews, loadSumoAssets, localizeSumoRouteCandidates, signalNetworkForScenario, validateSumoRuntimeBinary } from './sumoAssets';
 
 describe('SUMO browser assets', () => {
+  it('keeps a Yale-length 90-second controller exact by default and fits it only when requested', () => {
+    const yaleProgram = `<net><tlLogic id="yale-main" type="static" programID="0" offset="0">
+      <phase duration="42" state="Gr"/><phase duration="3" state="yr"/>
+      <phase duration="42" state="rG"/><phase duration="3" state="ry"/>
+    </tlLogic></net>`;
+    expect(signalNetworkForScenario(yaleProgram, false, 20)).toEqual({ xml: yaleProgram, adjustedControllers: 0 });
+    const accelerated = signalNetworkForScenario(yaleProgram, true, 20);
+    expect(accelerated.adjustedControllers).toBe(1);
+    const durations = [...accelerated.xml.matchAll(/duration="([\d.]+)"/g)].map((match) => Number(match[1]));
+    expect(durations.reduce((sum, value) => sum + value, 0)).toBeCloseTo(18, 6);
+    expect(durations).toEqual([7, 2, 7, 2]);
+  });
   it('builds a deterministic bounded population and proxy route', () => {
     const profile = resolveAmbientTrafficProfile({ version: 1, preset: 'custom', seed: 'fixed', maxActors: 2 });
     const routes = [['a', 'b'], ['c', 'd'], ['e', 'f']];

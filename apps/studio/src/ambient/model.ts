@@ -9,6 +9,29 @@ import {
 export const AMBIENT_TRAFFIC_STORAGE_KEY = 'uniscenarios.studio.ambient-traffic.v1';
 /** Canonical per-scenario authoring configuration. Materialization ignores it; the Studio worker consumes it. */
 export const AMBIENT_TRAFFIC_EXTENSION_KEY = 'studio.presentation.ambientTraffic.v1';
+/**
+ * Execution-bearing SUMO preview preference. Unlike the generated-population
+ * profile, this changes the physical map controller program and therefore must
+ * participate in the authored execution digest.
+ */
+export const ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY = 'studio.ambientTraffic.acceleratedSignalCycles.v1';
+
+export interface AmbientSignalCycleSettings {
+  readonly acceleratedSignalCycles: boolean;
+}
+
+export const DEFAULT_AMBIENT_SIGNAL_CYCLE_SETTINGS: AmbientSignalCycleSettings = Object.freeze({
+  acceleratedSignalCycles: false,
+});
+
+/** Legacy/missing/malformed values migrate fail-closed to real map timing. */
+export function ambientSignalCycleSettingsFromExtensions(
+  extensions: Readonly<Record<string, unknown>> | undefined,
+): AmbientSignalCycleSettings {
+  return {
+    acceleratedSignalCycles: extensions?.[ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY] === true,
+  };
+}
 
 export type AmbientTrafficPreset = ResolvedAmbientTrafficProfile['preset'];
 

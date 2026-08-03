@@ -72,6 +72,31 @@ describe('SUMO provider lifecycle', () => {
     expect(worker.messages.map((message) => message.kind)).toEqual(['init', 'reset']);
   });
 
+  it('reconfigures signal programs through the existing worker without retransferring or recompiling WASM', async () => {
+    const worker = new FakeWorker();
+    const factory = vi.fn(() => worker as unknown as Worker);
+    const provider = new SumoWasmTrafficProvider('/sumo.mjs', factory);
+    const initializing = provider.initialize(payload);
+    worker.emit({ kind: 'ready', id: worker.messages[0]!.id, initMilliseconds: 1, heapBytes: 64 });
+    await initializing;
+
+    const nextPayload = { ...payload, network: new ArrayBuffer(9), routes: new ArrayBuffer(7), wasmBinary: undefined };
+    const resetting = provider.reconfigure(nextPayload, { generation: 5, sequence: 0, deltaSeconds: 1, externalActors: [] });
+    const message = worker.messages[1]!;
+    expect(message.kind).toBe('reconfigure');
+    expect(message.kind === 'reconfigure' ? message.payload.wasmBinary : 'unexpected').toBeUndefined();
+    expect(worker.transfers[1]).toHaveLength(2);
+    worker.emit({
+      kind: 'state', id: message.id, generation: 5, sequence: 0, simulationSeconds: 1,
+      states: new ArrayBuffer(0), actorCount: 0, simulatedActorCount: 0,
+      signalStates: new ArrayBuffer(0), signalLinkCount: 0, stepMilliseconds: 2,
+    });
+    await resetting;
+    expect(factory).toHaveBeenCalledTimes(1);
+    expect(worker.terminated).toBe(false);
+    expect(worker.messages.map((entry) => entry.kind)).toEqual(['init', 'reconfigure']);
+  });
+
   it('keeps one worker across repeated resets and still closes it authoritatively', async () => {
     const worker = new FakeWorker();
     const factory = vi.fn(() => worker as unknown as Worker);

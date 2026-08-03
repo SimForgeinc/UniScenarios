@@ -12,6 +12,8 @@ export interface AmbientTrafficPanelProps {
   onChange: (profile: ResolvedAmbientTrafficProfile) => void;
   provider?: AmbientTrafficProviderId;
   onProviderChange?: (provider: AmbientTrafficProviderId) => void;
+  acceleratedSignalCycles?: boolean;
+  onAcceleratedSignalCyclesChange?: (enabled: boolean) => void;
   sumoStatus?: SumoTrafficStatus | null;
   robustnessReport?: AmbientRobustnessSummary | null;
   robustnessBusy?: boolean;
@@ -30,7 +32,7 @@ const PRESETS: readonly { id: AmbientTrafficPreset; label: string }[] = [
 ];
 
 /** Scenario-owned background traffic controls. Generated actors stay separate from authored actors. */
-export function AmbientTrafficPanel({ profile, provenance, busy = false, error = null, onChange, provider = 'native', onProviderChange, sumoStatus = null, robustnessReport = null, robustnessBusy = false, onRunRobustness, defaultOpen = false, alwaysOpen = false }: AmbientTrafficPanelProps): JSX.Element {
+export function AmbientTrafficPanel({ profile, provenance, busy = false, error = null, onChange, provider = 'native', onProviderChange, acceleratedSignalCycles = false, onAcceleratedSignalCyclesChange, sumoStatus = null, robustnessReport = null, robustnessBusy = false, onRunRobustness, defaultOpen = false, alwaysOpen = false }: AmbientTrafficPanelProps): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [seedDraft, setSeedDraft] = useState(String(profile.seed));
   const [promotionActorId, setPromotionActorId] = useState('');
@@ -88,6 +90,21 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             <div>{sumoStatus.emergencyStoppingActorCount ?? 0} emergency braking · safety counters {sumoStatus.detailedSafetyMetricsAvailable ? 'available' : 'not exposed'}</div>
             <div>{formatMs(sumoStatus.initMilliseconds)} init · {formatMs(sumoStatus.stepP95Milliseconds)} step p95</div>
           </> : null}
+        </div> : null}
+        {provider === 'sumo' ? <div style={styles.toggleBlock}>
+          <label style={styles.toggleLabel}>
+            <input
+              type="checkbox"
+              checked={acceleratedSignalCycles}
+              onChange={(event) => onAcceleratedSignalCyclesChange?.(event.currentTarget.checked)}
+              disabled={busy}
+              data-testid="ambient-traffic-accelerated-signal-cycles"
+            />
+            <span>Accelerated signal cycles</span>
+          </label>
+          <div style={styles.toggleHint}>
+            Compress long map signal programs to fit the scenario preview. Off uses the map's original timings.
+          </div>
         </div> : null}
         <label style={styles.label}>
           Density preset
@@ -332,6 +349,9 @@ const styles: Record<string, CSSProperties> = {
   seedRow: { display: 'flex', gap: 5 },
   regenerate: { width: 31, borderRadius: 6, border: '1px solid rgba(255,255,255,0.13)', background: 'rgba(255,255,255,0.06)', color: '#edf1f7', cursor: 'pointer' },
   hint: { margin: '-2px 0 10px', color: '#707a89', fontSize: 10, lineHeight: 1.35 },
+  toggleBlock: { margin: '1px 0 10px' },
+  toggleLabel: { display: 'flex', alignItems: 'center', gap: 7, color: '#c8d0dc', fontSize: 11, cursor: 'pointer' },
+  toggleHint: { margin: '4px 0 0 22px', color: '#707a89', fontSize: 10, lineHeight: 1.35 },
   range: { display: 'grid', gap: 1, margin: '7px 0', color: '#9da6b5', fontSize: 11 },
   active: { color: '#7fcf9b' },
   muted: { color: '#707a89' },
