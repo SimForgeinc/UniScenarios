@@ -22,8 +22,7 @@ import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
 import { defaultSpeedKph } from './timeline/actions';
-import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient } from './playback/scenarioWorkerClient';
-import { LiveSimulationClient, type LivePlaybackRun } from './playback/liveSimulationClient';
+import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient, type LivePlaybackRun } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
 import { loadQualityPreference } from './performance/quality';
@@ -173,12 +172,8 @@ export function App(): JSX.Element {
   const [viewSettings, setViewSettings] = useState<StudioViewSettings>(() => loadStudioViewSettings());
   const viewSettingsRef = useRef(viewSettings);
   viewSettingsRef.current = viewSettings;
-  const exportWorker = useRef<ScenarioWorkerClient | null>(null);
-  if (!exportWorker.current) exportWorker.current = new ScenarioWorkerClient();
-  const ambientPreviewWorker = useRef<ScenarioWorkerClient | null>(null);
-  if (!ambientPreviewWorker.current) ambientPreviewWorker.current = new ScenarioWorkerClient();
-  const liveSimulationWorker = useRef<LiveSimulationClient | null>(null);
-  if (!liveSimulationWorker.current) liveSimulationWorker.current = new LiveSimulationClient();
+  const runtimeWorker = useRef<ScenarioWorkerClient | null>(null);
+  if (!runtimeWorker.current) runtimeWorker.current = new ScenarioWorkerClient();
   const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
   const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
@@ -363,7 +358,7 @@ export function App(): JSX.Element {
     // Start the canonical fixed-step engine from the exact visible population.
     // Only a small lead is recorded before playback becomes visible.
     const entry = ambientWorld.current.current;
-    const run = await liveSimulationWorker.current!.start(bundle, map);
+    const run = await runtimeWorker.current!.start(bundle, map);
     throwIfPreparationAborted(signal);
     livePlayback.current = run;
     setAuthoredPlayback(run.bundle);
@@ -378,7 +373,7 @@ export function App(): JSX.Element {
     });
   }, [ambientTrafficProfile, editorController, map]);
   const cancelAuthoredPlayback = useCallback(() => {
-    liveSimulationWorker.current?.cancel();
+    runtimeWorker.current?.cancel();
     livePlayback.current = null;
     setAuthoredPlayback(null);
     setCameraPlaybackRequested(false);
@@ -458,7 +453,7 @@ export function App(): JSX.Element {
       return;
     }
     const token = ambientWorld.current.begin();
-    ambientPreviewWorker.current?.cancel();
+    runtimeWorker.current?.cancel();
     if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
     const verifiedFallback = editorController && campaignSource
       && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
@@ -478,7 +473,7 @@ export function App(): JSX.Element {
           actors: current.value.instance.input.actors.filter((actor): actor is SimActor => actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'))),
         }
       : undefined;
-    const promise = ambientPreviewWorker.current!.prepare(
+    const promise = runtimeWorker.current!.prepare(
       editorController.doc.data,
       map,
       ambientTrafficProfile,
@@ -507,8 +502,7 @@ export function App(): JSX.Element {
     });
   }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle]);
 
-  useEffect(() => () => ambientPreviewWorker.current?.cancel(), []);
-  useEffect(() => () => liveSimulationWorker.current?.dispose(), []);
+  useEffect(() => () => runtimeWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {
     if (!editorController || ambientRobustnessBusy) return;
     setAmbientRobustnessBusy(true);
@@ -818,7 +812,7 @@ export function App(): JSX.Element {
     }
     const sourceHash = contentHash(editorController.doc.data);
     setOpenScenarioState({ status: 'loading', sourceHash });
-    void exportWorker.current!.prepare(editorController.doc.data, map, ambientTrafficProfile).then(
+    void runtimeWorker.current!.prepare(editorController.doc.data, map, ambientTrafficProfile).then(
       (bundle) => {
         if (!bundle.openScenario || bundle.openScenario.source.templateHash !== sourceHash) {
           setOpenScenarioState({ status: 'error', sourceHash, message: 'The export worker returned a snapshot for a different document revision.' });
@@ -836,7 +830,6 @@ export function App(): JSX.Element {
     regenerateOpenScenario();
   }, [openScenarioOpen, openScenarioSourceHash, openScenarioState, regenerateOpenScenario]);
 
-  useEffect(() => () => exportWorker.current?.cancel(), []);
   const presentedOpenScenarioState: OpenScenarioWorkspaceState = useMemo(() => {
     if (openScenarioState.status === 'empty' || openScenarioState.sourceHash === openScenarioSourceHash) return openScenarioState;
     return { status: 'loading', sourceHash: openScenarioSourceHash };
