@@ -2,23 +2,23 @@
   "schema": "uniscenarios.gallery-validation.v1",
   "validatedAt": "2026-08-03T08:00:00.000Z",
   "provider": "native",
-  "command": "uniscenarios debug 03-red-light-ambulance-preemption/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "command": "uniscenarios debug 03-red-light-ambulance-preemption/scenario.instance.json --sample 0.1 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
   "acceptance": {
     "ok": true,
     "failures": []
   },
   "input": {
-    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/03-red-light-ambulance-preemption/scenario.instance.json",
+    "source": "examples/edge-cases/03-red-light-ambulance-preemption/scenario.instance.json",
     "kind": "instance",
     "mapId": "yale-street",
     "provider": "native",
-    "inputHash": "2a1679f767a6ea19010846ae629cf9f0423fe0db5ec499a304458df00d1c2833",
-    "traceDigest": "1b57ce14aa17c441adc9754b85c630ab6e58cc86ba612e09dff783a67304f4b6",
+    "inputHash": "abcef57d4b847080cbce5b6282060635e4a21efe02ad01c868624a5b61c9b91c",
+    "traceDigest": "913b2a1e5613a551e3529b326dc5977ac6b827984fed75d8952761f54d11e4e7",
     "durationSeconds": 20,
-    "sampleSeconds": 0.5
+    "sampleSeconds": 0.1
   },
   "compile": {
-    "milliseconds": 372.064125,
+    "milliseconds": 252.45625,
     "feasible": true,
     "manifest": {
       "instanceId": "ec-03-03-red-light-ambulance-preemption-v2#0",
@@ -36,19 +36,19 @@
           "id": "ambulance",
           "actorKind": "car",
           "roleKind": "supporting",
-          "laneRsl": null,
-          "spawnS": 0,
+          "laneRsl": "773:0:1",
+          "spawnS": 40.15070367719396,
           "initialSpeedMps": 6.666667,
-          "bindingStatus": "scene-absolute"
+          "bindingStatus": "bound"
         },
         {
           "id": "cross-traffic",
           "actorKind": "car",
           "roleKind": "supporting",
-          "laneRsl": null,
-          "spawnS": 0,
+          "laneRsl": "57:0:1",
+          "spawnS": 13.340423459139696,
           "initialSpeedMps": 9.444444,
-          "bindingStatus": "scene-absolute"
+          "bindingStatus": "bound"
         },
         {
           "id": "downstream-queue",
@@ -63,10 +63,10 @@
           "id": "focus-vehicle",
           "actorKind": "car",
           "roleKind": "focus",
-          "laneRsl": null,
-          "spawnS": 0,
+          "laneRsl": "93:0:1",
+          "spawnS": 6.451895932736173,
           "initialSpeedMps": 0,
-          "bindingStatus": "scene-absolute"
+          "bindingStatus": "bound"
         },
         {
           "id": "pedestrian",
@@ -83,9 +83,9 @@
     }
   },
   "performance": {
-    "nativeMilliseconds": 140.077375,
-    "nativeTicksPerSecond": 7146.050531,
-    "simulatedSecondsPerWallSecond": 142.778232,
+    "nativeMilliseconds": 143.214333,
+    "nativeTicksPerSecond": 6989.523877,
+    "simulatedSecondsPerWallSecond": 139.650827,
     "sumo": null
   },
   "summary": {
@@ -93,45 +93,59 @@
     "actorCount": 5,
     "ambientActorCount": 0,
     "signalCount": 0,
-    "interactionCount": 16,
+    "interactionCount": 18,
     "collisionCount": 0,
     "roadDepartureCount": 1,
     "neverFiredCount": 0,
     "actorMotion": {
       "ambulance": {
-        "samples": 41,
+        "samples": 201,
         "start": {
-          "x": 465,
-          "z": -1935,
-          "laneRsl": null
+          "x": 466.084398,
+          "z": -1919.546646,
+          "laneRsl": "773:0:1"
         },
         "end": {
-          "x": 410.475576,
-          "z": -1818.456273,
-          "laneRsl": null
+          "x": 386.565429,
+          "z": -1810.379646,
+          "laneRsl": "1207:0:1"
         },
-        "displacementM": 128.667607,
-        "maxSpeedMps": 10.309153,
-        "observedLanes": []
+        "displacementM": 135.058137,
+        "maxSpeedMps": 10.445381,
+        "observedLanes": [
+          "773:0:1",
+          "95:3:1",
+          "95:2:1",
+          "95:1:1",
+          "95:0:1",
+          "994:0:1",
+          "94:0:1",
+          "1145:0:1",
+          "93:0:1",
+          "1207:0:1"
+        ]
       },
       "cross-traffic": {
-        "samples": 41,
+        "samples": 201,
         "start": {
-          "x": 340,
-          "z": -1780,
-          "laneRsl": null
+          "x": 407.589112,
+          "z": -1801.135024,
+          "laneRsl": "57:0:1"
         },
         "end": {
-          "x": 341.961658,
-          "z": -1779.398667,
-          "laneRsl": null
+          "x": 395.878468,
+          "z": -1809.075534,
+          "laneRsl": "1221:0:1"
         },
-        "displacementM": 2.051756,
+        "displacementM": 14.148883,
         "maxSpeedMps": 9.444444,
-        "observedLanes": []
+        "observedLanes": [
+          "57:0:1",
+          "1221:0:1"
+        ]
       },
       "downstream-queue": {
-        "samples": 41,
+        "samples": 201,
         "start": {
           "x": 360,
           "z": -1760,
@@ -147,23 +161,25 @@
         "observedLanes": []
       },
       "focus-vehicle": {
-        "samples": 41,
+        "samples": 201,
         "start": {
-          "x": 397,
-          "z": -1828,
-          "laneRsl": null
+          "x": 395.863213,
+          "z": -1828.751233,
+          "laneRsl": "93:0:1"
         },
         "end": {
-          "x": 393.768395,
-          "z": -1823.569753,
-          "laneRsl": null
+          "x": 393.060448,
+          "z": -1826.372191,
+          "laneRsl": "93:0:1"
         },
-        "displacementM": 5.483645,
-        "maxSpeedMps": 1.945105,
-        "observedLanes": []
+        "displacementM": 3.676321,
+        "maxSpeedMps": 2.134941,
+        "observedLanes": [
+          "93:0:1"
+        ]
       },
       "pedestrian": {
-        "samples": 41,
+        "samples": 201,
         "start": {
           "x": 365,
           "z": -1809,
@@ -175,12 +191,63 @@
           "laneRsl": null
         },
         "displacementM": 11.33136,
-        "maxSpeedMps": 1.612095,
+        "maxSpeedMps": 1.620024,
         "observedLanes": []
       }
     }
   },
   "interactions": [
+    {
+      "id": "ambulance-commits",
+      "actorId": "ambulance",
+      "trigger": {
+        "kind": "at",
+        "t": 15.7
+      },
+      "verb": "set",
+      "target": {
+        "key": "rules.collisionAvoidance",
+        "value": false
+      },
+      "events": [
+        {
+          "t": 15.700000000000001,
+          "kind": "trigger_fired",
+          "interactionId": "ambulance-commits",
+          "actorId": "ambulance",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "ambulance-enters-refuge",
+      "actorId": "ambulance",
+      "trigger": {
+        "kind": "at",
+        "t": 13.1
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": 0.82
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "time",
+        "value": 1.8
+      },
+      "events": [
+        {
+          "t": 13.1,
+          "kind": "trigger_fired",
+          "interactionId": "ambulance-enters-refuge",
+          "actorId": "ambulance",
+          "verb": "laneOffset",
+          "forced": false
+        }
+      ]
+    },
     {
       "id": "ambulance-horn-1-off",
       "actorId": "ambulance",
@@ -283,7 +350,7 @@
       "verb": "speed",
       "target": {
         "mode": "absolute",
-        "value": 10.555556
+        "value": 10
       },
       "dynamics": {
         "shape": "linear",
@@ -640,12 +707,12 @@
     "collisions": [],
     "roadDepartures": [
       {
-        "t": 0.22,
+        "t": 1.8,
         "kind": "road_departure_prevented",
         "actorId": "cross-traffic",
-        "laneRsl": null,
-        "lateralErrorM": 1.3457508833076595,
-        "allowedCenterOffsetM": 1.275
+        "laneRsl": "1221:0:1",
+        "lateralErrorM": 0.20166480497836498,
+        "allowedCenterOffsetM": 0.2
       }
     ],
     "laneChangeRejections": [],
@@ -681,33 +748,38 @@
     "routes": {
       "ambulance": {
         "authored": {
-          "kind": "polyline",
-          "points": [
-            {
-              "x": 465,
-              "z": -1935
-            },
-            {
-              "x": 411,
-              "z": -1848
-            },
-            {
-              "x": 410,
-              "z": -1818
-            },
-            {
-              "x": 385,
-              "z": -1784
-            },
-            {
-              "x": 320,
-              "z": -1705
-            }
+          "kind": "lanePath",
+          "lanes": [
+            "106:0:1",
+            "773:0:1",
+            "95:3:1",
+            "95:2:1",
+            "95:1:1",
+            "95:0:1",
+            "994:0:1",
+            "94:0:1",
+            "1145:0:1",
+            "93:0:1",
+            "1207:0:1",
+            "92:0:1",
+            "1181:0:1",
+            "65:0:1"
           ]
         },
-        "initialLane": null,
-        "observedLanes": [],
-        "routeDistanceM": 131.941054,
+        "initialLane": "773:0:1",
+        "observedLanes": [
+          "773:0:1",
+          "95:3:1",
+          "95:2:1",
+          "95:1:1",
+          "95:0:1",
+          "994:0:1",
+          "94:0:1",
+          "1145:0:1",
+          "93:0:1",
+          "1207:0:1"
+        ],
+        "routeDistanceM": 138.452172,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -716,25 +788,30 @@
       },
       "cross-traffic": {
         "authored": {
-          "kind": "polyline",
-          "points": [
-            {
-              "x": 340,
-              "z": -1780
-            },
-            {
-              "x": 375,
-              "z": -1793
-            },
-            {
-              "x": 430,
-              "z": -1813
-            }
+          "kind": "lanePath",
+          "lanes": [
+            "57:0:1",
+            "1221:0:1",
+            "93:0:-1",
+            "1146:0:-1",
+            "94:0:-1",
+            "995:0:-1",
+            "95:0:-1",
+            "95:1:-1",
+            "95:2:-1",
+            "95:3:-1",
+            "772:0:-1",
+            "100:0:-1",
+            "227:0:-1",
+            "85:0:-1"
           ]
         },
-        "initialLane": null,
-        "observedLanes": [],
-        "routeDistanceM": 1.629447,
+        "initialLane": "57:0:1",
+        "observedLanes": [
+          "57:0:1",
+          "1221:0:1"
+        ],
+        "routeDistanceM": 14.161704,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -766,25 +843,20 @@
       },
       "focus-vehicle": {
         "authored": {
-          "kind": "polyline",
-          "points": [
-            {
-              "x": 397,
-              "z": -1828
-            },
-            {
-              "x": 375,
-              "z": -1793
-            },
-            {
-              "x": 343,
-              "z": -1742
-            }
+          "kind": "lanePath",
+          "lanes": [
+            "93:0:1",
+            "1207:0:1",
+            "92:0:1",
+            "1181:0:1",
+            "65:0:1"
           ]
         },
-        "initialLane": null,
-        "observedLanes": [],
-        "routeDistanceM": 5.470464,
+        "initialLane": "93:0:1",
+        "observedLanes": [
+          "93:0:1"
+        ],
+        "routeDistanceM": 3.530075,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -818,8 +890,8 @@
   },
   "metrics": {
     "minTTC": {
-      "value": 5.322,
-      "t": 13.28,
+      "value": 4.732,
+      "t": 13.26,
       "pair": [
         "ambulance",
         "focus-vehicle"
@@ -831,29 +903,29 @@
           "ambulance",
           "focus-vehicle"
         ],
-        "minDistanceM": 11.323,
-        "t": 19.26
+        "minDistanceM": 0,
+        "t": 17.86
       },
       {
         "pair": [
           "cross-traffic",
           "focus-vehicle"
         ],
-        "minDistanceM": 68.262,
-        "t": 0.22
+        "minDistanceM": 14.539,
+        "t": 1.8
       },
       {
         "pair": [
           "focus-vehicle",
           "pedestrian"
         ],
-        "minDistanceM": 30.462,
+        "minDistanceM": 32.098,
         "t": 20
       }
     ],
     "requiredDecelMax": {
-      "ambulance": 0,
-      "cross-traffic": 0,
+      "ambulance": 0.698,
+      "cross-traffic": 0.147,
       "downstream-queue": 0,
       "focus-vehicle": 0,
       "pedestrian": 0

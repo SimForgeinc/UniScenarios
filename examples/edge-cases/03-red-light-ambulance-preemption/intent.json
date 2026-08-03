@@ -13,6 +13,8 @@
     "red-light"
   ],
   "interactionIds": [
+    "ambulance-commits",
+    "ambulance-enters-refuge",
     "ambulance-horn-1-off",
     "ambulance-horn-1-on",
     "ambulance-horn-2-off",
@@ -31,6 +33,20 @@
     "pedestrian-enters"
   ],
   "windows": [
+    {
+      "interactionId": "ambulance-commits",
+      "actorId": "ambulance",
+      "startS": 15.7,
+      "endS": 16.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-enters-refuge",
+      "actorId": "ambulance",
+      "startS": 13.1,
+      "endS": 14.9,
+      "dependent": false
+    },
     {
       "interactionId": "ambulance-horn-1-off",
       "actorId": "ambulance",

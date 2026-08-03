@@ -3,7 +3,7 @@
   "version": 1,
   "manifest": {
     "instanceId": "ec-03-03-red-light-ambulance-preemption-v2#0",
-    "inputHash": "2a1679f767a6ea19010846ae629cf9f0423fe0db5ec499a304458df00d1c2833",
+    "inputHash": "abcef57d4b847080cbce5b6282060635e4a21efe02ad01c868624a5b61c9b91c",
     "replayKey": {
       "mapId": "yale-street",
       "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
@@ -17,19 +17,19 @@
         "id": "ambulance",
         "actorKind": "car",
         "roleKind": "supporting",
-        "laneRsl": null,
-        "spawnS": 0,
+        "laneRsl": "773:0:1",
+        "spawnS": 40.15070367719396,
         "initialSpeedMps": 6.666667,
-        "bindingStatus": "scene-absolute"
+        "bindingStatus": "bound"
       },
       {
         "id": "cross-traffic",
         "actorKind": "car",
         "roleKind": "supporting",
-        "laneRsl": null,
-        "spawnS": 0,
+        "laneRsl": "57:0:1",
+        "spawnS": 13.340423459139696,
         "initialSpeedMps": 9.444444,
-        "bindingStatus": "scene-absolute"
+        "bindingStatus": "bound"
       },
       {
         "id": "downstream-queue",
@@ -44,10 +44,10 @@
         "id": "focus-vehicle",
         "actorKind": "car",
         "roleKind": "focus",
-        "laneRsl": null,
-        "spawnS": 0,
+        "laneRsl": "93:0:1",
+        "spawnS": 6.451895932736173,
         "initialSpeedMps": 0,
-        "bindingStatus": "scene-absolute"
+        "bindingStatus": "bound"
       },
       {
         "id": "pedestrian",
@@ -91,10 +91,15 @@
           "h": 2.65
         },
         "initial": {
+          "laneRef": {
+            "rsl": "773:0:1",
+            "s": 40.15070367719396,
+            "tFrac": 0
+          },
           "pose": {
-            "x": 465,
-            "z": -1935,
-            "headingRad": -2.14
+            "x": 466.0843977707937,
+            "z": -1919.5466460272016,
+            "headingRad": 2.9252033538626705
           },
           "speedMps": 6.666667
         },
@@ -109,28 +114,22 @@
             "speedFactor": 1
           },
           "route": {
-            "kind": "polyline",
-            "points": [
-              {
-                "x": 465,
-                "z": -1935
-              },
-              {
-                "x": 411,
-                "z": -1848
-              },
-              {
-                "x": 410,
-                "z": -1818
-              },
-              {
-                "x": 385,
-                "z": -1784
-              },
-              {
-                "x": 320,
-                "z": -1705
-              }
+            "kind": "lanePath",
+            "lanes": [
+              "106:0:1",
+              "773:0:1",
+              "95:3:1",
+              "95:2:1",
+              "95:1:1",
+              "95:0:1",
+              "994:0:1",
+              "94:0:1",
+              "1145:0:1",
+              "93:0:1",
+              "1207:0:1",
+              "92:0:1",
+              "1181:0:1",
+              "65:0:1"
             ]
           },
           "cruiseSpeedMps": 6.666667
@@ -152,10 +151,15 @@
           "h": 1.78
         },
         "initial": {
+          "laneRef": {
+            "rsl": "57:0:1",
+            "s": 13.340423459139696,
+            "tFrac": 0
+          },
           "pose": {
-            "x": 340,
-            "z": -1780,
-            "headingRad": -0.36
+            "x": 407.5891124909301,
+            "z": -1801.135024191602,
+            "headingRad": 2.561107031878058
           },
           "speedMps": 9.444444
         },
@@ -170,20 +174,22 @@
             "speedFactor": 1
           },
           "route": {
-            "kind": "polyline",
-            "points": [
-              {
-                "x": 340,
-                "z": -1780
-              },
-              {
-                "x": 375,
-                "z": -1793
-              },
-              {
-                "x": 430,
-                "z": -1813
-              }
+            "kind": "lanePath",
+            "lanes": [
+              "57:0:1",
+              "1221:0:1",
+              "93:0:-1",
+              "1146:0:-1",
+              "94:0:-1",
+              "995:0:-1",
+              "95:0:-1",
+              "95:1:-1",
+              "95:2:-1",
+              "95:3:-1",
+              "772:0:-1",
+              "100:0:-1",
+              "227:0:-1",
+              "85:0:-1"
             ]
           },
           "cruiseSpeedMps": 9.444444
@@ -252,10 +258,15 @@
           "h": 1.45
         },
         "initial": {
+          "laneRef": {
+            "rsl": "93:0:1",
+            "s": 6.451895932736173,
+            "tFrac": 0
+          },
           "pose": {
-            "x": 397,
-            "z": -1828,
-            "headingRad": 2.14
+            "x": 395.86321327906774,
+            "z": -1828.7512328980163,
+            "headingRad": 4.128431836529889
           },
           "speedMps": 0
         },
@@ -270,20 +281,13 @@
             "speedFactor": 1
           },
           "route": {
-            "kind": "polyline",
-            "points": [
-              {
-                "x": 397,
-                "z": -1828
-              },
-              {
-                "x": 375,
-                "z": -1793
-              },
-              {
-                "x": 343,
-                "z": -1742
-              }
+            "kind": "lanePath",
+            "lanes": [
+              "93:0:1",
+              "1207:0:1",
+              "92:0:1",
+              "1181:0:1",
+              "65:0:1"
             ]
           },
           "cruiseSpeedMps": 0
@@ -346,6 +350,37 @@
     ],
     "interactions": [
       {
+        "id": "ambulance-commits",
+        "actorId": "ambulance",
+        "trigger": {
+          "kind": "at",
+          "t": 15.7
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      },
+      {
+        "id": "ambulance-enters-refuge",
+        "actorId": "ambulance",
+        "trigger": {
+          "kind": "at",
+          "t": 13.1
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": 0.82
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1.8
+        }
+      },
+      {
         "id": "ambulance-horn-1-off",
         "actorId": "ambulance",
         "trigger": {
@@ -407,7 +442,7 @@
         "verb": "speed",
         "target": {
           "mode": "absolute",
-          "value": 10.555556
+          "value": 10
         },
         "dynamics": {
           "shape": "linear",

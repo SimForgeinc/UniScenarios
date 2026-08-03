@@ -490,6 +490,27 @@
         "label": "Focus vehicle stops and does not follow through red"
       },
       {
+        "id": "ambulance-enters-refuge",
+        "actor": "ambulance",
+        "verb": "laneOffset",
+        "trigger": {
+          "kind": "after",
+          "of": "pedestrian-clears",
+          "event": "end",
+          "delayS": 0.4
+        },
+        "target": {
+          "tFrac": 0.82,
+          "reference": "lane_center"
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1.8
+        },
+        "label": "Ambulance enters the refuge opposite the yielding focus vehicle"
+      },
+      {
         "id": "ambulance-passes",
         "actor": "ambulance",
         "verb": "speed",
@@ -606,6 +627,13 @@
       "authoredActorsExcludedFromTimeline": true
     },
     "studio.timeline.windows": [
+      {
+        "interactionId": "ambulance-enters-refuge",
+        "actorId": "ambulance",
+        "startS": 13.1,
+        "endS": 14.9,
+        "dependent": false
+      },
       {
         "interactionId": "ambulance-horn-1-off",
         "actorId": "ambulance",
