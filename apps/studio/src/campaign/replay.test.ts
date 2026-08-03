@@ -46,6 +46,14 @@ describe('campaign exact-evidence replay', () => {
       expect(pair.startTime).toBe(0);
       expect(pair.endTime).toBe(20);
       expect(pair.trace.ticks.t).toHaveLength(1001);
+      for (const track of Object.values(pair.trace.ticks.actors)) {
+        expect(track.lateralOffsetM).toHaveLength(pair.trace.ticks.t.length);
+        expect(track.lateralOffsetM.every(Number.isFinite)).toBe(true);
+      }
+      if (fixture.ordinal !== 3) {
+        expect(Object.values(pair.trace.ticks.actors)
+          .every((track) => track.lateralOffsetM.every((offset) => offset === 0))).toBe(true);
+      }
       expect(pair.instance.input.clipSeconds).toBe(20);
       if (fixture.ordinal === 1) {
         expect(pair.actors.map((actor) => actor.id).sort()).toEqual(['focus-vehicle', 'reversing-truck', 'worker']);

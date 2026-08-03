@@ -104,7 +104,7 @@ function trace(documentInput = input()): SimTrace {
       clippedCriticality: false,
       ticksSimulated: 2,
     },
-  };
+  } as unknown as SimTrace;
 }
 
 function pair() {
@@ -192,17 +192,46 @@ function message(action: () => unknown): string {
 }
 
 describe('UniScenarios concrete playback import', () => {
-  it.each([1, 2, 3])('accepts explicitly supported trace format v%s', (traceVersion) => {
+  it.each([1, 2, 3])('accepts legacy trace format v%s without lateral offsets as lane-centred', (traceVersion) => {
     const fixture = pair();
     (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;
-    expect(parsePlaybackPair(fixture.instance, fixture.trace).trace.header.traceVersion).toBe(traceVersion);
+    const parsed = parsePlaybackPair(fixture.instance, fixture.trace);
+    expect(parsed.trace.header.traceVersion).toBe(traceVersion);
+    expect(parsed.trace.ticks.actors.ego?.lateralOffsetM).toEqual([0, 0]);
+    expect(parsed.trace.ticks.actors.bus?.lateralOffsetM).toEqual([0, 0]);
   });
 
-  it.each([0, 4, 99])('fails closed for unknown trace format v%s', (traceVersion) => {
+  it('preserves the exact lateral-offset channel in current traces', () => {
+    const fixture = pair();
+    (fixture.trace.header as { traceVersion: number }).traceVersion = 4;
+    (fixture.trace.ticks.actors.bus as any).lateralOffsetM = [0, 0];
+    (fixture.trace.ticks.actors.ego as any).lateralOffsetM = [-0.25, 1.75];
+    expect(parsePlaybackPair(fixture.instance, fixture.trace).trace.ticks.actors.ego?.lateralOffsetM)
+      .toEqual([-0.25, 1.75]);
+  });
+
+  it.each([1, 2, 3, 4])('rejects a malformed present lateral channel in trace format v%s', (traceVersion) => {
+    const fixture = pair();
+    (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;
+    (fixture.trace.ticks.actors.bus as any).lateralOffsetM = [0];
+    (fixture.trace.ticks.actors.ego as any).lateralOffsetM = [0, Number.NaN];
+    const error = message(() => parsePlaybackPair(fixture.instance, fixture.trace));
+    expect(error).toContain('ticks.actors.bus.lateralOffsetM length 1 does not match ticks.t length 2');
+    expect(error).toContain('ticks.actors.ego.lateralOffsetM contains a non-finite value');
+  });
+
+  it('requires the lateral channel in current traces', () => {
+    const fixture = pair();
+    (fixture.trace.header as { traceVersion: number }).traceVersion = 4;
+    const error = message(() => parsePlaybackPair(fixture.instance, fixture.trace));
+    expect(error).toContain('ticks.actors.bus.lateralOffsetM length missing does not match ticks.t length 2');
+  });
+
+  it.each([0, 5, 99])('fails closed for unknown trace format v%s', (traceVersion) => {
     const fixture = pair();
     (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;
     const error = message(() => parsePlaybackPair(fixture.instance, fixture.trace));
-    expect(error).toContain('header.traceVersion must be one of 1, 2, 3 (current 3)');
+    expect(error).toContain('header.traceVersion must be one of 1, 2, 3, 4 (current 4)');
   });
 
   it('maps every semantic actor kind to a buildable fallback model', () => {

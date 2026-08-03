@@ -11,7 +11,7 @@ import type { ActorTrack, SimTrace } from '../trace/trace.js';
 
 const t = [0, 1, 2, 3, 4, 5];
 function track(x: number[], speedMps: number[], lane = '1:0:-1'): ActorTrack {
-  return { x, y: x.map(() => 0), headingRad: x.map(() => 0), speedMps, laneRsl: x.map(() => lane), s: x, present: x.map(() => 1) };
+  return { x, y: x.map(() => 0), headingRad: x.map(() => 0), speedMps, lateralOffsetM: x.map(() => 0), laneRsl: x.map(() => lane), s: x, present: x.map(() => 1) };
 }
 
 function trace(egoSpeeds = [0, 0, 0, 0, 0, 0]): SimTrace {

@@ -17,14 +17,15 @@ import { quantize } from '../core/math.js';
 import { toSceneXZ } from '../frames.js';
 import type { ActorKind, ControlIndication, Dims, MotionPhysicsMode, OperationalConditions, StaticProp } from '../schema/input.js';
 
-/** v2 adds mandatory, truthful motion/physics provenance to the header. */
-export const TRACE_FORMAT_VERSION = 3;
+/** v4 adds the mandatory lane-relative lateral-offset actor channel. */
+export const TRACE_FORMAT_VERSION = 4;
+export const LATERAL_OFFSET_TRACE_VERSION = 4;
 /**
  * Read compatibility is explicit and append-only. v1 is the pre-physics
- * Gallery/evidence envelope; v2 adds physics provenance; v3 is the current
- * collision-impulse envelope. Unknown versions must fail closed.
+ * Gallery/evidence envelope; v2 adds physics provenance; v3 adds collision
+ * impulses; v4 adds lateral offsets. Unknown versions must fail closed.
  */
-export const READABLE_TRACE_FORMAT_VERSIONS = [1, 2, TRACE_FORMAT_VERSION] as const;
+export const READABLE_TRACE_FORMAT_VERSIONS = [1, 2, 3, TRACE_FORMAT_VERSION] as const;
 
 export function isReadableTraceFormatVersion(value: unknown): value is typeof READABLE_TRACE_FORMAT_VERSIONS[number] {
   return typeof value === 'number'
@@ -372,7 +373,8 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
       y: tr.y.map((v) => quantize(v, TRACE_PRECISION.position)),
       headingRad: tr.headingRad.map((v) => quantize(v, TRACE_PRECISION.heading)),
       speedMps: tr.speedMps.map((v) => quantize(v, TRACE_PRECISION.speed)),
-      lateralOffsetM: tr.lateralOffsetM.map((v) => quantize(v, TRACE_PRECISION.position)),
+      lateralOffsetM: lateralOffsetChannel(trace.header.traceVersion, id, tr, trace.ticks.t.length)
+        .map((v) => quantize(v, TRACE_PRECISION.position)),
       ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: tr.s.map((v) => quantize(v, TRACE_PRECISION.s)),
@@ -433,7 +435,7 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
       z,
       headingRad: [...tr.headingRad],
       speedMps: [...tr.speedMps],
-      lateralOffsetM: [...tr.lateralOffsetM],
+      lateralOffsetM: lateralOffsetChannel(trace.header.traceVersion, id, tr, trace.ticks.t.length),
       ...(tr.motionDirection ? { motionDirection: [...tr.motionDirection] } : {}),
       laneRsl: [...tr.laneRsl],
       s: [...tr.s],
@@ -463,4 +465,33 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
     events: trace.events,
     metrics: trace.metrics,
   };
+}
+
+/**
+ * Resolve the lateral channel at the serialized trace boundary. Versions 1–3
+ * predate the channel and deterministically mean lane-centred when it is
+ * absent. A present channel is always validated; v4+ requires it.
+ */
+function lateralOffsetChannel(
+  traceVersion: number,
+  actorId: string,
+  track: ActorTrack,
+  tickCount: number,
+): number[] {
+  if (!isReadableTraceFormatVersion(traceVersion)) {
+    throw new TypeError(`header.traceVersion ${traceVersion} is not readable`);
+  }
+  const value = (track as unknown as Record<string, unknown>)['lateralOffsetM'];
+  if (value === undefined && traceVersion < LATERAL_OFFSET_TRACE_VERSION) {
+    return Array.from({ length: tickCount }, () => 0);
+  }
+  if (!Array.isArray(value) || value.length !== tickCount) {
+    throw new TypeError(
+      `ticks.actors.${actorId}.lateralOffsetM length ${Array.isArray(value) ? value.length : 'missing'} does not match ticks.t length ${tickCount}`,
+    );
+  }
+  if (value.some((entry) => !Number.isFinite(entry))) {
+    throw new TypeError(`ticks.actors.${actorId}.lateralOffsetM contains a non-finite value`);
+  }
+  return [...value] as number[];
 }

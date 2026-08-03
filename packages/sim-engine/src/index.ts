@@ -183,6 +183,7 @@ export {
   quantizeMetrics,
   traceToSceneFrame,
   TRACE_FORMAT_VERSION,
+  LATERAL_OFFSET_TRACE_VERSION,
   READABLE_TRACE_FORMAT_VERSIONS,
   isReadableTraceFormatVersion,
   TRACE_PRECISION,

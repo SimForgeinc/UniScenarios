@@ -5,6 +5,7 @@ import {
   safeParseSimScenarioInput,
   traceToSceneFrame,
   TRACE_FORMAT_VERSION,
+  LATERAL_OFFSET_TRACE_VERSION,
   READABLE_TRACE_FORMAT_VERSIONS,
   isReadableTraceFormatVersion,
   type SceneTrace,
@@ -476,7 +477,7 @@ function validateTrace(value: unknown, name: string, issues: string[]): SimTrace
     }
   }
   if (header) {
-    // v1 and v2 are immutable replay/evidence formats. New traces write v3,
+    // v1 through v3 are immutable replay/evidence formats. New traces write v4,
     // but saved campaigns and imported verified bundles remain readable.
     if (!isReadableTraceFormatVersion(header['traceVersion'])) {
       issues.push(`${name}: header.traceVersion must be one of ${READABLE_TRACE_FORMAT_VERSIONS.join(', ')} (current ${TRACE_FORMAT_VERSION}); got ${display(header['traceVersion'])}`);
@@ -561,6 +562,18 @@ function validateTracks(
       if (channel !== 'laneRsl' && values.some((value) => !Number.isFinite(value))) {
         issues.push(`${name}: ticks.actors.${actor.id}.${channel} contains a non-finite value`);
       }
+    }
+    const lateralOffset = track['lateralOffsetM'];
+    if (lateralOffset === undefined
+      && isReadableTraceFormatVersion(trace.header.traceVersion)
+      && trace.header.traceVersion < LATERAL_OFFSET_TRACE_VERSION) {
+      // v1-v3 did not define this channel; scene conversion synthesizes zeros.
+    } else if (!Array.isArray(lateralOffset) || lateralOffset.length !== count) {
+      issues.push(
+        `${name}: ticks.actors.${actor.id}.lateralOffsetM length ${Array.isArray(lateralOffset) ? lateralOffset.length : 'missing'} does not match ticks.t length ${count}`,
+      );
+    } else if (lateralOffset.some((value) => !Number.isFinite(value))) {
+      issues.push(`${name}: ticks.actors.${actor.id}.lateralOffsetM contains a non-finite value`);
     }
     const motionDirection = track['motionDirection'];
     if (motionDirection !== undefined) {
