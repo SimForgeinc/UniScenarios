@@ -19,6 +19,17 @@ const reboundProgram = {
   },
 } satisfies SignalProgram;
 
+const sharedMovementProgram = {
+  ...program,
+  mapBinding: {
+    junctionId: 'junction', controllerIds: ['first-stage', 'preferred-stage'], headIds: ['head'], timingSource: 'authored',
+    controllerHeadGroups: [
+      { controllerId: 'first-stage', headIds: ['head'] },
+      { controllerId: 'preferred-stage', headIds: ['head'] },
+    ],
+  },
+} satisfies SignalProgram;
+
 describe('StudioSignalSelectionModel', () => {
   it('publishes exact head selections and clears them', () => {
     const model = new StudioSignalSelectionModel(buildSignalControlIndex([program]));
@@ -39,5 +50,16 @@ describe('StudioSignalSelectionModel', () => {
     model.setIndex(buildSignalControlIndex([reboundProgram]));
     expect(model.snapshot).toMatchObject({ junctionId: 'new-junction', controllerIds: ['new-stage'] });
     expect(listener).toHaveBeenLastCalledWith(expect.objectContaining({ junctionId: 'new-junction' }));
+  });
+
+  it('retains a non-first preferred controller for a shared movement and map refresh', () => {
+    const model = new StudioSignalSelectionModel(buildSignalControlIndex([sharedMovementProgram]));
+    expect(model.selectHead('head', 'through', 'preferred-stage')).toMatchObject({
+      referenceMovementId: 'through',
+      referenceControllerId: 'preferred-stage',
+      controllerIds: ['first-stage', 'preferred-stage'],
+    });
+    model.setIndex(buildSignalControlIndex([sharedMovementProgram]));
+    expect(model.snapshot?.referenceControllerId).toBe('preferred-stage');
   });
 });

@@ -1193,7 +1193,7 @@ export function App(): JSX.Element {
             signalControlDigest={signalAuthoringCatalog?.controlDigest ?? null}
             selectedSignalHeadId={selectedSignalHeadId}
             selectedSignalJunctionId={selectedSignalReference?.junctionId ?? null}
-            selectedSignalControllerId={selectedSignalReference?.controllerIds[0] ?? null}
+            selectedSignalControllerId={selectedSignalReference?.referenceControllerId ?? null}
             selectedSignalResolved={selectedSignalHeadId === null || selectedSignalReference !== null}
           />
         </div>

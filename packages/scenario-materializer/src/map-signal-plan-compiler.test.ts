@@ -127,6 +127,64 @@ describe('map signal plan compiler', () => {
     },
   );
 
+  it('compiles the exact non-first controller selected for a shared physical head', () => {
+    const sharedPrograms: SignalProgram[] = [
+      {
+        id: 'shared-first', phases: [{ phase: 'red', durationS: 4 }], offsetS: 0, loop: true,
+        stopLines: [{ rsl: 'a', s: 9, connectingLaneRsls: ['ja'] }],
+        mapBinding: { junctionId: 'j1', controllerIds: ['c-first'], headIds: ['shared'], controllerHeadGroups: [{ controllerId: 'c-first', headIds: ['shared'] }], timingSource: 'authored' },
+      },
+      {
+        id: 'shared-preferred', phases: [{ phase: 'red', durationS: 4 }], offsetS: 0, loop: true,
+        stopLines: [{ rsl: 'b', s: 9, connectingLaneRsls: ['jb'] }],
+        mapBinding: { junctionId: 'j1', controllerIds: ['c-preferred'], headIds: ['preferred-only', 'shared'], controllerHeadGroups: [{ controllerId: 'c-preferred', headIds: ['preferred-only', 'shared'] }], timingSource: 'authored' },
+      },
+      {
+        id: 'conflict', phases: [{ phase: 'green', durationS: 4 }], offsetS: 0, loop: true,
+        stopLines: [{ rsl: 'c', s: 9, connectingLaneRsls: ['jc'] }],
+        mapBinding: { junctionId: 'j1', controllerIds: ['c-conflict'], headIds: ['conflict'], controllerHeadGroups: [{ controllerId: 'c-conflict', headIds: ['conflict'] }], timingSource: 'authored' },
+      },
+    ];
+    const sharedCatalog = {
+      heads: [
+        { id: 'shared', roadId: '1', s: 1, dynamic: true },
+        { id: 'preferred-only', roadId: '2', s: 1, dynamic: true },
+        { id: 'conflict', roadId: '3', s: 1, dynamic: true },
+      ],
+      roadControls: [], speedLimits: [], applicability: [],
+      controllers: [
+        { id: 'c-first', sequence: 0, signalIds: ['shared'] },
+        { id: 'c-preferred', sequence: 1, signalIds: ['preferred-only', 'shared'] },
+        { id: 'c-conflict', sequence: 2, signalIds: ['conflict'] },
+      ],
+      junctions: [{ junctionId: 'j1', controllerIds: ['c-first', 'c-preferred', 'c-conflict'] }],
+    } as const;
+    const sharedDigest = contentHash({ signalPrograms: sharedPrograms, roadControls: [] });
+    const sharedPlan: MapSignalPlan = {
+      ...plan,
+      binding: { ...plan.binding, controlDigest: sharedDigest },
+      clips: [{ ...plan.clips[0]!, reference: { controllerId: 'c-preferred', headId: 'shared' }, indication: 'green' }],
+    };
+    const sharedTopology = {
+      ...topology,
+      gates: [
+        { id: 'g-first', junctionId: 'j1', turnRelation: 'Straight', headingChangeRad: 0, connectingLaneRsl: 'ja', approachLaneRsl: 'a', exitLaneRsls: [] },
+        { id: 'g-preferred', junctionId: 'j1', turnRelation: 'Left', headingChangeRad: 1, connectingLaneRsl: 'jb', approachLaneRsl: 'b', exitLaneRsls: [] },
+        { id: 'g-conflict', junctionId: 'j1', turnRelation: 'Straight', headingChangeRad: 0, connectingLaneRsl: 'jc', approachLaneRsl: 'c', exitLaneRsls: [] },
+      ],
+    } as any;
+    const compiled = compileMapSignalPlans(sharedPrograms, [sharedPlan], {
+      ...options,
+      controlDigest: sharedDigest,
+      signalCatalog: sharedCatalog,
+      topology: sharedTopology,
+      conflictPairsByJunction: { j1: [{ gateA: 'g-preferred', gateB: 'g-conflict' }] },
+    });
+    const book = new SignalBook(compiled, 2);
+    expect(book.phaseAt('shared-preferred', 4)).toBe('green');
+    expect(book.phaseAt('conflict', 4)).toBe('red');
+  });
+
   it('switches adjacent clips exactly at their shared boundary and coalesces equal phases', () => {
     const adjacent: MapSignalPlan = {
       ...plan,

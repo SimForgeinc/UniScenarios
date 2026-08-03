@@ -35,9 +35,27 @@ export function physicalSignalChoiceIndex(
   junctionId: string | null | undefined,
   controllerId: string | null | undefined,
 ): number {
-  const exact = choices.findIndex((choice) => choice.junctionId === junctionId
+  const matches = choices.reduce<number[]>((indices, choice, index) => {
+    if (choice.junctionId === junctionId && choice.controllerId === controllerId) indices.push(index);
+    return indices;
+  }, []);
+  return matches.length === 1 ? matches[0]! : -1;
+}
+
+/** Fail closed when the runtime-selected controller cannot be mapped exactly
+ * back to one catalog choice. Falling back to the first controller would make
+ * a click author a different OpenDRIVE stage than the one highlighted. */
+export function physicalSignalChoiceIssue(
+  choices: readonly PhysicalSignalChoice[],
+  junctionId: string | null | undefined,
+  controllerId: string | null | undefined,
+): string | null {
+  if (!junctionId || !controllerId) return 'exact controller ownership is unavailable';
+  const matches = choices.filter((choice) => choice.junctionId === junctionId
     && choice.controllerId === controllerId);
-  return exact >= 0 ? exact : 0;
+  if (matches.length === 0) return `controller ${controllerId} is stale or no longer owns this head`;
+  if (matches.length > 1) return `controller ${controllerId} ownership is ambiguous`;
+  return null;
 }
 
 export function createMapSignalPlan(

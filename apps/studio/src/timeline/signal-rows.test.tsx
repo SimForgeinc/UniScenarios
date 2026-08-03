@@ -39,9 +39,10 @@ describe('controller-level signal timeline UI', () => {
   });
 
   it('offers explicit controller authoring for a selected physical orb', () => {
-    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" />);
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalJunctionId="447" selectedSignalControllerId="alternate" />);
     expect(markup).toContain('data-testid="selected-signal-head"');
     expect(markup).toContain('Intersection 447');
+    expect(markup).toContain('<option value="1" selected="">Intersection 447 · controller alternate</option>');
     expect(markup).toContain('data-testid="timeline-add-signal-controller"');
   });
 
@@ -49,6 +50,13 @@ describe('controller-level signal timeline UI', () => {
     const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalResolved={false} />);
     expect(markup).toContain('Unbound signal — exact controller ownership is unavailable');
     expect(markup).toContain('disabled="" data-testid="timeline-add-signal-controller"');
+  });
+
+  it('fails visibly instead of falling back to the first controller when the preferred binding is stale', () => {
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalJunctionId="447" selectedSignalControllerId="removed" />);
+    expect(markup).toContain('controller removed is stale or no longer owns this head');
+    expect(markup).toContain('disabled="" data-testid="timeline-add-signal-controller"');
+    expect(markup).not.toContain('selected=""');
   });
 
   it('commits a new clip by replacing its plan exactly once', () => {

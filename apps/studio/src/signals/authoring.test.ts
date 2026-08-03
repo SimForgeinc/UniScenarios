@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MapSignalCatalog } from '@uniscenarios/scenario-materializer';
-import { createMapSignalPlan, ownedSignalHeadIds, physicalSignalChoiceIndex, physicalSignalChoices } from './authoring';
+import { createMapSignalPlan, ownedSignalHeadIds, physicalSignalChoiceIndex, physicalSignalChoiceIssue, physicalSignalChoices } from './authoring';
 
 const catalog: MapSignalCatalog = {
   heads: [{ id: 'h1', roadId: '1', s: 2, dynamic: true }, { id: 'h2', roadId: '2', s: 3, dynamic: true }],
@@ -30,7 +30,11 @@ describe('signal authoring catalog', () => {
   it('selects the exact derived controller instead of relying on catalog order', () => {
     const choices = physicalSignalChoices(catalog, 'h1');
     expect(physicalSignalChoiceIndex(choices, 'j', 'late')).toBe(1);
-    expect(physicalSignalChoiceIndex(choices, 'j', 'missing')).toBe(0);
+    expect(physicalSignalChoiceIndex(choices, 'j', 'missing')).toBe(-1);
+    expect(physicalSignalChoiceIssue(choices, 'j', 'late')).toBeNull();
+    expect(physicalSignalChoiceIssue(choices, 'j', 'missing')).toContain('stale');
+    expect(physicalSignalChoiceIndex([...choices, choices[1]!], 'j', 'late')).toBe(-1);
+    expect(physicalSignalChoiceIssue([...choices, choices[1]!], 'j', 'late')).toContain('ambiguous');
   });
 
   it('claims every head at an authored junction', () => {
