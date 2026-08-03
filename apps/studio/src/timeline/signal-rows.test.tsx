@@ -29,7 +29,8 @@ const catalog: MapSignalCatalog = {
 describe('controller-level signal timeline UI', () => {
   it('renders a signal group and an indication-colored, resizable phase clip', () => {
     const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template, map: { id: 'yale' } } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" />);
-    expect(markup).toContain('data-testid="timeline-signal-row-signals-447"');
+    expect(markup).toContain('data-testid="timeline-signal-sticker-signals-447"');
+    expect(markup).not.toContain('timeline-signal-row-');
     expect(markup).toContain('Intersection 447');
     expect(markup).toContain('data-testid="timeline-signal-clip-phase_1"');
     expect(markup).toContain('data-indication="green"');

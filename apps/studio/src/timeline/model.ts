@@ -1,4 +1,5 @@
 import type { Interaction, MapSignalPlan, MapSignalPlanClip, ScenarioTemplateV2, Trigger } from '@uniscenarios/scenario-model';
+import { getEntry, isCatalogId } from '@uniscenarios/prop-catalog';
 import { actionResource, isActionCompatible, type ActionResource } from './actions';
 
 export type TimelineTrackKind = 'actions';
@@ -6,7 +7,7 @@ export const MIN_TIMELINE_CLIP_SECONDS = 0.2;
 export const TIMELINE_LAYOUT_EXTENSION_KEY = 'studio.presentation.timeline.v1';
 export interface TimelineItem { readonly interaction: Interaction; readonly actorId: string; readonly track: TimelineTrackKind; readonly resource: ActionResource; readonly anchorTime: number; readonly endTime: number; readonly unresolved: boolean; }
 export interface TimelineActionLane { readonly index: number; readonly items: readonly TimelineItem[]; }
-export interface TimelineActorGroup { readonly actorId: string; readonly label: string; readonly actorClass: ScenarioTemplateV2['roles'][number]['actor']['class']; readonly catalogId?: string; readonly compact: boolean; readonly tracks: Readonly<Record<TimelineTrackKind, readonly TimelineItem[]>>; readonly lanes: readonly TimelineActionLane[]; }
+export interface TimelineActorGroup { readonly actorId: string; readonly label: string; readonly displayLabel: string; readonly actorClass: ScenarioTemplateV2['roles'][number]['actor']['class']; readonly catalogId?: string; readonly compact: boolean; readonly tracks: Readonly<Record<TimelineTrackKind, readonly TimelineItem[]>>; readonly lanes: readonly TimelineActionLane[]; }
 export interface TimelineMapSignalClip {
   readonly planId: string;
   readonly junctionId: string;
@@ -203,6 +204,7 @@ export function timelineLanePreferencesForDrop(
 }
 
 export function buildTimelineGroups(template: ScenarioTemplateV2, lanePreferences = timelineLanePreferences(template.extensions)): TimelineActorGroup[] {
+  const ordinals = new Map<string, number>();
   return template.roles.map((role) => {
     const items = template.choreography.interactions.flatMap((interaction): TimelineItem[] => {
       if (interaction.actor !== role.id || !isActionCompatible(interaction, role.actor.class, role.actor.catalogId)) return [];
@@ -211,8 +213,22 @@ export function buildTimelineGroups(template: ScenarioTemplateV2, lanePreference
       const end = interaction.until ? triggerAnchor(interaction.until, template.choreography.interactions, template.choreography.clipSeconds).time : Math.min(template.choreography.clipSeconds, anchor.time + interactionDuration(interaction));
       return [{ interaction, actorId: role.id, track: 'actions', resource, anchorTime: anchor.time, endTime: Math.max(anchor.time + .1, end), unresolved: anchor.unresolved }];
     }).sort((a, b) => a.anchorTime - b.anchorTime);
-    return { actorId: role.id, label: role.label ?? role.actor.catalogId ?? role.id, actorClass: role.actor.class, ...(role.actor.catalogId ? { catalogId: role.actor.catalogId } : {}), compact: role.actor.class === 'static_object', tracks: { actions: items }, lanes: packActionLanes(items, lanePreferences) };
+    const typeKey = role.actor.catalogId ?? role.actor.class;
+    const ordinal = (ordinals.get(typeKey) ?? 0) + 1;
+    ordinals.set(typeKey, ordinal);
+    return { actorId: role.id, label: role.label ?? role.actor.catalogId ?? role.id, displayLabel: `${timelineActorTypeName(role.actor.catalogId, role.actor.class)} ${ordinal}`, actorClass: role.actor.class, ...(role.actor.catalogId ? { catalogId: role.actor.catalogId } : {}), compact: role.actor.class === 'static_object', tracks: { actions: items }, lanes: packActionLanes(items, lanePreferences) };
   });
+}
+
+/** Concise, catalog-backed identity used only in timeline presentation. */
+export function timelineActorTypeName(catalogId: string | undefined, actorClass: ScenarioTemplateV2['roles'][number]['actor']['class']): string {
+  if (catalogId === 'vehicle.pickup') return 'Pickup';
+  if (catalogId === 'vehicle.van') return 'Van';
+  if (catalogId === 'vehicle.bus') return 'Bus';
+  if (catalogId === 'vehicle.tram') return 'Tram';
+  if (catalogId && isCatalogId(catalogId)) return getEntry(catalogId).label;
+  const fallback = catalogId?.split('.').at(-1) ?? actorClass;
+  return fallback.replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
 /** Project map-bound controller programs without turning physical lamp heads into actors. */

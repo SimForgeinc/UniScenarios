@@ -6,6 +6,10 @@ const speed: Interaction = { id: 'speed_ego', actor: 'ego', trigger: { kind: 'at
 const item = (interaction: Interaction, resource: TimelineItem['resource'], start: number, end: number): TimelineItem => ({ interaction, actorId: interaction.actor, track: 'actions', resource, anchorTime: start, endTime: end, unresolved: false });
 
 describe('action-only timeline projection', () => {
+  it('starts every actor with exactly one empty action lane', () => {
+    const empty = { schemaVersion: 2, roles: [{ id: 'ego', actor: { class: 'car', catalogId: 'vehicle.sedan' } }], choreography: { clipSeconds: 20, interactions: [] }, extensions: {} } as unknown as ScenarioTemplateV2;
+    expect(buildTimelineGroups(empty)[0]?.lanes).toEqual([{ index: 0, items: [] }]);
+  });
   it('resolves trigger chains and moves actions with typed at triggers', () => { const after: Interaction = { ...speed, id: 'after', trigger: { kind: 'after', of: speed.id, event: 'start', delayS: 2 } }; expect(triggerAnchor(after.trigger, [speed, after], 20)).toEqual({ time: 5, unresolved: false }); expect(moveInteraction(speed, 7.126).trigger).toEqual({ kind: 'at', t: 7.126 }); });
   it('moves a clip without changing its strict execution-window duration', () => { const clip = { ...speed, until: { kind: 'at', t: 5 } } as Interaction; const moved = moveInteraction(clip, 8); expect(moved.trigger).toEqual({ kind: 'at', t: 8 }); expect(moved.until).toEqual({ kind: 'at', t: 10 }); });
   it('packs overlapping independent actions onto automatic parallel lanes', () => { const horn = { id: 'horn', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'set', target: { key: 'audio.horn', value: true } } as Interaction; expect(packActionLanes([item(speed, 'longitudinal', 3, 5), item(horn, 'horn', 4, 5)]).map((lane) => lane.items.length)).toEqual([1, 1]); });
