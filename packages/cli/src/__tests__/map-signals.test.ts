@@ -9,6 +9,7 @@ import { runSimulation } from '@uniscenarios/sim-engine';
 import {
   buildSiteSignalPlan,
   buildSiteRoadControls,
+  buildMapControlPlan,
   defaultPhasesForHead,
   parseMapSignalCatalog,
   resolveSiteSignalProgram,
@@ -209,6 +210,33 @@ describe('map signal controller parsing', () => {
 });
 
 describe.skipIf(!haveMaps)('real map signal materialization', () => {
+  it('makes map-wide Belmont stops and Yale signals authoritative for live preview', async () => {
+    const [belmont, yale] = await Promise.all([loadMap(BELMONT), loadMap(YALE)]);
+    const belmontControls = buildMapControlPlan(belmont);
+    const yaleControls = buildMapControlPlan(yale);
+
+    expect(belmontControls.signalPrograms).toEqual([]);
+    expect(belmontControls.roadControls.length).toBeGreaterThan(0);
+    expect(belmontControls.roadControls.flatMap((control) => control.mapBinding?.controlIds ?? []))
+      .toContain('4376');
+    expect(belmontControls.roadControls.every((control) =>
+      control.stopLines.length > 0 && control.stopLines.every((line) =>
+        belmont.graph.geometry(line.rsl) !== null && line.connectingLaneRsls.length > 0,
+      ),
+    )).toBe(true);
+    expect(belmont.signalCatalog.speedLimits.some((sign) => sign.id === '4394' && sign.speedLimitKph > 40)).toBe(true);
+    expect(belmont.graph.geometry('17:0:-1')?.speedLimitMps).toBeCloseTo(25 * 1.609344 / 3.6, 6);
+
+    expect(yaleControls.signalPrograms.length).toBeGreaterThan(0);
+    expect(yaleControls.signalPrograms.flatMap((program) => program.mapBinding?.headIds ?? []))
+      .toContain('1542');
+    expect(yaleControls.signalPrograms.every((program) =>
+      program.stopLines.length > 0 && program.stopLines.every((line) =>
+        yale.graph.geometry(line.rsl) !== null && line.connectingLaneRsls.length > 0,
+      ),
+    )).toBe(true);
+  }, 60_000);
+
   it('binds Yale physical heads and controller sequences to movement-filtered programs', async () => {
     const authoredTemplate = await readTemplate(LTAP);
     const template = ScenarioTemplateV2Schema.parse({

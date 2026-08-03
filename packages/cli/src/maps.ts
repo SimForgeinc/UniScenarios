@@ -29,6 +29,7 @@ import {
   normalizeDerivedMapIndex,
   type DerivedMapIndex,
 } from '@uniscenarios/anchor-matcher';
+import { topologyWithMapSpeedLimits } from '@uniscenarios/scenario-materializer';
 import { buildLaneGraph, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
@@ -130,12 +131,13 @@ export function loadMap(mapId: string): Promise<MapBundle> {
   const built = (async (): Promise<MapBundle> => {
     assertKnownMap(mapId);
     const dir = mapDir(mapId);
-    const [topology, derived, catalog, signalCatalog] = await Promise.all([
+    const [rawTopology, derived, catalog, signalCatalog] = await Promise.all([
       readJsonGz<TopologyIndex>(path.join(dir, ARTIFACTS.topology), 'missing_topology_index'),
       readJsonGz<DerivedTopology>(path.join(dir, ARTIFACTS.derived), 'missing_derived_topology'),
       readJsonGz<LocationCatalog>(path.join(dir, ARTIFACTS.locations), 'missing_location_catalog'),
       loadMapSignalCatalog(path.join(dir, 'map.xodr'), path.join(dir, 'signals.geojson.gz')),
     ]);
+    const topology = topologyWithMapSpeedLimits(rawTopology, signalCatalog);
     const index = normalizeDerivedMapIndex(derived as unknown, {
       mapId,
       // The derived file carries only the derived layers; lanes and gates live

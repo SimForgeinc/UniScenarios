@@ -26,6 +26,13 @@ export interface MapRoadControlHead {
   readonly s: number;
 }
 
+export interface MapSpeedLimitHead {
+  readonly id: string;
+  readonly roadId: string;
+  readonly s: number;
+  readonly speedLimitKph: number;
+}
+
 /** OpenDRIVE lane applicability for a physical signal head. A head can be
  * declared once and referenced from several junction movements. */
 export interface MapSignalApplicability {
@@ -50,6 +57,7 @@ export interface MapSignalJunction {
 export interface MapSignalCatalog {
   readonly heads: readonly MapSignalHead[];
   readonly roadControls: readonly MapRoadControlHead[];
+  readonly speedLimits: readonly MapSpeedLimitHead[];
   readonly applicability: readonly MapSignalApplicability[];
   readonly controllers: readonly MapSignalController[];
   readonly junctions: readonly MapSignalJunction[];
@@ -91,6 +99,8 @@ interface SignalGeoJson {
       readonly s?: unknown;
       readonly signal_category?: unknown;
       readonly dynamic?: unknown;
+      readonly speed_limit_mph?: unknown;
+      readonly speed_limit_kph?: unknown;
     };
   }>;
 }
@@ -138,6 +148,20 @@ export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): Map
     })
     .filter((head): head is MapRoadControlHead => head !== null)
     .sort((a, b) => a.id.localeCompare(b.id));
+  const speedLimits = (geojson.features ?? [])
+    .map((feature): MapSpeedLimitHead | null => {
+      const p = feature.properties ?? {};
+      if (p.signal_category !== 'speed_limit_sign') return null;
+      const id = String(p.id ?? '');
+      const roadId = String(p.road_id ?? '');
+      const mph = finite(p.speed_limit_mph, Number.NaN);
+      const kph = finite(p.speed_limit_kph, Number.NaN);
+      const speedLimitKph = Number.isFinite(kph) && kph > 0 ? kph : mph * 1.609344;
+      if (!id || !roadId || !Number.isFinite(speedLimitKph) || speedLimitKph <= 0) return null;
+      return { id, roadId, s: finite(p.s), speedLimitKph };
+    })
+    .filter((head): head is MapSpeedLimitHead => head !== null)
+    .sort((a, b) => a.roadId.localeCompare(b.roadId) || a.s - b.s || a.id.localeCompare(b.id));
 
   const applicability: MapSignalApplicability[] = [];
   for (const road of xodr.matchAll(/<road\b([^>]*)>([\s\S]*?)<\/road>/g)) {
@@ -215,7 +239,32 @@ export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): Map
     }
   }
   junctions.sort((a, b) => a.junctionId.localeCompare(b.junctionId));
-  return { heads, roadControls, applicability: uniqueApplicability, controllers, junctions };
+  return { heads, roadControls, speedLimits, applicability: uniqueApplicability, controllers, junctions };
+}
+
+/** Apply physical speed-limit signs before the LaneGraph is built. The current
+ * maps use one posted value per OpenDRIVE road; preserving the helper as a
+ * pure topology transform keeps parsing, preview and CLI execution identical. */
+export function topologyWithMapSpeedLimits(
+  topology: TopologyIndex,
+  catalog: MapSignalCatalog,
+): TopologyIndex {
+  const byRoad = new Map<string, number>();
+  for (const sign of catalog.speedLimits) {
+    const previous = byRoad.get(sign.roadId);
+    if (previous === undefined || sign.speedLimitKph < previous) byRoad.set(sign.roadId, sign.speedLimitKph);
+  }
+  if (byRoad.size === 0) return topology;
+  let changed = false;
+  const lanes = Object.fromEntries(Object.entries(topology.lanes).map(([rsl, lane]) => {
+    const speedLimitKph = byRoad.get(String(lane.roadId));
+    if (speedLimitKph === undefined || Math.abs((lane.speedLimitKph ?? 0) - speedLimitKph) < 1e-9) {
+      return [rsl, lane];
+    }
+    changed = true;
+    return [rsl, { ...lane, speedLimitKph }];
+  }));
+  return changed ? { ...topology, lanes } : topology;
 }
 
 function coalescePhases(
@@ -448,7 +497,29 @@ function buildRoadControlsForJunction(bundle: SignalMapBundle, junctionId: strin
       mapBinding: { junctionId, controlIds: [head.id], source: 'map' },
     });
   }
-  return controls.sort((a, b) => a.id.localeCompare(b.id));
+  // RoadRunner often models one physical sign per lane even when the signs
+  // protect the same approach movement. Treating each head as an independent
+  // stop would make a car dwell repeatedly at one painted line. Coalesce only
+  // exact movement sets, retaining every source control id as provenance.
+  const grouped = new Map<string, RoadControl[]>();
+  for (const control of controls) {
+    const key = JSON.stringify(control.stopLines);
+    const bucket = grouped.get(key);
+    if (bucket) bucket.push(control);
+    else grouped.set(key, [control]);
+  }
+  return [...grouped.values()]
+    .map((group) => {
+      group.sort((a, b) => a.id.localeCompare(b.id));
+      const first = group[0]!;
+      const controlIds = [...new Set(group.flatMap((entry) => entry.mapBinding?.controlIds ?? []))].sort();
+      return {
+        ...first,
+        id: `road-control:${controlIds[0] ?? first.id}`,
+        mapBinding: first.mapBinding ? { ...first.mapBinding, controlIds } : undefined,
+      };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export function buildSiteRoadControls(bundle: SignalMapBundle, site: MatchedSite): RoadControl[] {

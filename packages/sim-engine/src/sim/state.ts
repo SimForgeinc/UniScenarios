@@ -78,6 +78,28 @@ export interface LateralCommand {
 export interface RoadControlRuntimeState {
   stoppedSinceS: number | null;
   released: boolean;
+  /** First tick at rest at this control. Used for deterministic FIFO order. */
+  arrivedAtS: number | null;
+  /** Release/commit time; retained until the actor clears the junction. */
+  releasedAtS: number | null;
+  /** A red/stop release includes a small seeded perception/start delay. */
+  proceedAfterS: number | null;
+  /** True after this actor has been held by a signal indication. */
+  wasBlocked: boolean;
+}
+
+/** Small deterministic variation, not a second simulation model. The same
+ * profile is used by authored and ambient road actors whenever an explicit
+ * timeline command is not owning longitudinal motion. */
+export interface DriverBehaviorProfile {
+  readonly naturalistic: boolean;
+  readonly desiredSpeedFactor: number;
+  readonly timeHeadwayS: number;
+  readonly minimumGapM: number;
+  readonly accelScale: number;
+  readonly comfortBrakeScale: number;
+  readonly reactionTimeS: number;
+  readonly startDelayS: number;
 }
 
 export interface ActorRuntime {
@@ -88,6 +110,7 @@ export interface ActorRuntime {
   /** Excluded from pair metrics; still collides and occludes. */
   readonly static: boolean;
   rules: ActorRules;
+  readonly driver?: DriverBehaviorProfile;
   /** Free-flow cruise speed, m/s (recomputed when `speedFactor` changes). */
   cruiseSpeedMps: number;
   cruiseOverrideMps: number | null;
