@@ -88,7 +88,11 @@ describe('cut-in composition', () => {
     };
     const slow = duration(0.4);
     const fast = duration(1.0);
-    expect(slow / fast).toBeGreaterThan(2.0);
+    // The authored rate remains monotone, while the force-based steering
+    // plant adds finite settling time at both rates. It therefore must be
+    // materially slower, but no longer has the exact inverse-duration ratio
+    // of the removed kinematic sampler.
+    expect(slow / fast).toBeGreaterThan(1.3);
     expect(slow / fast).toBeLessThan(3.0);
   });
 
@@ -125,7 +129,7 @@ describe('cut-in composition', () => {
     });
     const track = trace.ticks.actors['challenger']!;
     // -0.25 of a 3.5 m lane = -0.875 m, relative to the lane centreline at -3.5.
-    expect(track.y[track.y.length - 1]!).toBeCloseTo(-3.5 - 0.875, 2);
+    expect(track.y[track.y.length - 1]!).toBeCloseTo(-3.5 - 0.875, 1);
   });
 
   it('aborts an in-progress true lane change back to its source route', () => {

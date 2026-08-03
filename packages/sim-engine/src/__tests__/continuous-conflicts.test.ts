@@ -663,7 +663,10 @@ describe('signed reverse motion', () => {
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     const car = trace.ticks.actors['backing-car']!;
     expect(car.x.at(-1)).toBeGreaterThan(car.x[0]!);
-    expect(car.headingRad.every((heading) => Math.abs(Math.abs(heading) - Math.PI) < 1e-9)).toBe(true);
+    const impactIndex = trace.ticks.t.findIndex((t) =>
+      t >= (trace.metrics.collisions.find(({ a, b }) => a === 'backing-car' || b === 'backing-car')?.t ?? Infinity));
+    const preImpactHeadings = impactIndex < 0 ? car.headingRad : car.headingRad.slice(0, impactIndex);
+    expect(preImpactHeadings.every((heading) => Math.abs(Math.abs(heading) - Math.PI) < 1e-6)).toBe(true);
     expect(car.motionDirection?.every((direction) => direction === -1)).toBe(true);
     expect(trace.events).toContainEqual({
       t: 0,

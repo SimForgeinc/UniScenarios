@@ -57,7 +57,7 @@ import {
   longitudinalAccel,
   desiredGapM,
 } from './controllers.js';
-import { transitionDuration } from './dynamics.js';
+import { transitionDuration, transitionValue } from './dynamics.js';
 import { ACTOR_PHYSICS_PROFILES, DynamicV1Backend, DYNAMIC_V1_DEFAULT_SUBSTEP_S } from './dynamic-v1.js';
 import type { MotionBackend, PhysicsTelemetrySample } from './motion-backend.js';
 import { actorPhysicsBackends } from './physics-provenance.js';
@@ -921,7 +921,12 @@ class Simulation {
       }
       if (!verdict.fire) continue;
       const targetActor = this.byId.get(tr.interaction.actorId);
-      if (targetActor?.crashDisabledAtS != null) {
+      // A material crash disables every command capable of moving or
+      // respawning the body, but evidence-only state changes (lights, horn,
+      // doors) must still be observable when they are triggered by the impact
+      // itself. The crash latch remains authoritative regardless of a later
+      // rules.* state write.
+      if (targetActor?.crashDisabledAtS != null && tr.interaction.verb !== 'set') {
         tr.status = 'skipped';
         this.events.push({
           t,
@@ -978,7 +983,7 @@ class Simulation {
   private applyInteraction(it: Interaction, t: number): void {
     const a = this.byId.get(it.actorId);
     if (!a) return;
-    if (a.crashDisabledAtS != null) {
+    if (a.crashDisabledAtS != null && it.verb !== 'set') {
       this.events.push({ t, kind: 'trigger_skipped', interactionId: it.id, actorId: a.id, reason: 'actor-crash-disabled' });
       return;
     }
@@ -1519,7 +1524,30 @@ class Simulation {
 
     const commandedLeader =
       a.longCmd?.kind === 'gap' && a.longCmd.gap ? this.leaderFromId(a, a.longCmd.gap.actorId) : null;
-    const nearestLeader = findLeader(a, this.actors);
+    const sourceLeader = findLeader(a, this.actors);
+    let targetLeader: ReturnType<typeof findLeader> = null;
+    if (a.latCmd?.kind === 'changeLane' && a.latCmd.pending) {
+      const targetRoute = a.latCmd.pending.route;
+      const targetS = targetRoute.projectPoint(a.position).s;
+      const targetObserver: ActorRuntime = {
+        ...a,
+        route: targetRoute,
+        routeS: targetS,
+        // Query the reserved destination corridor, not the body's current
+        // cross-lane offset from that route.
+        lateralOffsetM: 0,
+      };
+      // Reserve the destination gap from the beginning of a lane change. A
+      // slow manoeuvre must not remain blind to a leader merely because its
+      // route hand-off is intentionally deferred until the physical body has
+      // crossed the lane marking.
+      targetLeader = findLeader(targetObserver, this.actors, targetRoute.widthAt(targetS) / 2 + 0.5);
+    }
+    const nearestLeader = sourceLeader === null
+      ? targetLeader
+      : targetLeader === null || sourceLeader.gapM <= targetLeader.gapM
+        ? sourceLeader
+        : targetLeader;
     let accel = longitudinalAccel({
       actor: a,
       t,
@@ -1561,19 +1589,43 @@ class Simulation {
         a.routeS + Math.max(5, Math.abs(a.speedMps) * 0.8),
       );
       const previewPose = a.route.poseAt(previewS);
+      const previewTimeS = Math.max(0.4, (previewS - a.routeS) / Math.max(Math.abs(a.speedMps), 1));
+      // A force-based body needs a spatial reference ahead of its current
+      // position. Feeding it only the one-tick lateral schedule produces a
+      // vanishing steering angle (centimetres of offset several metres away),
+      // so project the authored transition to the same look-ahead horizon used
+      // by pure pursuit. This preserves the timeline's rate/time semantics
+      // without teleporting the body onto the kinematic schedule.
+      const previewLateralOffset = a.latCmd
+        ? transitionValue(
+            a.latCmd.dynamics,
+            a.latCmd.from,
+            a.latCmd.to,
+            t + this.dt + previewTimeS - a.latCmd.firedAt,
+            a.latCmd.duration,
+          )
+        : plan.lateralOffset;
       const result = this.motionBackend.step(a.id, {
         motionDirection: isReverseMotion(a) ? -1 : 1,
         targetSpeedMps: speed,
         targetAccelerationMps2: accel,
-        previewPoint: a.route.pointWithOffset(previewS, plan.lateralOffset),
-        previewHeadingRad: previewPose.headingRad,
+        previewPoint: a.route.pointWithOffset(previewS, previewLateralOffset),
+        previewHeadingRad: headingWithSlip(previewPose.headingRad, plan.lateralRate, Math.max(plan.speed, 0.5)),
       }, this.dt, frictionScale);
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
       const projectedOffset = a.route.lateralOffsetAt(projected.s, {
         x: result.state.x,
         y: result.state.y,
       });
-      const allowedCenterOffsetM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
+      const roadCenterAllowanceM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
+      // A legal lane change deliberately leaves the source-lane envelope.
+      // Expand the route corridor only as far as the active authored lateral
+      // command; otherwise the safety guard would retire the actor at the lane
+      // marking before it can hand off to the adjacent route.
+      const commandedLateralAllowanceM = a.latCmd
+        ? Math.max(Math.abs(a.latCmd.from), Math.abs(a.latCmd.to)) + a.dims.w / 2 + 0.25
+        : 0;
+      const allowedCenterOffsetM = Math.max(roadCenterAllowanceM, commandedLateralAllowanceM);
       if (!a.tags.includes('motion:off-road') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
         // Never publish the first off-corridor integration. Hold the last valid
         // map pose and retire this generated actor; a later population refresh
