@@ -259,7 +259,7 @@ export class Route {
 
 /* -------------------------------------------------------------- building */
 
-function legFrom(graph: LaneGraph, d: DirectedLane, sStart: number): RouteLeg {
+function legFrom(graph: LaneGraph, d: DirectedLane, sStart: number, turnOverride?: TurnRelation | null): RouteLeg {
   const g = graph.requireGeometry(d.rsl);
   const turn = g.lane.isJunction ? graph.turnRelationOf(d.rsl) : null;
   return {
@@ -267,7 +267,7 @@ function legFrom(graph: LaneGraph, d: DirectedLane, sStart: number): RouteLeg {
     reversed: d.reversed,
     sStart,
     lengthM: g.lengthM,
-    turnRelation: (turn as TurnRelation | null) ?? null,
+    turnRelation: turnOverride === undefined ? ((turn as TurnRelation | null) ?? null) : turnOverride,
   };
 }
 
@@ -432,9 +432,12 @@ const TURN_FALLBACK_ORDER: TurnRelation[] = ['Straight', 'Right', 'Left', 'UTurn
 /**
  * Walk successors from `startRsl`, consuming `turns` at each junction.
  *
- * Choice rule (deterministic): the requested turn if a gate offers it, else the
- * first available relation in `Straight, Right, Left, UTurnRight, UTurnLeft`,
- * else the lowest-`rsl` successor.
+ * Choice rule (deterministic): the requested turn if a complete, connected
+ * gate movement offers it, else the first available relation in `Straight,
+ * Right, Left, UTurnRight, UTurnLeft`, else the straightest successor. Ties
+ * within a relation prefer the smallest heading deflection, closest exit-lane
+ * lineage and then stable topology ids. A chosen gate is completed atomically
+ * through its exit lane even when the preview bound falls inside the junction.
  */
 export function buildFollowRoute(
   graph: LaneGraph,
@@ -454,36 +457,114 @@ export function buildFollowRoute(
   const visited = new Set<string>([`${startRsl}#${reversed ? 'r' : 'f'}`]);
   let turnIdx = 0;
 
-  while (legs[legs.length - 1]!.sStart + legs[legs.length - 1]!.lengthM < maxLengthM) {
+  while (true) {
     const current = legs[legs.length - 1]!;
+    const routeEndM = current.sStart + current.lengthM;
+    const gates = graph.gatesFrom(current.rsl);
+    const want = turns[turnIdx];
+    // `maxLengthM` limits ordinary route preview runway. It must not suppress
+    // an explicit movement merely because the approach lane itself is longer
+    // than the preview. In that case include the requested connector, then let
+    // the next iteration apply the normal length bound.
+    const requestedMovementIsHere = want !== undefined && gates.some((gate) => gate.turnRelation === want);
+    if (routeEndM >= maxLengthM && !requestedMovementIsHere) break;
     const succ = graph.successors(current)
       .filter((d) => !visited.has(`${d.rsl}#${d.reversed ? 'r' : 'f'}`))
       .sort((a, b) => compareContinuation(graph, current, a, b));
     if (succ.length === 0) break;
 
     let chosen = succ[0]!;
-    const gates = graph.gatesFrom(current.rsl);
+    let chosenGate: (typeof gates)[number] | undefined;
     if (gates.length > 0) {
-      const byRelation = new Map<TurnRelation, DirectedLane>();
+      const byRelation = new Map<TurnRelation, Array<{ lane: DirectedLane; gate: (typeof gates)[number] }>>();
       for (const g of gates) {
         const match = succ.find((d) => d.rsl === g.connectingLaneRsl);
-        if (match && !byRelation.has(g.turnRelation as TurnRelation)) {
-          byRelation.set(g.turnRelation as TurnRelation, match);
-        }
+        if (!match) continue;
+        // A gate is only addressable when its complete movement chain is
+        // geometrically traversable. This prevents a stale/disconnected gate
+        // alternative from shadowing a valid movement with the same relation.
+        if (connectedGateExits(graph, g, match).length === 0) continue;
+        const relation = g.turnRelation as TurnRelation;
+        const candidates = byRelation.get(relation) ?? [];
+        // Keep duplicate connector alternatives until after ranking: their
+        // exit lineage or heading metadata can differ even when the connector
+        // RSL is the same.
+        candidates.push({ lane: match, gate: g });
+        byRelation.set(relation, candidates);
       }
-      const want = turns[turnIdx];
-      const pick =
-        (want !== undefined ? byRelation.get(want) : undefined) ??
-        TURN_FALLBACK_ORDER.map((r) => byRelation.get(r)).find((d) => d !== undefined);
+      for (const candidates of byRelation.values()) {
+        candidates.sort((a, b) =>
+          Math.abs(a.gate.headingChangeRad) - Math.abs(b.gate.headingChangeRad) ||
+          gateLineageDelta(graph, a.gate) - gateLineageDelta(graph, b.gate) ||
+          routeDirectedKey(a.lane).localeCompare(routeDirectedKey(b.lane)) ||
+          a.gate.id.localeCompare(b.gate.id));
+      }
+      const pick = (want !== undefined ? byRelation.get(want)?.[0] : undefined) ??
+        TURN_FALLBACK_ORDER.map((r) => byRelation.get(r)?.[0]).find((candidate) => candidate !== undefined);
       if (pick) {
-        chosen = pick;
-        if (want !== undefined) turnIdx++;
+        chosen = pick.lane;
+        chosenGate = pick.gate;
+        if (want !== undefined && pick.gate.turnRelation === want) turnIdx++;
       }
     }
     visited.add(`${chosen.rsl}#${chosen.reversed ? 'r' : 'f'}`);
-    legs.push(legFrom(graph, chosen, current.sStart + current.lengthM));
+    const connectorLeg = legFrom(
+      graph,
+      chosen,
+      current.sStart + current.lengthM,
+      chosenGate ? chosenGate.turnRelation as TurnRelation : undefined,
+    );
+    legs.push(connectorLeg);
+    if (chosenGate) {
+      // A selected gate is an atomic approach -> connector -> exit movement.
+      // Finish it even when the preview length ends inside the junction; this
+      // leaves a stable road-lane lineage for retargeting and replay.
+      const gateExit = connectedGateExits(graph, chosenGate, chosen)
+        .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
+        .sort((a, b) => compareGateExit(graph, chosenGate!, a, b))[0];
+      if (gateExit) {
+        visited.add(routeDirectedKey(gateExit));
+        legs.push(legFrom(graph, gateExit, connectorLeg.sStart + connectorLeg.lengthM));
+      }
+    }
   }
   return { ok: true, route: Route.fromLegs(graph, legs) };
+}
+
+function connectedGateExits(
+  graph: LaneGraph,
+  gate: ReturnType<LaneGraph['gatesFrom']>[number],
+  connector: DirectedLane,
+): DirectedLane[] {
+  const exitPoint = graph.endpoints(connector).exit;
+  const connectorType = graph.geometry(connector.rsl)?.lane.laneType;
+  return gate.exitLaneRsls
+    .map((rsl) => graph.orientToward(rsl, exitPoint))
+    .filter((candidate): candidate is DirectedLane => candidate !== null)
+    .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === connectorType);
+}
+
+function gateLineageDelta(graph: LaneGraph, gate: ReturnType<LaneGraph['gatesFrom']>[number]): number {
+  const approachLaneId = graph.geometry(gate.approachLaneRsl)?.lane.laneId;
+  if (approachLaneId === undefined) return Number.POSITIVE_INFINITY;
+  const exitLaneIds = gate.exitLaneRsls
+    .map((rsl) => graph.geometry(rsl)?.lane.laneId)
+    .filter((laneId): laneId is number => laneId !== undefined);
+  return exitLaneIds.length === 0
+    ? Number.POSITIVE_INFINITY
+    : Math.min(...exitLaneIds.map((laneId) => Math.abs(laneId - approachLaneId)));
+}
+
+function compareGateExit(
+  graph: LaneGraph,
+  gate: ReturnType<LaneGraph['gatesFrom']>[number],
+  a: DirectedLane,
+  b: DirectedLane,
+): number {
+  const approachLaneId = graph.geometry(gate.approachLaneRsl)?.lane.laneId ?? 0;
+  const laneDelta = (candidate: DirectedLane): number =>
+    Math.abs((graph.geometry(candidate.rsl)?.lane.laneId ?? approachLaneId) - approachLaneId);
+  return laneDelta(a) - laneDelta(b) || routeDirectedKey(a).localeCompare(routeDirectedKey(b));
 }
 
 /** Resolve a `RouteSpec` from the input document. */

@@ -19,8 +19,10 @@ interface Coverage {
   leftGates: number;
   rightGates: number;
   legalLaneChanges: number;
+  branchPreservationChecks: number;
   branchPreservingLaneChanges: number;
   metadataIssues: string[];
+  topologyLimitations: Record<string, number>;
   capabilityGaps: Record<string, number>;
   capabilityGapSamples: string[];
 }
@@ -39,7 +41,9 @@ function sweep(map: string): Coverage {
   const driving = graph.laneRsls().filter((rsl) => graph.geometry(rsl)?.lane.laneType === 'driving');
   let directedConnections = 0;
   let legalLaneChanges = 0;
+  let branchPreservationChecks = 0;
   let branchPreservingLaneChanges = 0;
+  const limitations: string[] = [];
 
   for (const rsl of driving) {
     const lane = graph.requireGeometry(rsl).lane;
@@ -79,9 +83,28 @@ function sweep(map: string): Coverage {
   for (const gate of topology.gates) {
     if (!topology.lanes[gate.approachLaneRsl]) issues.push(`${gate.id}: missing approach ${gate.approachLaneRsl}`);
     if (!topology.lanes[gate.connectingLaneRsl]) issues.push(`${gate.id}: missing connector ${gate.connectingLaneRsl}`);
+    const approachGeometry = graph.geometry(gate.approachLaneRsl);
+    const connectorGeometry = graph.geometry(gate.connectingLaneRsl);
+    const drivingExits = gate.exitLaneRsls.filter((exit) => graph.geometry(exit)?.lane.laneType === 'driving');
+    const isRoadMovement = approachGeometry?.lane.laneType === 'driving'
+      && connectorGeometry?.lane.laneType === 'driving'
+      && drivingExits.length > 0;
+    const connectedDrivingExits: string[] = [];
     for (const exit of gate.exitLaneRsls) {
       if (!topology.lanes[exit]) issues.push(`${gate.id}: missing exit ${exit}`);
-      else if (!buildLanePathRoute(graph, [gate.approachLaneRsl, gate.connectingLaneRsl, exit]).ok) issues.push(`${gate.id}: disconnected approach/connector/exit ${exit}`);
+      else if (!buildLanePathRoute(graph, [gate.approachLaneRsl, gate.connectingLaneRsl, exit]).ok) {
+        limitations.push(`${gate.id}: topology chain is geometrically disconnected at exit ${exit}`);
+      } else if (graph.geometry(exit)?.lane.laneType === 'driving') {
+        connectedDrivingExits.push(exit);
+      }
+    }
+    if (!isRoadMovement) {
+      limitations.push(`${gate.id}: non-driving movement (${approachGeometry?.lane.laneType ?? 'missing'} -> ${connectorGeometry?.lane.laneType ?? 'missing'})`);
+      continue;
+    }
+    if (connectedDrivingExits.length === 0) {
+      limitations.push(`${gate.id}: no geometrically connected driving exit`);
+      continue;
     }
     const explicit = buildFollowRoute(graph, gate.approachLaneRsl, [gate.turnRelation as TurnRelationName], 80);
     if (!explicit.ok || !explicit.route.legs.some((leg) => leg.turnRelation === gate.turnRelation)) {
@@ -95,19 +118,25 @@ function sweep(map: string): Coverage {
       }
     }
 
-    const approach = graph.geometry(gate.approachLaneRsl)?.lane;
+    const approach = approachGeometry.lane;
     if (!approach) continue;
     for (const side of ['left', 'right'] as const) {
       const adjacent = approach.adjacentLanes?.[side];
       if (!adjacent?.laneRsl || !adjacent.sameDirection) continue;
+      if (graph.geometry(adjacent.laneRsl)?.lane.laneType !== 'driving') continue;
       const targetGate = topology.gates.find((candidate) => candidate.approachLaneRsl === adjacent.laneRsl && candidate.turnRelation === gate.turnRelation);
       if (!targetGate) continue;
+      const targetIsConnectedRoadMovement = graph.geometry(targetGate.connectingLaneRsl)?.lane.laneType === 'driving'
+        && targetGate.exitLaneRsls.some((exit) => graph.geometry(exit)?.lane.laneType === 'driving'
+          && buildLanePathRoute(graph, [targetGate.approachLaneRsl, targetGate.connectingLaneRsl, exit]).ok);
+      if (!targetIsConnectedRoadMovement) continue;
       const source = buildFollowRoute(graph, gate.approachLaneRsl, [gate.turnRelation as TurnRelationName], 80);
       if (!source.ok) continue;
       const driverSide = graph.nominalReversed(gate.approachLaneRsl) === true
         ? (side === 'left' ? 'right' : 'left')
         : side;
       const changed = retargetToNeighbour(graph, source.route, Math.min(graph.lengthOf(gate.approachLaneRsl) / 2, source.route.lengthM / 3), driverSide, { legalOnly: true });
+      branchPreservationChecks += 1;
       if (changed?.route.legs.some((leg) => leg.turnRelation === gate.turnRelation)) branchPreservingLaneChanges += 1;
       else issues.push(`${gate.id}: ${side} lane change lost ${gate.turnRelation} branch intent`);
     }
@@ -118,8 +147,7 @@ function sweep(map: string): Coverage {
   const capabilityGaps = capabilityItems.reduce<Record<string, number>>((counts, item) => {
     const kind = item.includes('default route') ? 'default-straight'
       : item.includes('explicit ') ? 'explicit-turn-addressing'
-        : item.includes('disconnected') ? 'gate-chain-disconnected'
-          : item.includes('lane change lost') ? 'lane-change-branch-loss'
+        : item.includes('lane change lost') ? 'lane-change-branch-loss'
             : 'other';
     counts[kind] = (counts[kind] ?? 0) + 1;
     return counts;
@@ -133,8 +161,16 @@ function sweep(map: string): Coverage {
     leftGates: topology.gates.filter((gate) => gate.turnRelation === 'Left').length,
     rightGates: topology.gates.filter((gate) => gate.turnRelation === 'Right').length,
     legalLaneChanges,
+    branchPreservationChecks,
     branchPreservingLaneChanges,
     metadataIssues: [...new Set(metadataIssues)].sort(),
+    topologyLimitations: limitations.reduce<Record<string, number>>((counts, item) => {
+      const kind = item.includes('non-driving') ? 'non-driving-gate'
+        : item.includes('no geometrically') ? 'disconnected-road-movement'
+          : 'disconnected-gate-exit';
+      counts[kind] = (counts[kind] ?? 0) + 1;
+      return counts;
+    }, {}),
     capabilityGaps,
     capabilityGapSamples: [...new Set(capabilityItems)].sort().slice(0, 12),
   };
@@ -146,5 +182,26 @@ describe.skipIf(!ASSET_ROOT)('real-map topology interaction contract', () => {
     console.info(`TOPOLOGY_COVERAGE ${JSON.stringify(coverage)}`);
     expect(coverage.map((item) => item.map)).toEqual([...MAPS]);
     expect(coverage.flatMap((item) => item.metadataIssues)).toEqual([]);
+    expect(coverage.flatMap((item) => item.capabilityGapSamples)).toEqual([]);
   }, 120_000);
+
+  it.each([
+    ['yale-street', '788:2:1-1', '798:0:1', 'Straight'],
+    ['yale-street', '788:5:1-1', '805:0:1', 'Left'],
+    ['yale-street', '940:6:-1--1', '952:0:-1', 'Right'],
+    ['belmont-research-center', '219:0:-1--1', '220:0:-1', 'UTurnRight'],
+    ['belmont-research-center', '1247:2:-3--1', '1255:0:-1', 'Right'],
+    ['el-camino-road', '957:3:1-1', '969:0:1', 'Straight'],
+    ['easterbrook-discovery-school', '11266:1:2-2', '11272:0:2', 'Straight'],
+  ])('addresses %s gate %s as %s through %s even when the approach exceeds the preview', (map, gateId, expectedConnector, expectedRelation) => {
+    const topology = load(map);
+    const graph = buildLaneGraph(topology);
+    const gate = topology.gates.find((candidate) => candidate.id === gateId);
+    expect(gate).toBeDefined();
+    if (!gate) return;
+    const result = buildFollowRoute(graph, gate.approachLaneRsl, [expectedRelation as TurnRelationName], 80);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.legs.some((leg) => leg.rsl === expectedConnector && leg.turnRelation === expectedRelation)).toBe(true);
+  });
 });

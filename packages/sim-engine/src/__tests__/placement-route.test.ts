@@ -209,6 +209,39 @@ describe('buildDefaultPlacementRoute', () => {
     expect(result.route.legs.map((leg) => leg.rsl)).not.toContain('straight');
   });
 
+  it('completes an explicit gate chain when the approach alone exceeds the route preview', () => {
+    const index = junctionTopology();
+    for (const rsl of ['approach', 'approach-left']) {
+      const lane = index.lanes[rsl]!;
+      const first = lane.polyline[0] as { x: number; y: number };
+      index.lanes[rsl] = { ...lane, polyline: [{ x: -100, y: first.y }, ...lane.polyline.slice(1)] };
+    }
+    const result = buildFollowRoute(buildLaneGraph(index), 'approach', ['Right'], 35);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.legs.map((leg) => leg.rsl)).toEqual(['approach', 'right', 'right-exit']);
+  });
+
+  it('uses the smallest legal heading deflection for ambiguous same-relation movements', () => {
+    const index = junctionTopology();
+    const left = index.gates.find((gate) => gate.id === 'left-gate')!;
+    index.gates.push({ ...left, id: '000-wide-right', turnRelation: 'Right', headingChangeRad: -2.4 });
+    const result = buildFollowRoute(buildLaneGraph(index), 'approach', ['Right'], 35);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.legs.map((leg) => leg.rsl)).toEqual(['approach', 'right', 'right-exit']);
+  });
+
+  it('does not duplicate an identical gate alternative in the route', () => {
+    const index = junctionTopology();
+    const right = index.gates.find((gate) => gate.id === 'right-gate')!;
+    index.gates.push({ ...right, id: 'right-gate-duplicate' });
+    const result = buildFollowRoute(buildLaneGraph(index), 'approach', ['Right'], 35);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.route.legs.map((leg) => leg.rsl)).toEqual(['approach', 'right', 'right-exit']);
+  });
+
   it.each([
     ['left' as const, ['approach', 'straight', 'straight-exit'], ['approach-left', 'straight-left', 'straight-left-exit']],
     ['right' as const, ['approach-left', 'straight-left', 'straight-left-exit'], ['approach', 'straight', 'straight-exit']],
