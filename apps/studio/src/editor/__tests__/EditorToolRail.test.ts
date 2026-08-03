@@ -1,9 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { CATALOG } from '@uniscenarios/prop-catalog';
-import { filterCatalog, pushRecent } from '../EditorToolRail';
+import { filterCatalog, pushRecent, shouldShowEditorToolRail } from '../EditorToolRail';
 import { actorKindFor, simulationClassFor } from '../document';
 
 describe('editor actor catalog model', () => {
+  it('shows only while authoring and restores immediately after playback', () => {
+    expect(shouldShowEditorToolRail(true, false)).toBe(true);
+    expect(shouldShowEditorToolRail(false, false)).toBe(false);
+    expect(shouldShowEditorToolRail(true, false)).toBe(true);
+    expect(shouldShowEditorToolRail(true, true)).toBe(false);
+  });
+
   it('provides distinct vehicle, pedestrian and prop quick filters', () => {
     const none = new Set<string>();
     expect(filterCatalog(CATALOG, 'vehicle', '', none, []).every((entry) => entry.class === 'vehicle')).toBe(true);

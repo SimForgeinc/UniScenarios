@@ -1,5 +1,5 @@
 /**
- * Editor chrome: palette, inspector, status bar, map picker.
+ * Editor chrome: palette, inspector, and map picker.
  *
  * These are the only React components that touch the editor, and they are
  * deliberately thin — every one of them reads {@link EditorState} and calls a
@@ -394,64 +394,6 @@ function format(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(3);
 }
 
-// -------------------------------------------------------------- status bar
-
-export interface StatusBarProps {
-  state: EditorState;
-  mapLabel: string;
-  loading: boolean;
-  /** Includes materialized portable actors that are not editable scene records. */
-  actorCount?: number;
-}
-
-/** One line: what mode you are in, what the modifiers do, what just happened. */
-export function StatusBar({ state, mapLabel, loading, actorCount = state.actors.length }: StatusBarProps): JSX.Element {
-  const chip =
-    state.mode === 'placing'
-      ? 'PLACE'
-      : state.mode === 'grab'
-        ? 'MOVE'
-        : state.mode === 'rotate'
-          ? 'ROTATE'
-          : 'SELECT';
-  const chipColor =
-    state.mode === 'idle' ? '#4b5565' : state.valid || state.mode !== 'placing' ? ACCENT : '#c0392b';
-
-  return (
-    <div style={styles.statusBar} data-testid="status-bar">
-      <span style={{ ...styles.chip, background: chipColor }} data-testid="status-mode">
-        {chip}
-      </span>
-      <span style={styles.statusHint} data-testid="status-hint">
-        {state.hint}
-      </span>
-      {state.rotationDeg === null ? null : (
-        <span style={styles.readout} data-testid="status-rotation">
-          {state.rotationDeg >= 0 ? '+' : ''}
-          {state.rotationDeg.toFixed(1)}°
-        </span>
-      )}
-      {state.laneLabel === null ? null : (
-        <span style={styles.readout} data-testid="status-lane">
-          {state.laneLabel}
-        </span>
-      )}
-      {state.message === null ? null : (
-        <span style={styles.statusMessage} data-testid="status-message">
-          {state.message}
-        </span>
-      )}
-      <span style={styles.spacer} />
-      <span style={styles.readout} data-testid="status-count">
-        {actorCount} actor{actorCount === 1 ? '' : 's'}
-      </span>
-      <span style={styles.readout} data-testid="status-save">
-        {loading ? `loading ${mapLabel}…` : state.dirty ? 'saving…' : 'saved'}
-      </span>
-    </div>
-  );
-}
-
 // ------------------------------------------------------------------ shared
 
 export function Panel({ children, style }: { children: ReactNode; style?: CSSProperties }): JSX.Element {
@@ -608,32 +550,4 @@ const styles: Record<string, CSSProperties> = {
   },
   note: { fontSize: 11, color: '#6d7686', marginTop: 4 },
 
-  statusBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 28,
-    display: 'flex',
-    alignItems: 'center',
-    gap: 10,
-    padding: '0 12px',
-    background: 'rgba(8, 10, 14, 0.88)',
-    borderTop: BORDER,
-    font: '12px/1 ui-sans-serif, system-ui, sans-serif',
-    color: '#c3cad4',
-    userSelect: 'none',
-  },
-  chip: {
-    padding: '3px 7px',
-    borderRadius: 5,
-    fontSize: 10,
-    letterSpacing: 0.8,
-    fontWeight: 600,
-    color: '#fff',
-  },
-  statusHint: { color: '#8f98a6' },
-  statusMessage: { color: '#ffb454' },
-  readout: { color: '#7c8696', fontVariantNumeric: 'tabular-nums' },
-  spacer: { flex: 1 },
 };

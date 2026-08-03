@@ -8,9 +8,9 @@ import { loadMapOverlays, type MapOverlayHandle } from './mapOverlays';
 import { MAPS, initialMapId, mapById, rememberMapId, type MapEntry } from './maps';
 import { useEditor } from './editor/useEditor';
 import type { EditorController } from './editor/controller';
-import { MapPicker, StatusBar } from './editor/ui';
+import { MapPicker } from './editor/ui';
 import { WorkspaceHeader } from './editor/EditorChrome';
-import { EditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from './editor/EditorToolRail';
+import { EditorToolRail, shouldShowEditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from './editor/EditorToolRail';
 import { ScenarioActionsPanel } from './editor/ScenarioActionsPanel';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
@@ -1137,13 +1137,11 @@ export function App(): JSX.Element {
   return (
     <div style={styles.root}>
       <WorkspaceHeader
-        controller={editorController}
         state={state}
         map={map}
         playback={playbackBundle !== null || studioSession.state.mode !== 'authoring'}
         openScenario={openScenarioOpen}
         mapWorkspace={mapWorkspaceOpen}
-        authoringEnabled={authoringEnabled}
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
         onOpenScenario={() => {
@@ -1239,7 +1237,7 @@ export function App(): JSX.Element {
         editorReady={state !== null}
         error={editorError}
       /> : null}
-      {!mapWorkspaceOpen ? <EditorToolRail
+      {shouldShowEditorToolRail(authoringEnabled, mapWorkspaceOpen) ? <EditorToolRail
         controller={editorController}
         state={state}
         placement={catalogPlacement}
@@ -1402,13 +1400,8 @@ export function App(): JSX.Element {
           laneCount={laneStats?.lanes ?? null}
         />
       </div> : null}
-
-      {!mapWorkspaceOpen && !playbackBundle && state ? (
-        <StatusBar state={state} mapLabel={map.label} loading={loading} actorCount={ambientPreview?.actors.length ?? state.actors.length} />
-      ) : !playbackBundle ? (
-        <div style={styles.loadingBar} data-testid="status-bar">
-          loading {map.label}…
-        </div>
+      {!mapWorkspaceOpen && authoringEnabled && state?.message ? (
+        <div role="status" style={styles.editorNotice} data-testid="editor-notice">{state.message}</div>
       ) : null}
       </div>
       </div>
@@ -1722,7 +1715,7 @@ const styles: Record<string, CSSProperties> = {
     zIndex: 21,
     top: 12,
     left: 63,
-    bottom: 40,
+    bottom: 12,
     width: 372,
     overflow: 'hidden',
   },
@@ -1757,7 +1750,7 @@ const styles: Record<string, CSSProperties> = {
     position: 'absolute',
     top: 12,
     left: 64,
-    bottom: 40,
+    bottom: 12,
     width: 228,
     display: 'flex',
     flexDirection: 'column',
@@ -1767,24 +1760,11 @@ const styles: Record<string, CSSProperties> = {
     position: 'absolute',
     top: 12,
     right: 10,
-    bottom: 40,
+    bottom: 12,
     width: 'min(336px, calc(100vw - 84px))',
     zIndex: 25,
     overflow: 'hidden',
     filter: 'drop-shadow(0 18px 42px rgba(0,0,0,.5))',
   },
-  loadingBar: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
-    height: 28,
-    display: 'flex',
-    alignItems: 'center',
-    padding: '0 12px',
-    background: 'rgba(8, 10, 14, 0.88)',
-    borderTop: '1px solid rgba(255,255,255,0.08)',
-    fontSize: 12,
-    color: '#8f98a6',
-  },
+  editorNotice: { position: 'absolute', zIndex: 32, left: '50%', bottom: 14, transform: 'translateX(-50%)', maxWidth: 'min(520px, calc(100% - 32px))', padding: '7px 10px', border: '1px solid #72552e', borderRadius: 7, background: 'rgba(52,39,24,.96)', color: '#ffd49a', boxShadow: '0 8px 22px rgba(0,0,0,.34)', fontSize: 10, pointerEvents: 'none' },
 };

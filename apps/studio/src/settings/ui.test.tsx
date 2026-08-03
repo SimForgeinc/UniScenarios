@@ -29,12 +29,10 @@ describe('simplified editor settings UI', () => {
   it('exposes Settings in primary chrome without Scene Collections or Inspector', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceHeader
-        controller={null}
         state={null}
         map={{ id: 'test', label: 'Test map' } as never}
         playback={false}
         openScenario={false}
-        authoringEnabled={true}
         settingsOpen={false}
         onSettings={vi.fn()}
         onOpenScenario={vi.fn()}
@@ -45,20 +43,20 @@ describe('simplified editor settings UI', () => {
     expect(markup).not.toContain('Scene Collection');
     expect(markup).not.toContain('Inspector');
     expect(markup).toContain('Author');
-    expect(markup).toContain('data-testid="active-physics-mode"');
-    expect(markup).toContain('Physics · Dynamic');
+    expect(markup).not.toContain('data-testid="active-physics-mode"');
+    expect(markup).not.toContain('Physics · Dynamic');
+    expect(markup).not.toContain('>Undo<');
+    expect(markup).not.toContain('>Redo<');
     expect(markup).not.toContain('Playback');
   });
 
   it('uses compatible longhand borders for the active settings control', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceHeader
-        controller={null}
         state={null}
         map={{ id: 'test', label: 'Test map' } as never}
         playback={false}
         openScenario={false}
-        authoringEnabled
         settingsOpen
         onSettings={vi.fn()}
         onOpenScenario={vi.fn()}
@@ -68,10 +66,10 @@ describe('simplified editor settings UI', () => {
     expect(markup).toContain('border-color:#f07f2f');
   });
 
-  it('shows accessible class-native dynamic and fixed actor counts', () => {
+  it('keeps normal class-native dynamic and fixed actor counts out of primary chrome', () => {
     const markup = renderToStaticMarkup(<WorkspaceHeader
-      controller={null} state={null} map={{ id: 'test', label: 'Test map' } as never}
-      playback={false} authoringEnabled settingsOpen={false} onSettings={vi.fn()}
+      state={null} map={{ id: 'test', label: 'Test map' } as never}
+      playback={false} settingsOpen={false} onSettings={vi.fn()}
       physicsSummary={{
         mode: 'dynamic-v1', legacyReplay: false, dynamicCount: 3, staticCount: 1, fallbackCount: 0, unknownCount: 0,
         actors: [
@@ -82,10 +80,32 @@ describe('simplified editor settings UI', () => {
         ],
       }}
     />);
-    expect(markup).toContain('Physics · Dynamic · 3 moving · 1 fixed');
-    expect(markup).toContain('aria-label="Per-actor physics backends"');
-    expect(markup).toContain('pedestrian 1');
-    expect(markup).toContain('Every moving actor uses its class-native dynamic-v1 profile');
+    expect(markup).not.toContain('data-testid="active-physics-mode"');
+    expect(markup).not.toContain('Physics · Dynamic');
+  });
+
+  it('retains concise physics warnings for mixed and legacy playback', () => {
+    const mixed = renderToStaticMarkup(<WorkspaceHeader
+      state={null} map={{ id: 'test', label: 'Test map' } as never}
+      playback settingsOpen={false} onSettings={vi.fn()}
+      physicsSummary={{
+        mode: 'dynamic-v1', legacyReplay: false, dynamicCount: 1, staticCount: 0, fallbackCount: 1, unknownCount: 0,
+        actors: [
+          { id: 'car', label: 'Car', mode: 'dynamic-v1', reason: 'selected', profile: 'car' },
+          { id: 'legacy', label: 'Legacy car', mode: 'kinematic-v1', reason: 'provenance-unavailable' },
+        ],
+      }}
+    />);
+    expect(mixed).toContain('Physics · Mixed · 1 exception');
+    expect(mixed).toContain('Legacy car');
+    expect(mixed).not.toContain('Read-only playback');
+
+    const legacy = renderToStaticMarkup(<WorkspaceHeader
+      state={null} map={{ id: 'test', label: 'Test map' } as never}
+      playback settingsOpen={false} onSettings={vi.fn()}
+      physicsSummary={{ mode: 'kinematic-v1', legacyReplay: true, dynamicCount: 0, staticCount: 0, fallbackCount: 0, unknownCount: 0, actors: [] }}
+    />);
+    expect(legacy).toContain('Physics · Kinematic legacy');
   });
 
   it('keeps detailed overlays off, signal orbs on, and diagnostics hidden by default', () => {

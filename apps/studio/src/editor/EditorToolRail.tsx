@@ -44,6 +44,11 @@ export interface EditorToolRailProps {
   auxiliaryTool?: Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null;
 }
 
+/** The authoring rail is overlay chrome and should disappear outside mutable authoring. */
+export function shouldShowEditorToolRail(authoringEnabled: boolean, mapWorkspaceOpen: boolean): boolean {
+  return authoringEnabled && !mapWorkspaceOpen;
+}
+
 interface ToolDefinition {
   id: ViewportTool;
   label: string;
@@ -466,7 +471,7 @@ const styles: Record<string, CSSProperties> = {
   tooltip: { position: 'absolute', left: 45, pointerEvents: 'none', opacity: 0, width: 1, height: 1, overflow: 'hidden' },
   disabled: { opacity: .28, cursor: 'default' },
   drawer: {
-    position: 'absolute', zIndex: 21, top: 12, left: 63, bottom: 40, width: 372,
+    position: 'absolute', zIndex: 21, top: 12, left: 63, bottom: 12, width: 372,
     display: 'flex', flexDirection: 'column', overflow: 'hidden',
     borderRadius: 9, background: PANEL, border: BORDER,
     boxShadow: '0 18px 48px rgba(0,0,0,.52)',

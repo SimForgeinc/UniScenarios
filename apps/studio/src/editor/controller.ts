@@ -41,6 +41,7 @@ import type { CityViewer } from '@uniscenarios/city-renderer';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { buildDefaultPlacementRoute, buildFollowRoute } from '@uniscenarios/sim-engine';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
+import { handleEditorHistoryKey, isTextEditingTarget } from './keyboard';
 import {
   actorKindFor,
   DEFAULT_AUTHORED_VEHICLE_SPEED_KPH,
@@ -597,17 +598,17 @@ export class EditorController {
   private onKeyDown = (event: KeyboardEvent): void => {
     if (event.key === 'Alt') this.setAlt(true);
     if (event.key === 'Shift') this.setShift(true);
-    if (isTypingTarget(event.target)) return;
+    if (isTextEditingTarget(event.target)) return;
     if (!this.authoringEnabled) return;
 
+    if (handleEditorHistoryKey(event, {
+      enabled: this.authoringEnabled,
+      canUndo: this.doc.canUndo,
+      canRedo: this.doc.canRedo,
+      undo: () => this.undo(),
+      redo: () => this.redo(),
+    })) return;
     const meta = event.metaKey || event.ctrlKey;
-    if (meta && event.key.toLowerCase() === 'z') {
-      event.preventDefault();
-      event.stopPropagation();
-      if (event.shiftKey) this.redo();
-      else this.undo();
-      return;
-    }
     if (meta && event.key.toLowerCase() === 'd') {
       event.preventDefault();
       event.stopPropagation();
@@ -1404,12 +1405,4 @@ export function deterministicActorCatalog(
 function defaultBodyColor(catalogId: CatalogId): string {
   const color = getEntry(catalogId).defaultParams['color'];
   return typeof color === 'string' ? color : '#59748f';
-}
-
-/** Keyboard shortcuts must not fire while the user is typing in the inspector. */
-function isTypingTarget(target: EventTarget | null): boolean {
-  const element = target as HTMLElement | null;
-  if (!element || !element.tagName) return false;
-  const tag = element.tagName.toLowerCase();
-  return tag === 'input' || tag === 'textarea' || tag === 'select' || element.isContentEditable;
 }

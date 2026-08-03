@@ -10,13 +10,11 @@ const PANEL = '#202226';
 const BORDER = '1px solid #34373d';
 
 export function WorkspaceHeader({
-  controller,
   state,
   map,
   playback,
   openScenario = false,
   mapWorkspace = false,
-  authoringEnabled,
   settingsOpen,
   onSettings,
   onOpenScenario,
@@ -24,13 +22,11 @@ export function WorkspaceHeader({
   onAuthorWorkspace,
   physicsSummary = physicsSummaryForTrace(null),
 }: {
-  controller: EditorController | null;
   state: EditorState | null;
   map: MapEntry;
   playback: boolean;
   openScenario?: boolean;
   mapWorkspace?: boolean;
-  authoringEnabled: boolean;
   settingsOpen: boolean;
   onSettings: () => void;
   onOpenScenario?: () => void;
@@ -62,26 +58,12 @@ export function WorkspaceHeader({
       <PhysicsSummaryBadge summary={physicsSummary} />
       {!playback ? (
         <div style={styles.headerActions}>
-          <HeaderButton
-            label="Undo"
-            shortcut="⌘Z"
-            disabled={!authoringEnabled || !controller || !state?.canUndo}
-            onClick={() => controller?.undo()}
-          />
-          <HeaderButton
-            label="Redo"
-            shortcut="⇧⌘Z"
-            disabled={!authoringEnabled || !controller || !state?.canRedo}
-            onClick={() => controller?.redo()}
-          />
           <span style={{ ...styles.saveState, color: state?.dirty ? '#f0b45f' : '#8f98a7' }}>
             <span style={{ ...styles.saveDot, background: state?.dirty ? '#f0b45f' : '#62b986' }} />
             {state?.dirty ? 'Saving' : 'Saved'}
           </span>
         </div>
-      ) : (
-          <span style={styles.playbackBadge}>Read-only playback</span>
-      )}
+      ) : null}
       <button
         type="button"
         aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
@@ -97,13 +79,14 @@ export function WorkspaceHeader({
   );
 }
 
-export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummary }): JSX.Element {
+export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummary }): JSX.Element | null {
   if (summary.legacyReplay || summary.mode === 'kinematic-v1') {
     return <span style={styles.physicsBadgeLegacy} data-testid="active-physics-mode" title={summary.legacyReplay ? 'Recorded legacy route-following motion' : 'Kinematic-v1 was explicitly selected'}>
       Physics · {summary.legacyReplay ? 'Kinematic legacy' : 'Kinematic selected'}
     </span>;
   }
   const exceptions = summary.actors.filter((actor) => actor.mode === null || actor.mode === 'kinematic-v1');
+  if (exceptions.length === 0) return null;
   const profileCounts = [...summary.actors.reduce((counts, actor) => {
     if (actor.mode !== 'dynamic-v1' || !actor.profile) return counts;
     counts.set(actor.profile, (counts.get(actor.profile) ?? 0) + 1);
@@ -111,16 +94,16 @@ export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummar
   }, new Map<string, number>())].sort(([a], [b]) => a.localeCompare(b));
   return <details style={styles.physicsDetails} data-testid="physics-provenance">
     <summary
-      style={styles.physicsBadgeDynamic}
+      style={styles.physicsBadgeLegacy}
       data-testid="active-physics-mode"
-      aria-label={`Physics Dynamic, ${summary.dynamicCount} moving${summary.staticCount ? `, ${summary.staticCount} fixed` : ''}${summary.unknownCount ? `, ${summary.unknownCount} unknown` : ''}`}
+      aria-label={`Physics mixed, ${exceptions.length} exceptional actor${exceptions.length === 1 ? '' : 's'}`}
     >
-      Physics · Dynamic · {summary.dynamicCount} moving{summary.staticCount ? ` · ${summary.staticCount} fixed` : ''}{summary.unknownCount ? ` · ${summary.unknownCount} unknown` : ''}
+      Physics · Mixed · {exceptions.length} exception{exceptions.length === 1 ? '' : 's'}
     </summary>
     <div style={styles.physicsPopover} role="status" aria-label="Per-actor physics backends">
       <strong>{summary.dynamicCount} class-native dynamic · {summary.staticCount} fixed</strong>
       {profileCounts.length ? <span style={styles.physicsNote}>Profiles · {profileCounts.map(([profile, count]) => `${profile} ${count}`).join(' · ')}</span> : null}
-      {exceptions.length === 0 ? <span style={styles.physicsNote}>Every moving actor uses its class-native dynamic-v1 profile.</span> : exceptions.map((actor) => (
+      {exceptions.map((actor) => (
         <div key={actor.id} style={styles.physicsRow} data-testid={`physics-backend-${actor.id}`}>
           <span>{actor.label}</span>
           <small>{actor.mode === 'kinematic-v1' ? 'Legacy kinematic' : 'Unknown'} · {physicsReasonLabel(actor.reason)}</small>
@@ -128,30 +111,6 @@ export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummar
       ))}
     </div>
   </details>;
-}
-
-function HeaderButton({
-  label,
-  shortcut,
-  disabled,
-  onClick,
-}: {
-  label: string;
-  shortcut: string;
-  disabled: boolean;
-  onClick: () => void;
-}): JSX.Element {
-  return (
-    <button
-      type="button"
-      title={`${label} (${shortcut})`}
-      disabled={disabled}
-      onClick={onClick}
-      style={{ ...styles.headerButton, ...(disabled ? styles.disabled : null) }}
-    >
-      {label}
-    </button>
-  );
 }
 
 export function Outliner({
@@ -307,20 +266,8 @@ const styles: Record<string, CSSProperties> = {
   sceneName: { color: '#d5d9e0', fontSize: 12, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' },
   headerSpacer: { flex: 1 },
   headerActions: { display: 'flex', alignItems: 'center', gap: 4 },
-  headerButton: {
-    border: '1px solid transparent',
-    borderRadius: 4,
-    background: 'transparent',
-    color: '#b7bdc7',
-    padding: '4px 8px',
-    font: 'inherit',
-    fontSize: 11,
-    cursor: 'pointer',
-  },
   saveState: { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 8, fontSize: 10 },
   saveDot: { width: 6, height: 6, borderRadius: '50%' },
-  playbackBadge: { color: '#9ba3af', fontSize: 11 },
-  physicsBadgeDynamic: { color: '#a9e6c5', background: 'rgba(49, 145, 96, 0.18)', border: '1px solid rgba(94, 204, 143, 0.28)', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 700 },
   physicsBadgeLegacy: { color: '#f2c078', background: 'rgba(164, 106, 31, 0.18)', border: '1px solid rgba(225, 159, 70, 0.3)', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 700 },
   physicsDetails: { position: 'relative' },
   physicsPopover: { position: 'absolute', zIndex: 30, top: 30, right: 0, width: 300, display: 'flex', flexDirection: 'column', gap: 7, padding: 10, border: BORDER, borderRadius: 7, background: '#202226', boxShadow: '0 12px 30px rgba(0,0,0,.45)', color: '#dce2ea', fontSize: 10 },
