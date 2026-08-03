@@ -17,7 +17,7 @@ target_link_options(uniscenarios-sumo-wasm PRIVATE
     "-sASSERTIONS=0"
     "-sWASM_BIGINT=1"
     "-sEXPORTED_RUNTIME_METHODS=['HEAPU8','HEAPU32','UTF8ToString','stringToUTF8','lengthBytesUTF8']"
-    "-sEXPORTED_FUNCTIONS=['_malloc','_free','_us_sumo_start','_us_sumo_step','_us_sumo_upsert_external','_us_sumo_remove','_us_sumo_state_pointer','_us_sumo_state_count','_us_sumo_time','_us_sumo_last_error','_us_sumo_close']"
+    "-sEXPORTED_FUNCTIONS=['_malloc','_free','_us_sumo_start','_us_sumo_step','_us_sumo_upsert_external','_us_sumo_remove','_us_sumo_state_pointer','_us_sumo_state_count','_us_sumo_signal_state_pointer','_us_sumo_signal_state_count','_us_sumo_time','_us_sumo_last_error','_us_sumo_close']"
 )
 set_target_properties(uniscenarios-sumo-wasm PROPERTIES
     OUTPUT_NAME "sumo"

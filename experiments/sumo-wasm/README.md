@@ -177,8 +177,23 @@ Current behavioral boundary: authored moving cars, stopped obstacles,
 pedestrians, cyclists, and construction props are represented to SUMO as
 conservative occupancy proxies, so they influence car following without
 ceding timeline ownership. Native SUMO signals imported from a map are obeyed,
-but authored traffic-light programs are not yet synchronized into the SUMO
-worker. Rich pedestrian crossing behavior, semantic construction-lane closure,
+and the worker publishes each controlled-link state. Studio resolves those
+packed states through netconvert's retained `linkSignalID:<index>` provenance,
+then uses the normalized physical-head snapshot as the rendered-lamp authority.
+Unmapped links are reported rather than guessed onto a head, and signal-free
+maps produce an empty snapshot.
+
+Authored traffic-light programs are not yet serialized into the provider. As a
+deterministic preview fallback, imported cycles longer than a standard
+20-second scenario are fitted inside 18 seconds while preserving two seconds
+for yellow and one second for all-red phases. SUMO runs that adjusted network,
+so visible lamps and vehicle right-of-way still share one authority and every
+preview can show red-to-green queue release. Run the quantitative acceptance
+check after building with `signal-queue-smoke.mjs <sumo.mjs> <map.net.xml>
+<sumo-network-manifest.json>`. A future authored-program payload should replace
+this documented fallback.
+
+Rich pedestrian crossing behavior, semantic construction-lane closure,
 cut-in negotiation, and highway-merge acceptance need dedicated scenario
 fixtures before this provider should be promoted from Experimental. The
 browser integration improves traffic behavior; it does not reproduce CARLA's

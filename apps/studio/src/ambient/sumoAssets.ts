@@ -3,6 +3,11 @@ import type { ActorView } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
 import type { NetworkWorldTransform, TrafficNetworkPayload, TrafficStepResult } from '../playback/traffic-provider/protocol';
 import { toNetwork } from '../playback/traffic-provider/coordinateTransform';
+import {
+  fitSumoSignalProgramsToScenario,
+  parseSumoSignalTopology,
+  type SumoSignalTopology,
+} from '../playback/traffic-provider/signalState';
 
 export const SUMO_RUNTIME_MODULE_URL = '/dev-assets/sumo-runtime/sumo.mjs';
 export const SUMO_RUNTIME_MANIFEST_URL = '/dev-assets/sumo-runtime/runtime-manifest.json';
@@ -30,6 +35,8 @@ export interface LoadedSumoAssets {
   readonly payload: TrafficNetworkPayload;
   readonly runtime: SumoRuntimeManifest;
   readonly demand: SumoDemandSummary;
+  readonly signalTopology: SumoSignalTopology;
+  readonly adjustedSignalControllers: number;
 }
 
 export interface SumoDemandFocus { readonly x: number; readonly z: number }
@@ -61,11 +68,17 @@ export async function loadSumoAssets(
   const manifestUrl = new URL(map.sumoManifest, globalThis.location?.href ?? 'http://localhost/');
   const networkResponse = await fetcher(new URL(manifest.networkFile, manifestUrl).toString());
   if (!networkResponse.ok) throw new Error(`SUMO network is unavailable for ${map.label} (${networkResponse.status})`);
-  const network = await networkResponse.arrayBuffer();
-  if (network.byteLength === 0) throw new Error(`SUMO network is empty for ${map.label}`);
+  const rawNetwork = await networkResponse.arrayBuffer();
+  if (rawNetwork.byteLength === 0) throw new Error(`SUMO network is empty for ${map.label}`);
+  const networkXml = new TextDecoder().decode(rawNetwork);
+  const signalTopology = parseSumoSignalTopology(networkXml);
+  // Fit imported programs inside the standard scenario so editor previews show
+  // an observable queue/release transition while preserving the link topology.
+  const synchronized = fitSumoSignalProgramsToScenario(networkXml, 20);
+  const network = new TextEncoder().encode(synchronized.xml).buffer;
   const localized = localizeSumoRouteCandidates(
     manifest.routeCandidates,
-    new TextDecoder().decode(network),
+    networkXml,
     manifest.worldFromNetwork,
     focus,
   );
@@ -94,6 +107,8 @@ export async function loadSumoAssets(
       replenishmentPeriodSeconds: SUMO_REPLENISHMENT_PERIOD_SECONDS,
       warmupSeconds: SUMO_DEMAND_WARMUP_SECONDS,
     },
+    signalTopology,
+    adjustedSignalControllers: synchronized.adjustedControllers,
   };
 }
 

@@ -5,7 +5,7 @@ export const AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY = 'studio.presentation.ambie
 export function ambientTrafficProviderFromExtensions(
   extensions: Readonly<Record<string, unknown>> | undefined,
 ): AmbientTrafficProviderId {
-  return extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY] === 'sumo' ? 'sumo' : 'native';
+  return extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY] === 'native' ? 'native' : 'sumo';
 }
 
 export type SumoTrafficPhase = 'disabled' | 'loading' | 'ready' | 'running' | 'fallback';
@@ -27,6 +27,11 @@ export interface SumoTrafficStatus {
   readonly nearbyRouteStarts?: number;
   /** The lean bridge does not currently expose SUMO's teleport/collision counters. */
   readonly detailedSafetyMetricsAvailable?: boolean;
+  /** Physical OpenDRIVE head ids normalized from SUMO's live link states. */
+  readonly signalStates?: Readonly<Record<string, 'green' | 'yellow' | 'red' | 'off'>>;
+  readonly mappedSignalHeads?: number;
+  readonly unmappedSignalLinks?: number;
+  readonly adjustedSignalControllers?: number;
 }
 
 export const DISABLED_SUMO_STATUS: SumoTrafficStatus = Object.freeze({

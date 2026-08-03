@@ -6,6 +6,7 @@ import type { MapEntry } from '../maps';
 import { evaluateSumoPerformance } from '../playback/traffic-provider/adaptiveFallback';
 import type { ExternalTrafficActor } from '../playback/traffic-provider/protocol';
 import { SumoWasmTrafficProvider } from '../playback/traffic-provider/sumoWasmProvider';
+import { decodeSumoSignalSnapshot, type SumoSignalTopology } from '../playback/traffic-provider/signalState';
 import type { StudioSessionMode } from '../session/model';
 import { DISABLED_SUMO_STATUS, type SumoTrafficStatus } from './provider';
 import { decodeSumoActorViews, loadSumoAssets, SUMO_RUNTIME_MODULE_URL } from './sumoAssets';
@@ -76,7 +77,13 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0 });
-    void loadSumoAssets(options.map, options.profile, fetch, options.focus).then(async ({ payload, runtime, demand }) => {
+    void loadSumoAssets(options.map, options.profile, fetch, options.focus).then(async ({
+      payload,
+      runtime,
+      demand,
+      signalTopology,
+      adjustedSignalControllers,
+    }) => {
       if (cancelled) return;
       const initialized = await provider.initialize(payload);
       if (cancelled) return;
@@ -93,9 +100,12 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current) });
       if (cancelled) return;
       active.simulationTime = first.simulationSeconds;
+      active.signalTopology = signalTopology;
+      active.adjustedSignalControllers = adjustedSignalControllers;
       active.stepSamples.push(first.stepMilliseconds);
       const firstMetrics = trafficMetrics(first, options.focus, active);
       options.renderer!.syncLayer('sumo-traffic', decodeSumoActorViews(first, options.sampleHeight!));
+      const signals = decodeSumoSignalSnapshot(first.signalStates, first.signalLinkCount, signalTopology);
       setStatus({
         phase: 'ready',
         actorCount: first.actorCount,
@@ -108,6 +118,10 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         simulatedActorCount: first.simulatedActorCount,
         nearbyRouteStarts: demand.nearbyRouteStarts,
         detailedSafetyMetricsAvailable: false,
+        signalStates: signals.heads,
+        mappedSignalHeads: signals.mappedHeadCount,
+        unmappedSignalLinks: signals.unmappedLinkCount,
+        adjustedSignalControllers,
       });
     }).catch((reason: unknown) => {
       if (cancelled) return;
@@ -148,7 +162,21 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       else active.missedDeadlines = 0;
       if (active.missedDeadlines >= 3) throw new Error(`performance gate: ${p95.toFixed(1)} ms p95 exceeds realtime headroom`);
       options.renderer?.syncLayer('sumo-traffic', decodeSumoActorViews(result, options.sampleHeight!));
-      setStatus((current) => ({ ...current, phase: 'running', actorCount: result.actorCount, simulatedActorCount: result.simulatedActorCount, stepP95Milliseconds: p95, ...trafficMetrics(result, options.focus, active) }));
+      const signals = active.signalTopology
+        ? decodeSumoSignalSnapshot(result.signalStates, result.signalLinkCount, active.signalTopology)
+        : { heads: {}, mappedHeadCount: 0, unmappedLinkCount: result.signalLinkCount };
+      setStatus((current) => ({
+        ...current,
+        phase: 'running',
+        actorCount: result.actorCount,
+        simulatedActorCount: result.simulatedActorCount,
+        stepP95Milliseconds: p95,
+        ...trafficMetrics(result, options.focus, active),
+        signalStates: signals.heads,
+        mappedSignalHeads: signals.mappedHeadCount,
+        unmappedSignalLinks: signals.unmappedLinkCount,
+        adjustedSignalControllers: active.adjustedSignalControllers,
+      }));
     }).catch((reason: unknown) => {
       const message = reason instanceof Error ? reason.message : String(reason);
       options.renderer?.clearLayer('sumo-traffic');
@@ -170,6 +198,8 @@ interface SumoTrafficRun {
   missedDeadlines: number;
   readonly seenActorIds: Set<number>;
   readonly completedActorIds: Set<number>;
+  signalTopology?: SumoSignalTopology;
+  adjustedSignalControllers?: number;
 }
 
 export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly actorCount: number }, focus: SumoDemandFocus | null, run: Pick<SumoTrafficRun, 'seenActorIds' | 'completedActorIds'>): Pick<SumoTrafficStatus, 'nearbyActorCount' | 'queuedActorCount' | 'completedActorCount' | 'emergencyStoppingActorCount'> {

@@ -23,6 +23,8 @@ interface SumoModule {
   _us_sumo_remove(id: number): number;
   _us_sumo_state_pointer(): number;
   _us_sumo_state_count(): number;
+  _us_sumo_signal_state_pointer(): number;
+  _us_sumo_signal_state_count(): number;
   _us_sumo_time(): number;
   _us_sumo_last_error(): number;
   _us_sumo_close(): void;
@@ -91,6 +93,9 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   const byteLength = count * 8 * Uint32Array.BYTES_PER_ELEMENT;
   const source = new Uint8Array(sumo.HEAPU8.buffer, sumo._us_sumo_state_pointer(), byteLength);
   const states = source.slice().buffer;
+  const signalLinkCount = sumo._us_sumo_signal_state_count();
+  const signalSource = new Uint8Array(sumo.HEAPU8.buffer, sumo._us_sumo_signal_state_pointer(), signalLinkCount * 8);
+  const signalStates = signalSource.slice().buffer;
   transformPackedStatesToWorld(states, count, requireTransform());
   post({
     kind: 'state',
@@ -100,8 +105,10 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     states,
     actorCount: count,
     simulatedActorCount: simulatedCount,
+    signalStates,
+    signalLinkCount,
     stepMilliseconds: performance.now() - started,
-  }, [states]);
+  }, [states, signalStates]);
 }
 
 function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTrafficActor[]): void {

@@ -49,6 +49,9 @@ export interface TrafficStepResult {
   readonly states: ArrayBuffer;
   readonly actorCount: number;
   readonly simulatedActorCount: number;
+  /** Eight bytes per controlled SUMO link; see SUMO_WASM_SIGNAL_STATE_BYTES. */
+  readonly signalStates: ArrayBuffer;
+  readonly signalLinkCount: number;
   readonly stepMilliseconds: number;
 }
 
@@ -58,6 +61,7 @@ export interface TrafficProviderInitialization {
 }
 
 export const SUMO_WASM_STATE_WORDS = 8;
+export const SUMO_WASM_SIGNAL_STATE_BYTES = 8;
 
 export function boundedTrafficActorCount(simulatedCount: number, maximum: number): number {
   return Math.max(0, Math.min(Math.trunc(simulatedCount), Math.trunc(maximum)));

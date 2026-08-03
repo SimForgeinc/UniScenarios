@@ -9,6 +9,7 @@
 #include <vector>
 
 #include <libsumo/Simulation.h>
+#include <libsumo/TrafficLight.h>
 #include <libsumo/Vehicle.h>
 
 #ifdef __EMSCRIPTEN__
@@ -34,7 +35,19 @@ struct alignas(4) PackedState {
 };
 static_assert(sizeof(PackedState) == 32, "PackedState ABI changed");
 
+// One record per controlled link. Controller ids are stable FNV-1a hashes;
+// the Studio resolves them against physical OpenDRIVE head provenance parsed
+// once from the same network document.
+struct alignas(4) PackedSignalState {
+    std::uint32_t controllerHash;
+    std::uint16_t linkIndex;
+    std::uint8_t state;
+    std::uint8_t reserved;
+};
+static_assert(sizeof(PackedSignalState) == 8, "PackedSignalState ABI changed");
+
 std::vector<PackedState> states;
+std::vector<PackedSignalState> signalStates;
 std::unordered_set<std::string> externalIds;
 std::string lastError;
 double simulationTime = 0;
@@ -93,6 +106,21 @@ void refreshStates() {
     }
 }
 
+void refreshSignalStates() {
+    signalStates.clear();
+    for (const auto& controllerId : libsumo::TrafficLight::getIDList()) {
+        const auto state = libsumo::TrafficLight::getRedYellowGreenState(controllerId);
+        for (std::size_t index = 0; index < state.size(); ++index) {
+            signalStates.push_back(PackedSignalState{
+                fnv1a(controllerId),
+                static_cast<std::uint16_t>(index),
+                static_cast<std::uint8_t>(state[index]),
+                0,
+            });
+        }
+    }
+}
+
 } // namespace
 
 US_EXPORT int us_sumo_start(
@@ -120,11 +148,13 @@ US_EXPORT int us_sumo_start(
         libsumo::Simulation::start(args);
         simulationTime = 0;
         states.clear();
+        signalStates.clear();
         externalIds.clear();
         loaded = true;
         // Materialize depart="0" actors so the first browser frame has state.
         libsumo::Simulation::step(0);
         refreshStates();
+        refreshSignalStates();
     });
 }
 
@@ -135,6 +165,7 @@ US_EXPORT int us_sumo_step(const double deltaSeconds) {
         simulationTime += deltaSeconds;
         libsumo::Simulation::step(simulationTime);
         refreshStates();
+        refreshSignalStates();
     });
 }
 
@@ -180,6 +211,8 @@ US_EXPORT int us_sumo_remove(const char* rawId) {
 
 US_EXPORT const void* us_sumo_state_pointer() { return states.data(); }
 US_EXPORT int us_sumo_state_count() { return static_cast<int>(states.size()); }
+US_EXPORT const void* us_sumo_signal_state_pointer() { return signalStates.data(); }
+US_EXPORT int us_sumo_signal_state_count() { return static_cast<int>(signalStates.size()); }
 US_EXPORT double us_sumo_time() { return simulationTime; }
 US_EXPORT const char* us_sumo_last_error() { return lastError.c_str(); }
 
@@ -190,5 +223,6 @@ US_EXPORT void us_sumo_close() {
     loaded = false;
     simulationTime = 0;
     states.clear();
+    signalStates.clear();
     externalIds.clear();
 }

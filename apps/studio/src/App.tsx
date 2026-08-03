@@ -173,7 +173,7 @@ export function App(): JSX.Element {
   const campaignRecovery = useRef('');
   const [pendingCampaignOpen, setPendingCampaignOpen] = useState<CampaignOpenRequest | null>(null);
   const [ambientTrafficProfile, setAmbientTrafficProfile] = useState<ResolvedAmbientTrafficProfile>(() => defaultAmbientTrafficProfile());
-  const [ambientTrafficProvider, setAmbientTrafficProvider] = useState<AmbientTrafficProviderId>('native');
+  const [ambientTrafficProvider, setAmbientTrafficProvider] = useState<AmbientTrafficProviderId>('sumo');
   const [sumoFallbackReason, setSumoFallbackReason] = useState<string | null>(null);
   const [ambientPreview, setAmbientPreview] = useState<PlaybackBundle | null>(null);
   const [actorDetailsId, setActorDetailsId] = useState<string | null>(null);
@@ -668,7 +668,10 @@ export function App(): JSX.Element {
     viewer,
     bundle: activePlayback,
     sampleHeight,
-    overlays,
+    // In SUMO mode one authority must govern both vehicle right-of-way and the
+    // visible lamps. Prevent authored playback samples from racing SUMO's live
+    // controller/link snapshot; fallback restores the native authority.
+    overlays: ambientTrafficProvider === 'sumo' && !sumoFallbackReason ? null : overlays,
     cameraPolicy: defaultPlaybackCamera?.policy,
     cameraView: defaultPlaybackCamera?.view,
     dashCamera: !playbackBundle && cameraPlaybackRequested && selectedAuthoredDashCamera
@@ -730,6 +733,14 @@ export function App(): JSX.Element {
     focus: sumoDemandFocus,
     onFallback: fallbackToNativeTraffic,
   });
+  useEffect(() => {
+    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason || !sumoStatus.signalStates) return;
+    overlays?.setSignalStates(sumoStatus.signalStates);
+  }, [ambientTrafficProvider, overlays, sumoFallbackReason, sumoStatus.signalStates]);
+  useEffect(() => {
+    if (ambientTrafficProvider !== 'sumo' || sumoFallbackReason) return;
+    return () => overlays?.clearSignalStates();
+  }, [ambientTrafficProvider, map.id, overlays, sumoFallbackReason]);
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
   // Keep t=0 visible through the preparing frame. The playback renderer takes
   // ownership only after the exact same bundle has been installed.
