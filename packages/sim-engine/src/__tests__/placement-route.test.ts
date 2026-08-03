@@ -141,7 +141,7 @@ describe('buildSeededPlacementRoute', () => {
     expect(result.route.legs.map((leg) => leg.rsl)).toEqual(result.lanes);
   });
 
-  it('returns a stable no-route error when available runway is insufficient', () => {
+  it('accepts the longest connected route when available runway is shorter than requested', () => {
     const graph = buildLaneGraph(topology([
       { rsl: '1:0:-1', x0: 0, x1: 10, successors: ['2:0:-1'] },
       { rsl: '2:0:-1', x0: 10, x1: 15, predecessors: ['1:0:-1'] },
@@ -155,12 +155,28 @@ describe('buildSeededPlacementRoute', () => {
       actorId: 'vehicle_01',
     });
 
-    expect(result).toMatchObject({
-      ok: false,
-      error: {
-        code: 'route_disconnected',
-        detail: { startRsl: '1:0:-1', requiredDownstreamM: 20 },
-      },
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lanes).toEqual(['1:0:-1', '2:0:-1']);
+    expect(result.downstreamM).toBeCloseTo(6);
+  });
+
+  it('accepts an isolated terminal driving lane and stops at its end', () => {
+    const graph = buildLaneGraph(topology([
+      { rsl: '1:0:-1', x0: 0, x1: 10 },
+    ]));
+
+    const result = buildSeededPlacementRoute(graph, {
+      startRsl: '1:0:-1',
+      startStorageS: 8,
+      requiredDownstreamM: 100,
+      seed: 'terminal-lane',
+      actorId: 'vehicle_01',
     });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lanes).toEqual(['1:0:-1']);
+    expect(result.downstreamM).toBeCloseTo(2);
   });
 });

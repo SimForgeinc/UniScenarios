@@ -308,6 +308,10 @@ export class DynamicV1Backend implements MotionBackend {
     return value ? { ...value, control: { ...value.control } } : undefined;
   }
 
+  profile(actorId: string): ResolvedVehiclePhysicsProfile | undefined {
+    return this.vehicles.get(actorId)?.profile;
+  }
+
   step(actorId: string, intent: MotionIntent, dtS: number, frictionScale: number): MotionStepResult {
     const entry = this.vehicles.get(actorId);
     if (!entry) throw new Error(`dynamic-v1 actor is not registered: ${actorId}`);

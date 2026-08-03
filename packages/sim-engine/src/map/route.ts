@@ -350,12 +350,21 @@ export function buildSeededPlacementRoute(
   const nominal = graph.nominalReversed(options.startRsl);
   const orientations = nominal === null ? [false, true] : [nominal];
 
+  const fallback: { best: { lanes: LaneRsl[]; downstreamM: number } | null } = { best: null };
+
+  const rememberBest = (lanes: LaneRsl[], downstreamM: number): void => {
+    if (fallback.best === null || downstreamM > fallback.best.downstreamM + 1e-6) {
+      fallback.best = { lanes, downstreamM };
+    }
+  };
+
   const search = (
     current: DirectedLane,
     lanes: LaneRsl[],
     downstreamM: number,
     visited: ReadonlySet<string>,
   ): { lanes: LaneRsl[]; downstreamM: number } | null => {
+    rememberBest(lanes, downstreamM);
     const candidates = graph.successors(current)
       .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === 'driving')
       .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
@@ -392,6 +401,25 @@ export function buildSeededPlacementRoute(
     const downstreamM = built.route.lengthM - spawnS;
     if (downstreamM + 1e-6 < required) continue;
     return { ok: true, route: built.route, lanes: found.lanes, downstreamM };
+  }
+
+  // The requested distance is a planning preference, not a placement gate.
+  // A short or terminal lane is still a valid place to author a vehicle: use
+  // the longest connected path available and let route-end behaviour stop it
+  // naturally instead of rejecting the actor.
+  if (fallback.best !== null) {
+    const built = buildLanePathRoute(graph, fallback.best.lanes);
+    if (built.ok) {
+      const spawnS = built.route.sOfLaneStorage(options.startRsl, options.startStorageS);
+      if (spawnS !== null) {
+        return {
+          ok: true,
+          route: built.route,
+          lanes: fallback.best.lanes,
+          downstreamM: Math.max(0, built.route.lengthM - spawnS),
+        };
+      }
+    }
   }
   return {
     ok: false,

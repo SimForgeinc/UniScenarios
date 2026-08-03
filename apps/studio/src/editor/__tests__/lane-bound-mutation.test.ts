@@ -60,7 +60,7 @@ describe('lane-bound pose mutation', () => {
     document.dispose();
   });
 
-  it('leaves the document untouched when the destination has no executable runway', async () => {
+  it('moves an actor onto a short terminal lane and uses the available route', async () => {
     const document = await EditorDocument.openBlank(MAPS[0]!, {
       store: new WebTemplateFileStore({ storage: new MemoryStorage() }), autosaveMs: 60_000,
     });
@@ -77,6 +77,8 @@ describe('lane-bound pose mutation', () => {
 
     controller.setWorldPose('ego', { x: 10, z: -20 });
 
+    expect(document.actor('ego')).toMatchObject({ x: 10, z: -20, laneRef: { roadId: '2' }, routeLaneRsls: ['2:0:-1'] });
+    expect(document.undo()).toBe(true);
     expect(document.actor('ego')).toMatchObject({ x: 10, z: 0, laneRef: { roadId: '1' }, routeLaneRsls: ['1:0:-1'] });
     controller.dispose();
     document.dispose();

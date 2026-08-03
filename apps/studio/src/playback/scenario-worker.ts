@@ -749,6 +749,14 @@ function ambientInstance(
   input: SimScenarioInput,
   provenance: AmbientTrafficProvenance,
 ): unknown {
+  // The blank-world path may remove its schema-only seed actor after ambient
+  // population has been materialized. Always derive identity from the exact
+  // input returned to playback rather than trusting an earlier intermediate
+  // hash; otherwise the editor rejects its own freshly prepared scenario.
+  const generatedInputHash = contentHash(input);
+  const normalizedProvenance = provenance.generatedInputHash === generatedInputHash
+    ? provenance
+    : { ...provenance, generatedInputHash };
   const authored = new Map((baseManifest['actors'] as Array<Record<string, unknown>>).map((actor) => [actor['id'], actor]));
   const actors = input.actors.map((actor) => authored.get(actor.id) ?? {
     id: actor.id,
@@ -767,14 +775,14 @@ function ambientInstance(
     version: 1,
     manifest: {
       ...baseManifest,
-      inputHash: provenance.generatedInputHash,
+      inputHash: generatedInputHash,
       instanceId: `${String(baseManifest['instanceId'])}@ambient:${provenance.profileHash.slice(0, 12)}`,
       actors,
-      ambientTraffic: provenance,
+      ambientTraffic: normalizedProvenance,
       ambientBaseInputHash: provenance.baseInputHash,
     },
     input,
-    ambientTraffic: provenance,
+    ambientTraffic: normalizedProvenance,
   };
 }
 

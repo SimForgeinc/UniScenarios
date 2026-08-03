@@ -20,7 +20,7 @@
  * trigger by a tick.
  */
 
-import { obbCorners, obbOverlap, normalizeAngle, type Obb, type Vec2 } from '../core/math.js';
+import { angleDelta, clamp, obbCorners, obbOverlap, normalizeAngle, type Obb, type Vec2 } from '../core/math.js';
 import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
 import { localFromScene } from '../frames.js';
@@ -58,7 +58,12 @@ import {
   desiredGapM,
 } from './controllers.js';
 import { transitionDuration, transitionValue } from './dynamics.js';
-import { ACTOR_PHYSICS_PROFILES, DynamicV1Backend, DYNAMIC_V1_DEFAULT_SUBSTEP_S } from './dynamic-v1.js';
+import {
+  ACTOR_PHYSICS_PROFILES,
+  DynamicV1Backend,
+  DYNAMIC_V1_DEFAULT_SUBSTEP_S,
+  type ResolvedVehiclePhysicsProfile,
+} from './dynamic-v1.js';
 import type { MotionBackend, PhysicsTelemetrySample } from './motion-backend.js';
 import { actorPhysicsBackends } from './physics-provenance.js';
 import {
@@ -144,6 +149,52 @@ const CONFLICT_WINDOW_S = 2.5;
 const CONFLICT_MIN_ANGLE_RAD = 0.4;
 /** Uniform-grid size; larger than ordinary road-user footprints and one tick's motion. */
 const COLLISION_GRID_CELL_M = 20;
+
+/**
+ * Cap approach speed using the authored route's upcoming curvature. Dynamic
+ * bodies cannot negotiate a sharp connector at the straight-road cruise speed;
+ * planning the braking envelope here keeps physics authoritative without
+ * allowing a vehicle to cut across the inside of a turn.
+ */
+function curveAwareSpeedCapMps(
+  route: Route,
+  routeS: number,
+  currentSpeedMps: number,
+  profile: ResolvedVehiclePhysicsProfile,
+): number {
+  const comfortableBrakeMps2 = Math.max(1, profile.maxLongitudinalDecelMps2 * 0.5);
+  // Road-going actors should corner well below their physical tyre limit. An
+  // 18% envelope is comparable to an ordinary urban manoeuvre and leaves
+  // steering authority for cross-track correction instead of saturating the
+  // tyres merely to stay on the centreline.
+  const lateralBudgetMps2 = Math.max(0.6, profile.maxLateralAccelerationMps2 * 0.18);
+  const brakingDistanceM = currentSpeedMps ** 2 / (2 * comfortableBrakeMps2);
+  const horizonM = clamp(brakingDistanceM + 15, 18, 65);
+  const endS = Math.min(route.lengthM, routeS + horizonM);
+  const sampleStepM = 2.5;
+  let priorS = routeS;
+  let priorHeading = route.poseAt(routeS).headingRad;
+  let capMps = Number.POSITIVE_INFINITY;
+
+  for (let sampleS = Math.min(endS, routeS + sampleStepM); sampleS <= endS + 1e-6; sampleS = Math.min(endS, sampleS + sampleStepM)) {
+    const pose = route.poseAt(sampleS);
+    const segmentM = Math.max(0.1, sampleS - priorS);
+    const curvaturePerM = Math.abs(angleDelta(priorHeading, pose.headingRad)) / segmentM;
+    if (curvaturePerM > 1e-4) {
+      const turnSpeedMps = Math.sqrt(lateralBudgetMps2 / curvaturePerM);
+      const distanceToCurveM = Math.max(0, priorS - routeS);
+      const approachSpeedMps = Math.sqrt(
+        turnSpeedMps ** 2 + 2 * comfortableBrakeMps2 * distanceToCurveM,
+      );
+      capMps = Math.min(capMps, approachSpeedMps);
+    }
+    if (sampleS >= endS) break;
+    priorS = sampleS;
+    priorHeading = pose.headingRad;
+  }
+
+  return Math.max(0.75, capMps);
+}
 
 function collisionGridCells(bounds: Omit<SpatialBounds, 'id'> | SpatialBounds): string[] {
   const x0 = Math.floor(bounds.minX / COLLISION_GRID_CELL_M);
@@ -1584,9 +1635,22 @@ class Simulation {
     }
 
     if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
+      const dynamicProfile = this.dynamicBackend?.profile(a.id);
+      const curveSpeedCap = dynamicProfile
+        ? curveAwareSpeedCapMps(a.route, a.routeS, Math.abs(a.speedMps), dynamicProfile)
+        : Number.POSITIVE_INFINITY;
+      const dynamicTargetSpeed = Math.min(speed, curveSpeedCap);
+      const dynamicTargetAcceleration = dynamicTargetSpeed < Math.abs(a.speedMps) - 0.05
+        ? Math.min(accel, (dynamicTargetSpeed - Math.abs(a.speedMps)) / 0.35)
+        : accel;
+      const steeringLookaheadM = a.latCmd
+        ? Math.max(5, Math.abs(a.speedMps) * 0.8)
+        : dynamicProfile
+          ? Math.max(dynamicProfile.wheelbaseM * 0.85, Math.abs(a.speedMps) * 0.25)
+          : Math.max(5, Math.abs(a.speedMps) * 0.8);
       const previewS = Math.min(
         a.route.lengthM,
-        a.routeS + Math.max(5, Math.abs(a.speedMps) * 0.8),
+        a.routeS + steeringLookaheadM,
       );
       const previewPose = a.route.poseAt(previewS);
       const previewTimeS = Math.max(0.4, (previewS - a.routeS) / Math.max(Math.abs(a.speedMps), 1));
@@ -1605,11 +1669,28 @@ class Simulation {
             a.latCmd.duration,
           )
         : plan.lateralOffset;
+      // Pure pursuit naturally cuts the inside of compact junction curves.
+      // Aim slightly across the desired offset when the physical body has
+      // accumulated cross-track error. This changes only the steering target;
+      // the force-based plant and tyre limits remain authoritative.
+      // During a timeline-owned lane change, the authored lateral transition
+      // already supplies the correct preview target and rate. Recovery is only
+      // for ordinary route following; layering it onto a lane change would
+      // distort the commanded duration and peak lateral velocity.
+      const measuredCrossTrackM = a.latCmd ? 0 : a.lateralOffsetM - plan.lateralOffset;
+      const recoveryLimitM = Math.max(0.5, a.route.widthAt(previewS) / 2 - a.dims.w / 2);
+      const trackingPreviewOffset = a.latCmd
+        ? previewLateralOffset
+        : clamp(
+          previewLateralOffset - measuredCrossTrackM * 3,
+          -recoveryLimitM,
+          recoveryLimitM,
+        );
       const result = this.motionBackend.step(a.id, {
         motionDirection: isReverseMotion(a) ? -1 : 1,
-        targetSpeedMps: speed,
-        targetAccelerationMps2: accel,
-        previewPoint: a.route.pointWithOffset(previewS, previewLateralOffset),
+        targetSpeedMps: dynamicTargetSpeed,
+        targetAccelerationMps2: dynamicTargetAcceleration,
+        previewPoint: a.route.pointWithOffset(previewS, trackingPreviewOffset),
         previewHeadingRad: headingWithSlip(previewPose.headingRad, plan.lateralRate, Math.max(plan.speed, 0.5)),
       }, this.dt, frictionScale);
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
@@ -1617,7 +1698,10 @@ class Simulation {
         x: result.state.x,
         y: result.state.y,
       });
-      const roadCenterAllowanceM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
+      // Permit a modest tyre/body envelope beyond the painted lane centre
+      // corridor. The route remains authoritative, but a physically integrated
+      // body can briefly overhang a marking while completing a real turn.
+      const roadCenterAllowanceM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.5);
       // A legal lane change deliberately leaves the source-lane envelope.
       // Expand the route corridor only as far as the active authored lateral
       // command; otherwise the safety guard would retire the actor at the lane
