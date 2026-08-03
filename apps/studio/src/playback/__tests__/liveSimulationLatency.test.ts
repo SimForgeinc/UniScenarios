@@ -43,6 +43,6 @@ describe('32-actor live startup budget', () => {
   it('keeps cold fallback bounded and yields between catch-up batches', () => {
     const dt = 0.05;
     expect(initialLiveTickBudget(1, dt)).toBe(22);
-    expect(liveBatchTickBudget(dt, 1)).toBe(5);
+    expect(liveBatchTickBudget(dt, 1)).toBe(20);
   });
 });

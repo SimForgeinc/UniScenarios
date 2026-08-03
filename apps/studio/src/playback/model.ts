@@ -699,16 +699,25 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
         motionDirection,
       };
     }
+    // Presence changes and collision response are discontinuities. Holding the
+    // preceding physical sample until the exact event boundary prevents a
+    // visual pose that the deterministic simulation never occupied.
+    const discontinuous = track.present[bracket.lower] !== track.present[bracket.upper]
+      || bundle.trace.events.some((event) => event.kind === 'collision'
+        && event.t > (bundle.trace.ticks.t[bracket.lower] as number)
+        && event.t <= (bundle.trace.ticks.t[bracket.upper] as number)
+        && (event.a === actor.id || event.b === actor.id));
+    const alpha = discontinuous && bracket.alpha < 1 ? 0 : bracket.alpha;
     return {
       id: actor.id,
       catalogId: actor.catalogId,
       dims: actor.dims,
-      x: lerp(track.x[bracket.lower] as number, track.x[bracket.upper] as number, bracket.alpha),
-      z: lerp(track.z[bracket.lower] as number, track.z[bracket.upper] as number, bracket.alpha),
+      x: lerp(track.x[bracket.lower] as number, track.x[bracket.upper] as number, alpha),
+      z: lerp(track.z[bracket.lower] as number, track.z[bracket.upper] as number, alpha),
       headingRad: lerpHeading(
         track.headingRad[bracket.lower] as number,
         track.headingRad[bracket.upper] as number,
-        bracket.alpha,
+        alpha,
       ),
       present,
       static: false,

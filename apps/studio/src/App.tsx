@@ -657,7 +657,6 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
     studioSession.setFrameDriver?.((time) => {
-      livePlayback.current?.updatePlayhead(time);
       playbackController.renderAt(time);
     });
     playbackController.renderAt(studioSession.state.time);
@@ -667,10 +666,17 @@ export function App(): JSX.Element {
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
     const playing = studioSession.state.mode === 'playing';
-    livePlayback.current?.setPlaying(playing);
+    livePlayback.current?.setPlaying(playing, studioSession.state.time);
     if (playing) playbackController.play();
     else playbackController.pause();
   }, [authoredPlayback, playbackController, studioSession.state.mode]);
+
+  // A seek is authoritative for worker lookahead too. This message is tiny and
+  // follows the already-throttled 20 Hz UI publication; physics remains fixed-step.
+  useEffect(() => {
+    if (studioSession.state.mode !== 'playing') return;
+    livePlayback.current?.setPlaying(true, studioSession.state.time);
+  }, [studioSession.state.mode, studioSession.state.time]);
 
   // Playback is a viewport mode, not an editor mutation. Keep the autosave
   // document intact but hide its actors until the imported evidence is closed.

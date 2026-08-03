@@ -5,7 +5,6 @@ import { parsePlaybackPair, type PlaybackBundle } from './model';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
 import { RevisionGate } from './mapRuntime';
-import { LIVE_DEMAND_QUANTUM_SECONDS, liveDemandUntil } from './liveSimulationPlan';
 
 export interface LivePlaybackCounters {
   readonly startupMs: number | null;
@@ -17,8 +16,7 @@ export interface LivePlaybackRun {
   readonly bundle: PlaybackBundle;
   readonly completion: Promise<PlaybackBundle>;
   recordedUntil(): number;
-  setPlaying(playing: boolean): void;
-  updatePlayhead(time: number): void;
+  setPlaying(playing: boolean, time?: number): void;
   counters(): LivePlaybackCounters;
 }
 
@@ -130,7 +128,6 @@ export class ScenarioWorkerClient {
     let startupMs: number | null = null;
     let progressMessages = 0;
     let demandMessages = 0;
-    let lastDemand = -Infinity;
     let available = base.trace.ticks.t.at(-1) ?? 0;
     const liveBundle: PlaybackBundle = { ...base, endTime: base.instance.input.clipSeconds };
     let resolveCompletion!: (bundle: PlaybackBundle) => void;
@@ -139,13 +136,6 @@ export class ScenarioWorkerClient {
       resolveCompletion = resolve;
       rejectCompletion = reject;
     });
-    const demand = (time: number): void => {
-      const until = liveDemandUntil(time, base.instance.input.clipSeconds);
-      if (until < lastDemand + LIVE_DEMAND_QUANTUM_SECONDS - 1e-9) return;
-      lastDemand = until;
-      demandMessages++;
-      worker.postMessage({ kind: 'demand', id, until });
-    };
     this.pending.set(id, { revision, reject: rejectCompletion, onMessage: (message) => {
         if (message.revision !== revision) return;
         if (!message.ok) {
@@ -173,11 +163,10 @@ export class ScenarioWorkerClient {
       bundle: liveBundle,
       completion,
       recordedUntil: () => available,
-      setPlaying: (playing) => {
-        worker.postMessage({ kind: 'transport', id, playing });
-        if (playing) demand(available);
+      setPlaying: (playing, time) => {
+        if (playing && typeof time === 'number') demandMessages++;
+        worker.postMessage({ kind: 'transport', id, playing, time });
       },
-      updatePlayhead: demand,
       counters: () => ({ startupMs, progressMessages, demandMessages }),
     };
   }

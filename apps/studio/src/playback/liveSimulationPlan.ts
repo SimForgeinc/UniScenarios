@@ -1,28 +1,37 @@
-/** How far the producer should stay ahead of the sole Studio playhead. */
-export const LIVE_TARGET_LOOKAHEAD_SECONDS = 0.3;
-
-/** Do not send a worker demand for every animation frame. */
-export const LIVE_DEMAND_QUANTUM_SECONDS = 0.2;
+/**
+ * The renderer needs two fixed-step samples around its display playhead.
+ * This reserve absorbs worker scheduling and structured-clone jitter after
+ * playback has started; it is deliberately not a startup prerequisite.
+ */
+export const LIVE_LOOKAHEAD_SECONDS = 0.75;
+export const LIVE_REFILL_SECONDS = 0.25;
 
 /**
- * Publish the first moving sample as soon as possible. The already-compiled
- * bundle owns t=0, so live startup only needs one fixed step beyond it.
+ * The compiled bundle already owns t=0. A resumed warmed session therefore
+ * publishes exactly one moving fixed-step sample; a cold fallback includes
+ * warmup plus that same first sample.
  */
 export function initialLiveTickBudget(warmupSeconds: number, dt: number): number {
   return Math.round(warmupSeconds / dt) + 2;
 }
 
-/**
- * Adapt producer work to actual demand. Small batches yield quickly on a busy
- * CPU; a large deficit is allowed a larger batch so an underrun recovers rather
- * than remaining permanently one chunk behind.
- */
-export function liveBatchTickBudget(dt: number, deficitSeconds: number): number {
-  const requested = Math.ceil(Math.max(dt, deficitSeconds) / dt);
-  const maxBatch = Math.max(1, Math.ceil(0.25 / dt));
-  return Math.max(1, Math.min(requested, maxBatch));
+export function liveBatchTickBudget(dt: number, deficitSeconds = LIVE_REFILL_SECONDS): number {
+  return Math.max(1, Math.ceil(Math.max(LIVE_REFILL_SECONDS, deficitSeconds) / dt));
 }
 
-export function liveDemandUntil(playhead: number, duration: number): number {
-  return Math.min(duration, playhead + LIVE_TARGET_LOOKAHEAD_SECONDS);
+export interface LiveRefillPlan {
+  readonly advanceTicks: number;
+  readonly waitMs: number;
+}
+
+/** Adapt the post-start producer reserve to the authoritative playhead. */
+export function planLiveRefill(recordedUntil: number, playhead: number, dt: number): LiveRefillPlan {
+  const lead = Math.max(0, recordedUntil - playhead);
+  const missing = Math.max(0, LIVE_LOOKAHEAD_SECONDS - lead);
+  if (missing > dt / 2) {
+    return { advanceTicks: liveBatchTickBudget(dt, missing), waitMs: 0 };
+  }
+  // Wake before a refill chunk is consumed. The cap keeps pause and seek
+  // responsive without polling at display cadence.
+  return { advanceTicks: 0, waitMs: Math.max(16, Math.min(100, (lead - LIVE_REFILL_SECONDS) * 500)) };
 }

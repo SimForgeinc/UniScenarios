@@ -36,7 +36,7 @@ import { selectPlayableSite } from './site-selection';
 import { withEditablePhysicsDefault } from './physics';
 import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from './staticMapColliders';
 import type { StaticColliderDiagnostics } from './staticMapColliders';
-import { initialLiveTickBudget, liveBatchTickBudget } from './liveSimulationPlan';
+import { initialLiveTickBudget, planLiveRefill } from './liveSimulationPlan';
 import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from './mapRuntime';
 
 export interface ScenarioWorkerMap {
@@ -79,9 +79,14 @@ export interface ScenarioWorkerStartRequest {
   readonly input: SimScenarioInput;
 }
 export interface ScenarioWorkerCancelRequest { readonly kind: 'cancel'; readonly id?: number }
-export interface ScenarioWorkerTransportRequest { readonly kind: 'transport'; readonly id: number; readonly playing: boolean }
-export interface ScenarioWorkerDemandRequest { readonly kind: 'demand'; readonly id: number; readonly until: number }
-export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest | ScenarioWorkerDemandRequest;
+export interface ScenarioWorkerTransportRequest {
+  readonly kind: 'transport';
+  readonly id: number;
+  readonly playing: boolean;
+  /** Authoritative display playhead, including seeks. */
+  readonly time?: number;
+}
+export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest;
 
 export interface AmbientRobustnessSummary {
   readonly version: 1;
@@ -136,7 +141,13 @@ const compiledWorlds = new Map<string, Promise<ScenarioWorkerResponse>>();
 // second warmup pass over all dynamic actors.
 const preparedLiveSessions = new Map<string, FixedStepSimulationSession>();
 let liveGeneration = 0;
-let transport: { id: number; playing: boolean; demandUntil: number; wake: (() => void) | null } | null = null;
+let transport: {
+  id: number;
+  playing: boolean;
+  playheadS: number;
+  wallStartedMs: number | null;
+  wake: (() => void) | null;
+} | null = null;
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
@@ -150,21 +161,21 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
   }
   if (request.kind === 'transport') {
     if (transport?.id !== request.id) return;
+    const now = performance.now();
+    if (typeof request.time === 'number') {
+      transport.playheadS = Math.max(0, request.time);
+    } else if (transport.playing && transport.wallStartedMs !== null) {
+      transport.playheadS += Math.max(0, now - transport.wallStartedMs) / 1000;
+    }
     transport.playing = request.playing;
-    transport.wake?.();
-    transport.wake = null;
-    return;
-  }
-  if (request.kind === 'demand') {
-    if (transport?.id !== request.id) return;
-    transport.demandUntil = Math.max(transport.demandUntil, request.until);
+    transport.wallStartedMs = request.playing ? now : null;
     transport.wake?.();
     transport.wake = null;
     return;
   }
   if (request.kind === 'start') {
     const token = ++liveGeneration;
-    transport = { id: request.id, playing: false, demandUntil: 0, wake: null };
+    transport = { id: request.id, playing: false, playheadS: 0, wallStartedMs: null, wake: null };
     void runLive(request, token).catch((reason: unknown) => postFailure(request.id, request.revision, reason));
     return;
   }
@@ -464,12 +475,20 @@ async function runLive(request: ScenarioWorkerStartRequest, token: number): Prom
     : initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
   postLive(request, progress.done ? 'complete' : 'ready', progress.trace, progress.recordedUntil ?? 0);
   while (!progress.done && token === liveGeneration) {
-    await waitForDemand(request.id, token, progress.recordedUntil ?? 0);
+    await waitUntilPlaying(request.id, token);
+    if (transport?.id === request.id && !transport.playing) continue;
     if (token !== liveGeneration) return;
-    const requestedUntil = transport?.id === request.id ? transport.demandUntil : 0;
-    const deficit = requestedUntil - (progress.recordedUntil ?? 0);
-    if (deficit <= request.input.dt / 2) continue;
-    progress = simulation.advance(liveBatchTickBudget(request.input.dt, deficit));
+    const activeTransport = transport;
+    if (!activeTransport || activeTransport.id !== request.id) return;
+    const playhead = activeTransport.playheadS + (activeTransport.wallStartedMs === null
+      ? 0
+      : Math.max(0, performance.now() - activeTransport.wallStartedMs) / 1000);
+    const refill = planLiveRefill(progress.recordedUntil ?? 0, playhead, request.input.dt);
+    if (refill.advanceTicks === 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, refill.waitMs));
+      continue;
+    }
+    progress = simulation.advance(refill.advanceTicks);
     postLive(request, progress.done ? 'complete' : 'progress', progress.trace, progress.recordedUntil ?? 0);
     // Let cancellation, pause, and a newer document revision preempt long
     // catch-up work without imposing a fixed delay on normal playback.
@@ -477,14 +496,10 @@ async function runLive(request: ScenarioWorkerStartRequest, token: number): Prom
   }
 }
 
-async function waitForDemand(id: number, token: number, recordedUntil: number): Promise<void> {
-  while (token === liveGeneration && transport?.id === id && (
-    !transport.playing || transport.demandUntil <= recordedUntil + 1e-9
-  )) {
+async function waitUntilPlaying(id: number, token: number): Promise<void> {
+  while (token === liveGeneration && transport?.id === id && !transport.playing) {
     await new Promise<void>((resolve) => {
-      if (!transport || transport.id !== id || (
-        transport.playing && transport.demandUntil > recordedUntil + 1e-9
-      )) resolve();
+      if (!transport || transport.id !== id || transport.playing) resolve();
       else transport.wake = resolve;
     });
   }
