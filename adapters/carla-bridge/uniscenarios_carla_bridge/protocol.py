@@ -111,6 +111,7 @@ def validate_job(job: dict[str, Any], xodr_bytes: bytes, osc_bytes: bytes, asset
         _fail("runtimeContract", "must pin the CARLA worker and bridge builds")
     if not isinstance(runtime.get("workerImageDigest"), str) or not IMAGE_DIGEST.fullmatch(runtime["workerImageDigest"]):
         _fail("runtimeContract.workerImageDigest", "must be a sha256 container image digest")
+    _require_sha("runtimeContract.workerManifestSha256", runtime.get("workerManifestSha256"))
     if not isinstance(runtime.get("bridgeRevision"), str) or not REVISION.fullmatch(runtime["bridgeRevision"]):
         _fail("runtimeContract.bridgeRevision", "must be a full lowercase Git revision")
     for field in ("carlaServerVersion", "carlaClientVersion", "engineVersion"):

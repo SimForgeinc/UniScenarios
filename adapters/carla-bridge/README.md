@@ -33,6 +33,10 @@ Hard gates:
 - inputs and frame/actor/signal counts are bounded; every backend tick is a
   strictly increasing integer and results require job-bound CARLA build, map,
   payload, fixed-step, bridge-revision, collision, and runtime provenance;
+- worker identity is independently attested from a fixed read-only build
+  manifest plus a live CARLA version probe; both the caller's expectation and
+  backend observations must match it, so echoed caller provenance is not
+  accepted as proof;
 - tick IDs must be contiguous, and every observation names that exact CARLA
   frame plus snapshot elapsed time advancing by exactly one fixed step;
 - both execution modes compare CARLA readback to the same authoritative frames

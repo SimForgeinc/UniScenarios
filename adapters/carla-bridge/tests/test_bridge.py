@@ -2,12 +2,14 @@ import copy
 import hashlib
 import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).parents[1]))
 
 from uniscenarios_carla_bridge import (
     ContractError,
+    ManifestWorkerRuntimeAttestor,
     assess_scenario_runner_1_0,
     canonical_sha256,
     execute_job as _execute_job,
@@ -26,6 +28,7 @@ def job(mode="authoritative-trace"):
         "schema": "uniscenarios.carla-job/v3",
         "executionMode": mode,
         "runtimeContract": {
+            "workerManifestSha256": "8" * 64,
             "workerImageDigest": "sha256:" + "9" * 64,
             "bridgeRevision": "a" * 40,
             "carlaServerVersion": "0.10.0-dev",
@@ -85,11 +88,13 @@ def evidence(value=None):
         "collisions": [],
         "provenance": {
             "backend": "carla",
-            "carlaServerVersion": "0.10.0-dev",
-            "carlaClientVersion": "0.10.0-dev",
-            "engineVersion": "UE5.5",
-            "bridgeRevision": "a" * 40,
+            "carlaServerVersion": value["runtimeContract"]["carlaServerVersion"],
+            "carlaClientVersion": value["runtimeContract"]["carlaClientVersion"],
+            "engineVersion": value["runtimeContract"]["engineVersion"],
+            "bridgeRevision": value["runtimeContract"]["bridgeRevision"],
             "workerImageDigest": value["runtimeContract"]["workerImageDigest"],
+            "workerManifestSha256": value["runtimeContract"]["workerManifestSha256"],
+            "workerAttestationSource": "worker-owned-manifest+live-carla-probe",
             "jobSchema": value["schema"],
             "executionMode": value["executionMode"],
             "mapName": value["map"]["name"],
@@ -118,8 +123,24 @@ class FakeValidator:
         }
 
 
-def execute_job(value, xodr_bytes, osc_bytes, catalog_bytes, backend, validator=None):
-    return _execute_job(value, xodr_bytes, osc_bytes, catalog_bytes, backend, validator or FakeValidator())
+class FakeAttestor:
+    def attest(self):
+        return {
+            "source": "worker-owned-manifest+live-carla-probe",
+            "workerManifestSha256": "8" * 64,
+            "workerImageDigest": "sha256:" + "9" * 64,
+            "bridgeRevision": "a" * 40,
+            "carlaServerVersion": "0.10.0-dev",
+            "carlaClientVersion": "0.10.0-dev",
+            "engineVersion": "UE5.5",
+        }
+
+
+def execute_job(value, xodr_bytes, osc_bytes, catalog_bytes, backend, validator=None, attestor=None):
+    return _execute_job(
+        value, xodr_bytes, osc_bytes, catalog_bytes, backend,
+        validator or FakeValidator(), attestor or FakeAttestor(),
+    )
 
 
 class FakeBackend:
@@ -310,6 +331,43 @@ class BridgeTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ContractError, "worker XSD rejected"):
             execute_job(job(), XODR, OSC, CATALOG, FakeBackend(), RejectingValidator())
+
+    def test_trusted_worker_attestation_rejects_caller_backend_identity_collusion(self):
+        colluding_job = job()
+        colluding_job["runtimeContract"]["workerImageDigest"] = "sha256:" + "7" * 64
+        colluding_job["runtimeContract"]["workerManifestSha256"] = "6" * 64
+        colluding_job["runtimeContract"]["bridgeRevision"] = "b" * 40
+        colluding_job["runtimeContract"]["carlaServerVersion"] = "forged-server"
+        colluding_job["payloadSha256"] = canonical_sha256(payload_for_digest(colluding_job))
+        colluding_evidence = evidence(colluding_job)
+        backend = FakeBackend(colluding_job)
+        backend.collect_result = lambda: colluding_evidence
+        with self.assertRaisesRegex(ContractError, "disagrees with trusted worker attestation"):
+            execute_job(colluding_job, XODR, OSC, CATALOG, backend)
+
+    def test_valid_trusted_worker_attestation_is_reported(self):
+        value = job()
+        result = execute_job(value, XODR, OSC, CATALOG, FakeBackend(value))
+        self.assertEqual(result["runtimeAttestation"], FakeAttestor().attest())
+        self.assertEqual(
+            result["observations"]["provenance"]["workerManifestSha256"],
+            result["runtimeAttestation"]["workerManifestSha256"],
+        )
+
+    def test_manifest_attestor_hashes_worker_owned_bytes_and_probes_live_runtime(self):
+        manifest = b'{"workerImageDigest":"sha256:9999999999999999999999999999999999999999999999999999999999999999","bridgeRevision":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}'
+        with tempfile.TemporaryDirectory() as directory:
+            manifest_path = pathlib.Path(directory) / "worker-build.json"
+            manifest_path.write_bytes(manifest)
+            attestor = ManifestWorkerRuntimeAttestor(manifest_path, lambda: {
+                "carlaServerVersion": "0.10.0-dev",
+                "carlaClientVersion": "0.10.0-dev",
+                "engineVersion": "UE5.5",
+            })
+            attestation = attestor.attest()
+        self.assertEqual(attestation["workerManifestSha256"], hashlib.sha256(manifest).hexdigest())
+        self.assertEqual(attestation["workerImageDigest"], "sha256:" + "9" * 64)
+        self.assertEqual(attestation["carlaServerVersion"], "0.10.0-dev")
 
     def test_cleanup_runs_when_backend_fails(self):
         backend = FakeBackend()

@@ -3,6 +3,7 @@
 import math
 from typing import Any, Protocol
 
+from .attestation import WorkerRuntimeAttestor
 from .capabilities import BRIDGE_CAPABILITIES
 from .protocol import ContractError, validate_job, validate_resolved_actor_bindings, validate_resolved_signal_bindings
 from .validation import OpenScenario14Validator
@@ -87,6 +88,7 @@ def validate_and_compare_observations(
     resolved_actors: dict[str, dict[str, Any]],
     resolved_signals: dict[str, dict[str, Any]],
     runtime_validation: dict[str, Any],
+    runtime_attestation: dict[str, Any],
 ) -> dict[str, Any]:
     """Fail closed unless CARLA returned complete readback within acceptance limits."""
     if not isinstance(observations, dict):
@@ -221,11 +223,13 @@ def validate_and_compare_observations(
     exact_provenance = {
         "jobSchema": job["schema"],
         "executionMode": job["executionMode"],
-        "workerImageDigest": job["runtimeContract"]["workerImageDigest"],
-        "bridgeRevision": job["runtimeContract"]["bridgeRevision"],
-        "carlaServerVersion": job["runtimeContract"]["carlaServerVersion"],
-        "carlaClientVersion": job["runtimeContract"]["carlaClientVersion"],
-        "engineVersion": job["runtimeContract"]["engineVersion"],
+        "workerAttestationSource": runtime_attestation["source"],
+        "workerManifestSha256": runtime_attestation["workerManifestSha256"],
+        "workerImageDigest": runtime_attestation["workerImageDigest"],
+        "bridgeRevision": runtime_attestation["bridgeRevision"],
+        "carlaServerVersion": runtime_attestation["carlaServerVersion"],
+        "carlaClientVersion": runtime_attestation["carlaClientVersion"],
+        "engineVersion": runtime_attestation["engineVersion"],
         "mapName": job["map"]["name"],
         "xodrSha256": job["map"]["xodrSha256"],
         "controlDigest": job["map"]["controlDigest"],
@@ -261,6 +265,7 @@ def execute_job(
     asset_catalog_bytes: bytes,
     backend: CarlaBackend,
     validator: OpenScenario14Validator,
+    attestor: WorkerRuntimeAttestor,
 ) -> dict[str, Any]:
     validate_job(job, xodr_bytes, osc_bytes, asset_catalog_bytes)
     runtime_validation = validator.validate(osc_bytes)
@@ -270,6 +275,12 @@ def execute_job(
             raise ContractError(f"worker OpenSCENARIO validation disagrees with submitted receipt field {field}")
     if not isinstance(runtime_validation.get("validator"), str) or not runtime_validation["validator"]:
         raise ContractError("worker OpenSCENARIO validation did not identify its validator")
+    runtime_attestation = attestor.attest()
+    if not isinstance(runtime_attestation, dict) or runtime_attestation.get("source") != "worker-owned-manifest+live-carla-probe":
+        raise ContractError("worker runtime attestation did not come from the trusted manifest and live CARLA probe")
+    for field in ("workerManifestSha256", "workerImageDigest", "bridgeRevision", "carlaServerVersion", "carlaClientVersion", "engineVersion"):
+        if runtime_attestation.get(field) != job["runtimeContract"][field]:
+            raise ContractError(f"runtimeContract.{field}: submitted expectation disagrees with trusted worker attestation")
     mode = job["executionMode"]
     unsupported = sorted(
         semantic for semantic in set(job["requiredSemantics"])
@@ -300,7 +311,7 @@ def execute_job(
             previous_tick = tick
         observations = backend.collect_result()
         comparison = validate_and_compare_observations(
-            job, observations, rendered_frames, resolved_actors, resolved_signals, runtime_validation,
+            job, observations, rendered_frames, resolved_actors, resolved_signals, runtime_validation, runtime_attestation,
         )
         return {
             "schema": "uniscenarios.carla-result/v3",
@@ -309,6 +320,7 @@ def execute_job(
             "fixedTimestepS": job["fixedTimestepS"],
             "payloadSha256": job["payloadSha256"],
             "runtimeValidation": runtime_validation,
+            "runtimeAttestation": runtime_attestation,
             "renderedFrames": rendered_frames,
             "observations": observations,
             "comparison": comparison,
