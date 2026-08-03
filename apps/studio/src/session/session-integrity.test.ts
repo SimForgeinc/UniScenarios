@@ -144,6 +144,7 @@ describe('authoring session integrity', () => {
     };
     const map = MAPS[0]!;
     const document = await EditorDocument.open(map, { store, autosaveMs: 60_000 });
+    document.add([{ id: 'ego', catalogId: 'vehicle.sedan', x: 0, y: 0, z: 0, headingRad: 0 }]);
     const original = newSpeedInteraction('ego', 0, 1);
     if (original.verb !== 'speed') throw new Error('fixture must be a speed interaction');
     document.addInteraction(original);

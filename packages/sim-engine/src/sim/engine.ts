@@ -59,6 +59,7 @@ import {
 import { transitionDuration } from './dynamics.js';
 import { DynamicV1Backend, DYNAMIC_V1_DEFAULT_SUBSTEP_S } from './dynamic-v1.js';
 import type { MotionBackend, PhysicsTelemetrySample } from './motion-backend.js';
+import { actorPhysicsBackend, actorPhysicsBackends } from './physics-provenance.js';
 import {
   articulatedDoorObb,
   alongRouteGapM,
@@ -409,10 +410,8 @@ class Simulation {
   }
 
   private dynamicFallbackReason(a: ActorRuntime): 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | null {
-    if (a.static) return 'static-actor';
-    if (isReverseMotion(a)) return 'reverse-motion';
-    if (a.kind !== 'vehicle' && a.kind !== 'car') return 'unsupported-actor-kind';
-    return null;
+    const backend = actorPhysicsBackend(a, this.physicsConfig);
+    return backend.mode === 'dynamic-v1' ? null : backend.reason === 'selected' ? null : backend.reason;
   }
 
   /* ------------------------------------------------------------ actor setup */
@@ -1736,15 +1735,7 @@ class Simulation {
           vehicleProfileDigest: this.physicsConfig.vehicleProfiles
             ? contentHash(this.physicsConfig.vehicleProfiles)
             : null,
-          actorBackends: Object.fromEntries(this.actors.map((actor) => {
-            if (this.physicsConfig.mode === 'kinematic-v1') {
-              return [actor.id, { mode: 'kinematic-v1' as const, reason: 'selected' as const }];
-            }
-            const fallback = this.dynamicFallbackReason(actor);
-            return [actor.id, fallback
-              ? { mode: 'kinematic-v1' as const, reason: fallback }
-              : { mode: 'dynamic-v1' as const, reason: 'selected' as const }];
-          })),
+          actorBackends: actorPhysicsBackends(this.actors, this.physicsConfig),
         },
       },
       ticks: { t: this.tArray, actors, signals },

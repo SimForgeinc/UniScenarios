@@ -64,6 +64,8 @@ export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate';
 
 /** Everything the panels render from. Replaced wholesale on every change. */
 export interface EditorState {
+  /** Exact EditorDocument revision represented by this snapshot. */
+  readonly revision: number;
   readonly name: string;
   readonly mode: EditorMode;
   readonly actors: readonly ActorRecord[];
@@ -207,7 +209,9 @@ export class EditorController {
     this.viewer.scene.add(this.ghost.group);
     this.unbindDoc = this.doc.subscribe(() => {
       this.syncScene();
-      this.notify();
+      // Document edits are already gesture-coalesced. Publish them immediately
+      // so timeline edits update route previews before autosave/materialization.
+      this.publish();
     });
     this.snapshot = this.buildState();
     this.syncScene();
@@ -1238,9 +1242,13 @@ export class EditorController {
     if (this.notifyHandle) return;
     this.notifyHandle = requestAnimationFrame(() => {
       this.notifyHandle = 0;
-      this.snapshot = this.buildState();
-      for (const listener of [...this.listeners]) listener();
+      this.publish();
     });
+  }
+
+  private publish(): void {
+    this.snapshot = this.buildState();
+    for (const listener of [...this.listeners]) listener();
   }
 
   private buildState(): EditorState {
@@ -1253,6 +1261,7 @@ export class EditorController {
           ? anchorLabel(selectedRecord.laneRef)
           : null;
     return {
+      revision: this.doc.revision,
       name: this.doc.name,
       mode: this.mode,
       actors: this.doc.actors,

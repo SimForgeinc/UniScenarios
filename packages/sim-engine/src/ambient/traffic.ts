@@ -5,9 +5,6 @@ import { Rng } from '../core/rng.js';
 import { toSceneXZ } from '../frames.js';
 import type { DirectedLane, LaneGraph } from '../map/lane-graph.js';
 import { buildRoute } from '../map/route.js';
-import { runSimulation } from '../sim/engine.js';
-import { phaseForbidsEntry, SignalBook } from '../sim/signals.js';
-import { DEFAULT_MAX_DECEL_MPS2 } from '../trace/evaluate.js';
 import {
   actorSchema,
   normalizeSimScenarioInput,
@@ -41,7 +38,7 @@ export const ambientTrafficProfileSchema = z.object({
   speedVariance: z.number().finite().min(0).max(0.8).default(0.12),
   seed: z.union([z.string().min(1), z.number().int()]).default('ambient'),
   maxActors: z.number().int().min(0).max(128).default(40),
-  /** Generation is local to the authored choreography, not the whole city. */
+  /** Candidate selection is local to authored choreography, not the whole city. */
   radiusM: z.number().finite().min(25).max(2000).default(250),
   /** Empty road around authored starts and explicit reservations. */
   exclusionRadiusM: z.number().finite().min(2).max(100).default(12),
@@ -65,8 +62,8 @@ export interface AmbientReservation {
 export interface AmbientTrafficOptions {
   readonly reservations?: readonly AmbientReservation[];
   /**
-   * Exact evaluator deceleration ceiling. When omitted, generation uses the
-   * same scenario-friction policy as `evaluateTrace`: `0.8g * frictionScale`.
+   * Retained for robustness-evaluator callers. Candidate materialization does
+   * not run the clip; the explicit robustness job applies this ceiling.
    */
   readonly maxAchievableDecelMps2?: number;
 }
@@ -84,18 +81,24 @@ export interface AmbientActorProvenance {
   readonly kind: ActorKind;
   readonly routeLaneRsls: readonly string[];
   readonly seedKey: string;
+  readonly origin: 'ambient';
+  readonly timelineVisible: false;
+  readonly editable: false;
 }
 
 export interface AmbientTrafficProvenance {
   readonly version: 1;
   readonly profile: ResolvedAmbientTrafficProfile;
   readonly profileHash: string;
+  /** Stable population identity. Authored choreography is deliberately absent. */
+  readonly candidatePoolKey: string;
+  readonly mapGraphDigest: string;
   readonly baseInputHash: string;
   readonly generatedInputHash: string;
   readonly actors: readonly AmbientActorProvenance[];
   readonly rejectedSpawnCount: number;
   readonly eligibleLaneKm: number;
-  /** Ambient actors removed by deterministic full-clip feasibility screening. */
+  /** Compatibility summary. Ordinary materialization never executes a screening clip. */
   readonly screening: {
     readonly evaluated: boolean;
     readonly passes: number;
@@ -110,6 +113,28 @@ export interface AmbientTrafficProvenance {
 export interface AmbientTrafficResult {
   readonly input: SimScenarioInput;
   readonly provenance: AmbientTrafficProvenance;
+}
+
+export interface AmbientCandidate {
+  readonly id: string;
+  readonly actor: SimActor;
+  readonly laneRsl: string;
+  readonly routeLaneRsls: readonly string[];
+  readonly seedKey: string;
+  readonly footprintRadiusM: number;
+  /** Runtime/editor ownership metadata; simulation still receives an ordinary SimActor. */
+  readonly origin: 'ambient';
+  readonly timelineVisible: false;
+  readonly editable: false;
+}
+
+export interface AmbientCandidatePool {
+  readonly version: 1;
+  readonly key: string;
+  readonly mapGraphDigest: string;
+  readonly profile: ResolvedAmbientTrafficProfile;
+  readonly profileHash: string;
+  readonly candidates: readonly AmbientCandidate[];
 }
 
 const PRESET_DENSITY: Record<ResolvedAmbientTrafficProfile['preset'], number> = {
@@ -148,155 +173,50 @@ export function resolveAmbientTrafficProfile(profile: AmbientTrafficProfile): Re
   };
 }
 
-/**
- * Deterministically add ambient actors to a concrete scenario. The authored
- * input is never mutated, and remains the authority for interactions/metrics.
- */
-export function applyAmbientTraffic(
-  base: SimScenarioInput,
+/** Generate map-wide candidates once. The key intentionally excludes authored state. */
+export function createAmbientCandidatePool(
   graph: LaneGraph,
   rawProfile: AmbientTrafficProfile,
-  options: AmbientTrafficOptions = {},
-): AmbientTrafficResult {
+): AmbientCandidatePool {
   const profile = resolveAmbientTrafficProfile(rawProfile);
-  const baseInputHash = contentHash(base);
   const profileHash = contentHash(profile);
-  const empty = (warnings: string[] = []): AmbientTrafficResult => ({
-    input: base,
-    provenance: {
-      version: 1,
-      profile,
-      profileHash,
-      baseInputHash,
-      generatedInputHash: baseInputHash,
-      actors: [],
-      rejectedSpawnCount: 0,
-      eligibleLaneKm: 0,
-      screening: {
-        evaluated: false,
-        passes: 0,
-        maxAchievableDecelMps2: null,
-        count: 0,
-        actorIds: [],
-        reasons: [],
-      },
-      warnings,
-    },
-  });
+  const key = contentHash({ version: 1, mapGraphDigest: graph.topologyDigest, profile });
   if (profile.preset === 'off' || profile.densityVehiclesPerKm === 0 || profile.maxActors === 0) {
-    return empty();
+    return { version: 1, key, mapGraphDigest: graph.topologyDigest, profile, profileHash, candidates: [] };
   }
-
-  const rng = new Rng(`${String(profile.seed)}|${baseInputHash}|ambient-v1`);
-  const focus = base.actors.filter((actor) => !actor.static).map((actor) => ({
-    x: actor.initial.pose.x,
-    z: actor.initial.pose.z,
-  }));
-  const allFocus = focus.length > 0 ? focus : base.actors.map((actor) => actor.initial.pose);
-  const reservations: AmbientReservation[] = [
-    ...base.actors.map((actor) => ({
-      x: actor.initial.pose.x,
-      z: actor.initial.pose.z,
-      radiusM: profile.exclusionRadiusM + Math.hypot(actor.dims.l, actor.dims.w) * 0.5,
-      reason: `authored:${actor.id}`,
-    })),
-    ...base.props
-      .filter((prop) => prop.collidable && prop.attachment === undefined)
-      .map((prop) => ({
-        x: prop.pose.x,
-        z: prop.pose.z,
-        radiusM: profile.exclusionRadiusM
-          + Math.hypot(prop.dims.l * prop.scale, prop.dims.w * prop.scale) * 0.5,
-        reason: `authored-prop:${prop.groupId ?? prop.id}`,
-      })),
-    ...(options.reservations ?? []),
-  ];
-
-  const roadLanes = eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM);
-  const walkingLanes = eligibleDirectedLanes(graph, ['sidewalk', 'walking'], allFocus, profile.radiusM);
-  const eligibleLaneKm = roadLanes.reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
-  const target = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
-  if (target === 0) return empty(['No eligible drivable lane length was available near the authored scenario.']);
-
-  const actors: SimActor[] = [];
-  const actorProvenance: AmbientActorProvenance[] = [];
-  const occupied = [...reservations];
-  const warnings: string[] = [];
-  let rejectedSpawnCount = 0;
-  let pedestrianMisses = 0;
-  const queueSeeds = buildQueueSeeds(base, graph, roadLanes, target);
-
-  // A finite attempt budget makes generation time independent of map size and
-  // prevents dense profiles from hanging on a fully reserved site.
-  const attemptLimit = Math.max(40, target * 24);
-  for (let attempt = 0; attempt < attemptLimit && actors.length < target; attempt++) {
-    const actorRng = rng.fork(`actor:${attempt}`);
-    const queueSeed = queueSeeds[attempt] ?? null;
-    const requestedKind = queueSeed ? chooseVehicleKind(profile, actorRng) : chooseRoadUserKind(profile, actorRng);
-    const wantsWalkingLane = requestedKind === 'pedestrian';
-    const lanes = wantsWalkingLane ? walkingLanes : roadLanes;
-    if (lanes.length === 0) {
-      if (wantsWalkingLane) pedestrianMisses++;
-      rejectedSpawnCount++;
-      continue;
-    }
-    const lane = queueSeed?.lane ?? lanes[Math.floor(actorRng.next() * lanes.length)]!;
+  const roadLanes = eligibleDirectedLanes(graph, ['driving'], [], Number.POSITIVE_INFINITY);
+  const walkingLanes = eligibleDirectedLanes(graph, ['sidewalk', 'walking'], [], Number.POSITIVE_INFINITY);
+  const totalLaneKm = roadLanes.reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
+  const candidateBudget = Math.min(4096, Math.max(profile.maxActors * 8, Math.ceil(totalLaneKm * profile.densityVehiclesPerKm * 2)));
+  const rng = new Rng(`${key}|ambient-candidate-pool-v1`);
+  const candidates: AmbientCandidate[] = [];
+  const attemptLimit = Math.max(80, candidateBudget * 4);
+  for (let attempt = 0; attempt < attemptLimit && candidates.length < candidateBudget; attempt++) {
+    const actorRng = rng.fork(`candidate:${attempt}`);
+    const requestedKind = chooseRoadUserKind(profile, actorRng);
+    const lanes = requestedKind === 'pedestrian' ? walkingLanes : roadLanes;
+    if (lanes.length === 0) continue;
+    const lane = lanes[Math.floor(actorRng.next() * lanes.length)]!;
     const geom = graph.requireGeometry(lane.rsl);
     const margin = Math.min(8, geom.lengthM * 0.2);
-    const routeS = queueSeed?.routeS
-      ?? actorRng.range(margin, Math.max(margin + 0.01, geom.lengthM - margin));
+    const routeS = actorRng.range(margin, Math.max(margin + 0.01, geom.lengthM - margin));
     const pose = graph.sampleDirected(lane, routeS);
     const scene = toSceneXZ(pose.point);
-    const footprint = requestedKind === 'bus' || requestedKind === 'truck' ? 7 : requestedKind === 'pedestrian' ? 1.2 : 3.5;
-    if (occupied.some((area) => Math.hypot(scene.x - area.x, scene.z - area.z) < area.radiusM + footprint)) {
-      rejectedSpawnCount++;
-      continue;
-    }
-    const laneSpeed = requestedKind === 'pedestrian'
-      ? 1.35
-      : requestedKind === 'bicycle'
-        ? 5.5
-        : geom.speedLimitMps;
+    const laneSpeed = requestedKind === 'pedestrian' ? 1.35 : requestedKind === 'bicycle' ? 5.5 : geom.speedLimitMps;
     const factor = Math.max(0.35, 1 + actorRng.range(-profile.speedVariance, profile.speedVariance));
     const cruise = laneSpeed * factor;
-    // A queue generated at a red physical head is already settled at t=0.
-    // Its ordinary cruise target remains intact, so it releases smoothly when
-    // that same deterministic controller turns green.
-    const speed = queueSeed ? 0 : cruise;
-    // Ambient actors exist during warm-up as well as the recorded clip. Build
-    // enough route from the actual spawn (rather than from the lane entrance),
-    // otherwise a perfectly valid preview can fail the simulator's runway
-    // guard as soon as a scenario has non-zero warm-up.
-    const requiredDownstreamM = cruise * (base.warmupSeconds + base.clipSeconds) * 1.1;
-    const routeLaneRsls = walkRoute(
-      graph,
-      lane,
-      profile,
-      actorRng,
-      routeS,
-      requiredDownstreamM,
-      queueSeed?.connectingLaneRsl,
-    );
-    if (routeLaneRsls.length === 0) {
-      rejectedSpawnCount++;
-      continue;
-    }
+    const routeLaneRsls = walkRoute(graph, lane, profile, actorRng, routeS, 5_000);
+    if (routeLaneRsls.length === 0) continue;
     const storageS = lane.reversed ? geom.lengthM - routeS : routeS;
-    const builtRoute = buildRoute(graph, { kind: 'lanePath', lanes: routeLaneRsls });
-    const startOnRoute = builtRoute.ok ? builtRoute.route.sOfLaneStorage(lane.rsl, storageS) : null;
-    if (!builtRoute.ok || startOnRoute === null || builtRoute.route.lengthM - startOnRoute < requiredDownstreamM) {
-      rejectedSpawnCount++;
-      continue;
-    }
-    const seedKey = contentHash({ profileHash, attempt, lane: lane.rsl, storageS }).slice(0, 16);
-    const id = `ambient:v1:${seedKey}:${String(actors.length).padStart(3, '0')}`;
-    const actor = {
+    const seedKey = contentHash({ key, attempt, lane: lane.rsl, storageS }).slice(0, 16);
+    const id = `ambient:v1:${seedKey}`;
+    const actor = normalizeActor({
       id,
       kind: requestedKind,
       initial: {
         laneRef: { rsl: lane.rsl, s: storageS, tFrac: 0 },
         pose: { x: scene.x, z: scene.z, headingRad: pose.headingRad },
-        speedMps: speed,
+        speedMps: cruise,
       },
       behavior: {
         rules: {
@@ -308,128 +228,129 @@ export function applyAmbientTraffic(
           aggression: profile.aggressiveness,
           speedFactor: factor,
         },
-        route: { kind: 'lanePath' as const, lanes: routeLaneRsls },
+        route: { kind: 'lanePath', lanes: routeLaneRsls },
         cruiseSpeedMps: cruise,
       },
       presentAtStart: true,
       static: false,
-      tags: [
-        'ambient',
-        'ambient:v1',
-        ...(queueSeed ? [`ambient:signal-queue:${queueSeed.controlId}`] : []),
-        `ambient-profile:${profileHash.slice(0, 16)}`,
-        `ambient-seed:${seedKey}`,
-      ],
-    } satisfies Parameters<typeof normalizeActor>[0];
-    const normalized = normalizeActor(actor);
-    actors.push(normalized);
-    actorProvenance.push({ id, kind: normalized.kind, routeLaneRsls, seedKey });
-    occupied.push({ x: scene.x, z: scene.z, radiusM: footprint + 4, reason: id });
+      tags: ['ambient', 'ambient:v1', `ambient-profile:${profileHash.slice(0, 16)}`, `ambient-seed:${seedKey}`],
+    });
+    candidates.push({
+      id,
+      actor,
+      laneRsl: lane.rsl,
+      routeLaneRsls,
+      seedKey,
+      footprintRadiusM: requestedKind === 'bus' || requestedKind === 'truck' ? 7 : requestedKind === 'pedestrian' ? 1.2 : 3.5,
+      origin: 'ambient',
+      timelineVisible: false,
+      editable: false,
+    });
   }
+  return { version: 1, key, mapGraphDigest: graph.topologyDigest, profile, profileHash, candidates };
+}
 
-  if (pedestrianMisses > 0 && walkingLanes.length === 0) {
-    warnings.push('Pedestrian share requested, but this map exposes no sidewalk/walking lanes; no pedestrians were placed on vehicle lanes.');
+/** Select stable candidates around authored geometry and compile them to ordinary SimActors. */
+export function materializeAmbientCandidatePool(
+  base: SimScenarioInput,
+  graph: LaneGraph,
+  pool: AmbientCandidatePool,
+  options: AmbientTrafficOptions = {},
+): AmbientTrafficResult {
+  if (pool.mapGraphDigest !== graph.topologyDigest) throw new Error('Ambient candidate pool does not match the lane graph');
+  const { profile, profileHash } = pool;
+  const baseInputHash = contentHash(base);
+  const focus = base.actors.filter((actor) => !actor.static).map((actor) => actor.initial.pose);
+  const allFocus = focus.length > 0 ? focus : base.actors.map((actor) => actor.initial.pose);
+  const roadLanes = eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM);
+  const eligibleRsls = new Set(roadLanes.map((lane) => lane.rsl));
+  const eligibleLaneKm = roadLanes.reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
+  const target = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
+  const reservations: AmbientReservation[] = [
+    ...base.actors.map((actor) => ({
+      x: actor.initial.pose.x,
+      z: actor.initial.pose.z,
+      radiusM: profile.exclusionRadiusM + Math.hypot(actor.dims.l, actor.dims.w) * 0.5,
+      reason: `authored:${actor.id}`,
+    })),
+    ...base.props.filter((prop) => prop.collidable && prop.attachment === undefined).map((prop) => ({
+      x: prop.pose.x,
+      z: prop.pose.z,
+      radiusM: profile.exclusionRadiusM + Math.hypot(prop.dims.l * prop.scale, prop.dims.w * prop.scale) * 0.5,
+      reason: `authored-prop:${prop.groupId ?? prop.id}`,
+    })),
+    ...(options.reservations ?? []),
+  ];
+  const occupied = [...reservations];
+  const selected: AmbientCandidate[] = [];
+  let rejectedSpawnCount = 0;
+  for (const candidate of pool.candidates) {
+    if (selected.length >= target) break;
+    if (!eligibleRsls.has(candidate.laneRsl)) continue;
+    const { x, z } = candidate.actor.initial.pose;
+    if (occupied.some((area) => Math.hypot(x - area.x, z - area.z) < area.radiusM + candidate.footprintRadiusM)) {
+      rejectedSpawnCount++;
+      continue;
+    }
+    const builtRoute = buildRoute(graph, candidate.actor.behavior.route);
+    const laneRef = candidate.actor.initial.laneRef;
+    const startOnRoute = builtRoute.ok && laneRef ? builtRoute.route.sOfLaneStorage(laneRef.rsl, laneRef.s) : null;
+    const requiredDownstreamM = (candidate.actor.behavior.cruiseSpeedMps ?? candidate.actor.initial.speedMps)
+      * (base.warmupSeconds + base.clipSeconds) * 1.1;
+    if (!builtRoute.ok || startOnRoute === null || builtRoute.route.lengthM - startOnRoute < requiredDownstreamM) {
+      rejectedSpawnCount++;
+      continue;
+    }
+    selected.push(candidate);
+    occupied.push({ x, z, radiusM: candidate.footprintRadiusM + 4, reason: candidate.id });
   }
-  if (actors.length < target) {
-    warnings.push(`Placed ${actors.length}/${target} ambient actors; reservations and route feasibility rejected the remainder.`);
-  }
-
-  const maxAchievableDecelMps2 = options.maxAchievableDecelMps2
-    ?? DEFAULT_MAX_DECEL_MPS2 * base.operationalConditions.effects.frictionScale;
-  const screened = removeUnsafeAmbientActors(base, actors, graph, maxAchievableDecelMps2);
-  if (screened.reasons.length > 0) {
-    rejectedSpawnCount += screened.reasons.length;
-    const collisionCount = screened.reasons.filter((reason) => reason.reason === 'collision').length;
-    const decelCount = screened.reasons.filter((reason) => reason.reason === 'required_decel').length;
-    warnings.push(
-      `Removed ${screened.reasons.length} ambient actor(s) during full-clip safety screening (${collisionCount} collision, ${decelCount} required-deceleration).`,
-    );
-  }
-  const survivingIds = new Set(screened.actors.map((actor) => actor.id));
-  const survivingProvenance = actorProvenance.filter((actor) => survivingIds.has(actor.id));
-  const input = normalizeSimScenarioInput({ ...base, actors: [...base.actors, ...screened.actors] });
+  const actors = selected.map((candidate) => candidate.actor);
+  const input = normalizeSimScenarioInput({ ...base, actors: [...base.actors, ...actors] });
+  const warnings: string[] = [];
+  if (target === 0 && profile.preset !== 'off') warnings.push('No eligible drivable lane length was available near the authored scenario.');
+  if (actors.length < target) warnings.push(`Placed ${actors.length}/${target} ambient actors; reservations and route feasibility rejected the remainder.`);
   return {
     input,
     provenance: {
       version: 1,
       profile,
       profileHash,
+      candidatePoolKey: pool.key,
+      mapGraphDigest: pool.mapGraphDigest,
       baseInputHash,
       generatedInputHash: contentHash(input),
-      actors: survivingProvenance,
+      actors: selected.map(({ id, actor, routeLaneRsls, seedKey, origin, timelineVisible, editable }) => ({
+        id,
+        kind: actor.kind,
+        routeLaneRsls,
+        seedKey,
+        origin,
+        timelineVisible,
+        editable,
+      })),
       rejectedSpawnCount,
       eligibleLaneKm,
       screening: {
-        evaluated: true,
-        passes: screened.passes,
-        maxAchievableDecelMps2,
-        count: screened.reasons.length,
-        actorIds: screened.reasons.map((reason) => reason.actorId),
-        reasons: screened.reasons,
+        evaluated: false,
+        passes: 0,
+        maxAchievableDecelMps2: null,
+        count: 0,
+        actorIds: [],
+        reasons: [],
       },
       warnings,
     },
   };
 }
 
-/**
- * Geometry-only spawn checks cannot prove safety over an authored clip: actors
- * accelerate, stop, change lane and cross junctions, while attached props move
- * with their owners. Run the same deterministic engine that will execute the
- * scenario and fail closed by pruning every generated participant in a
- * collision. Repeating reaches a stable set because removing one actor can
- * expose a later conflict that was previously hidden by car-following.
- */
-function removeUnsafeAmbientActors(
+/** Convenience API: cheap pool construction plus selection; it never runs the clip. */
+export function applyAmbientTraffic(
   base: SimScenarioInput,
-  generated: readonly SimActor[],
   graph: LaneGraph,
-  maxAchievableDecelMps2: number,
-): { actors: SimActor[]; reasons: AmbientScreeningReason[]; passes: number } {
-  let actors = [...generated];
-  const reasons: AmbientScreeningReason[] = [];
-  let passes = 0;
-  while (actors.length > 0) {
-    passes++;
-    const ambientIds = new Set(actors.map((actor) => actor.id));
-    const input = normalizeSimScenarioInput({ ...base, actors: [...base.actors, ...actors] });
-    const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
-    const unsafe = new Map<string, AmbientScreeningReason>();
-    for (const collision of trace.metrics.collisions) {
-      if (ambientIds.has(collision.a)) {
-        unsafe.set(collision.a, {
-          actorId: collision.a,
-          reason: 'collision',
-          detail: `collision with ${collision.b}`,
-        });
-      }
-      if (ambientIds.has(collision.b)) {
-        unsafe.set(collision.b, {
-          actorId: collision.b,
-          reason: 'collision',
-          detail: `collision with ${collision.a}`,
-        });
-      }
-    }
-    for (const actorId of [...ambientIds].sort()) {
-      if (unsafe.has(actorId)) continue;
-      const requiredDecelMps2 = trace.metrics.requiredDecelMax[actorId] ?? 0;
-      if (requiredDecelMps2 > maxAchievableDecelMps2) {
-        unsafe.set(actorId, {
-          actorId,
-          reason: 'required_decel',
-          requiredDecelMps2,
-          maxAchievableDecelMps2,
-          detail: `${requiredDecelMps2.toFixed(3)} m/s² exceeds ${maxAchievableDecelMps2.toFixed(3)} m/s²`,
-        });
-      }
-    }
-    if (unsafe.size === 0) break;
-    const orderedUnsafe = [...unsafe.values()].sort((a, b) => a.actorId.localeCompare(b.actorId));
-    reasons.push(...orderedUnsafe);
-    actors = actors.filter((actor) => !unsafe.has(actor.id));
-  }
-  return { actors, reasons, passes };
+  rawProfile: AmbientTrafficProfile,
+  options: AmbientTrafficOptions = {},
+): AmbientTrafficResult {
+  return materializeAmbientCandidatePool(base, graph, createAmbientCandidatePool(graph, rawProfile), options);
 }
 
 /** Remove ambient provenance so an editor can adopt the actor as authored. */
@@ -470,69 +391,6 @@ function eligibleDirectedLanes(
     out.push({ rsl, reversed });
   }
   return out.sort((a, b) => a.rsl.localeCompare(b.rsl));
-}
-
-interface AmbientQueueSeed {
-  readonly lane: DirectedLane;
-  /** Arc length in the lane's travel direction. */
-  readonly routeS: number;
-  readonly connectingLaneRsl: string | undefined;
-  readonly controlId: string;
-}
-
-/** Create a compact, deterministic standing queue at physical controls that
- * forbid entry at t=0. This makes a signalized city read like traffic rather
- * than a uniform scatter while keeping every queue attached to a real stop
- * line and route movement. */
-function buildQueueSeeds(
-  base: SimScenarioInput,
-  graph: LaneGraph,
-  roadLanes: readonly DirectedLane[],
-  target: number,
-): AmbientQueueSeed[] {
-  if (target <= 0 || (base.signalPrograms.length === 0 && base.roadControls.length === 0)) return [];
-  const lanesByRsl = new Map(roadLanes.map((lane) => [lane.rsl, lane]));
-  const book = new SignalBook(base.signalPrograms, base.warmupSeconds, base.roadControls);
-  const controlled = book.stopLines
-    .filter((line) => {
-      if (!lanesByRsl.has(line.rsl)) return false;
-      if (line.kind === 'stop') return true;
-      const phase = line.signalId === null ? null : book.phaseAt(line.signalId, 0);
-      return phase !== null && phaseForbidsEntry(phase) && phase !== 'yellow';
-    })
-    .sort(
-      (a, b) =>
-        a.controlId.localeCompare(b.controlId) ||
-        a.rsl.localeCompare(b.rsl) ||
-        a.s - b.s ||
-        (a.connectingLaneRsls[0] ?? '').localeCompare(b.connectingLaneRsls[0] ?? ''),
-    );
-  if (controlled.length === 0) return [];
-
-  // Reserve most, but not all, of the City population for junction queues.
-  // Round-robin by depth gives every controlled approach one waiting vehicle
-  // before a second is added to any approach.
-  const queueTarget = Math.min(target, Math.max(controlled.length, Math.round(target * 0.7)));
-  const out: AmbientQueueSeed[] = [];
-  for (let depth = 0; out.length < queueTarget && depth < 4; depth++) {
-    for (const line of controlled) {
-      if (out.length >= queueTarget) break;
-      const lane = lanesByRsl.get(line.rsl)!;
-      const geom = graph.requireGeometry(line.rsl);
-      const stopTravelS = lane.reversed ? geom.lengthM - line.s : line.s;
-      // 3.5 m keeps the first vehicle's nose behind the line; 12 m centres
-      // provide a comfortable visible queue gap for mixed vehicle lengths.
-      const routeS = stopTravelS - 3.5 - depth * 12;
-      if (routeS < Math.min(2, geom.lengthM * 0.1)) continue;
-      out.push({
-        lane,
-        routeS,
-        connectingLaneRsl: line.connectingLaneRsls[0],
-        controlId: line.controlId,
-      });
-    }
-  }
-  return out;
 }
 
 function walkRoute(

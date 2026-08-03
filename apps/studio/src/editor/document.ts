@@ -28,6 +28,7 @@ import {
   type ScenarioTemplateV2,
   type TemplateFileStore,
   type ValidationReport,
+  migrateLegacyInitialRoutes,
 } from '@uniscenarios/scenario-model';
 import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { MapEntry } from '../maps';
@@ -66,6 +67,8 @@ export interface ActorRecord {
   /** Studio-only presentation color, persisted with the role and ignored by export. */
   readonly bodyColor: string | undefined;
   readonly initialSpeedKph?: number;
+  /** Exact authored lane chain, available without materializing or scanning actions. */
+  readonly routeLaneRsls?: readonly string[];
   /** Physical sensors mounted to this actor. */
   readonly sensors: readonly ActorSensor[];
 }
@@ -101,6 +104,8 @@ export interface ActorUpdate {
   catalogId?: CatalogId;
   bodyColor?: string;
   initialSpeedKph?: number;
+  /** Replace the actor's authored t=0 lane route; `null` clears it. */
+  routeLaneRsls?: readonly string[] | null;
 }
 
 /** Which lane a catalog id belongs in. */
@@ -202,6 +207,8 @@ export function normalizeAuthoringGraph(template: ScenarioTemplateV2): {
   readonly template: ScenarioTemplateV2;
   readonly plan: AuthoringGraphPrunePlan;
 } {
+  const initialRoutes = migrateLegacyInitialRoutes(template);
+  template = initialRoutes.template;
   const plan = authoringGraphPrunePlan(template);
   const changed = plan.interactionIds.length > 0 || plan.propIds.length > 0
     || plan.invariantIds.length > 0 || plan.variantIds.length > 0 || plan.clearMetricSubject;
@@ -337,6 +344,8 @@ export class EditorDocument {
   readonly #listeners = new Set<() => void>();
 
   #actors: ActorRecord[] = [];
+  /** Monotonic authoring revision. Background products must carry this tag. */
+  #revision = 0;
   /** Ops applied since construction; the group bookkeeping counts against it. */
   #opCount = 0;
   #groups: number[] = [];
@@ -430,6 +439,10 @@ export class EditorDocument {
     return this.#doc.data;
   }
 
+  get revision(): number {
+    return this.#revision;
+  }
+
   get name(): string {
     return this.#doc.data.meta.name;
   }
@@ -515,21 +528,12 @@ export class EditorDocument {
           ...(input.label === undefined ? {} : { label: input.label }),
           initialSpeedKph: q(Math.max(0, input.initialSpeedKph ?? defaultSpeedKph(simulationClassFor(input.catalogId), input.catalogId))),
           ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
+          ...(input.routeLaneRsls && input.routeLaneRsls.length > 0
+            ? { initialRoute: { mode: 'lanePath' as const, lanes: [...input.routeLaneRsls] } }
+            : {}),
           essentiality: kind === 'prop' ? 'preferred' : 'required',
           ...(input.bodyColor ? { extensions: { 'studio.presentation.bodyColor': input.bodyColor } } : {}),
         });
-        if (input.routeLaneRsls && input.routeLaneRsls.length > 0) {
-          this.#doc.addInteraction({
-            id: `route_${id}_initial`.slice(0, 64),
-            actor: id,
-            // This is deliberately a presentation label over a concrete,
-            // deterministic lanePath. It is not a new simulator/export verb.
-            label: 'Random turns',
-            trigger: { kind: 'at', t: 0 },
-            verb: 'route',
-            target: { mode: 'lanePath', lanes: [...input.routeLaneRsls] },
-          });
-        }
         ids.push(id);
       }
     });
@@ -572,6 +576,8 @@ export class EditorDocument {
           }
         }
         if (update.initialSpeedKph !== undefined) role.initialSpeedKph = q(Math.max(0, update.initialSpeedKph));
+        if (update.routeLaneRsls === null || update.routeLaneRsls?.length === 0) delete role.initialRoute;
+        else if (update.routeLaneRsls !== undefined) role.initialRoute = { mode: 'lanePath', lanes: [...update.routeLaneRsls] };
         if (update.bodyColor !== undefined) {
           role.extensions = { ...current.extensions, 'studio.presentation.bodyColor': update.bodyColor };
         }
@@ -628,6 +634,7 @@ export class EditorDocument {
     this.#savedAt = null;
     this.#saveError = null;
     this.#namedSave = options.saveName ?? null;
+    this.#revision++;
     this.#rebuild();
     this.#scheduleSave();
     this.#emit();
@@ -735,6 +742,7 @@ export class EditorDocument {
   }
 
   #afterMutation(): void {
+    this.#revision++;
     this.#rebuild();
     this.#scheduleSave();
     this.#emit();
@@ -784,6 +792,14 @@ export class EditorDocument {
   }
 }
 
+/** Fail-closed boundary for installing asynchronously compiled editor worlds. */
+export function compiledWorldMatchesRevision(
+  document: Pick<EditorDocument, 'revision'>,
+  compiledRevision: number,
+): boolean {
+  return document.revision === compiledRevision;
+}
+
 function anchorFrom(laneRef: LaneRef | LaneAnchor | undefined): LaneAnchor | undefined {
   if (!laneRef) return undefined;
   return {
@@ -819,6 +835,7 @@ function recordFromRole(role: RoleBinding): ActorRecord | null {
       ? role.extensions['studio.presentation.bodyColor']
       : undefined,
     initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
+    routeLaneRsls: role.initialRoute?.lanes,
     sensors: role.actor.sensors,
   };
 }

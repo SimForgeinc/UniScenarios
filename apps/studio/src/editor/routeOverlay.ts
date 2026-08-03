@@ -12,7 +12,7 @@ import { buildRoute, contentHash, type RouteSpec, type SimActor, type SimScenari
 import type { Interaction, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { LaneIndex } from './laneIndex';
 
-export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'lane-change' | 'stop' | 'speed-change';
+export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'reroute' | 'lane-change' | 'stop' | 'speed-change';
 
 export interface RoutePoint { readonly x: number; readonly z: number }
 export interface VehicleRouteOverlay {
@@ -34,6 +34,10 @@ const VEHICLE_KINDS = new Set<SimActor['kind']>(['vehicle', 'car', 'truck', 'bus
 const PALETTE = ['#55a7ff', '#ff8a65', '#8bd17c', '#d590ef', '#ffd166', '#54d6c4', '#ef6f9b'];
 const ROUTE_CACHE_LIMIT = 256;
 const routeGeometryCache = new Map<string, readonly RoutePoint[]>();
+
+/** Test/diagnostic hook: route edits add one entry without evicting unrelated actors. */
+export function routeGeometryCacheSize(): number { return routeGeometryCache.size; }
+export function clearRouteGeometryCache(): void { routeGeometryCache.clear(); }
 
 /** Stable presentation color when an actor has no authored body color. */
 export function routeColor(actorId: string, authored?: string): string {
@@ -146,41 +150,86 @@ export function routesFromSimulation(
     .filter((route) => route.planned.length > 1);
 }
 
-/** Immediate editor fallback until concrete materialization is available. */
+function pointAtProgress(points: readonly RoutePoint[], progress: number): RoutePoint {
+  if (points.length === 0) return { x: 0, z: 0 };
+  if (points.length === 1) return points[0]!;
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    total += Math.hypot(points[i]!.x - points[i - 1]!.x, points[i]!.z - points[i - 1]!.z);
+    lengths.push(total);
+  }
+  const target = Math.max(0, Math.min(1, progress)) * total;
+  let before = 0;
+  for (let i = 1; i < points.length; i++) {
+    const after = lengths[i - 1]!;
+    if (after >= target) {
+      const t = after === before ? 0 : (target - before) / (after - before);
+      return { x: points[i - 1]!.x + (points[i]!.x - points[i - 1]!.x) * t, z: points[i - 1]!.z + (points[i]!.z - points[i - 1]!.z) * t };
+    }
+    before = after;
+  }
+  return points.at(-1)!;
+}
+
+function authoredActionMarkers(roleId: string, interactions: readonly Interaction[], points: readonly RoutePoint[], clipSeconds: number) {
+  return interactions.filter((action) => action.actor === roleId).flatMap((action, ordinal) => {
+    if (action.verb !== 'speed' && action.verb !== 'changeLane' && action.verb !== 'route') return [];
+    const time = action.trigger.kind === 'at' && typeof action.trigger.t === 'number'
+      ? action.trigger.t : (ordinal + 1) / (interactions.length + 1) * clipSeconds;
+    let kind: RouteMarkerKind;
+    if (action.verb === 'speed') kind = action.target.mode === 'stop' ? 'stop' : 'speed-change';
+    else if (action.verb === 'changeLane') kind = 'lane-change';
+    else if (action.target.mode === 'lanePath') kind = 'reroute';
+    else {
+      const text = `${action.label ?? ''} ${JSON.stringify(action.target)}`.toLowerCase();
+      kind = text.includes('right') || (action.target.mode === 'acquire' && Number(action.target.pose.laneOffset) < 0)
+        ? 'turn-right' : 'turn-left';
+    }
+    return [{ kind, point: pointAtProgress(points, clipSeconds > 0 ? time / clipSeconds : 0) }];
+  });
+}
+
+/** Synchronous optimistic projection from the current editor document. */
 export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneIndex): VehicleRouteOverlay[] {
-  const byActor = new Map<string, Interaction>();
+  const reroutes = new Map<string, Extract<Interaction, { verb: 'route' }>>();
   for (const interaction of template.choreography.interactions) {
-    if (interaction.verb === 'route' && interaction.target.mode === 'lanePath'
-      && interaction.trigger.kind === 'at' && typeof interaction.trigger.t === 'number' && interaction.trigger.t <= 0) byActor.set(interaction.actor, interaction);
+    if (interaction.verb === 'route' && interaction.target.mode === 'lanePath') reroutes.set(interaction.actor, interaction);
   }
   return template.roles.flatMap((role) => {
     if (role.actor.static || role.actor.class === 'pedestrian' || role.actor.class === 'static_object') return [];
-    const route = byActor.get(role.id);
-    if (!route || route.verb !== 'route' || route.target.mode !== 'lanePath') return [];
-    const planned = resolvedRoutePoints({ kind: 'lanePath', lanes: route.target.lanes }, index);
+    const reroute = reroutes.get(role.id);
+    const lanes = reroute?.target.mode === 'lanePath' ? reroute.target.lanes : role.kind === 'scene_absolute' ? role.initialRoute?.lanes : undefined;
+    if (!lanes?.length) return [];
+    const planned = resolvedRoutePoints({ kind: 'lanePath', lanes }, index);
     if (planned.length < 2) return [];
     const authoredColor = role.extensions?.['studio.presentation.bodyColor'];
-    return [{ actorId: role.id, ambient: false, color: routeColor(role.id, typeof authoredColor === 'string' ? authoredColor : undefined), planned, actual: [], markers: turnMarkers(planned) }];
+    return [{
+      actorId: role.id,
+      ambient: false,
+      color: routeColor(role.id, typeof authoredColor === 'string' ? authoredColor : undefined),
+      planned,
+      actual: [],
+      markers: [...turnMarkers(planned), ...authoredActionMarkers(role.id, template.choreography.interactions, planned, template.choreography.clipSeconds)],
+    }];
   }).sort((a, b) => a.actorId.localeCompare(b.actorId));
 }
 
-/**
- * Compose the authoring view without waiting for background materialization.
- * Authored routes always come from the live document; the warmed simulation is
- * used only for its persistent ambient population.
- */
-export function routesForAuthoringPreview(
+/** Authored actors are always optimistic; concrete data contributes ambient only. */
+export function authoringRoutes(
   template: ScenarioTemplateV2,
   index: LaneIndex,
-  ambientInput?: Pick<SimScenarioInput, 'actors' | 'interactions'>,
-  ambientTrace?: SceneTrace,
+  concrete?: Pick<SimScenarioInput, 'actors' | 'interactions'>,
+  trace?: SceneTrace,
 ): VehicleRouteOverlay[] {
   const authored = routesFromTemplate(template, index);
-  const ambient = ambientInput
-    ? routesFromSimulation(ambientInput, index, ambientTrace).filter((route) => route.ambient)
-    : [];
+  if (!concrete) return authored;
+  const ambient = routesFromSimulation(concrete, index, trace).filter((route) => route.ambient);
   return [...authored, ...ambient].sort((a, b) => a.actorId.localeCompare(b.actorId));
 }
+
+/** Backwards-compatible name for callers outside the editor shell. */
+export const routesForAuthoringPreview = authoringRoutes;
 
 function pushSegment(target: number[], a: RoutePoint, b: RoutePoint, y: number): void {
   target.push(a.x, y, a.z, b.x, y, b.z);

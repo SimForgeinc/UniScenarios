@@ -276,6 +276,21 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
             ),
           );
         }
+        if (role.initialRoute) {
+          const placedLane = role.laneRef
+            ? `${role.laneRef.roadId}:${role.laneRef.section}:${role.laneRef.laneId}`
+            : null;
+          if (!placedLane || role.initialRoute.lanes[0] !== placedLane) {
+            out.push(issue(
+              'error',
+              'route_disconnected',
+              joinPath(base, 'initialRoute'),
+              placedLane
+                ? `initial lanePath starts on "${role.initialRoute.lanes[0]}", not the actor's placed lane "${placedLane}"`
+                : 'an initial lanePath requires a laneRef on its scene_absolute actor',
+            ));
+          }
+        }
         break;
       default:
         break;

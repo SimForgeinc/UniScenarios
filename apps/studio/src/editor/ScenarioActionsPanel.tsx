@@ -1,8 +1,10 @@
 import type { CSSProperties } from 'react';
 import type { EditorController } from './controller';
+import { physicsReasonLabel, type PhysicsDisplaySummary } from '../playback/physics';
 
 export interface ScenarioActionsPanelProps {
   controller: EditorController;
+  physicsSummary: PhysicsDisplaySummary;
   onClose: () => void;
 }
 
@@ -12,7 +14,7 @@ export interface ScenarioActionsPanelProps {
  * materialization result and lane graph, so the export controls deliberately
  * describe that dependency instead of producing a misleading partial file.
  */
-export function ScenarioActionsPanel({ controller, onClose }: ScenarioActionsPanelProps): JSX.Element {
+export function ScenarioActionsPanel({ controller, physicsSummary, onClose }: ScenarioActionsPanelProps): JSX.Element {
   const report = controller.doc.validation;
   const errors = report.issues.filter((issue) => issue.severity === 'error');
   const warnings = report.issues.filter((issue) => issue.severity !== 'error');
@@ -41,6 +43,21 @@ export function ScenarioActionsPanel({ controller, onClose }: ScenarioActionsPan
             ))}
           </ul>
         ) : <div style={styles.hint}>Roles, choreography, triggers, and invariants pass schema validation.</div>}
+      </section>
+
+      <section style={styles.section} data-testid="physics-export-provenance">
+        <div style={styles.sectionTitle}>Physics provenance</div>
+        <div style={styles.verdict}>
+          {physicsSummary.legacyReplay ? 'Kinematic legacy replay' : `Dynamic v1 · ${physicsSummary.dynamicCount} actor${physicsSummary.dynamicCount === 1 ? '' : 's'}`}
+        </div>
+        {physicsSummary.fallbackCount > 0 ? <div style={styles.physicsWarning} role="status">
+          {physicsSummary.fallbackCount} actor{physicsSummary.fallbackCount === 1 ? '' : 's'} will use explicit kinematic fallback.
+        </div> : null}
+        {physicsSummary.actors.map((actor) => <div key={actor.id} style={styles.physicsRow}>
+          <code style={styles.path}>{actor.label}</code>
+          <span>{actor.mode === 'dynamic-v1' ? 'dynamic-v1' : actor.mode === 'kinematic-v1' ? 'kinematic-v1' : 'unknown'} · {physicsReasonLabel(actor.reason)}</span>
+        </div>)}
+        <div style={styles.hint}>The same per-actor backend and reason are retained in canonical trace diagnostics and trajectory-replay export provenance.</div>
       </section>
 
       <section style={styles.section}>
@@ -85,4 +102,6 @@ const styles: Record<string, CSSProperties> = {
   exportChoice: { width: '100%', display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, padding: '8px', border: '1px solid #373c44', borderRadius: 6, background: '#20242a', color: '#8d96a3', textAlign: 'left' },
   ready: { marginLeft: 'auto', flex: '0 0 auto', padding: '2px 5px', borderRadius: 999, background: '#3a3030', color: '#c99191', fontSize: 8, textTransform: 'uppercase' },
   blocker: { display: 'flex', flexDirection: 'column', gap: 4, marginTop: 10, padding: 9, border: '1px solid #62502f', borderRadius: 6, background: '#332b1f', color: '#e9c77d', fontSize: 10, lineHeight: 1.45 },
+  physicsWarning: { margin: '7px 0', color: '#f2c078', fontSize: 10 },
+  physicsRow: { display: 'grid', gridTemplateColumns: 'minmax(90px, 1fr) 2fr', gap: 8, padding: '5px 0', borderBottom: '1px solid #30343b', color: '#aeb6c2', fontSize: 9 },
 };

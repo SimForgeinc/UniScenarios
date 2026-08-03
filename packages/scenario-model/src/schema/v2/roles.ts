@@ -142,6 +142,18 @@ export const FramePoseSchema = z.strictObject({
   headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
 });
 
+/**
+ * The concrete lane chain a map-bound actor follows from its authored pose.
+ *
+ * This is spawn state, not choreography: changing it in the timeline would
+ * imply an event at t=0 and force every consumer to rediscover the actor's
+ * initial route by scanning interactions.
+ */
+export const SceneAbsoluteInitialRouteSchema = z.strictObject({
+  mode: z.literal('lanePath'),
+  lanes: z.array(z.string().min(1)).min(1).max(128),
+});
+
 /** A frame-relative pose. */
 export type FramePose = z.infer<typeof FramePoseSchema>;
 /** A frame-relative pose as authored. */
@@ -321,6 +333,8 @@ export const SceneAbsoluteRoleSchema = z.strictObject({
   pose: V1PoseSchema,
   /** The v1 lane anchor, when the entity was placed by lane snapping. */
   laneRef: V1LaneRefSchema.optional(),
+  /** Exact map-bound route available synchronously to playback and overlays. */
+  initialRoute: SceneAbsoluteInitialRouteSchema.optional(),
 });
 
 /** Any role binding. */
@@ -356,6 +370,8 @@ export type RoleBindingInput = z.input<typeof RoleBindingSchema>;
 export type ActorSpec = z.infer<typeof ActorSpecSchema>;
 /** Actor class. */
 export type ActorClass = z.infer<typeof ActorClassSchema>;
+/** Initial route owned by a map-bound actor rather than the timeline. */
+export type SceneAbsoluteInitialRoute = z.infer<typeof SceneAbsoluteInitialRouteSchema>;
 
 /** The pose a role declares, when its kind has one. */
 export function rolePose(role: RoleBinding): FramePose | undefined {

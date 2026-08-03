@@ -16,14 +16,19 @@ import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
 import { PlaybackLoadError, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
 import { galleryCameraChoice } from './playback/controller';
-import { activePhysicsModeForTrace } from './playback/physics';
+import {
+  physicsForActor,
+  physicsReasonLabel,
+  physicsSummaryForAuthoredActors,
+  physicsSummaryForTrace,
+  type ActorPhysicsDisplay,
+} from './playback/physics';
 import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
 import { defaultSpeedKph } from './timeline/actions';
-import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient } from './playback/scenarioWorkerClient';
-import { LiveSimulationClient, type LivePlaybackRun } from './playback/liveSimulationClient';
+import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient, type LivePlaybackRun } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
 import { loadQualityPreference } from './performance/quality';
@@ -36,8 +41,8 @@ import {
 } from './ambient/model';
 import { AmbientTrafficPopover } from './ambient/AmbientTrafficPanel';
 import { useAmbientTrafficPreview } from './ambient/useAmbientTrafficPreview';
-import { ambientMaterializationKey, ambientPopulationKey, PersistentAmbientWorld } from './ambient/persistentWorld';
-import type { ResolvedAmbientTrafficProfile, SimActor } from '@uniscenarios/sim-engine';
+import { ambientCandidatePoolRequestKey, ambientPreviewKey, AmbientPreviewCache } from './ambient/candidatePool';
+import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import { contentHash } from '@uniscenarios/sim-engine';
 import {
   dashCameras,
@@ -69,9 +74,9 @@ import { OpenScenarioWorkspace } from './openscenario/OpenScenarioWorkspace';
 import type { OpenScenarioWorkspaceState } from './openscenario/model';
 import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
-import { simulationClassFor, type ActorRecord } from './editor/document';
+import { compiledWorldMatchesRevision, simulationClassFor, type ActorRecord } from './editor/document';
 import {
-  routesForAuthoringPreview,
+  authoringRoutes,
   routesFromSimulation,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
@@ -173,14 +178,10 @@ export function App(): JSX.Element {
   const [viewSettings, setViewSettings] = useState<StudioViewSettings>(() => loadStudioViewSettings());
   const viewSettingsRef = useRef(viewSettings);
   viewSettingsRef.current = viewSettings;
-  const exportWorker = useRef<ScenarioWorkerClient | null>(null);
-  if (!exportWorker.current) exportWorker.current = new ScenarioWorkerClient();
-  const ambientPreviewWorker = useRef<ScenarioWorkerClient | null>(null);
-  if (!ambientPreviewWorker.current) ambientPreviewWorker.current = new ScenarioWorkerClient();
-  const liveSimulationWorker = useRef<LiveSimulationClient | null>(null);
-  if (!liveSimulationWorker.current) liveSimulationWorker.current = new LiveSimulationClient();
-  const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
-  const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
+  const runtimeWorker = useRef<ScenarioWorkerClient | null>(null);
+  if (!runtimeWorker.current) runtimeWorker.current = new ScenarioWorkerClient();
+  const ambientPreviewCache = useRef(new AmbientPreviewCache<PlaybackBundle>());
+  const ambientPreparation = useRef<{ previewKey: string; revision: number; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
   const routeOverlayRenderer = useRef<VehicleRouteOverlayRenderer | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -346,12 +347,12 @@ export function App(): JSX.Element {
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
     if (!editorController) throw new Error('The editor is not ready');
-    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
-    const materializationKey = ambientMaterializationKey(populationKey, simulationSourceHash(editorController.doc.data));
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const previewKey = ambientPreviewKey(candidatePoolRequestKey, simulationSourceHash(editorController.doc.data));
     const pending = ambientPreparation.current;
-    if (pending?.materializationKey === materializationKey) await pending.promise;
+    if (pending?.previewKey === previewKey && pending.revision === editorController.doc.revision) await pending.promise;
     throwIfPreparationAborted(signal);
-    const bundle = ambientWorld.current.playback();
+    const bundle = ambientPreviewCache.current.playback(editorController.doc.revision);
     if (!bundle) throw new Error('Traffic is still loading. Press Play again when the map population is visible.');
     const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
     if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
@@ -362,15 +363,16 @@ export function App(): JSX.Element {
     }
     // Start the canonical fixed-step engine from the exact visible population.
     // Only a small lead is recorded before playback becomes visible.
-    const entry = ambientWorld.current.current;
-    const run = await liveSimulationWorker.current!.start(bundle, map);
+    const entry = ambientPreviewCache.current.current;
+    const run = await runtimeWorker.current!.start(bundle, map);
     throwIfPreparationAborted(signal);
     livePlayback.current = run;
     setAuthoredPlayback(run.bundle);
     void run.completion.then((completed) => {
-      if (!entry || ambientWorld.current.current?.value !== bundle) return;
-      const token = ambientWorld.current.begin();
-      ambientWorld.current.commit(token, { ...entry, value: completed });
+      if (!entry || ambientPreviewCache.current.current?.value !== bundle) return;
+      const token = ambientPreviewCache.current.begin();
+      if (!compiledWorldMatchesRevision(editorController.doc, entry.revision)) return;
+      ambientPreviewCache.current.commit(token, { ...entry, value: completed });
     }).catch((reason: unknown) => {
       if ((reason as { name?: string } | null)?.name !== 'AbortError') {
         setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
@@ -378,7 +380,7 @@ export function App(): JSX.Element {
     });
   }, [ambientTrafficProfile, editorController, map]);
   const cancelAuthoredPlayback = useCallback(() => {
-    liveSimulationWorker.current?.cancel();
+    runtimeWorker.current?.cancel();
     livePlayback.current = null;
     setAuthoredPlayback(null);
     setCameraPlaybackRequested(false);
@@ -399,17 +401,12 @@ export function App(): JSX.Element {
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
+    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
-    const concretePlayback = playbackBundle ?? authoredPlayback;
-    const routes = concretePlayback
-      ? routesFromSimulation(concretePlayback.instance.input, editorController.laneIndex, concretePlayback.trace, authoredColors)
-      : routesForAuthoringPreview(
-          editorController.doc.data,
-          editorController.laneIndex,
-          ambientPreview?.instance.input,
-          ambientPreview?.trace,
-        );
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
+    const routes = playback && concrete
+      ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
+      : authoringRoutes(editorController.doc.data, editorController.laneIndex, concrete?.instance.input, concrete?.trace);
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
     renderer.group.visible = viewSettings.routes.visible
       && !mapWorkspaceOpen
@@ -449,36 +446,33 @@ export function App(): JSX.Element {
       setAmbientPreviewBusy(false);
       return;
     }
-    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
-    const materializationKey = ambientMaterializationKey(populationKey, ambientPreviewSourceHash ?? 'empty');
-    const current = ambientWorld.current.current;
-    if (current?.materializationKey === materializationKey) {
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const previewKey = ambientPreviewKey(candidatePoolRequestKey, ambientPreviewSourceHash ?? 'empty');
+    const current = ambientPreviewCache.current.current;
+    if (current?.previewKey === previewKey && current.revision === editorController.doc.revision) {
       setAmbientPreview(current.value);
       setAmbientPreviewBusy(false);
       return;
     }
-    const token = ambientWorld.current.begin();
-    ambientPreviewWorker.current?.cancel();
+    const token = ambientPreviewCache.current.begin();
+    const revision = editorController.doc.revision;
+    runtimeWorker.current?.cancel();
     if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
     const verifiedFallback = editorController && campaignSource
       && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
       ? campaignSource.evidence
       : null;
     if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, verifiedFallback.ambientTraffic)) {
-      ambientWorld.current.commit(token, { populationKey, materializationKey, value: verifiedFallback });
+      if (compiledWorldMatchesRevision(editorController.doc, revision)) {
+        ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: verifiedFallback });
+      }
       setAmbientPreview(verifiedFallback);
       setAmbientPreviewBusy(false);
       return;
     }
     setAmbientPreviewBusy(true);
     setAmbientTrafficError(null);
-    const reusablePopulation = current?.populationKey === populationKey && current.value.ambientTraffic
-      ? {
-          provenance: current.value.ambientTraffic,
-          actors: current.value.instance.input.actors.filter((actor): actor is SimActor => actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'))),
-        }
-      : undefined;
-    const promise = ambientPreviewWorker.current!.prepare(
+    const promise = runtimeWorker.current!.prepare(
       editorController.doc.data,
       map,
       ambientTrafficProfile,
@@ -486,18 +480,19 @@ export function App(): JSX.Element {
       // Build only the warmed t=0 world in the background. Static map collider
       // extraction is intentionally not on this interactive path; dynamic
       // actor collision handling remains enabled and identical.
-      { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true, ...(reusablePopulation ? { ambientPopulation: reusablePopulation } : {}) },
+      { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true },
     );
-    ambientPreparation.current = { materializationKey, promise };
+    ambientPreparation.current = { previewKey, revision, promise };
     void promise.then(
       (bundle) => {
-        if (!ambientWorld.current.commit(token, { populationKey, materializationKey, value: bundle })) return;
+        if (!compiledWorldMatchesRevision(editorController.doc, revision)) return;
+        if (!ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: bundle })) return;
         setAmbientPreview(bundle);
         setAmbientPreviewBusy(false);
         setAmbientTrafficError(null);
       },
       (reason: unknown) => {
-        ambientWorld.current.fail(token);
+        ambientPreviewCache.current.fail(token);
         if ((reason as { name?: string } | null)?.name === 'AbortError') return;
         setAmbientTrafficError(`Traffic preparation: ${reason instanceof Error ? reason.message : String(reason)}`);
         setAmbientPreviewBusy(false);
@@ -505,10 +500,9 @@ export function App(): JSX.Element {
     ).finally(() => {
       if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
     });
-  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle]);
+  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle, state?.revision]);
 
-  useEffect(() => () => ambientPreviewWorker.current?.cancel(), []);
-  useEffect(() => () => liveSimulationWorker.current?.dispose(), []);
+  useEffect(() => () => runtimeWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {
     if (!editorController || ambientRobustnessBusy) return;
     setAmbientRobustnessBusy(true);
@@ -532,7 +526,19 @@ export function App(): JSX.Element {
     if (cameraRegistry) cameraRegistry.helpers.group.visible = viewSettings.debugGraphics;
   }, [cameraRegistry, viewSettings.debugGraphics]);
   const selectedPlayback = playbackBundle ?? authoredPlayback;
-  const activePhysicsMode = activePhysicsModeForTrace(selectedPlayback?.trace ?? null);
+  const authoredPhysicsSummary = useMemo(() => physicsSummaryForAuthoredActors((state?.actors ?? []).map((actor) => {
+    const role = editorController?.doc.data.roles.find((item) => item.id === actor.id);
+    return {
+      id: actor.id,
+      label: actor.label,
+      simulationKind: actor.source === 'prop' ? 'static_object' : role?.actor.class ?? simulationClassFor(actor.catalogId),
+      static: actor.source === 'prop' || role?.actor.static === true,
+      reverse: role?.extensions?.['motionSemantics'] === 'reverse',
+    };
+  })), [editorController, state?.actors]);
+  const activePhysicsSummary = selectedPlayback
+    ? physicsSummaryForTrace(selectedPlayback.trace)
+    : authoredPhysicsSummary;
   const playbackPresentation = playbackBundle ? campaignCameras : cameraState;
   const galleryCamera = useMemo(
     () => playbackBundle ? galleryCameraChoice(playbackBundle) : null,
@@ -818,7 +824,7 @@ export function App(): JSX.Element {
     }
     const sourceHash = contentHash(editorController.doc.data);
     setOpenScenarioState({ status: 'loading', sourceHash });
-    void exportWorker.current!.prepare(editorController.doc.data, map, ambientTrafficProfile).then(
+    void runtimeWorker.current!.prepare(editorController.doc.data, map, ambientTrafficProfile).then(
       (bundle) => {
         if (!bundle.openScenario || bundle.openScenario.source.templateHash !== sourceHash) {
           setOpenScenarioState({ status: 'error', sourceHash, message: 'The export worker returned a snapshot for a different document revision.' });
@@ -836,7 +842,6 @@ export function App(): JSX.Element {
     regenerateOpenScenario();
   }, [openScenarioOpen, openScenarioSourceHash, openScenarioState, regenerateOpenScenario]);
 
-  useEffect(() => () => exportWorker.current?.cancel(), []);
   const presentedOpenScenarioState: OpenScenarioWorkspaceState = useMemo(() => {
     if (openScenarioState.status === 'empty' || openScenarioState.sourceHash === openScenarioSourceHash) return openScenarioState;
     return { status: 'loading', sourceHash: openScenarioSourceHash };
@@ -867,7 +872,7 @@ export function App(): JSX.Element {
           setOpenScenarioOpen(false);
           setMapWorkspaceOpen(false);
         }}
-        activePhysicsMode={activePhysicsMode}
+        physicsSummary={activePhysicsSummary}
       />
       <div
         style={{
@@ -945,6 +950,7 @@ export function App(): JSX.Element {
       {!mapWorkspaceOpen && authoringEnabled && actorDetailsId && editorController && viewer ? (
         <ActorDetailsCallout
           actor={actorDetailsActor}
+          physics={actorDetailsActor ? physicsForActor(activePhysicsSummary, actorDetailsActor.id) : null}
           controller={editorController}
           viewer={viewer}
           host={hostRef.current}
@@ -1007,7 +1013,7 @@ export function App(): JSX.Element {
               onClose={() => setAuxiliaryTool(null)}
             />
           ) : auxiliaryTool === 'validate' && editorController ? (
-            <ScenarioActionsPanel controller={editorController} onClose={() => setAuxiliaryTool(null)} />
+            <ScenarioActionsPanel controller={editorController} physicsSummary={activePhysicsSummary} onClose={() => setAuxiliaryTool(null)} />
           ) : auxiliaryTool === 'measure' ? (
             <div style={styles.measurePanel}>
               <div style={styles.drawerHeading}>Viewport performance</div>
@@ -1107,8 +1113,9 @@ export function App(): JSX.Element {
   );
 }
 
-function ActorDetailsCallout({ actor, controller, viewer, host, onClose }: {
+export function ActorDetailsCallout({ actor, physics, controller, viewer, host, onClose }: {
   actor: ActorRecord | null;
+  physics: ActorPhysicsDisplay | null;
   controller: EditorController;
   viewer: CityViewer;
   host: HTMLDivElement | null;
@@ -1164,6 +1171,11 @@ function ActorDetailsCallout({ actor, controller, viewer, host, onClose }: {
         <button type="button" role="tab" aria-selected={tab === 'sensors'} style={tab === 'sensors' ? styles.actorTabActive : styles.actorTab} onClick={() => setTab('sensors')} data-testid="actor-sensors-tab">Sensors{actor.sensors.length ? ` · ${actor.sensors.length}` : ''}</button>
       </div>
       {tab === 'appearance' ? <div role="tabpanel" aria-label="Appearance">
+        {physics ? <div style={styles.actorPhysics} role="status" data-testid="actor-physics-backend">
+          <span>Motion backend</span>
+          <strong>{physics.mode === 'dynamic-v1' ? 'Dynamic v1' : physics.mode === 'kinematic-v1' ? 'Kinematic fallback' : 'Unknown'}</strong>
+          <small>{physicsReasonLabel(physics.reason)}</small>
+        </div> : null}
         <label style={styles.actorField}><span>Catalog model</span><select value={actor.catalogId} onChange={(event) => controller.updateActorAppearance(actor.id, { catalogId: event.target.value as CatalogId })} data-testid="actor-model">
           {!known ? <option value={actor.catalogId}>Missing model · {actor.catalogId}</option> : null}
           {models.map((entry) => {
@@ -1371,6 +1383,7 @@ const styles: Record<string, CSSProperties> = {
   actorTab: { padding: '6px 7px', border: 0, borderRadius: 4, background: 'transparent', color: '#8993a1', fontSize: 10, cursor: 'pointer' },
   actorTabActive: { padding: '6px 7px', border: '1px solid #4f5967', borderRadius: 4, background: '#282d35', color: '#f0f2f5', fontSize: 10, cursor: 'pointer' },
   actorField: { display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 11, color: '#9099a7', fontSize: 10 },
+  actorPhysics: { display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 8px', marginBottom: 12, padding: 9, border: '1px solid #39434a', borderRadius: 6, background: '#1c2426', color: '#96a1ae', fontSize: 10 },
   colorControl: { display: 'flex', alignItems: 'center', gap: 9, color: '#c8ced7' },
   missingAsset: { marginBottom: 9, padding: 7, borderRadius: 5, background: '#4b3523', color: '#ffd0a8', fontSize: 9 },
   actorIdentity: { paddingTop: 8, borderTop: '1px solid #393e46', color: '#747e8c', fontSize: 9, lineHeight: 1.35 },

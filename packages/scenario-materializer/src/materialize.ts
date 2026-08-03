@@ -1476,7 +1476,7 @@ class Materializer {
       let laneRef: SimActor['initial']['laneRef'];
       if (rsl) {
         const distance = Math.max(100, authoredSpeedCeilingMps * (this.template.choreography.clipSeconds + this.template.choreography.warmupSeconds) * 1.6);
-        const authoredLanePath = this.spawnRouteLanePathFor(role.id);
+        const authoredLanePath = role.initialRoute?.lanes ?? this.spawnRouteLanePathFor(role.id);
         if (authoredLanePath && authoredLanePath[0] !== rsl) {
           throw new CliError('route_disconnected', `authored lane path for "${role.id}" does not start on its placed lane`, {
             path: `${path}.laneRef`, detail: { placedLane: rsl, routeStart: authoredLanePath[0] },

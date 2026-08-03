@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 import {
   applyAmbientTraffic,
   contentHash,
+  createAmbientCandidatePool,
   evaluateAmbientRobustness,
+  materializeAmbientCandidatePool,
   promoteAmbientActor,
   runSimulation,
 } from '../index.js';
@@ -140,109 +142,78 @@ describe('native ambient traffic', () => {
     expect(promoted.tags.some((tag) => tag.startsWith('ambient'))).toBe(false);
   });
 
-  it('fails closed around collidable authored props for the entire clip', () => {
-    const blocked = scenario(graph, {
-      clipSeconds: 20,
-      warmupSeconds: 0,
-      actors: [vehicle(graph, { id: 'ego', s: 150, speedMps: 8, cruiseSpeedMps: 8 })],
-      props: [{
-        id: 'work-zone-barrier',
-        groupId: 'work-zone',
-        catalogId: 'construction.barrier',
-        pose: { x: 500, z: 1.75, headingRad: Math.PI / 2 },
-        dims: { l: 8, w: 1, h: 1 },
-        scale: 1,
-        collidable: true,
-        essentiality: 'required',
-      }],
-    });
-    const generated = applyAmbientTraffic(blocked, graph, {
+  it('keys the candidate pool only to graph/profile/mix/seed', () => {
+    const profile = {
       version: 1,
       preset: 'custom',
-      densityVehiclesPerKm: 60,
-      seed: 'prop-corridor-regression',
-      maxActors: 40,
+      densityVehiclesPerKm: 20,
+      seed: 'pool-identity',
+      maxActors: 16,
+      radiusM: 1_000,
+      pedestrianShare: 0,
+      cyclistShare: 0,
+    } as const;
+    const pool = createAmbientCandidatePool(graph, profile);
+    const edited = scenario(graph, { ...base, actors: [vehicle(graph, { id: 'ego-edited', s: 350, speedMps: 8 })], metricSubject: 'ego-edited' });
+    expect(materializeAmbientCandidatePool(base, graph, pool).provenance.candidatePoolKey).toBe(pool.key);
+    expect(materializeAmbientCandidatePool(edited, graph, pool).provenance.candidatePoolKey).toBe(pool.key);
+    expect(createAmbientCandidatePool(graph, { ...profile, seed: 'regenerate' }).key).not.toBe(pool.key);
+    expect(createAmbientCandidatePool(graph, {
+      ...profile,
+      vehicleMix: { car: 0, van: 1, truck: 0, bus: 0, motorcycle: 0 },
+    }).key).not.toBe(pool.key);
+    expect(pool.mapGraphDigest).toBe(graph.topologyDigest);
+    expect(pool.candidates.every((item) => item.origin === 'ambient' && !item.timelineVisible && !item.editable)).toBe(true);
+  });
+
+  it('filters authored reservations without rerolling unaffected ids or routes', () => {
+    const profile = {
+      version: 1,
+      preset: 'custom',
+      densityVehiclesPerKm: 30,
+      seed: 'no-reroll',
+      maxActors: 24,
       exclusionRadiusM: 2,
       radiusM: 1_000,
       pedestrianShare: 0,
       cyclistShare: 0,
+    } as const;
+    const pool = createAmbientCandidatePool(graph, profile);
+    const before = materializeAmbientCandidatePool(base, graph, pool);
+    const victim = before.input.actors.find((actor) => actor.tags.includes('ambient'))!;
+    const after = materializeAmbientCandidatePool(base, graph, pool, {
+      reservations: [{ x: victim.initial.pose.x, z: victim.initial.pose.z, radiusM: 1 }],
     });
-    const trace = runSimulation(generated.input, { graph, guards: 'collect' }).trace;
-    const ambientIds = new Set(generated.provenance.actors.map((actor) => actor.id));
-    expect(trace.metrics.collisions.filter(({ a, b }) => ambientIds.has(a) || ambientIds.has(b))).toEqual([]);
-    expect(generated.provenance.screening.evaluated).toBe(true);
-    expect(generated.provenance.screening.passes).toBeGreaterThanOrEqual(1);
-  }, 30_000);
-
-  it('prunes dense same-lane and crossing conflicts instead of relaxing density safety', () => {
-    const generated = applyAmbientTraffic(base, graph, {
-      version: 1,
-      preset: 'custom',
-      densityVehiclesPerKm: 80,
-      seed: 'dense-headway-regression',
-      maxActors: 64,
-      exclusionRadiusM: 2,
-      radiusM: 1_000,
-      pedestrianShare: 0,
-      cyclistShare: 0.2,
-    });
-    const trace = runSimulation(generated.input, { graph, guards: 'collect' }).trace;
-    const ambientIds = new Set(generated.provenance.actors.map((actor) => actor.id));
-    expect(trace.metrics.collisions.filter(({ a, b }) => ambientIds.has(a) || ambientIds.has(b))).toEqual([]);
-    expect(generated.provenance.actors.length).toBeLessThanOrEqual(64);
+    const beforeById = new Map(before.input.actors.filter((actor) => actor.tags.includes('ambient')).map((actor) => [actor.id, actor]));
+    const afterAmbient = after.input.actors.filter((actor) => actor.tags.includes('ambient'));
+    expect(afterAmbient.some((actor) => actor.id === victim.id)).toBe(false);
+    for (const actor of afterAmbient) {
+      const prior = beforeById.get(actor.id);
+      if (prior) expect(actor.behavior.route).toEqual(prior.behavior.route);
+    }
   });
 
-  it('uses wet-road friction to prune ambient actors requiring infeasible deceleration', () => {
-    const wet = scenario(graph, {
-      ...base,
-      operationalConditions: {
-        weather: 'rain',
-        timeOfDay: 'day',
-        traffic: 'moderate',
-        visibility: 'reduced-contrast',
-        effects: { visibilityRangeM: 10_000, frictionScale: 0.1, trafficSpeedFactor: 1 },
-      },
-    });
-    const generated = applyAmbientTraffic(wet, graph, {
-      version: 1,
-      preset: 'custom',
-      densityVehiclesPerKm: 80,
-      seed: 'dense-headway-regression',
-      maxActors: 64,
-      exclusionRadiusM: 2,
-      radiusM: 1_000,
-      pedestrianShare: 0,
-      cyclistShare: 0.2,
-    });
-    const ceiling = 0.8 * 9.81 * 0.1;
-    const trace = runSimulation(generated.input, { graph, guards: 'collect' }).trace;
-    const ambientIds = new Set(generated.provenance.actors.map((actor) => actor.id));
-    expect(generated.provenance.screening.maxAchievableDecelMps2).toBeCloseTo(ceiling);
-    expect(generated.provenance.screening.reasons.some((reason) => reason.reason === 'required_decel')).toBe(true);
-    for (const id of ambientIds) expect(trace.metrics.requiredDecelMax[id] ?? 0).toBeLessThanOrEqual(ceiling);
-  }, 60_000);
-
-  it('honors an explicit evaluator deceleration ceiling and remains deterministic', () => {
+  it('materializes quickly and uses the same actor physics/routes/signals/collisions as authored actors', () => {
     const profile = {
       version: 1 as const,
       preset: 'custom' as const,
-      densityVehiclesPerKm: 80,
-      seed: 'dense-headway-regression',
-      maxActors: 64,
-      exclusionRadiusM: 2,
+      densityVehiclesPerKm: 20,
+      seed: 'performance-parity',
+      maxActors: 32,
       radiusM: 1_000,
       pedestrianShare: 0,
-      cyclistShare: 0.2,
+      cyclistShare: 0,
     };
-    const a = applyAmbientTraffic(base, graph, profile, { maxAchievableDecelMps2: 1 });
-    const b = applyAmbientTraffic(base, graph, profile, { maxAchievableDecelMps2: 1 });
-    expect(contentHash(a)).toBe(contentHash(b));
-    expect(a.provenance.screening.reasons.some((reason) =>
-      reason.reason === 'required_decel' && (reason.requiredDecelMps2 ?? 0) > 1,
-    )).toBe(true);
-    const trace = runSimulation(a.input, { graph, guards: 'collect' }).trace;
-    for (const actor of a.provenance.actors) {
-      expect(trace.metrics.requiredDecelMax[actor.id] ?? 0).toBeLessThanOrEqual(1);
-    }
-  }, 60_000);
+    const pool = createAmbientCandidatePool(graph, profile);
+    const started = performance.now();
+    const generated = materializeAmbientCandidatePool(base, graph, pool);
+    expect(performance.now() - started).toBeLessThan(25);
+    expect(generated.provenance.screening.evaluated).toBe(false);
+    const ambient = generated.input.actors.find((actor) => actor.tags.includes('ambient'))!;
+    const authoredTwin = { ...ambient, id: 'authored-twin', tags: [] };
+    const ambientTrace = runSimulation({ ...generated.input, actors: [ambient] }, { graph, guards: 'collect' }).trace;
+    const authoredTrace = runSimulation({ ...generated.input, actors: [authoredTwin] }, { graph, guards: 'collect' }).trace;
+    expect(ambientTrace.ticks.actors[ambient.id]!.x).toEqual(authoredTrace.ticks.actors[authoredTwin.id]!.x);
+    expect(ambientTrace.ticks.actors[ambient.id]!.speedMps).toEqual(authoredTrace.ticks.actors[authoredTwin.id]!.speedMps);
+  });
 });

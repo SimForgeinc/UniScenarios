@@ -1,41 +1,81 @@
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { extractGlbColliders, loadStaticMapCollidersBounded } from '../staticMapColliders';
+import { loadStaticMapColliders, resetStaticColliderCacheForTests } from '../staticMapColliders';
 
-describe('static map collider extraction', () => {
-  it('reads semantic buildings and fences from a real Yale map tile without decoding triangles', () => {
-    const bytes = readFileSync(resolve(process.cwd(), '../../fixtures/yale-tile_0_0.lod3.glb'));
-    const start = performance.now();
-    const result = extractGlbColliders(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength), 'yale-0-0');
-    const elapsed = performance.now() - start;
+const SOURCE_BYTES = new TextEncoder().encode('{"map":"test"}\n');
+const SOURCE_HASH = createHash('sha256').update(SOURCE_BYTES).digest('hex');
+const DIGEST = `sha256-${'b'.repeat(64)}`;
 
-    expect(result.colliders.filter((item) => item.class === 'building').length).toBeGreaterThanOrEqual(5);
-    expect(result.colliders.filter((item) => item.class === 'wall').length).toBeGreaterThanOrEqual(2);
-    expect(result.colliders.every((item) => item.id.startsWith('yale-0-0/'))).toBe(true);
-    expect(result.colliders.every((item) => item.obb.lengthM > 0 && item.obb.widthM > 0)).toBe(true);
-    // JSON-header extraction should stay far below one frame's worth of heavy
-    // geometry work even though the fixture still contains its binary payload.
-    expect(elapsed).toBeLessThan(50);
+function artifact(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    schema: 'uniscenarios.static-map-colliders/v1',
+    mapId: 'test-map',
+    sourceManifestSha256: SOURCE_HASH,
+    sources: [{ id: 'tile-0', file: 'tile.glb', declaredBytes: 1234 }],
+    colliders: [{
+      id: 'tile-0/1',
+      class: 'building',
+      obb: { center: { x: 10, z: 20 }, lengthM: 8, widthM: 6, headingRad: 0 },
+    }],
+    statistics: {
+      sourceTiles: 1,
+      accepted: 1,
+      rejectedRoadOverlap: 0,
+      ignored: 2,
+      classes: { building: 1, wall: 0, barrier: 0, prop: 0, 'road-boundary': 0 },
+    },
+    digest: DIGEST,
+    ...overrides,
+  };
+}
+
+function fixtureFetcher(value: Record<string, unknown>, calls: string[]): typeof fetch {
+  const bytes = new TextEncoder().encode(`${JSON.stringify(value)}\n`);
+  const outputSha256 = createHash('sha256').update(bytes).digest('hex');
+  return (async (input: string | URL | Request) => {
+    const url = String(input);
+    calls.push(url);
+    if (url.endsWith('/3d/manifest.json')) return new Response(SOURCE_BYTES);
+    if (url.endsWith('/variants/manifest.json')) return Response.json({
+      sourceManifestSha256: SOURCE_HASH,
+      variants: { 'static-colliders': { schemaVersion: 1, file: 'static-colliders-v1.json', digest: DIGEST, outputSha256 } },
+    });
+    return new Response(bytes);
+  }) as typeof fetch;
+}
+
+describe('precomputed static map colliders', () => {
+  it('loads and validates one compact artifact, then reuses the map cache', async () => {
+    resetStaticColliderCacheForTests();
+    const calls: string[] = [];
+    const fetcher = fixtureFetcher(artifact(), calls);
+    const first = await loadStaticMapColliders('/dev-assets/test-map/3d/manifest.json', fetcher);
+    const second = await loadStaticMapColliders('/dev-assets/test-map/3d/manifest.json', fetcher);
+
+    expect(first).toBe(second);
+    expect(first.colliders).toEqual([{
+      id: 'tile-0/1', class: 'building',
+      obb: { center: { x: 10, z: 20 }, lengthM: 8, widthM: 6, headingRad: 0 },
+    }]);
+    expect(first.diagnostics).toMatchObject({ status: 'ready', accepted: 1, sourceTiles: 1, digest: DIGEST });
+    expect(calls).toHaveLength(3);
+    expect(calls.every((url) => !url.endsWith('.glb'))).toBe(true);
   });
 
-  it('fails closed on data that is not a GLB v2 asset', () => {
-    expect(() => extractGlbColliders(new ArrayBuffer(32), 'broken')).toThrow(/not GLB v2/);
+  it('fails immediately with diagnostics when the derivative is absent', async () => {
+    resetStaticColliderCacheForTests();
+    const result = await loadStaticMapColliders('/dev-assets/missing/3d/manifest.json', (async () => new Response('', { status: 404 })) as typeof fetch);
+    expect(result.colliders).toEqual([]);
+    expect(result.diagnostics).toMatchObject({ status: 'unavailable', warning: expect.stringContaining('(404)') });
   });
 
-  it('fails open with explicit diagnostics when extraction exceeds its preview budget', async () => {
-    const originalFetch = globalThis.fetch;
-    globalThis.fetch = (() => new Promise<Response>(() => undefined)) as typeof fetch;
-    try {
-      const result = await loadStaticMapCollidersBounded('/never-resolves.json', {} as never, 5);
-      expect(result.colliders).toEqual([]);
-      expect(result.diagnostics).toMatchObject({
-        status: 'unavailable',
-        accepted: 0,
-        warning: expect.stringContaining('exceeded 5 ms'),
-      });
-    } finally {
-      globalThis.fetch = originalFetch;
-    }
+  it('rejects malformed and map-mismatched artifacts without GLB fallback', async () => {
+    resetStaticColliderCacheForTests();
+    const calls: string[] = [];
+    const malformed = artifact({ sourceManifestSha256: 'd'.repeat(64) });
+    const result = await loadStaticMapColliders('/dev-assets/test-map/3d/manifest.json', fixtureFetcher(malformed, calls));
+    expect(result.colliders).toEqual([]);
+    expect(result.diagnostics.warning).toContain('different map bundle');
+    expect(calls).toHaveLength(3);
   });
 });

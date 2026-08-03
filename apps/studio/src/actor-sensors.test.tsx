@@ -5,7 +5,7 @@ import { defaultDashCamera, type ActorSensor, type RoleBinding } from '@uniscena
 import type { SampledActor } from './playback/model';
 import type { EditorController } from './editor/controller';
 import type { ActorRecord } from './editor/document';
-import { ActorSensorsPanel, actorRecordForRole } from './App';
+import { ActorDetailsCallout, ActorSensorsPanel, actorRecordForRole } from './App';
 
 function actor(kind: ActorRecord['kind'], sensors: readonly ActorSensor[] = []): ActorRecord {
   return {
@@ -36,6 +36,20 @@ function controllerFor(record: ActorRecord, actorClass: string): EditorControlle
 }
 
 describe('ActorSensorsPanel', () => {
+  it('discloses the selected actor backend and fallback reason in the inspector', () => {
+    const record = actor('pedestrian');
+    const markup = renderToStaticMarkup(<ActorDetailsCallout
+      actor={record}
+      physics={{ id: record.id, label: record.label ?? record.id, mode: 'kinematic-v1', reason: 'unsupported-actor-kind' }}
+      controller={controllerFor(record, 'pedestrian')}
+      viewer={{ camera: {} } as never}
+      host={null}
+      onClose={() => undefined}
+    />);
+    expect(markup).toContain('data-testid="actor-physics-backend"');
+    expect(markup).toContain('Kinematic fallback');
+    expect(markup).toContain('This actor kind is not supported by dynamic-v1');
+  });
   it('renders add, enable, configure and remove affordances for vehicle cameras', () => {
     const camera = defaultDashCamera({ class: 'car' }, 'test-dash-camera');
     const record = actor('vehicle', [camera]);

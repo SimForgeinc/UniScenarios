@@ -50,6 +50,26 @@ describe('simplified editor settings UI', () => {
     expect(markup).not.toContain('Playback');
   });
 
+  it('shows an accessible aggregate fallback count with per-actor reasons', () => {
+    const markup = renderToStaticMarkup(<WorkspaceHeader
+      controller={null} state={null} map={{ id: 'test', label: 'Test map' } as never}
+      playback={false} authoringEnabled settingsOpen={false} onSettings={vi.fn()}
+      physicsSummary={{
+        mode: 'dynamic-v1', legacyReplay: false, dynamicCount: 1, fallbackCount: 2, unknownCount: 0,
+        actors: [
+          { id: 'car', label: 'Car', mode: 'dynamic-v1', reason: 'selected' },
+          { id: 'ped', label: 'Walker', mode: 'kinematic-v1', reason: 'unsupported-actor-kind' },
+          { id: 'reverse', label: 'Reversing car', mode: 'kinematic-v1', reason: 'reverse-motion' },
+        ],
+      }}
+    />);
+    expect(markup).toContain('Physics · Dynamic · 2 fallbacks');
+    expect(markup).toContain('aria-label="Per-actor physics backends"');
+    expect(markup).toContain('Walker');
+    expect(markup).toContain('This actor kind is not supported by dynamic-v1');
+    expect(markup).toContain('Reverse motion is not supported by dynamic-v1 yet');
+  });
+
   it('keeps road and traffic-light overlays off and diagnostics hidden by default', () => {
     const markup = renderSettings(false);
     expect(markup).toContain('Road overlay');

@@ -5,17 +5,22 @@ import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
 import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
 import {
-  applyAmbientTraffic,
   buildLaneGraph,
   contentHash,
   createFixedStepSimulation,
+  createAmbientCandidatePool,
   pruneDanglingAfterInteractions,
   evaluateAmbientRobustness,
   evaluateIntentRubric,
   runSimulation,
+  materializeAmbientCandidatePool,
+  parseSimScenarioInput,
+  resolveAmbientTrafficProfile,
   traceDigest,
   type AmbientTrafficProfile,
   type AmbientTrafficProvenance,
+  type AmbientTrafficResult,
+  type AmbientCandidatePool,
   type EvaluateFilters,
   type IntentRubricInput,
   type SimScenarioInput,
@@ -25,13 +30,13 @@ import {
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { ambientRobustnessGate } from '../ambient/robustnessGate';
-import { isAmbientSimActor, reuseAmbientPopulation, type AmbientPopulationSnapshot } from '../ambient/persistentPopulation';
-import { createAmbientWorldPreviewInput } from '../ambient/worldPreview';
 import type { OpenScenarioSnapshot, OpenScenarioSourceMapping } from '../openscenario/model';
 import { selectPlayableSite } from './site-selection';
 import { withEditablePhysicsDefault } from './physics';
 import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from './staticMapColliders';
 import type { StaticColliderDiagnostics } from './staticMapColliders';
+import { initialLiveTickBudget, liveBatchTickBudget } from './liveSimulationPlan';
+import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from './mapRuntime';
 
 export interface ScenarioWorkerMap {
   id: string;
@@ -44,7 +49,10 @@ export interface ScenarioWorkerMap {
 }
 
 export interface ScenarioWorkerRequest {
+  kind?: 'compile' | 'export' | 'robustness';
   id: number;
+  /** The editor revision that must be echoed back unchanged. */
+  revision?: string;
   template: ScenarioTemplateV2;
   map: ScenarioWorkerMap;
   ambientTraffic: AmbientTrafficProfile;
@@ -53,14 +61,25 @@ export interface ScenarioWorkerRequest {
     readonly manifest: Record<string, unknown>;
     readonly input: SimScenarioInput;
   };
-  /** Exact generated actors from the persistent authoring world. */
-  ambientPopulation?: AmbientPopulationSnapshot;
+  /** Stable map/profile candidates returned by an earlier preparation. */
+  ambientCandidatePool?: AmbientCandidatePool;
   staticCollisionMode?: 'skip' | 'bounded';
   operation?: 'prepare' | 'materialize' | 'robustness';
   evaluationFilters?: EvaluateFilters;
   /** Optional canonical intent rubric. Without it robustness is incomplete, never accepted. */
   intentRubric?: IntentRubricInput;
 }
+
+export interface ScenarioWorkerStartRequest {
+  readonly kind: 'start';
+  readonly id: number;
+  readonly revision: string;
+  readonly runtimeKey: string;
+  readonly input: SimScenarioInput;
+}
+export interface ScenarioWorkerCancelRequest { readonly kind: 'cancel'; readonly id?: number }
+export interface ScenarioWorkerTransportRequest { readonly kind: 'transport'; readonly id: number; readonly playing: boolean }
+export type ScenarioWorkerMessage = ScenarioWorkerRequest | ScenarioWorkerStartRequest | ScenarioWorkerCancelRequest | ScenarioWorkerTransportRequest;
 
 export interface AmbientRobustnessSummary {
   readonly version: 1;
@@ -91,60 +110,109 @@ export interface AmbientRobustnessSummary {
 }
 
 export type ScenarioWorkerResponse =
-  | { id: number; ok: true; kind: 'prepare'; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
-  | { id: number; ok: true; kind: 'robustness'; report: AmbientRobustnessSummary }
-  | { id: number; ok: false; error: string };
+  | { id: number; revision: string; ok: true; kind: 'prepare'; runtimeKey: string; cache: 'cold' | 'warm'; timing?: { totalMs: number; compileCache: 'hit' | 'miss' }; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; ambientCandidatePool: AmbientCandidatePool; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
+  | { id: number; revision: string; ok: true; kind: 'robustness'; report: AmbientRobustnessSummary }
+  | { id: number; revision: string; ok: true; kind: 'ready' | 'progress' | 'complete'; trace: SimTrace; recordedUntil: number }
+  | { id: number; revision: string; ok: false; error: string };
+
+interface MapRuntime {
+  readonly key: string;
+  readonly identity: MapRuntimeIdentity;
+  readonly topology: TopologyIndex;
+  readonly graph: ReturnType<typeof buildLaneGraph>;
+  readonly bundle: MapBundle;
+  readonly controls: MapControlPlan;
+  readonly xodr: string;
+  readonly colliders: Promise<Awaited<ReturnType<typeof loadStaticMapCollidersBounded>>>;
+}
+
+const runtimesByAsset = new Map<string, Promise<MapRuntime>>();
+const runtimesByKey = new Map<string, MapRuntime>();
+const compiledWorlds = new Map<string, Promise<ScenarioWorkerResponse>>();
+let liveGeneration = 0;
+let transport: { id: number; playing: boolean; wake: (() => void) | null } | null = null;
 
 const scope = self as unknown as DedicatedWorkerGlobalScope;
 
-scope.onmessage = (event: MessageEvent<ScenarioWorkerRequest>): void => {
+scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
   const request = event.data;
+  if (request.kind === 'cancel') {
+    liveGeneration += 1;
+    transport?.wake?.();
+    transport = null;
+    return;
+  }
+  if (request.kind === 'transport') {
+    if (transport?.id !== request.id) return;
+    transport.playing = request.playing;
+    transport.wake?.();
+    transport.wake = null;
+    return;
+  }
+  if (request.kind === 'start') {
+    const token = ++liveGeneration;
+    transport = { id: request.id, playing: false, wake: null };
+    void runLive(request, token).catch((reason: unknown) => postFailure(request.id, request.revision, reason));
+    return;
+  }
   void prepare(request).then(
     (response) => scope.postMessage(response),
-    (reason: unknown) => scope.postMessage({
-      id: request.id,
-      ok: false,
-      error: reason instanceof Error ? reason.message : String(reason),
-    } satisfies ScenarioWorkerResponse),
+    (reason: unknown) => postFailure(request.id, request.revision ?? String(request.id), reason),
   );
 };
 
 async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerResponse> {
-  const [topology, derived, locations, xodr, signals] = await Promise.all([
-    fetchJson(request.map.topology),
-    fetchJson(request.map.derivedTopology),
-    fetchJson(request.map.locations),
-    fetchText(request.map.xodr),
-    fetchJson(request.map.signals),
-  ]);
-  const topologyIndex = topology as TopologyIndex;
-  const index = normalizeDerivedMapIndex(derived, {
-    mapId: request.map.id,
-    topology: topologyIndex as never,
-    locations,
+  const interactive = request.kind === 'compile' || request.operation === 'materialize';
+  if (!interactive) return prepareUncached(request);
+  const started = performance.now();
+  const revision = request.revision ?? String(request.id);
+  const key = contentHash({
+    map: mapAssetDigest(request.map),
+    revision,
+    document: request.template,
+    ambient: request.ambientTraffic,
+    base: request.baseInstance?.input ?? null,
+    candidatePool: request.ambientCandidatePool?.profileHash ?? null,
   });
-  const graph = buildLaneGraph(topologyIndex);
-  // A t=0 authoring preview must never wait for map GLB inspection. Full
-  // playback gets a bounded attempt and explicit diagnostics on fallback.
-  const staticCollision = request.staticCollisionMode === 'skip'
-    ? emptyStaticColliderBundle('skipped', 'Static map collision extraction is deferred until playback.')
-    : await loadStaticMapCollidersBounded(request.map.manifest, topologyIndex);
-  const bundle: MapBundle = {
-    mapId: request.map.id,
-    catalog: locations as MapBundle['catalog'],
-    derived: derived as MapBundle['derived'],
-    topology: topologyIndex,
-    index,
-    graph,
-    signalCatalog: parseMapSignalCatalog(xodr, signals),
-  };
-  const mapControls = buildMapControlPlan(bundle);
+  const cached = compiledWorlds.get(key);
+  if (cached) {
+    const response = await cached;
+    return response.ok && response.kind === 'prepare'
+      ? { ...response, id: request.id, revision, cache: 'warm', timing: { totalMs: performance.now() - started, compileCache: 'hit' } }
+      : response;
+  }
+  const pending = prepareUncached(request);
+  compiledWorlds.set(key, pending);
+  try {
+    const response = await pending;
+    return response.ok && response.kind === 'prepare'
+      ? { ...response, timing: { totalMs: performance.now() - started, compileCache: 'miss' } }
+      : response;
+  } catch (error) {
+    compiledWorlds.delete(key);
+    throw error;
+  }
+}
+
+async function prepareUncached(request: ScenarioWorkerRequest): Promise<ScenarioWorkerResponse> {
+  const assetKey = mapAssetDigest(request.map);
+  const cache = runtimesByAsset.has(assetKey) ? 'warm' : 'cold';
+  const runtime = await getMapRuntime(request.map);
+  const { topology: topologyIndex, graph, bundle, controls: mapControls, xodr } = runtime;
+  const { index } = bundle;
+  // Collider extraction starts once per map runtime, but compile/t=0 never
+  // awaits it. Explicit export/validation jobs can consume the cached result.
+  const isInteractiveCompile = request.kind === 'compile' || request.operation === 'materialize';
+  const staticCollision = isInteractiveCompile || request.staticCollisionMode === 'skip'
+    ? emptyStaticColliderBundle('skipped', 'Static map collision extraction is cached in the map runtime and deferred off the compile path.')
+    : await runtime.colliders;
+  const revision = request.revision ?? String(request.id);
 
   // A blank editor still owns one normal concrete world. It has no authored
   // rows yet, but its ambient SimActors use the same routes, controls, physics,
   // collision handling and trace format as every later authored scenario.
   if (request.template.roles.length === 0 && !request.baseInstance) {
-    const base = withMapControls(withEditablePhysicsDefault(createAmbientWorldPreviewInput(request.map.id)), mapControls);
+    const base = withMapControls(withEditablePhysicsDefault(createEmptyAmbientInput(request.map.id)), mapControls);
     const ambient = applyRequestedAmbientPopulation(base, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
@@ -157,12 +225,16 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     };
     return {
       id: request.id,
+      revision,
       ok: true,
       kind: 'prepare',
+      runtimeKey: runtime.key,
+      cache,
       instance: ambientInstance(manifest, ambient.input, ambient.provenance),
       trace: result.trace,
       siteId: 'ambient-world',
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
     };
   }
@@ -198,14 +270,18 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     const replayKey = request.baseInstance.manifest['replayKey'] as Record<string, unknown> | undefined;
     return {
       id: request.id,
+      revision,
       ok: true,
       kind: 'prepare',
+      runtimeKey: runtime.key,
+      cache,
       instance,
       trace: result.trace,
       siteId: String(replayKey?.['siteId'] ?? 'verified-base'),
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
-      openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr),
+      ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
     };
   }
 
@@ -225,14 +301,18 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     const instance = ambientInstance(product.manifest, ambient.input, ambient.provenance);
     return {
       id: request.id,
+      revision,
       ok: true,
       kind: 'prepare',
+      runtimeKey: runtime.key,
+      cache,
       instance,
       trace: result.trace,
       siteId: product.manifest.replayKey.siteId,
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
-      openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr),
+      ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
     };
   }
 
@@ -267,15 +347,140 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
   const instance = ambientInstance(product.manifest, ambient.input, ambient.provenance);
   return {
     id: request.id,
+    revision,
     ok: true,
     kind: 'prepare',
+    runtimeKey: runtime.key,
+    cache,
     instance,
     trace: result.trace,
     siteId: site.siteId,
     ambientTraffic: ambient.provenance,
+    ambientCandidatePool: ambient.candidatePool,
     mapCollisions: staticCollision.diagnostics,
-    openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr),
+    ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
   };
+}
+
+/** Empty authored document base. Ambient actors are ordinary runtime actors added afterward. */
+function createEmptyAmbientInput(mapId: string): SimScenarioInput {
+  const parsed = parseSimScenarioInput({
+    mapId,
+    clipSeconds: 20,
+    warmupSeconds: 0,
+    dt: 0.05,
+    seed: `ambient-world:${mapId}`,
+    actors: [{
+      id: 'ambient-world-seed',
+      kind: 'static_object',
+      static: true,
+      initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+      behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
+    }],
+    physics: { mode: 'dynamic-v1' },
+  });
+  return { ...parsed, actors: [] };
+}
+
+async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
+  const assetDigest = mapAssetDigest(map);
+  const existing = runtimesByAsset.get(assetDigest);
+  if (existing) return existing;
+  const pending = (async (): Promise<MapRuntime> => {
+    const [topology, derived, locations, xodr, signals] = await Promise.all([
+      fetchJson(map.topology),
+      fetchJson(map.derivedTopology),
+      fetchJson(map.locations),
+      fetchText(map.xodr),
+      fetchJson(map.signals),
+    ]);
+    const topologyIndex = topology as TopologyIndex;
+    const index = normalizeDerivedMapIndex(derived, {
+      mapId: map.id,
+      topology: topologyIndex as never,
+      locations,
+    });
+    const graph = buildLaneGraph(topologyIndex);
+    const bundle: MapBundle = {
+      mapId: map.id,
+      catalog: locations as MapBundle['catalog'],
+      derived: derived as MapBundle['derived'],
+      topology: topologyIndex,
+      index,
+      graph,
+      signalCatalog: parseMapSignalCatalog(xodr, signals),
+    };
+    const controls = buildMapControlPlan(bundle);
+    // Start exactly once and reuse the result for validation/export. This does
+    // not delay an editor compile or its t=0 response.
+    const colliders = loadStaticMapCollidersBounded(map.manifest, topologyIndex);
+    const identity: MapRuntimeIdentity = {
+      mapId: map.id,
+      assetDigest,
+      graphDigest: graph.topologyDigest,
+      controlDigest: contentHash(controls),
+      // The artifact source is part of the identity immediately; diagnostics
+      // expose the parsed manifest digest once the background load completes.
+      colliderDigest: contentHash({ manifest: map.manifest }),
+    };
+    const runtime: MapRuntime = {
+      key: runtimeDigest(identity), identity, topology: topologyIndex, graph,
+      bundle, controls, xodr, colliders,
+    };
+    runtimesByKey.set(runtime.key, runtime);
+    return runtime;
+  })();
+  runtimesByAsset.set(assetDigest, pending);
+  try {
+    return await pending;
+  } catch (error) {
+    runtimesByAsset.delete(assetDigest);
+    throw error;
+  }
+}
+
+async function runLive(request: ScenarioWorkerStartRequest, token: number): Promise<void> {
+  const runtime = runtimesByKey.get(request.runtimeKey);
+  if (!runtime) throw new Error('The compiled map runtime is no longer available; compile this revision again.');
+  const simulation = createFixedStepSimulation(request.input, { graph: runtime.graph, guards: 'throw' });
+  let progress = simulation.advance(initialLiveTickBudget(request.input.warmupSeconds, request.input.dt));
+  postLive(request, progress.done ? 'complete' : 'ready', progress.trace, progress.recordedUntil ?? 0);
+  const batchTicks = liveBatchTickBudget(request.input.dt);
+  while (!progress.done && token === liveGeneration) {
+    await waitUntilPlaying(request.id, token);
+    await new Promise<void>((resolve) => setTimeout(resolve, 200));
+    if (transport?.id === request.id && !transport.playing) continue;
+    if (token !== liveGeneration) return;
+    progress = simulation.advance(batchTicks);
+    postLive(request, progress.done ? 'complete' : 'progress', progress.trace, progress.recordedUntil ?? 0);
+  }
+}
+
+async function waitUntilPlaying(id: number, token: number): Promise<void> {
+  while (token === liveGeneration && transport?.id === id && !transport.playing) {
+    await new Promise<void>((resolve) => {
+      if (!transport || transport.id !== id || transport.playing) resolve();
+      else transport.wake = resolve;
+    });
+  }
+}
+
+function postLive(
+  request: ScenarioWorkerStartRequest,
+  kind: 'ready' | 'progress' | 'complete',
+  trace: SimTrace,
+  recordedUntil: number,
+): void {
+  scope.postMessage({ id: request.id, revision: request.revision, ok: true, kind, trace, recordedUntil } satisfies ScenarioWorkerResponse);
+}
+
+function postFailure(id: number, revision: string, reason: unknown): void {
+  scope.postMessage({
+    id,
+    revision,
+    ok: false,
+    error: reason instanceof Error ? reason.message : String(reason),
+  } satisfies ScenarioWorkerResponse);
 }
 
 function simulateForRequest(
@@ -299,9 +504,24 @@ function applyRequestedAmbientPopulation(
   graph: ReturnType<typeof buildLaneGraph>,
   request: ScenarioWorkerRequest,
   options: { maxAchievableDecelMps2?: number },
-): ReturnType<typeof applyAmbientTraffic> {
-  return reuseAmbientPopulation(base, request.ambientTraffic, request.ambientPopulation)
-    ?? applyAmbientTraffic(base, graph, request.ambientTraffic, options);
+): AmbientTrafficResult & { readonly candidatePool: AmbientCandidatePool } {
+  const requestedProfileHash = contentHash(resolveAmbientTrafficProfile(request.ambientTraffic));
+  const reusable = request.ambientCandidatePool;
+  const candidatePool = reusable
+    && reusable.mapGraphDigest === graph.topologyDigest
+    && reusable.profileHash === requestedProfileHash
+    ? reusable
+    : createAmbientCandidatePool(graph, request.ambientTraffic);
+  return {
+    ...materializeAmbientCandidatePool(base, graph, candidatePool, options),
+    candidatePool,
+  };
+}
+
+function isAmbientSimActor(actor: { readonly id: string; readonly tags: readonly string[] }): boolean {
+  return actor.id.startsWith('ambient:')
+    || actor.id.startsWith('ambient-')
+    || actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'));
 }
 
 
@@ -440,6 +660,7 @@ function robustnessResponse(
   } : null);
   return {
     id: request.id,
+    revision: request.revision ?? String(request.id),
     ok: true,
     kind: 'robustness',
     report: {
@@ -482,6 +703,9 @@ function ambientInstance(
     id: actor.id,
     actorKind: actor.kind,
     roleKind: 'ambient',
+    origin: 'ambient',
+    timelineVisible: false,
+    editable: false,
     laneRsl: actor.initial.laneRef?.rsl ?? null,
     spawnS: actor.initial.laneRef?.s ?? 0,
     initialSpeedMps: actor.initial.speedMps,

@@ -82,6 +82,17 @@ const absolute = (id: string, rsl: string | undefined, x: number, z: number, hea
 };
 
 describe('scene-absolute to portable variation lift', () => {
+  it('drops the concrete initial lane chain when lifting to a portable role', () => {
+    const source = deriveMapIndexFromTopology(corridorTopology(2), { mapId: 'source' });
+    const ego = absolute('ego', '1:0:-1', 80, 0);
+    if (ego.kind !== 'scene_absolute') throw new Error('test actor must be scene_absolute');
+    ego.initialRoute = { mode: 'lanePath', lanes: ['1:0:-1'] };
+    const lifted = liftMapBoundTemplate(template([ego]), source, { origin: 'corridor' });
+    expect(lifted.ok, JSON.stringify(lifted.issues)).toBe(true);
+    expect(JSON.stringify(lifted.template!.roles)).not.toContain('initialRoute');
+    expect(JSON.stringify(lifted.template!.roles)).not.toContain('1:0:-1');
+  });
+
   it('round-trips corridor-relative positions while preserving ids, choreography, and props', () => {
     const source = deriveMapIndexFromTopology(corridorTopology(2), { mapId: 'source' });
     for (const delta of [-25, 0, 17, 60]) {

@@ -151,6 +151,7 @@ export type {
   VehicleControl,
   VehicleMotionState,
 } from './sim/motion-backend.js';
+export { actorPhysicsBackend, actorPhysicsBackends, physicsBackendCounts } from './sim/physics-provenance.js';
 export {
   alongRouteGapM,
   articulatedDoorObb,
@@ -277,11 +278,15 @@ export type {
 export {
   ambientTrafficProfileSchema,
   applyAmbientTraffic,
+  createAmbientCandidatePool,
+  materializeAmbientCandidatePool,
   promoteAmbientActor,
   resolveAmbientTrafficProfile,
 } from './ambient/traffic.js';
 export type {
   AmbientActorProvenance,
+  AmbientCandidate,
+  AmbientCandidatePool,
   AmbientReservation,
   AmbientScreeningReason,
   AmbientTrafficOptions,
