@@ -14,6 +14,7 @@ const [{ default: factory }, sourceNetwork, manifest] = await Promise.all([
   readFile(manifestPath, 'utf8').then(JSON.parse),
 ]);
 const network = fitCycles(sourceNetwork, 18);
+const controlledStops = controlledStopPoints(network);
 const routes = routeDocument(manifest.routeCandidates.slice(0, 64));
 const sumo = await factory({ noInitialRun: true, printErr: () => {} });
 const net = copy(sumo, new TextEncoder().encode(network));
@@ -32,14 +33,19 @@ for (let tick = 1; tick <= 400; tick += 1) {
   const time = tick * .05;
   const actors = actorSpeeds(sumo);
   const signals = linkStates(sumo);
-  const stopped = new Set([...actors].filter(([, speed]) => speed < .2).map(([id]) => id));
   for (const [key, state] of signals) {
-    if (previousSignals.get(key) === 'r' && state === 'g') candidates.push({ time, stopped, released: new Set() });
+    if (previousSignals.get(key) === 'r' && state === 'g') {
+      const stops = controlledStops.get(key) ?? [];
+      const stopped = new Set([...actors]
+        .filter(([, actor]) => actor.speed < .2 && stops.some((stop) => Math.hypot(actor.x - stop.x, actor.y - stop.y) < 35))
+        .map(([id]) => id));
+      candidates.push({ time, stopped, released: new Set() });
+    }
     previousSignals.set(key, state);
   }
   for (const candidate of candidates) {
     if (time - candidate.time > 6) continue;
-    for (const id of candidate.stopped) if ((actors.get(id) ?? 0) > 1) candidate.released.add(id);
+    for (const id of candidate.stopped) if ((actors.get(id)?.speed ?? 0) > 1) candidate.released.add(id);
   }
 }
 sumo._us_sumo_close();
@@ -61,8 +67,37 @@ function actorSpeeds(sumo) {
   const count = sumo._us_sumo_state_count();
   const view = new DataView(sumo.HEAPU8.buffer, sumo._us_sumo_state_pointer(), count * 32);
   const values = new Map();
-  for (let index = 0; index < count; index += 1) values.set(view.getUint32(index * 32, true), view.getFloat32(index * 32 + 16, true));
+  for (let index = 0; index < count; index += 1) {
+    const offset = index * 32;
+    values.set(view.getUint32(offset, true), {
+      x: view.getFloat32(offset + 4, true),
+      y: view.getFloat32(offset + 8, true),
+      speed: view.getFloat32(offset + 16, true),
+    });
+  }
   return values;
+}
+
+function controlledStopPoints(xml) {
+  const lanes = new Map([...xml.matchAll(/<lane\b([^>]*)\/?\s*>/g)].flatMap((match) => {
+    const id = attribute(match[1], 'id');
+    const shape = attribute(match[1], 'shape');
+    if (!id || !shape) return [];
+    const last = shape.trim().split(/\s+/).at(-1)?.split(',').map(Number);
+    return last?.length >= 2 ? [[id, { x: last[0], y: last[1] }]] : [];
+  }));
+  const result = new Map();
+  for (const match of xml.matchAll(/<connection\b([^>]*)/g)) {
+    const controller = attribute(match[1], 'tl');
+    const linkIndex = Number(attribute(match[1], 'linkIndex'));
+    const from = attribute(match[1], 'from');
+    const fromLane = attribute(match[1], 'fromLane');
+    const stop = lanes.get(`${from}_${fromLane}`);
+    if (!controller || !Number.isInteger(linkIndex) || !stop) continue;
+    const key = `${fnv1a(controller)}:${linkIndex}`;
+    result.set(key, [...(result.get(key) ?? []), stop]);
+  }
+  return result;
 }
 
 function linkStates(sumo) {
@@ -106,4 +141,17 @@ function copy(sumo, bytes) {
 function assertOk(sumo, code) {
   if (code === 0) return;
   throw new Error(sumo.UTF8ToString(sumo._us_sumo_last_error()) || `SUMO failed (${code})`);
+}
+
+function attribute(source, name) {
+  return source.match(new RegExp(`\\b${name}="([^"]*)"`))?.[1];
+}
+
+function fnv1a(value) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
 }
