@@ -2,10 +2,27 @@
 import childProcess from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import zlib from 'node:zlib';
 import {
   analyzeRoadTiling, atomicWrite, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, readGlb, sha256, subsetSceneRoots,
 } from './map-derivatives-lib.mjs';
 import { inspectPinnedToolchain, pinnedToolEnvironment } from './map-derivative-toolchain.mjs';
+import { buildStaticColliderArtifact, serializeStaticColliderArtifact } from './static-map-colliders-lib.mjs';
+
+function readGlbJsonChunk(file) {
+  const descriptor = fs.openSync(file, 'r');
+  try {
+    const header = Buffer.alloc(20);
+    if (fs.readSync(descriptor, header, 0, header.length, 0) !== header.length) throw new Error(`Truncated GLB header: ${file}`);
+    const jsonLength = header.readUInt32LE(12);
+    const bytes = Buffer.alloc(20 + jsonLength);
+    header.copy(bytes);
+    if (fs.readSync(descriptor, bytes, 20, jsonLength, 20) !== jsonLength) throw new Error(`Truncated GLB JSON chunk: ${file}`);
+    return bytes;
+  } finally {
+    fs.closeSync(descriptor);
+  }
+}
 
 function arg(name, fallback = null) {
   const index = process.argv.indexOf(`--${name}`);
@@ -16,7 +33,7 @@ const mode = arg('mode', 'dry-run');
 const variant = arg('variant', 'all');
 if (!mapId || !/^[a-z0-9-]+$/.test(mapId)) throw new Error('Pass a safe map id with --map <id>');
 if (!['dry-run', 'build'].includes(mode)) throw new Error('--mode must be dry-run or build');
-if (!['all', 'geometry-only', 'ktx2'].includes(variant)) throw new Error('--variant must be all, geometry-only, or ktx2');
+if (!['all', 'geometry-only', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, ktx2, or static-colliders');
 
 const repository = path.resolve(import.meta.dirname, '..');
 const mapRoot = path.join(repository, 'dev-assets', mapId, '3d');
@@ -113,6 +130,35 @@ if (variant === 'geometry-only' || variant === 'all') {
     geometryVariant.staticLayers = [{ id: 'road', files: tiledFiles, bounds: tiledBounds }];
   }
   variants['geometry-only'] = geometryVariant;
+}
+if (variant === 'static-colliders' || variant === 'all') {
+  const topologyFile = ['topology-index.json.gz', 'topology-index.json']
+    .map((name) => path.join(repository, 'dev-assets', mapId, name))
+    .find((file) => fs.existsSync(file));
+  if (!topologyFile) throw new Error(`Map has no topology index: ${mapId}`);
+  const topologyBytes = fs.readFileSync(topologyFile);
+  const topology = JSON.parse((topologyFile.endsWith('.gz') ? zlib.gunzipSync(topologyBytes) : topologyBytes).toString('utf8'));
+  const artifact = buildStaticColliderArtifact({
+    mapId,
+    sourceManifestSha256: sha256(manifestBytes),
+    manifest,
+    topology,
+    readSource: (file) => readGlbJsonChunk(path.join(mapRoot, file)),
+  });
+  const relative = 'static-colliders-v1.json';
+  const serialized = serializeStaticColliderArtifact(artifact);
+  atomicWrite(path.join(outputRoot, relative), serialized);
+  variants['static-colliders'] = {
+    id: 'static-colliders',
+    schemaVersion: 1,
+    generator: { name: 'uniscenarios-static-map-colliders', version: '1.0.0' },
+    file: relative,
+    digest: artifact.digest,
+    outputSha256: sha256(Buffer.from(serialized)),
+    bytes: Buffer.byteLength(serialized),
+    sourceTiles: artifact.statistics.sourceTiles,
+    accepted: artifact.statistics.accepted,
+  };
 }
 if (variant === 'ktx2' || variant === 'all') {
   const files = {};

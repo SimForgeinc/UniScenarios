@@ -172,7 +172,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     document: request.template,
     ambient: request.ambientTraffic,
     base: request.baseInstance?.input ?? null,
-    population: request.ambientPopulation ?? null,
+    candidatePool: request.ambientCandidatePool?.profileHash ?? null,
   });
   const cached = compiledWorlds.get(key);
   if (cached) {

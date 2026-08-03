@@ -46,6 +46,12 @@ The build writes only under the selected map's ignored `3d/variants/` folder:
 - Road tiles are emitted only when every complete road node fits a spatial cell.
   Any hierarchy or boundary-crossing sheet blocks tiling rather than cutting
   geometry, lane markings, or ground continuity heuristically.
+- `static-colliders-v1.json` contains compact scene-frame OBBs for buildings,
+  walls, fences, barriers, bollards, guardrails, and explicitly named curbs.
+  The builder reads only each lowest-detail GLB's JSON chunk, normalizes
+  quantized accessor bounds, and rejects travel-lane overlaps using the map
+  topology. The timestamp-free artifact is byte-for-byte deterministic and is
+  bound to the source map manifest by SHA-256.
 - `manifest.json` contains source/output SHA-256 values, generator versions,
   runtime dependencies, and optional validated static-layer tiles. A new
   generation is written to its own directory and becomes visible only through
@@ -56,6 +62,13 @@ geometry-only file and fails closed if it is unavailable or invalid, preventing
 a surprise textured-source fetch. Normal modes can select KTX2 only when its
 transcoder is declared and retain source fallback behavior. Starting directly
 in Ultra Low also skips HDR environment and baked-shadow atlas requests.
+
+The simulation worker also discovers the collider derivative by convention. It
+validates the live map-manifest hash, derivative checksum, schema, and sorted
+collider IDs, then caches the result for the worker lifetime. It never inspects
+or range-fetches a GLB. A missing, stale, or malformed artifact produces an
+empty collider set plus diagnostics immediately; editor preparation does not
+wait for an extraction timeout.
 
 The derivatives are local and reproducible, not redistributable source-map
 replacements. Original GLBs are never overwritten or deleted.
