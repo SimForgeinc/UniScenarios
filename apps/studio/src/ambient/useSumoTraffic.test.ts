@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { classifySumoTimelineStep, externalTrafficActors, trafficMetrics } from './useSumoTraffic';
+import { buildSumoCatchUpRequests, classifySumoTimelineStep, externalTrafficActors, trafficMetrics } from './useSumoTraffic';
 
 function packed(actors: readonly { id: number; x: number; z: number; speed: number; acceleration: number }[]): ArrayBuffer {
   const result = new ArrayBuffer(actors.length * 32);
@@ -35,6 +35,41 @@ describe('SUMO live product metrics', () => {
     expect(classifySumoTimelineStep(.02)).toBe('wait');
     expect(classifySumoTimelineStep(-.01)).toBe('reset');
     expect(classifySumoTimelineStep(5.01)).toBe('reset');
+  });
+
+  it('splits a delayed 3.33 m frame into physically aligned SUMO proxy steps', () => {
+    const before = {
+      id: 'external:fire-engine', kind: 'vehicle' as const, routeId: 'proxy-route',
+      x: 0, z: 0, headingDegrees: 90, speedMetersPerSecond: 10.62,
+      lengthMeters: 5.5, widthMeters: 2,
+    };
+    const after = { ...before, x: 3.33 };
+    expect((after.x - before.x) / .05).toBeCloseTo(66.6, 1);
+
+    const requests = buildSumoCatchUpRequests(7, 3.33 / 10.62, [before], [after]);
+    expect(requests).toHaveLength(7);
+    expect(requests.map((request) => request.sequence)).toEqual([7, 8, 9, 10, 11, 12, 13]);
+    let prior: (typeof requests)[number]['externalActors'][number] = before;
+    for (const request of requests) {
+      expect(request.deltaSeconds).toBeLessThanOrEqual(.05);
+      const actor = request.externalActors[0]!;
+      expect(Math.hypot(actor.x - prior.x, actor.z - prior.z) / request.deltaSeconds).toBeCloseTo(10.62, 6);
+      prior = actor;
+    }
+    expect(prior.x).toBeCloseTo(3.33, 9);
+  });
+
+  it('holds proxy occupancy until a discontinuous despawn boundary', () => {
+    const obstacle = {
+      id: 'external:barrier', kind: 'obstacle' as const, routeId: 'proxy-route',
+      x: 10, z: 5, headingDegrees: 0, speedMetersPerSecond: 0,
+      lengthMeters: 2, widthMeters: .5,
+    };
+    const requests = buildSumoCatchUpRequests(0, .15, [obstacle], []);
+    expect(requests).toHaveLength(3);
+    expect(requests[0]!.externalActors).toEqual([obstacle]);
+    expect(requests[1]!.externalActors).toEqual([obstacle]);
+    expect(requests[2]!.externalActors).toEqual([]);
   });
 
   it('counts local queues, emergency braking, and completed flow vehicles deterministically', () => {

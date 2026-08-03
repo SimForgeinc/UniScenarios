@@ -9,7 +9,7 @@ import type { ActorView } from '../editor/actorRenderer';
 import type { ActorRenderer } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
 import { evaluateSumoPerformance } from '../playback/traffic-provider/adaptiveFallback';
-import type { ExternalTrafficActor } from '../playback/traffic-provider/protocol';
+import type { ExternalTrafficActor, TrafficStepRequest, TrafficStepResult } from '../playback/traffic-provider/protocol';
 import { SumoWasmTrafficProvider } from '../playback/traffic-provider/sumoWasmProvider';
 import { decodeSumoSignalSnapshot, type SumoSignalTopology } from '../playback/traffic-provider/signalState';
 import type { StudioSessionMode } from '../session/model';
@@ -73,6 +73,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       seenActorIds: new Set(),
       completedActorIds: new Set(),
       occupancyRoads: null,
+      lastExternalActors: [],
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0 });
@@ -97,11 +98,13 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       if (!initialGate.useSumo) throw new Error(`capability gate: ${initialGate.reason}`);
       // Warm the staggered departures before publishing the authoring preview.
       // This keeps the city populated before Play without a visible spawn burst.
-      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current, occupancyRoads) });
+      const initialExternalActors = externalTrafficActors(externals.current, occupancyRoads);
+      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: initialExternalActors });
       if (cancelled) return;
       active.signalTopology = signalTopology;
       active.adjustedSignalControllers = adjustedSignalControllers;
       active.occupancyRoads = occupancyRoads;
+      active.lastExternalActors = initialExternalActors;
       active.stepSamples.push(first.stepMilliseconds);
       const firstMetrics = trafficMetrics(first, options.focus, active);
       options.renderer!.syncLayer('sumo-traffic', decodeSumoActorViews(first, options.sampleHeight!));
@@ -154,17 +157,26 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     // mutable ref inside the queued promise pairs a future pose with an older
     // step interval whenever the worker is briefly backlogged, which makes
     // TraCI report physically impossible implied speeds.
-    const request = {
-      sequence: active.sequence++,
-      deltaSeconds: Math.max(.001, delta),
-      externalActors: externalTrafficActors(externals.current, occupancyRoads),
-    } as const;
+    const targetExternalActors = externalTrafficActors(externals.current, occupancyRoads);
+    const requests = buildSumoCatchUpRequests(
+      active.sequence,
+      Math.max(.001, delta),
+      active.lastExternalActors,
+      targetExternalActors,
+    );
+    active.sequence += requests.length;
+    active.lastExternalActors = targetExternalActors;
     active.stepping = active.stepping.then(async () => {
-      const result = await active.provider.step(request);
-      active.stepSamples.push(result.stepMilliseconds);
-      if (active.stepSamples.length > 120) active.stepSamples.shift();
+      let result: TrafficStepResult | null = null;
+      for (const request of requests) {
+        result = await active.provider.step(request);
+        active.stepSamples.push(result.stepMilliseconds);
+      }
+      if (!result) return;
+      while (active.stepSamples.length > 120) active.stepSamples.shift();
       const p95 = percentile(active.stepSamples, .95);
-      if (active.stepSamples.length >= 20 && p95 > delta * 500) active.missedDeadlines += 1;
+      const requestedStepSeconds = Math.max(...requests.map((request) => request.deltaSeconds));
+      if (active.stepSamples.length >= 20 && p95 > requestedStepSeconds * 500) active.missedDeadlines += 1;
       else active.missedDeadlines = 0;
       if (active.missedDeadlines >= 3) throw new Error(`performance gate: ${p95.toFixed(1)} ms p95 exceeds realtime headroom`);
       options.renderer?.syncLayer('sumo-traffic', decodeSumoActorViews(result, options.sampleHeight!));
@@ -211,6 +223,7 @@ interface SumoTrafficRun {
   signalTopology?: SumoSignalTopology;
   adjustedSignalControllers?: number;
   occupancyRoads: SumoRoadOccupancyIndex | null;
+  lastExternalActors: readonly ExternalTrafficActor[];
 }
 
 export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly actorCount: number }, focus: SumoDemandFocus | null, run: Pick<SumoTrafficRun, 'seenActorIds' | 'completedActorIds'>): Pick<SumoTrafficStatus, 'nearbyActorCount' | 'queuedActorCount' | 'completedActorCount' | 'emergencyStoppingActorCount'> {
@@ -251,6 +264,63 @@ export function externalTrafficActors(
     lengthMeters: actor.lengthM,
     widthMeters: actor.widthM,
   }));
+}
+
+const SUMO_PROXY_SUBSTEP_SECONDS = .05;
+
+/**
+ * A delayed render may advance the editor by several SUMO ticks at once.
+ * Preserve the full elapsed duration and interpolate external poses at every
+ * 50 ms traffic step so moveToXY never observes the whole displacement in the
+ * first substep. Actor births/removals occur only on the final boundary.
+ */
+export function buildSumoCatchUpRequests(
+  firstSequence: number,
+  deltaSeconds: number,
+  previous: readonly ExternalTrafficActor[],
+  current: readonly ExternalTrafficActor[],
+): readonly TrafficStepRequest[] {
+  const count = Math.max(1, Math.ceil(deltaSeconds / SUMO_PROXY_SUBSTEP_SECONDS));
+  const stepSeconds = deltaSeconds / count;
+  const previousById = new Map(previous.map((actor) => [actor.id, actor] as const));
+  const currentById = new Map(current.map((actor) => [actor.id, actor] as const));
+  return Array.from({ length: count }, (_, index) => {
+    const alpha = (index + 1) / count;
+    const final = index === count - 1;
+    const externalActors: ExternalTrafficActor[] = [];
+    for (const before of previous) {
+      const after = currentById.get(before.id);
+      if (!after) {
+        if (!final) externalActors.push(before);
+        continue;
+      }
+      externalActors.push(interpolateExternalActor(before, after, alpha));
+    }
+    if (final) {
+      for (const after of current) if (!previousById.has(after.id)) externalActors.push(after);
+    }
+    return {
+      sequence: firstSequence + index,
+      deltaSeconds: stepSeconds,
+      externalActors,
+    };
+  });
+}
+
+function interpolateExternalActor(before: ExternalTrafficActor, after: ExternalTrafficActor, alpha: number): ExternalTrafficActor {
+  let headingDelta = (after.headingDegrees - before.headingDegrees) % 360;
+  if (headingDelta > 180) headingDelta -= 360;
+  if (headingDelta < -180) headingDelta += 360;
+  return {
+    ...after,
+    x: before.x + (after.x - before.x) * alpha,
+    z: before.z + (after.z - before.z) * alpha,
+    headingDegrees: before.headingDegrees + headingDelta * alpha,
+    speedMetersPerSecond: before.speedMetersPerSecond
+      + (after.speedMetersPerSecond - before.speedMetersPerSecond) * alpha,
+    lengthMeters: before.lengthMeters + (after.lengthMeters - before.lengthMeters) * alpha,
+    widthMeters: before.widthMeters + (after.widthMeters - before.widthMeters) * alpha,
+  };
 }
 
 function percentile(values: readonly number[], fraction: number): number {

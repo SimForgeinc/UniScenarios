@@ -704,9 +704,12 @@ export function App(): JSX.Element {
     externalClock: !playbackBundle,
   });
   const sumoExternalActors = useMemo<readonly SumoExternalActorView[]>(() => {
-    if (authoredPlayback && playbackController) {
+    if (authoredPlayback) {
       const metadata = new Map(authoredPlayback.actors.map((actor) => [actor.id, actor] as const));
-      const actors = playbackController.currentActors.flatMap((actor) => {
+      // Sample the canonical trace at the exact editor clock. The renderer's
+      // cached `currentActors` can legitimately advance in a larger chunk
+      // after a stalled frame and must not be paired with a smaller SUMO tick.
+      const actors = samplePlaybackActors(authoredPlayback, studioSession.state.time).flatMap((actor) => {
         const detail = metadata.get(actor.id);
         if (!detail || !actor.present || actor.id.startsWith('ambient')) return [];
         return [{
@@ -748,7 +751,7 @@ export function App(): JSX.Element {
       static: actor.source === 'prop',
       present: true,
     }));
-  }, [authoredPlayback, playbackController, playbackState?.time, state?.actors, studioSession.state.time]);
+  }, [authoredPlayback, state?.actors, studioSession.state.time]);
   const fallbackToNativeTraffic = useCallback((reason: string) => setSumoFallbackReason(reason), []);
   const sumoDemandFocus = useMemo(() => {
     if (state?.actors.length) {
