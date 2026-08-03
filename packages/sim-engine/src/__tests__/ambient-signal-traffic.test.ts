@@ -41,7 +41,7 @@ describe('ambient signal traffic behavior', () => {
       id: 'authored-follow', rsl: LANE_LEFT, s: 302, speedMps: 9, cruiseSpeedMps: 10,
     });
     const input = scenario(graph, {
-      clipSeconds: 22,
+      clipSeconds: 26,
       warmupSeconds: 0,
       dt: 0.05,
       seed: 'shared-live-driver',

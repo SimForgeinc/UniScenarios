@@ -307,7 +307,7 @@ export function governorCap(
     // envelope. This starts braking earlier while retaining a clean 0.5 m
     // stand-off and the fixed-step deterministic integration.
     const d = stopLineDistM - 0.5 - a.speedMps * driverFor(a).reactionTimeS;
-    const accel = d <= 0.05 || (stopLineDistM <= 5 && a.speedMps < 1.5)
+    const accel = d <= 0.05 || (stopLineDistM <= 6 && a.speedMps < 1.5)
       ? -lim.brakeHard
       : -(a.speedMps * a.speedMps) / (2 * d);
     required = Math.max(required, -accel);
@@ -441,7 +441,7 @@ export function distanceToStopLine(
         // dynamic-v1 can settle a few metres upstream under its bounded brake
         // actuator; that is still a complete, compliant stop, not a reason to
         // wait forever for sub-centimetre path convergence.
-        if (a.speedMps <= 0.05 && d <= 5) {
+        if (a.speedMps <= 0.05 && d <= 6) {
           if (state.stoppedSinceS === null) {
             state.stoppedSinceS = t;
             state.arrivedAtS = t;
