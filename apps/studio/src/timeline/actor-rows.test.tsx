@@ -52,6 +52,15 @@ describe('timeline actor stickers', () => {
     expect(markup).not.toContain('timeline-actor-row-');
     expect(markup).not.toContain('Signals &amp; actors');
     expect(markup).toContain('data-testid="timeline-full-width"');
+    expect(markup).toMatch(/right:4px[^>]+data-placement="top-right"[^>]+data-testid="timeline-actor-sticker-delivery"/);
+    const deliveryCluster = markup.slice(
+      markup.indexOf('data-testid="timeline-actor-sticker-delivery"'),
+      markup.indexOf('data-actor-id="cone"'),
+    );
+    expect(deliveryCluster).toContain('aria-label="Truck or van icon"');
+    expect(deliveryCluster).toContain('data-testid="timeline-delete-actor-delivery"');
+    expect(deliveryCluster).toContain('data-testid="timeline-add-delivery-actions"');
+    expect(deliveryCluster).toContain('aria-label="Add action for Van 1"');
     expect(markup).not.toContain('data-testid="timeline-cone-speed"');
     expect(markup).toContain('aria-label="Object or prop icon"');
     expect(markup).toContain('aria-label="Delete Traffic cone 1"');
