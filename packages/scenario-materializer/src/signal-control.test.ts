@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { SignalProgram } from '@uniscenarios/sim-engine';
+import type { ControlIndication, SignalProgram } from '@uniscenarios/sim-engine';
 import {
   buildSignalControlIndex,
   evaluateSignalReferencePhase,
@@ -57,6 +57,26 @@ describe('signal control index and reference evaluation', () => {
     expect(result.movementStates['east-through']).toBe('red');
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'conflicting_controller_stage' }));
   });
+
+  it.each([
+    ['green', { h1: 'green', h2: 'green', h3: 'red' }],
+    ['yellow', { h1: 'yellow', h2: 'yellow', h3: 'red' }],
+    ['red', { h1: 'red', h2: 'red', h3: 'red' }],
+    ['off', { h1: 'off', h2: 'off', h3: 'red' }],
+    ['flashing_yellow', { h1: 'flashing_yellow', h2: 'flashing_yellow', h3: 'flashing_red' }],
+    ['flashing_red', { h1: 'flashing_red', h2: 'flashing_red', h3: 'flashing_red' }],
+  ] satisfies Array<[ControlIndication, Record<string, ControlIndication>]>) (
+    'derives the complete safe intersection state for reference phase %s',
+    (referencePhase, expected) => {
+      const index = buildSignalControlIndex(programs);
+      const selected = selectSignalReference(index, 'h1')!;
+      expect(evaluateSignalReferencePhase(index, selected, {
+        timeSeconds: 1,
+        referencePhase,
+        movementPhases: { 'east-through': 'green' },
+      }).headStates).toEqual(expected);
+    },
+  );
 
   it('resolves incompatible claims on a shared physical head restrictively', () => {
     const shared: SignalProgram = {

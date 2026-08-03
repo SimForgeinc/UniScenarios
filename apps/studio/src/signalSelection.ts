@@ -20,7 +20,13 @@ export class StudioSignalSelectionModel {
 
   setIndex(index: SignalControlIndex): void {
     this.index = index;
-    if (this.current) this.selectHead(this.current.selectedHeadId, this.current.referenceMovementId);
+    if (!this.current) return;
+    const next = selectSignalReference(index, this.current.selectedHeadId, this.current.referenceMovementId);
+    this.current = next;
+    // The stable selected ids may survive a map reload while controller,
+    // junction, conflict, or diagnostic membership changes. Always publish the
+    // newly derived selection instead of retaining the stale snapshot.
+    for (const listener of this.listeners) listener(next);
   }
 
   selectHead(headId: string, preferredMovementId?: string): SignalReferenceSelection | null {

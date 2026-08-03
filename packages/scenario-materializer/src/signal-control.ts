@@ -73,7 +73,7 @@ export interface SignalReferenceEvaluationInput {
   readonly timeSeconds: number;
   /** The selected reference movement's authored phase at `timeSeconds`. */
   readonly referencePhase: ControlIndication;
-  /** Optional authored phases for sibling movements at the same instant. */
+  /** Optional competing authored requests for sibling movements at the same instant. */
   readonly movementPhases?: Readonly<Record<string, ControlIndication>>;
 }
 
@@ -249,10 +249,6 @@ export function selectSignalReference(
   };
 }
 
-function isPermissive(phase: ControlIndication): boolean {
-  return phase === 'green' || phase === 'green_arrow' || phase === 'proceed' || phase === 'flashing_yellow';
-}
-
 function restrictiveClaim(claims: readonly ControlIndication[]): ControlIndication {
   if (claims.includes('stop')) return 'stop';
   if (claims.includes('red_x')) return 'red_x';
@@ -274,37 +270,24 @@ export function evaluateSignalReferencePhase(
 ): SignalReferenceEvaluationResult {
   const diagnostics: SignalControlDiagnostic[] = [...selection.diagnostics];
   const movementStates: Record<string, ControlIndication> = {};
+  const siblingPhase: ControlIndication = input.referencePhase === 'flashing_red'
+    ? 'flashing_red'
+    : input.referencePhase === 'flashing_yellow'
+      ? 'flashing_red'
+      : 'red';
   for (const movementId of selection.relatedMovementIds) {
+    movementStates[movementId] = movementId === selection.referenceMovementId
+      ? input.referencePhase
+      : siblingPhase;
     const requested = input.movementPhases?.[movementId];
-    if (requested) movementStates[movementId] = requested;
-  }
-  movementStates[selection.referenceMovementId] = input.referencePhase;
-
-  const reference = index.movements.get(selection.referenceMovementId);
-  const referenceControllers = new Set(reference?.controllerIds ?? []);
-  if (isPermissive(input.referencePhase)) {
-    for (const [movementId, phase] of Object.entries(movementStates)) {
-      if (movementId === selection.referenceMovementId || !isPermissive(phase)) continue;
+    if (movementId !== selection.referenceMovementId && requested && requested !== siblingPhase) {
       const movement = index.movements.get(movementId);
-      if (!movement) {
-        diagnostics.push({
-          code: 'unresolved_movement',
-          message: `Authored signal movement ${movementId} is not present in the exact map index.`,
-          movementIds: [movementId],
-        });
-        delete movementStates[movementId];
-        continue;
-      }
-      const sharesStage = movement.controllerIds.some((id) => referenceControllers.has(id));
-      if (!sharesStage) {
-        diagnostics.push({
-          code: 'conflicting_controller_stage',
-          message: `Movement ${movementId} conflicts with selected movement ${selection.referenceMovementId}; it was held red.`,
-          movementIds: [selection.referenceMovementId, movementId],
-          controllerIds: unique([...referenceControllers, ...movement.controllerIds]),
-        });
-        movementStates[movementId] = 'red';
-      }
+      diagnostics.push({
+        code: 'conflicting_controller_stage',
+        message: `Movement ${movementId} requested ${requested} while reference movement ${selection.referenceMovementId} requires ${siblingPhase}; the safe derived state was used.`,
+        movementIds: [selection.referenceMovementId, movementId],
+        controllerIds: unique(movement?.controllerIds ?? []),
+      });
     }
   }
 
