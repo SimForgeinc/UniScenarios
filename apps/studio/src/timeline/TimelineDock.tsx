@@ -20,11 +20,12 @@ export function timelineActorIcon(actorClass: TimelineActorGroup['actorClass'], 
 export function cameraActorForTimelineClick(surface: TimelineClickSurface, actorId: string): string | null { return surface === 'actor-header' ? actorId : null; }
 
 export interface TimelineDockProps { controller: EditorController | null; editorState: EditorState | null; session: StudioSessionApi; outcomes?: readonly TraceOutcomeMarker[]; achievedSpeeds?: Readonly<Record<string, TimelineSpeedSeries>>; rightInset?: number; drawerMode?: boolean; onActorInspect?: (actorId: string) => void; onActorDelete?: (actorId: string) => void; dashCameras?: readonly { id: string; label: string }[]; selectedDashCameraId?: string | null; onDashCameraChange?: (id: string) => void; onCameraPlay?: () => void; onPlayPause?: () => void; signalCatalog?: MapSignalCatalog | null; signalControlDigest?: string | null; selectedSignalHeadId?: string | null; selectedSignalJunctionId?: string | null; selectedSignalControllerId?: string | null; selectedSignalResolved?: boolean; }
-interface ActionEditorState { actorId: string; definitionId: string; time: number; duration: number; maneuverDuration: number; maneuverStyle: 'cautious' | 'normal' | 'assertive'; targetSpeed: number; editingId: string | null; }
+export interface ActionEditorState { actorId: string; definitionId: string; sourceDefinitionId: string | null; time: number; duration: number; timingEditable: boolean; maneuverDuration: number; maneuverStyle: 'cautious' | 'normal' | 'assertive'; targetSpeed: number; editingId: string | null; }
 export interface TimelineSignalDraft { planId: string; clipId: string; startS: number; endS: number; reference: MapSignalPlanClip['reference']; indication: MapSignalPlanClip['indication']; pendingPlan?: MapSignalPlan; }
-export type TimelineActionDraft = Omit<ActionEditorState, 'maneuverDuration' | 'maneuverStyle'> & {
+export type TimelineActionDraft = Omit<ActionEditorState, 'maneuverDuration' | 'maneuverStyle' | 'sourceDefinitionId' | 'timingEditable'> & {
   maneuverDuration?: number;
   maneuverStyle?: 'cautious' | 'normal' | 'assertive';
+  sourceDefinitionId?: string | null;
 };
 export type TimelineActionOutcome = 'pending' | 'executed' | 'missed';
 export function timelineActionOutcome(markers: readonly TraceOutcomeMarker[], interactionId: string): TimelineActionOutcome {
@@ -95,15 +96,20 @@ export function submitTimelineAction(
     const template = document.data;
     const role = template.roles.find((item) => item.id === draft.actorId);
     if (!role) return { ok: false, message: 'This actor no longer exists. Close the dialog and select another actor.' };
+    const existing = draft.editingId
+      ? template.choreography.interactions.find((item) => item.id === draft.editingId)
+      : undefined;
+    if (draft.editingId && !existing) return { ok: false, message: 'This action no longer exists. Close the dialog and select it again.' };
+    const timingEditable = !existing || isTimelineRangeEditable(existing);
     const definition = actionsForActor(role.actor.class, role.actor.catalogId).find((item) => item.id === draft.definitionId);
     if (!definition) return { ok: false, message: 'That action is not available for this actor type.' };
-    if (!Number.isFinite(draft.time) || draft.time < 0 || draft.time > template.choreography.clipSeconds) {
+    if (timingEditable && (!Number.isFinite(draft.time) || draft.time < 0 || draft.time > template.choreography.clipSeconds)) {
       return { ok: false, message: `Start must be between 0 and ${template.choreography.clipSeconds} seconds.` };
     }
-    if (!Number.isFinite(draft.duration) || draft.duration < .1 || draft.duration > 20) {
+    if (timingEditable && (!Number.isFinite(draft.duration) || draft.duration < .1 || draft.duration > 20)) {
       return { ok: false, message: 'Duration must be between 0.1 and 20 seconds.' };
     }
-    if (draft.time + draft.duration > template.choreography.clipSeconds + 1e-9) {
+    if (timingEditable && draft.time + draft.duration > template.choreography.clipSeconds + 1e-9) {
       return { ok: false, message: `This action ends after the ${template.choreography.clipSeconds}-second scenario. Shorten it or move it earlier.` };
     }
     if (definition.id.includes('target_speed') && (!Number.isFinite(draft.targetSpeed) || draft.targetSpeed < 0 || draft.targetSpeed > 200)) {
@@ -130,7 +136,19 @@ export function submitTimelineAction(
     while (!draft.editingId && usedIds.has(interaction.id)) {
       interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ++ordinal, maneuver);
     }
-    if (draft.editingId) interaction = { ...interaction, id: draft.editingId } as Interaction;
+    if (existing) {
+      const originalDefinition = definitionForInteraction(existing, role.actor.class, role.actor.catalogId);
+      const actionChanged = definition.id !== (draft.sourceDefinitionId ?? originalDefinition?.id ?? definition.id);
+      if (!timingEditable) {
+        if (actionChanged) {
+          interaction = withPreservedConditionalTiming(interaction, existing);
+        } else {
+          interaction = updateConditionalInteractionFields(existing, interaction, definition, draft);
+        }
+      } else {
+        interaction = { ...interaction, id: existing.id } as Interaction;
+      }
+    }
     const currentGroup = buildTimelineGroups(template).find((item) => item.actorId === draft.actorId);
     if (!currentGroup) return { ok: false, message: 'The timeline could not find this actor.' };
     const candidate: TimelineItem = {
@@ -150,6 +168,70 @@ export function submitTimelineAction(
     const detail = reason instanceof Error ? reason.message : String(reason);
     return { ok: false, message: `Could not add this action: ${detail}` };
   }
+}
+
+function withPreservedConditionalTiming(generated: Interaction, existing: Interaction): Interaction {
+  const candidate = { ...generated, id: existing.id, trigger: existing.trigger } as Interaction;
+  if (existing.until) return { ...candidate, until: existing.until } as Interaction;
+  const withoutGeneratedUntil = { ...candidate } as Interaction & { until?: Interaction['until'] };
+  delete withoutGeneratedUntil.until;
+  return withoutGeneratedUntil;
+}
+
+function updateConditionalInteractionFields(
+  existing: Interaction,
+  generated: Interaction,
+  definition: ActionDefinition,
+  draft: TimelineActionDraft,
+): Interaction {
+  if (definition.id.includes('target_speed')) {
+    return { ...existing, target: generated.target } as Interaction;
+  }
+  if (existing.verb === 'changeLane' || existing.verb === 'laneOffset') {
+    const maneuverDurationS = draft.maneuverDuration ?? existing.maneuverDurationS
+      ?? (existing.dynamics?.constraint === 'time' ? Number(existing.dynamics.value) : definition.durationS);
+    const maneuverStyle = draft.maneuverStyle ?? existing.maneuverStyle ?? 'normal';
+    return {
+      ...existing,
+      maneuverDurationS,
+      maneuverStyle,
+      ...(existing.dynamics?.constraint === 'time'
+        ? { dynamics: { ...existing.dynamics, value: maneuverDurationS } }
+        : {}),
+    } as Interaction;
+  }
+  return existing;
+}
+
+export function actionEditorStateForItem(item: TimelineItem, group: TimelineActorGroup): ActionEditorState | null {
+  const choices = actionsForActor(group.actorClass, group.catalogId);
+  const definition = definitionForInteraction(item.interaction, group.actorClass, group.catalogId)
+    ?? (item.interaction.verb === 'speed' && item.interaction.target.mode === 'absolute'
+      ? choices.find((choice) => choice.id.includes('target_speed'))
+      : undefined)
+    ?? choices.find((choice) => choice.verb === item.interaction.verb && choice.resource === item.resource)
+    ?? choices[0];
+  if (!definition) return null;
+  const lateral = item.interaction.verb === 'changeLane' || item.interaction.verb === 'laneOffset'
+    ? item.interaction
+    : null;
+  const legacyDuration = lateral?.dynamics?.constraint === 'time' && typeof lateral.dynamics.value === 'number'
+    ? lateral.dynamics.value
+    : definition.durationS;
+  return {
+    actorId: item.actorId,
+    definitionId: definition.id,
+    sourceDefinitionId: definition.id,
+    time: item.anchorTime,
+    duration: Math.max(.1, item.endTime - item.anchorTime),
+    timingEditable: isTimelineRangeEditable(item.interaction),
+    maneuverDuration: lateral && typeof lateral.maneuverDurationS === 'number' ? lateral.maneuverDurationS : legacyDuration,
+    maneuverStyle: lateral?.maneuverStyle ?? 'normal',
+    targetSpeed: item.interaction.verb === 'speed' && item.interaction.target.mode === 'absolute' && typeof item.interaction.target.valueKph === 'number'
+      ? item.interaction.target.valueKph
+      : Number(definition.target.valueKph ?? 30),
+    editingId: item.interaction.id,
+  };
 }
 
 export function TimelineDock({ controller, editorState, session, outcomes = [], rightInset = 16, drawerMode = false, onActorInspect, onActorDelete, dashCameras = [], selectedDashCameraId = null, onDashCameraChange, onCameraPlay, onPlayPause, signalCatalog = null, signalControlDigest = null, selectedSignalHeadId = null, selectedSignalJunctionId = null, selectedSignalControllerId = null, selectedSignalResolved = true }: TimelineDockProps): JSX.Element {
@@ -176,8 +258,8 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
   }, [selectedSignalControllerId, selectedSignalHeadId, selectedSignalJunctionId, signalChoices]);
   useEffect(() => { if (readonly) { setEditor(null); setSignalEditor(null); setNotice(null); setClipPreview(null); } }, [readonly]);
   const groupFor = (actorId: string) => groups.find((group) => group.actorId === actorId);
-  const openNew = (actorId: string, time = session.state.time): void => { const group = groupFor(actorId); if (!group || readonly) return; const choices = actionsForActor(group.actorClass, group.catalogId); if (!choices.length) return; setEditor({ actorId, definitionId: choices[0]!.id, time: clamp(time, 0, duration), duration: choices[0]!.durationS, maneuverDuration: choices[0]!.durationS, maneuverStyle: 'normal', targetSpeed: Number(choices[0]!.target.valueKph ?? 30), editingId: null }); setSelectedInteraction(null); setNotice(null); };
-  const selectItem = (item: TimelineItem): void => { const group = groupFor(item.actorId); if (!group) return; const choices = actionsForActor(group.actorClass, group.catalogId); const definition = definitionForInteraction(item.interaction, group.actorClass, group.catalogId) ?? choices.find((choice) => choice.verb === item.interaction.verb && choice.resource === item.resource) ?? choices[0]; if (!definition) return; const lateral = item.interaction.verb === 'changeLane' || item.interaction.verb === 'laneOffset' ? item.interaction : null; const legacyDuration = lateral?.dynamics?.constraint === 'time' && typeof lateral.dynamics.value === 'number' ? lateral.dynamics.value : definition.durationS; setSelectedInteraction(item.interaction.id); setEditor({ actorId: item.actorId, definitionId: definition.id, time: item.anchorTime, duration: Math.max(.1, item.endTime - item.anchorTime), maneuverDuration: lateral && typeof lateral.maneuverDurationS === 'number' ? lateral.maneuverDurationS : legacyDuration, maneuverStyle: lateral?.maneuverStyle ?? 'normal', targetSpeed: item.interaction.verb === 'speed' && item.interaction.target.mode === 'absolute' && typeof item.interaction.target.valueKph === 'number' ? item.interaction.target.valueKph : Number(definition.target.valueKph ?? 30), editingId: item.interaction.id }); controller?.setSelection([item.actorId]); };
+  const openNew = (actorId: string, time = session.state.time): void => { const group = groupFor(actorId); if (!group || readonly) return; const choices = actionsForActor(group.actorClass, group.catalogId); if (!choices.length) return; setEditor({ actorId, definitionId: choices[0]!.id, sourceDefinitionId: null, time: clamp(time, 0, duration), duration: choices[0]!.durationS, timingEditable: true, maneuverDuration: choices[0]!.durationS, maneuverStyle: 'normal', targetSpeed: Number(choices[0]!.target.valueKph ?? 30), editingId: null }); setSelectedInteraction(null); setNotice(null); };
+  const selectItem = (item: TimelineItem): void => { const group = groupFor(item.actorId); if (!group) return; const state = actionEditorStateForItem(item, group); if (!state) return; setSelectedInteraction(item.interaction.id); setEditor(state); controller?.setSelection([item.actorId]); };
   const saveEditor = (): void => {
     if (!editor) { setNotice('The action dialog lost its draft. Close it and try again.'); return; }
     if (!controller) { setNotice('The editor is still loading. Try again in a moment.'); return; }
@@ -257,7 +339,7 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
   </section>;
 }
 
-function ActionEditor({ state, group, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element {
+export function ActionEditor({ state, group, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element {
   const choices = actionsForActor(group.actorClass, group.catalogId);
   const selected = choices.find((item) => item.id === state.definitionId) ?? choices[0]!;
   const grouped = [...new Set(choices.map((item) => item.group))];
@@ -267,10 +349,10 @@ function ActionEditor({ state, group, readOnly, rightInset, onChange, onSave, on
     <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, maneuverDuration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
       {selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}
-      <label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} data-testid="interaction-time" /></label>
-      <label style={styles.field}><span>Window</span><input type="number" min={.1} max={20} step={.1} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} data-testid="interaction-window-duration" /></label>
+      <label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be retimed here.' : undefined} data-testid="interaction-time" /></label>
+      <label style={styles.field}><span>Window</span><input type="number" min={.1} max={20} step={.1} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be resized here.' : undefined} data-testid="interaction-window-duration" /></label>
       {lateral ? <><label style={styles.field}><span>Maneuver</span><span><input type="number" min={.1} max={30} step={.1} value={state.maneuverDuration} onChange={(event) => onChange({ ...state, maneuverDuration: Number(event.target.value) })} data-testid="maneuver-duration" /> s</span></label><label style={styles.field}><span>Style</span><select value={state.maneuverStyle} onChange={(event) => onChange({ ...state, maneuverStyle: event.target.value as ActionEditorState['maneuverStyle'] })} data-testid="maneuver-style"><option value="cautious">Cautious</option><option value="normal">Normal</option><option value="assertive">Assertive</option></select></label></> : null}
-      <div style={styles.resourceHint}>{lateral ? 'The window controls when this action may start. Maneuver duration controls the gradual physical motion.' : `Only one ${selected.resource} action can run at once; different resources run in parallel.`}</div>
+      <div style={styles.resourceHint}>{!state.timingEditable ? 'This action uses a conditional trigger or end condition. Its timing is preserved; edit the condition in the advanced scenario editor.' : lateral ? 'The window controls when this action may start. Maneuver duration controls the gradual physical motion.' : `Only one ${selected.resource} action can run at once; different resources run in parallel.`}</div>
       <div style={styles.editorActions}><button type="submit" disabled={readOnly} style={styles.save} data-testid="save-interaction">{state.editingId ? 'Update' : 'Add to timeline'}</button>{onDelete ? <button type="button" onClick={onDelete} style={styles.delete}>Delete</button> : null}</div>
     </form>
   </aside>;
