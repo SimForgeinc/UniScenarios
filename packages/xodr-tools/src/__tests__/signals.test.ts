@@ -1,17 +1,22 @@
-import { Group, InstancedMesh, Matrix4 } from 'three';
+import { BufferAttribute, Group, InstancedMesh, Matrix4, Points, ShaderMaterial } from 'three';
 import { describe, expect, it } from 'vitest';
 import { CoordinateFrame } from '../coordinate-frame.js';
 import { MissingHeightError } from '../overlays/height.js';
 import { signalsFromGeoJson } from '../signals.js';
 import {
   buildSignalOverlay,
+  buildTrafficLightOrbLayer,
+  clearTrafficLightOrbStates,
   clearTrafficLightStates,
+  setTrafficLightOrbDepthMode,
+  setTrafficLightOrbStates,
   setTrafficLightStates,
   signalIdForHit,
   signalPlacement,
   type SignalHeadUserData,
   type SignalOverlayUserData,
   type TrafficLightStateUserData,
+  type TrafficLightOrbLayerUserData,
 } from '../overlays/signals.js';
 import { yaleHeaderText, yaleManifest, yaleSignals } from './fixtures.js';
 
@@ -129,6 +134,71 @@ describe('signalsFromGeoJson', () => {
 });
 
 describe('buildSignalOverlay', () => {
+  it('builds one independent, batched editor orb for every physical Yale head', async () => {
+    const signals = await load();
+    const furniture = buildSignalOverlay(signals, { heightSampler: () => 12 });
+    furniture.visible = false;
+    const orbs = buildTrafficLightOrbLayer(furniture);
+    const data = orbs.userData as TrafficLightOrbLayerUserData;
+    const points = orbs.getObjectByName('traffic-light-orb-points') as Points;
+    expect(data.count).toBe(59);
+    expect(data.signalIds).toHaveLength(59);
+    expect(new Set(data.signalIds).size).toBe(59);
+    expect(Object.values(data.states).every((state) => state === 'unknown')).toBe(true);
+    expect(points.geometry.getAttribute('position').count).toBe(59);
+    expect((points.material as ShaderMaterial).uniforms.pointSize!.value).toBe(18);
+    expect(orbs.visible).toBe(true);
+    // A sibling layer remains independently visible when furniture is hidden.
+    expect(furniture.visible).toBe(false);
+  });
+
+  it('updates, flashes, and resets orb state in place without rebuilding geometry', async () => {
+    const furniture = buildSignalOverlay(await load());
+    const orbs = buildTrafficLightOrbLayer(furniture);
+    const points = orbs.getObjectByName('traffic-light-orb-points') as Points;
+    const geometry = points.geometry;
+    const colors = geometry.getAttribute('color') as BufferAttribute;
+    const ids = (orbs.userData as TrafficLightOrbLayerUserData).signalIds.slice(0, 4);
+    expect(setTrafficLightOrbStates(orbs, {
+      [ids[0]!]: 'red',
+      [ids[1]!]: 'yellow',
+      [ids[2]!]: 'green',
+      [ids[3]!]: 'flashing_red',
+      missing: 'green',
+    })).toBe(4);
+    expect(points.geometry).toBe(geometry);
+    const red = [colors.getX(0), colors.getY(0), colors.getZ(0)];
+    const yellow = [colors.getX(1), colors.getY(1), colors.getZ(1)];
+    const green = [colors.getX(2), colors.getY(2), colors.getZ(2)];
+    expect(red[0]!).toBeGreaterThan(red[1]!);
+    expect(yellow[0]!).toBeGreaterThan(yellow[2]!);
+    expect(green[1]!).toBeGreaterThan(green[0]!);
+    setTrafficLightOrbStates(orbs, { [ids[3]!]: 'flashing_red' }, false);
+    expect(colors.getX(3)).toBeLessThan(red[0]!);
+    clearTrafficLightOrbStates(orbs);
+    expect(points.geometry).toBe(geometry);
+    expect(Object.values((orbs.userData as TrafficLightOrbLayerUserData).states)
+      .every((state) => state === 'unknown')).toBe(true);
+  });
+
+  it('supports scene-depth and x-ray modes and produces no points for maps without heads', async () => {
+    const orbs = buildTrafficLightOrbLayer(buildSignalOverlay(await load()), { depthMode: 'scene' });
+    const points = orbs.getObjectByName('traffic-light-orb-points') as Points<never, ShaderMaterial>;
+    expect(points.material.depthTest).toBe(true);
+    setTrafficLightOrbDepthMode(orbs, 'xray');
+    expect(points.material.depthTest).toBe(false);
+    expect(points.renderOrder).toBe(100);
+    orbs.visible = false;
+    expect(orbs.visible).toBe(false);
+
+    // Belmont and Easterbrook have no traffic-light features: their input is
+    // equivalent to an empty filtered overlay and must cost zero marker draws.
+    const empty = buildTrafficLightOrbLayer(buildSignalOverlay([]));
+    expect((empty.userData as TrafficLightOrbLayerUserData).count).toBe(0);
+    expect((empty.getObjectByName('traffic-light-orb-points') as Points).geometry
+      .getAttribute('position').count).toBe(0);
+  });
+
   it('renders and clears one live active-lamp state per physical traffic-light head', async () => {
     const signals = await load();
     const group = buildSignalOverlay(signals);

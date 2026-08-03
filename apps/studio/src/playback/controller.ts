@@ -44,7 +44,7 @@ export interface PlaybackControllerOptions {
   viewer: CityViewer;
   bundle: PlaybackBundle;
   sampleHeight: (x: number, z: number) => number | null;
-  setSignalStates?: (states: Readonly<Record<string, ControlIndication>>) => number;
+  setSignalStates?: (states: Readonly<Record<string, ControlIndication>>, timeSeconds: number) => number;
   clearSignalStates?: () => void;
   /** Auto framing is opt-in. Authored/free/editor policies preserve the user's view. */
   cameraPolicy?: CameraPolicy;
@@ -540,7 +540,7 @@ export class PlaybackController {
       for (const headId of signal.headIds) headStates[headId] = signal.phase;
     }
     if (Object.keys(headStates).length > 0) {
-      this.renderedSignalHeadCount = this.options.setSignalStates?.(headStates) ?? 0;
+      this.renderedSignalHeadCount = this.options.setSignalStates?.(headStates, this.time) ?? 0;
     } else {
       this.options.clearSignalStates?.();
       this.renderedSignalHeadCount = 0;

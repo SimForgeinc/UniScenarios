@@ -46,6 +46,7 @@ import {
   Points,
   PointsMaterial,
   Quaternion,
+  ShaderMaterial,
   Vector3,
   type Intersection,
   type Material,
@@ -141,6 +142,28 @@ export interface TrafficLightStateUserData {
   layer: 'traffic-light-state';
   states: Record<string, TrafficLightVisualPhase>;
   count: number;
+}
+
+export type TrafficLightOrbPhase = TrafficLightVisualPhase | 'unknown';
+export type TrafficLightOrbDepthMode = 'scene' | 'xray';
+
+export interface TrafficLightOrbLayerOptions {
+  /** Screen-space diameter in CSS-like pixels. Default `18`. */
+  size?: number;
+  /** Height above the physical head centre in metres. Default `1.8`. */
+  heightOffset?: number;
+  /** Whether buildings may occlude the editor marker. Default `xray`. */
+  depthMode?: TrafficLightOrbDepthMode;
+}
+
+export interface TrafficLightOrbLayerUserData {
+  layer: 'traffic-light-orbs';
+  /** Stable signal id per point-buffer index. */
+  signalIds: string[];
+  /** Current editor-visible state, including unknown heads. */
+  states: Record<string, TrafficLightOrbPhase>;
+  count: number;
+  depthMode: TrafficLightOrbDepthMode;
 }
 
 function srgbBytes(hex: number): [number, number, number] {
@@ -503,6 +526,145 @@ const TRAFFIC_LIGHT_PHASE_Y: Record<TrafficLightVisualPhase, number> = {
   proceed: -0.28,
   stop: 0.28,
 };
+
+const TRAFFIC_LIGHT_ORB_COLOR: Record<TrafficLightOrbPhase, number> = {
+  ...TRAFFIC_LIGHT_PHASE_COLOR,
+  // Unknown is intentionally distinct from a known dark/off controller.
+  unknown: 0x94a3b8,
+  off: 0x30363d,
+};
+const TRAFFIC_LIGHT_ORB_RGB = Object.fromEntries(
+  Object.entries(TRAFFIC_LIGHT_ORB_COLOR).map(([phase, color]) => [phase, srgbBytes(color)]),
+) as Record<TrafficLightOrbPhase, [number, number, number]>;
+
+const ORB_VERTEX_SHADER = /* glsl */ `
+  uniform float pointSize;
+  attribute vec3 color;
+  varying vec3 pointColor;
+  void main() {
+    pointColor = color;
+    gl_PointSize = pointSize;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const ORB_FRAGMENT_SHADER = /* glsl */ `
+  varying vec3 pointColor;
+  void main() {
+    vec2 centered = gl_PointCoord - vec2(0.5);
+    float radius = length(centered);
+    if (radius > 0.5) discard;
+    float edge = smoothstep(0.5, 0.42, radius);
+    float highlight = smoothstep(0.3, 0.0, length(centered - vec2(-0.12, 0.12)));
+    vec3 color = pointColor * (0.88 + 0.3 * highlight);
+    gl_FragColor = vec4(color, edge);
+  }
+`;
+
+/**
+ * Build the editor's always-readable traffic-signal state layer.
+ *
+ * The returned group is deliberately a sibling of the detailed signal overlay:
+ * hiding lane polygons or physical signal furniture cannot hide these markers.
+ * Positions and colours are allocated once; timeline scrubs mutate only the
+ * existing colour attribute.
+ */
+export function buildTrafficLightOrbLayer(
+  signalOverlay: Object3D,
+  options: TrafficLightOrbLayerOptions = {},
+): Group {
+  const { size = 18, heightOffset = 1.8, depthMode = 'xray' } = options;
+  const group = new Group();
+  group.name = 'traffic-light-orbs';
+  const byId = (signalOverlay.userData as Partial<SignalOverlayUserData>).byId ?? {};
+  const placements = Object.values(byId)
+    .filter((placement) => placement.category === 'traffic_light')
+    .sort((a, b) => a.signal.id.localeCompare(b.signal.id));
+  const signalIds = placements.map((placement) => placement.signal.id);
+  const states: Record<string, TrafficLightOrbPhase> = {};
+  const positions = new Float32Array(placements.length * 3);
+  const colors = new Float32Array(placements.length * 3);
+  const unknown = TRAFFIC_LIGHT_ORB_RGB.unknown;
+  for (let index = 0; index < placements.length; index++) {
+    const placement = placements[index]!;
+    const offset = index * 3;
+    positions[offset] = placement.position[0];
+    positions[offset + 1] = placement.position[1] + heightOffset;
+    positions[offset + 2] = placement.position[2];
+    colors.set(unknown, offset);
+    states[placement.signal.id] = 'unknown';
+  }
+  const geometry = new BufferGeometry();
+  geometry.setAttribute('position', new BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  geometry.computeBoundingSphere();
+  const xray = depthMode === 'xray';
+  const material = new ShaderMaterial({
+    uniforms: { pointSize: { value: size } },
+    vertexShader: ORB_VERTEX_SHADER,
+    fragmentShader: ORB_FRAGMENT_SHADER,
+    vertexColors: true,
+    transparent: true,
+    depthTest: !xray,
+    depthWrite: false,
+    toneMapped: false,
+  });
+  const points = new Points(geometry, material);
+  points.name = 'traffic-light-orb-points';
+  points.frustumCulled = false;
+  points.renderOrder = xray ? 100 : 14;
+  group.add(points);
+  group.userData = {
+    layer: 'traffic-light-orbs',
+    signalIds,
+    states,
+    count: placements.length,
+    depthMode,
+  } satisfies TrafficLightOrbLayerUserData;
+  return group;
+}
+
+/** Update orb colours in place. Missing heads return to the neutral unknown state. */
+export function setTrafficLightOrbStates(
+  group: Object3D,
+  states: Readonly<Record<string, TrafficLightVisualPhase>>,
+  flashOn = true,
+): number {
+  const data = group.userData as Partial<TrafficLightOrbLayerUserData>;
+  const points = group.getObjectByName('traffic-light-orb-points') as Points | undefined;
+  const attribute = points?.geometry.getAttribute('color') as BufferAttribute | undefined;
+  if (data.layer !== 'traffic-light-orbs' || !data.signalIds || !attribute) return 0;
+  const current = data.states ?? {};
+  let applied = 0;
+  for (let index = 0; index < data.signalIds.length; index++) {
+    const id = data.signalIds[index]!;
+    const requested = states[id];
+    const phase: TrafficLightOrbPhase = requested ?? 'unknown';
+    const flashingOff = (phase === 'flashing_red' || phase === 'flashing_yellow') && !flashOn;
+    const color = TRAFFIC_LIGHT_ORB_RGB[flashingOff ? 'off' : phase];
+    attribute.setXYZ(index, color[0], color[1], color[2]);
+    current[id] = phase;
+    if (requested !== undefined) applied++;
+  }
+  attribute.needsUpdate = true;
+  data.states = current;
+  return applied;
+}
+
+/** Reset every orb to unknown without removing or reallocating the point cloud. */
+export function clearTrafficLightOrbStates(group: Object3D): void {
+  setTrafficLightOrbStates(group, {});
+}
+
+export function setTrafficLightOrbDepthMode(group: Object3D, mode: TrafficLightOrbDepthMode): void {
+  const data = group.userData as Partial<TrafficLightOrbLayerUserData>;
+  const points = group.getObjectByName('traffic-light-orb-points') as Points<BufferGeometry, ShaderMaterial> | undefined;
+  if (data.layer !== 'traffic-light-orbs' || !points) return;
+  points.material.depthTest = mode === 'scene';
+  points.material.needsUpdate = true;
+  points.renderOrder = mode === 'xray' ? 100 : 14;
+  data.depthMode = mode;
+}
 
 /**
  * Draw the active lamp for each physical map head as one point-cloud draw.

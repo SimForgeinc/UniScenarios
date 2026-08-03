@@ -49,16 +49,20 @@ import {
   CoordinateFrame,
   buildLaneOverlay,
   buildSignalOverlay,
-  clearTrafficLightStates,
+  buildTrafficLightOrbLayer,
+  clearTrafficLightOrbStates,
   fetchXodrHeader,
   loadLanePolygons,
   loadSignals,
-  setTrafficLightStates,
+  setTrafficLightOrbDepthMode,
+  setTrafficLightOrbStates,
   type CalibrationReport,
   type LaneOverlayUserData,
   type SceneManifestLike,
   type SignalOverlayUserData,
   type TrafficLightVisualPhase,
+  type TrafficLightOrbDepthMode,
+  type TrafficLightOrbLayerUserData,
 } from '@uniscenarios/xodr-tools';
 
 /** Where a map's overlay sidecars live. */
@@ -87,6 +91,8 @@ export interface MapOverlayStats {
   signalsSkipped: number;
   /** Draw calls the signal layer costs — one per category plus poles and crosswalks. */
   signalDrawCalls: number;
+  /** Physical traffic-light heads represented by editor state orbs. */
+  signalOrbCount: number;
   /** Where each lane/signal vertex height came from. */
   heights: { direct: number; near: number; datum: number };
   /** Ground datum used for rung 3, in scene Y. */
@@ -103,6 +109,8 @@ export interface MapOverlayHandle {
   readonly group: Group;
   readonly lanes: Group;
   readonly signals: Group;
+  /** Editor-only signal state markers, independent from detailed furniture. */
+  readonly signalOrbs: Group;
   readonly stats: MapOverlayStats;
   /** Height lookup used for draping — reusable for actor placement and picking. */
   readonly sampleHeight: (x: number, z: number) => number;
@@ -110,8 +118,10 @@ export interface MapOverlayHandle {
   setVisible(layer: MapOverlayLayer, visible: boolean): void;
   isVisible(layer: MapOverlayLayer): boolean;
   /** Update physical signal heads from the concrete simulation trace. */
-  setSignalStates(states: Readonly<Record<string, TrafficLightVisualPhase>>): number;
+  setSignalStates(states: Readonly<Record<string, TrafficLightVisualPhase>>, timeSeconds?: number): number;
   clearSignalStates(): void;
+  setSignalOrbsVisible(visible: boolean): void;
+  setSignalOrbDepthMode(mode: TrafficLightOrbDepthMode): void;
   /** Detach from the scene and release GPU resources. */
   dispose(): void;
 }
@@ -126,6 +136,8 @@ export interface MapOverlayOptions {
   pollMs?: number;
   /** Which layers start visible. Default `{ lanes: true, signals: false }`. */
   initialVisibility?: Partial<Record<MapOverlayLayer, boolean>>;
+  /** Initial editor signal-marker presentation. */
+  initialSignalOrbs?: { visible?: boolean; depthMode?: TrafficLightOrbDepthMode };
   /** Abort the load (component unmount). */
   signal?: AbortSignal;
 }
@@ -246,6 +258,9 @@ export async function loadMapOverlays(
   const tBuild = now();
   const laneGroup = buildLaneOverlay(lanes, { heightSampler: sampleHeight });
   const signalGroup = buildSignalOverlay(signals, { heightSampler: sampleHeight });
+  const signalOrbGroup = buildTrafficLightOrbLayer(signalGroup, {
+    depthMode: options.initialSignalOrbs?.depthMode ?? 'xray',
+  });
   const buildMs = now() - tBuild;
 
   const group = new Group();
@@ -253,7 +268,7 @@ export async function loadMapOverlays(
   // Overlays are decorations on a static map; skipping the per-frame matrix
   // recompute keeps them off the hot path entirely.
   group.matrixAutoUpdate = false;
-  group.add(laneGroup, signalGroup);
+  group.add(laneGroup, signalGroup, signalOrbGroup);
   group.updateMatrixWorld(true);
 
   const visibility: Record<MapOverlayLayer, boolean> = {
@@ -262,6 +277,7 @@ export async function loadMapOverlays(
   };
   laneGroup.visible = visibility.lanes;
   signalGroup.visible = visibility.signals;
+  signalOrbGroup.visible = options.initialSignalOrbs?.visible ?? true;
 
   if (signal?.aborted) {
     disposeGroup(group);
@@ -278,6 +294,7 @@ export async function loadMapOverlays(
     signalCount: signalData.signalCount,
     signalsSkipped: signals.length - signalData.signalCount,
     signalDrawCalls: signalData.drawCalls,
+    signalOrbCount: (signalOrbGroup.userData as TrafficLightOrbLayerUserData).count,
     heights: { ...heights },
     datum,
     ground: {
@@ -293,6 +310,7 @@ export async function loadMapOverlays(
     group,
     lanes: laneGroup,
     signals: signalGroup,
+    signalOrbs: signalOrbGroup,
     stats,
     sampleHeight,
     setVisible(layer, visible) {
@@ -302,11 +320,20 @@ export async function loadMapOverlays(
     isVisible(layer) {
       return visibility[layer];
     },
-    setSignalStates(states) {
-      return setTrafficLightStates(signalGroup, states);
+    setSignalStates(states, timeSeconds = 0) {
+      // Flashing is deterministic under scrubbing and naturally animates while
+      // playback samples advance; no timer or per-frame object allocation.
+      const flashOn = Math.floor(Math.max(0, timeSeconds) * 2) % 2 === 0;
+      return setTrafficLightOrbStates(signalOrbGroup, states, flashOn);
     },
     clearSignalStates() {
-      clearTrafficLightStates(signalGroup);
+      clearTrafficLightOrbStates(signalOrbGroup);
+    },
+    setSignalOrbsVisible(visible) {
+      signalOrbGroup.visible = visible;
+    },
+    setSignalOrbDepthMode(mode) {
+      setTrafficLightOrbDepthMode(signalOrbGroup, mode);
     },
     dispose() {
       viewer.scene.remove(group);

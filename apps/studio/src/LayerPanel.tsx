@@ -94,11 +94,37 @@ export function SettingsPanel({
           <span>{key === 'lanes' ? 'Road overlay' : 'Traffic-light overlay'}</span>
         </label>
       ))}
+      <label style={{ ...styles.check, opacity: overlays ? 1 : 0.45 }}>
+        <input
+          type="checkbox"
+          data-testid="signal-orbs-visible"
+          checked={settings.signalOrbs.visible}
+          disabled={!overlays}
+          onChange={() => onSettingsChange({
+            ...settings,
+            signalOrbs: { ...settings.signalOrbs, visible: !settings.signalOrbs.visible },
+          })}
+        />
+        <span>Traffic signal orbs</span>
+      </label>
+      <label style={{ ...styles.check, opacity: overlays && settings.signalOrbs.visible ? 1 : 0.45 }}>
+        <input
+          type="checkbox"
+          data-testid="signal-orbs-xray"
+          checked={settings.signalOrbs.xray}
+          disabled={!overlays || !settings.signalOrbs.visible}
+          onChange={() => onSettingsChange({
+            ...settings,
+            signalOrbs: { ...settings.signalOrbs, xray: !settings.signalOrbs.xray },
+          })}
+        />
+        <span>Show signal orbs through buildings</span>
+      </label>
       <div style={styles.hint}>
         {overlayError
           ? `overlay error: ${overlayError}`
           : overlays
-            ? `${overlays.stats.laneCount} lanes · ${overlays.stats.signalCount} signals · ${overlays.stats.signalDrawCalls} draws`
+            ? `${overlays.stats.laneCount} lanes · ${overlays.stats.signalOrbCount} signal orbs · ${overlays.stats.signalDrawCalls} draws`
             : 'loading after map settle…'}
       </div>
 

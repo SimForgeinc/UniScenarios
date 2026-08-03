@@ -99,8 +99,12 @@ export {
 
 export {
   buildSignalOverlay,
+  buildTrafficLightOrbLayer,
   clearTrafficLightStates,
+  clearTrafficLightOrbStates,
   setTrafficLightStates,
+  setTrafficLightOrbDepthMode,
+  setTrafficLightOrbStates,
   signalIdForHit,
   signalPlacement,
   SIGNAL_CATEGORY_COLORS,
@@ -109,5 +113,9 @@ export {
   type SignalOverlayUserData,
   type SignalPlacement,
   type TrafficLightStateUserData,
+  type TrafficLightOrbDepthMode,
+  type TrafficLightOrbLayerOptions,
+  type TrafficLightOrbLayerUserData,
+  type TrafficLightOrbPhase,
   type TrafficLightVisualPhase,
 } from './overlays/signals.js';

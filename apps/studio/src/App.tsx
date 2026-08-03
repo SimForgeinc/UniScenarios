@@ -256,7 +256,14 @@ export function App(): JSX.Element {
     loadMapOverlays(
       viewer,
       { xodr: map.xodr, manifest: map.manifest, lanePolygons: map.lanePolygons, signals: map.signals },
-      { signal: controller.signal, initialVisibility: viewSettingsRef.current.overlays },
+      {
+        signal: controller.signal,
+        initialVisibility: viewSettingsRef.current.overlays,
+        initialSignalOrbs: {
+          visible: viewSettingsRef.current.signalOrbs.visible,
+          depthMode: viewSettingsRef.current.signalOrbs.xray ? 'xray' : 'scene',
+        },
+      },
     )
       .then((next) => {
         if (controller.signal.aborted) {
@@ -293,6 +300,8 @@ export function App(): JSX.Element {
     }
     overlays?.setVisible('lanes', viewSettings.overlays.lanes);
     overlays?.setVisible('signals', viewSettings.overlays.signals);
+    overlays?.setSignalOrbsVisible(viewSettings.signalOrbs.visible);
+    overlays?.setSignalOrbDepthMode(viewSettings.signalOrbs.xray ? 'xray' : 'scene');
   }, [overlays, viewer, viewSettings]);
 
   /**

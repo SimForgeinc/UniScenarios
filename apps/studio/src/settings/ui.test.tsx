@@ -70,11 +70,13 @@ describe('simplified editor settings UI', () => {
     expect(markup).toContain('Every moving actor uses its class-native dynamic-v1 profile');
   });
 
-  it('keeps road and traffic-light overlays off and diagnostics hidden by default', () => {
+  it('keeps detailed overlays off, signal orbs on, and diagnostics hidden by default', () => {
     const markup = renderSettings(false);
     expect(markup).toContain('Road overlay');
     expect(markup).toContain('Traffic-light overlay');
     expect(markup.match(/data-testid="overlay-(?:lanes|signals)"/g)).toHaveLength(2);
+    expect(markup).toMatch(/data-testid="signal-orbs-visible"[^>]*checked=""/);
+    expect(markup).toMatch(/data-testid="signal-orbs-xray"[^>]*checked=""/);
     expect(markup).not.toContain('data-testid="debug-diagnostics"');
     expect(markup).toContain('data-testid="rendering-quality-panel"');
     expect(markup).not.toContain('data-testid="hud"');

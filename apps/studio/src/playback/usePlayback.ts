@@ -50,7 +50,7 @@ export function usePlayback({
         viewer,
         bundle,
         sampleHeight,
-        setSignalStates: (states) => overlays?.setSignalStates(states) ?? 0,
+        setSignalStates: (states, timeSeconds) => overlays?.setSignalStates(states, timeSeconds) ?? 0,
         clearSignalStates: () => overlays?.clearSignalStates(),
         ...(cameraPolicy ? { cameraPolicy } : {}),
         ...(cameraView ? { cameraView } : {}),

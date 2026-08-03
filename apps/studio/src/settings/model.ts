@@ -1,6 +1,7 @@
 import type { MapOverlayLayer } from '../mapOverlays';
 
-export const STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v3';
+export const STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v4';
+export const PREVIOUS_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v3';
 export const REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v2';
 export const LEGACY_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v1';
 
@@ -25,6 +26,10 @@ export interface StudioViewSettings {
     road: boolean;
   };
   overlays: Record<MapOverlayLayer, boolean>;
+  signalOrbs: {
+    visible: boolean;
+    xray: boolean;
+  };
   debugGraphics: boolean;
   routes: {
     visible: boolean;
@@ -38,6 +43,7 @@ export interface StudioViewSettings {
 export const DEFAULT_STUDIO_VIEW_SETTINGS: StudioViewSettings = Object.freeze({
   layers: Object.freeze({ city: true, vegetation: true, road: true }),
   overlays: Object.freeze({ lanes: false, signals: false }),
+  signalOrbs: Object.freeze({ visible: true, xray: true }),
   debugGraphics: false,
   routes: Object.freeze({ visible: true, ambient: false, actual: false, duringPlayback: true }),
   controls: Object.freeze({
@@ -78,6 +84,10 @@ export function parseStudioViewSettings(value: unknown): StudioViewSettings {
       lanes: typeof overlays.lanes === 'boolean' ? overlays.lanes : false,
       signals: typeof overlays.signals === 'boolean' ? overlays.signals : false,
     },
+    signalOrbs: {
+      visible: typeof input.signalOrbs?.visible === 'boolean' ? input.signalOrbs.visible : true,
+      xray: typeof input.signalOrbs?.xray === 'boolean' ? input.signalOrbs.xray : true,
+    },
     debugGraphics: typeof input.debugGraphics === 'boolean' ? input.debugGraphics : false,
     routes: {
       visible: typeof input.routes?.visible === 'boolean' ? input.routes.visible : true,
@@ -105,6 +115,7 @@ export function loadStudioViewSettings(storage: Pick<Storage, 'getItem'> | null 
   if (!storage) return cloneDefaults();
   try {
     const raw = storage.getItem(STUDIO_VIEW_SETTINGS_KEY)
+      ?? storage.getItem(PREVIOUS_STUDIO_VIEW_SETTINGS_KEY)
       ?? storage.getItem(REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY)
       ?? storage.getItem(LEGACY_STUDIO_VIEW_SETTINGS_KEY);
     return raw ? parseStudioViewSettings(JSON.parse(raw)) : cloneDefaults();
@@ -128,6 +139,7 @@ export function cloneDefaults(): StudioViewSettings {
   return {
     layers: { ...DEFAULT_STUDIO_VIEW_SETTINGS.layers },
     overlays: { ...DEFAULT_STUDIO_VIEW_SETTINGS.overlays },
+    signalOrbs: { ...DEFAULT_STUDIO_VIEW_SETTINGS.signalOrbs },
     debugGraphics: DEFAULT_STUDIO_VIEW_SETTINGS.debugGraphics,
     routes: { ...DEFAULT_STUDIO_VIEW_SETTINGS.routes },
     controls: { ...DEFAULT_STUDIO_VIEW_SETTINGS.controls },

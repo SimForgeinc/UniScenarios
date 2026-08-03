@@ -15,6 +15,7 @@ describe('Studio view settings', () => {
     expect(loadStudioViewSettings({ getItem: () => null })).toEqual({
       layers: { city: true, vegetation: true, road: true },
       overlays: { lanes: false, signals: false },
+      signalOrbs: { visible: true, xray: true },
       debugGraphics: false,
       routes: cloneDefaults().routes,
       controls: cloneDefaults().controls,
@@ -36,6 +37,7 @@ describe('Studio view settings', () => {
     expect(parseStudioViewSettings({ layers: { road: false } })).toEqual({
       layers: { city: true, vegetation: true, road: false },
       overlays: { lanes: false, signals: false },
+      signalOrbs: { visible: true, xray: true },
       debugGraphics: false,
       routes: cloneDefaults().routes,
       controls: cloneDefaults().controls,
@@ -139,7 +141,10 @@ describe('Studio view settings', () => {
   it('reset defaults returns a fresh mutable copy', () => {
     const reset = cloneDefaults();
     reset.overlays.signals = true;
+    reset.signalOrbs.visible = false;
     expect(DEFAULT_STUDIO_VIEW_SETTINGS.overlays.signals).toBe(false);
+    expect(DEFAULT_STUDIO_VIEW_SETTINGS.signalOrbs.visible).toBe(true);
     expect(cloneDefaults().overlays.signals).toBe(false);
+    expect(cloneDefaults().signalOrbs.visible).toBe(true);
   });
 });
