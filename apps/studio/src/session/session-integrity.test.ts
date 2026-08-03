@@ -187,7 +187,7 @@ describe('authoring session integrity', () => {
     const projected = buildTimelineGroups(document.data);
     expect(projected).toHaveLength(1);
     expect(projected[0]).toMatchObject({ actorId, label: 'New actor' });
-    expect(Object.keys(projected[0]!.tracks)).toEqual(['speed', 'actions']);
+    expect(Object.keys(projected[0]!.tracks)).toEqual(['actions']);
 
     document.remove([actorId!]);
     expect(buildTimelineGroups(document.data)).toHaveLength(0);

@@ -31,6 +31,7 @@ import {
 } from '@uniscenarios/scenario-model';
 import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { MapEntry } from '../maps';
+import { defaultSpeedKph, isActionCompatible } from '../timeline/actions';
 
 /** Where an actor is stored. */
 export type ActorSource = 'role' | 'prop';
@@ -64,6 +65,7 @@ export interface ActorRecord {
   readonly dims: Dims;
   /** Studio-only presentation color, persisted with the role and ignored by export. */
   readonly bodyColor: string | undefined;
+  readonly initialSpeedKph?: number;
   /** Physical sensors mounted to this actor. */
   readonly sensors: readonly ActorSensor[];
 }
@@ -98,6 +100,7 @@ export interface ActorUpdate {
   /** Swap only the presentation model; identity and choreography stay intact. */
   catalogId?: CatalogId;
   bodyColor?: string;
+  initialSpeedKph?: number;
 }
 
 /** Which lane a catalog id belongs in. */
@@ -111,8 +114,10 @@ export function actorKindFor(catalogId: CatalogId): ActorKind {
 }
 
 /** Preserve the semantic simulation class for specialized catalog actors. */
-export function simulationClassFor(catalogId: CatalogId): 'car' | 'bus' | 'scooter' | 'pedestrian' | 'static_object' {
+export function simulationClassFor(catalogId: CatalogId): 'car' | 'bus' | 'motorcycle' | 'bicycle' | 'scooter' | 'pedestrian' | 'static_object' {
   if (catalogId === 'vehicle.tram') return 'bus';
+  if (catalogId === 'vehicle.motorcycle') return 'motorcycle';
+  if (catalogId === 'vehicle.bicycle') return 'bicycle';
   if (catalogId === 'vehicle.mobility_scooter' || catalogId === 'street.shopping_cart') return 'scooter';
   const kind = actorKindFor(catalogId);
   if (kind === 'pedestrian') return 'pedestrian';
@@ -508,7 +513,7 @@ export class EditorDocument {
             headingRad: q(input.headingRad),
           },
           ...(input.label === undefined ? {} : { label: input.label }),
-          ...(input.initialSpeedKph === undefined ? {} : { initialSpeedKph: q(Math.max(0, input.initialSpeedKph)) }),
+          initialSpeedKph: q(Math.max(0, input.initialSpeedKph ?? defaultSpeedKph(simulationClassFor(input.catalogId), input.catalogId))),
           ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
           essentiality: kind === 'prop' ? 'preferred' : 'required',
           ...(input.bodyColor ? { extensions: { 'studio.presentation.bodyColor': input.bodyColor } } : {}),
@@ -523,19 +528,6 @@ export class EditorDocument {
             trigger: { kind: 'at', t: 0 },
             verb: 'route',
             target: { mode: 'lanePath', lanes: [...input.routeLaneRsls] },
-          });
-        }
-        if (input.initialSpeedKph !== undefined && input.initialSpeedKph > 0) {
-          this.#doc.addInteraction({
-            id: `speed_${id}_initial`.slice(0, 64),
-            actor: id,
-            label: input.initialSpeedKph === DEFAULT_AUTHORED_VEHICLE_SPEED_KPH
-              ? '30 mph'
-              : `Cruise at ${q(input.initialSpeedKph)} km/h`,
-            trigger: { kind: 'at', t: 0 },
-            verb: 'speed',
-            target: { mode: 'absolute', valueKph: q(input.initialSpeedKph) },
-            dynamics: { shape: 'linear', constraint: 'time', value: 0.25 },
           });
         }
         ids.push(id);
@@ -572,7 +564,14 @@ export class EditorDocument {
             dims: { length: entry.dims.l, width: entry.dims.w, height: entry.dims.h },
             static: actorKindFor(update.catalogId) === 'prop',
           };
+          if (current.actor.class !== role.actor.class) {
+            role.initialSpeedKph = defaultSpeedKph(role.actor.class, update.catalogId);
+            for (const interaction of [...this.#doc.data.choreography.interactions]) {
+              if (interaction.actor === update.id && !isActionCompatible(interaction, role.actor.class, update.catalogId)) this.#doc.removeInteraction(interaction.id);
+            }
+          }
         }
+        if (update.initialSpeedKph !== undefined) role.initialSpeedKph = q(Math.max(0, update.initialSpeedKph));
         if (update.bodyColor !== undefined) {
           role.extensions = { ...current.extensions, 'studio.presentation.bodyColor': update.bodyColor };
         }
@@ -819,6 +818,7 @@ function recordFromRole(role: RoleBinding): ActorRecord | null {
     bodyColor: typeof role.extensions?.['studio.presentation.bodyColor'] === 'string'
       ? role.extensions['studio.presentation.bodyColor']
       : undefined,
+    initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
     sensors: role.actor.sensors,
   };
 }

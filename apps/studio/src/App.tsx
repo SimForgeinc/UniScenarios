@@ -20,6 +20,7 @@ import { activePhysicsModeForTrace } from './playback/physics';
 import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { TimelineDock } from './timeline/TimelineDock';
+import { defaultSpeedKph } from './timeline/actions';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
@@ -1079,8 +1080,9 @@ function ActorDetailsCallout({ actor, controller, viewer, host, onClose }: {
           })}
         </select></label>
         {actor.kind === 'vehicle' ? <label style={styles.actorField}><span>Body color</span><span style={styles.colorControl}><input type="color" value={actor.bodyColor ?? '#59748f'} onInput={(event) => controller.updateActorAppearance(actor.id, { bodyColor: event.currentTarget.value })} data-testid="actor-body-color" /><code>{actor.bodyColor ?? '#59748f'}</code></span></label> : null}
+        {actor.kind !== 'prop' ? <label style={styles.actorField}><span>Default speed</span><span><input type="number" min={0} max={200} step={1} value={Number((actor.initialSpeedKph ?? 0).toFixed(2))} onChange={(event) => controller.updateActorAppearance(actor.id, { initialSpeedKph: Number(event.currentTarget.value) })} data-testid="actor-default-speed" /> km/h</span></label> : null}
         {!known ? <div style={styles.missingAsset}>This model is unavailable in this build. Its ID is preserved until you choose a replacement.</div> : null}
-        <div style={styles.actorIdentity}>Identity, transform, route, speed, and actions are preserved when appearance changes.</div>
+        <div style={styles.actorIdentity}>The default speed applies before timeline actions. Changing actor type removes actions that do not apply to the new type.</div>
       </div> : <ActorSensorsPanel actor={actor} controller={controller} />}
     </aside>
   </>;
@@ -1183,6 +1185,7 @@ export function actorRecordForRole(role: RoleBinding, sampled?: SampledActor): A
     bodyColor: typeof role.extensions?.['studio.presentation.bodyColor'] === 'string'
       ? role.extensions['studio.presentation.bodyColor']
       : undefined,
+    initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
     sensors: role.actor.sensors,
   };
 }

@@ -325,7 +325,7 @@ export class EditorController {
   }
 
   /** Change only appearance in one undoable document gesture. */
-  updateActorAppearance(id: string, patch: { catalogId?: CatalogId; bodyColor?: string }): void {
+  updateActorAppearance(id: string, patch: { catalogId?: CatalogId; bodyColor?: string; initialSpeedKph?: number }): void {
     if (!this.authoringEnabled) return;
     const actor = this.doc.actor(id);
     if (!actor) return;
