@@ -141,6 +141,7 @@ export function authoringGraphPrunePlan(
 ): AuthoringGraphPrunePlan {
   const deleting = new Set(deletingRoleIds);
   const remainingRoles = new Set(template.roles.map((role) => role.id).filter((id) => !deleting.has(id)));
+  const interactionIds = new Set(template.choreography.interactions.map((interaction) => interaction.id));
   const removedInteractions = new Set<string>();
   for (const interaction of template.choreography.interactions) {
     if ((interaction.actor !== '@world' && !remainingRoles.has(interaction.actor))
@@ -155,8 +156,8 @@ export function authoringGraphPrunePlan(
     changed = false;
     for (const interaction of template.choreography.interactions) {
       if (removedInteractions.has(interaction.id)) continue;
-      if (triggerReferencesInteraction(interaction.trigger, removedInteractions)
-        || (interaction.until && triggerReferencesInteraction(interaction.until, removedInteractions))) {
+      if (triggerReferencesInteraction(interaction.trigger, interactionIds, removedInteractions)
+        || (interaction.until && triggerReferencesInteraction(interaction.until, interactionIds, removedInteractions))) {
         removedInteractions.add(interaction.id);
         changed = true;
       }
@@ -169,7 +170,7 @@ export function authoringGraphPrunePlan(
       || (occludes && (!remainingRoles.has(occludes.observer) || !remainingRoles.has(occludes.target)));
   }).map((prop) => prop.id);
   const invariantIds = template.invariants.filter((invariant) => invariant.kind === 'event_order'
-    ? invariant.events.some((id) => removedInteractions.has(id)
+    ? invariant.events.some((id) => !interactionIds.has(id) || removedInteractions.has(id))
     : invariantReferencesMissingRole(invariant as unknown as Record<string, unknown>, remainingRoles)).map((invariant) => invariant.id);
   const removedProps = new Set(propIds);
   const removedInvariants = new Set(invariantIds);
@@ -189,8 +190,8 @@ export function authoringGraphPrunePlan(
   };
 }
 
-function triggerReferencesInteraction(trigger: Interaction['trigger'], removed: ReadonlySet<string>): boolean {
-  return trigger.kind === 'after' && removed.has(trigger.of);
+function triggerReferencesInteraction(trigger: Interaction['trigger'], known: ReadonlySet<string>, removed: ReadonlySet<string>): boolean {
+  return trigger.kind === 'after' && (!known.has(trigger.of) || removed.has(trigger.of));
 }
 
 function triggerReferencesMissingRole(trigger: Interaction['trigger'], roles: ReadonlySet<string>): boolean {
@@ -219,7 +220,8 @@ function conditionReferencesMissingRole(condition: Record<string, unknown>, role
 
 function targetReferencesMissingRole(target: Interaction['target'], roles: ReadonlySet<string>): boolean {
   if (!isRecord(target)) return false;
-  return typeof target.role === 'string' && !roles.has(target.role);
+  const record = target as Record<string, unknown>;
+  return typeof record.role === 'string' && !roles.has(record.role);
 }
 
 function invariantReferencesMissingRole(invariant: Record<string, unknown>, roles: ReadonlySet<string>): boolean {
@@ -335,7 +337,9 @@ export class EditorDocument {
         { historyLimit: HISTORY_LIMIT },
       );
     }
-    return new EditorDocument(map, doc, { ...options, store });
+    const editor = new EditorDocument(map, doc, { ...options, store });
+    editor.#repairOrphansOnOpen();
+    return editor;
   }
 
   // ------------------------------------------------------------------ reads
@@ -510,13 +514,10 @@ export class EditorDocument {
   remove(ids: readonly string[]): void {
     if (ids.length === 0) return;
     this.#transaction(() => {
-      for (const id of ids) {
-        if (!this.#doc.role(id)) continue;
-        for (const interaction of [...this.#doc.data.choreography.interactions]) {
-          if (interaction.actor === id) this.#doc.removeInteraction(interaction.id);
-        }
-        this.#doc.removeRole(id);
-      }
+      const existing = [...new Set(ids)].filter((id) => this.#doc.role(id));
+      if (existing.length === 0) return;
+      this.#applyPrunePlan(authoringGraphPrunePlan(this.#doc.data, existing));
+      for (const id of existing) this.#doc.removeRole(id);
     });
   }
 
@@ -651,6 +652,33 @@ export class EditorDocument {
         this.#afterMutation();
       }
     }
+  }
+
+  #applyPrunePlan(plan: AuthoringGraphPrunePlan): void {
+    for (const id of plan.variantIds) this.#doc.removeVariant(id);
+    for (const id of plan.invariantIds) this.#doc.removeInvariant(id);
+    for (const id of plan.propIds) this.#doc.removeProp(id);
+    for (const id of plan.interactionIds) this.#doc.removeInteraction(id);
+    if (plan.clearMetricSubject) this.#doc.setMetricSubject(null);
+  }
+
+  /**
+   * Repair autosaves produced by older actor deletion code. This is migration,
+   * not an author gesture: persist the cleaned graph without offering a partial
+   * Undo that could reintroduce dangling commands.
+   */
+  #repairOrphansOnOpen(): void {
+    const plan = authoringGraphPrunePlan(this.#doc.data);
+    if (plan.interactionIds.length === 0 && plan.propIds.length === 0
+      && plan.invariantIds.length === 0 && plan.variantIds.length === 0
+      && !plan.clearMetricSubject) return;
+    this.#applyPrunePlan(plan);
+    this.#doc.clearHistory();
+    this.#opCount = 0;
+    this.#groups = [];
+    this.#redoGroups = [];
+    this.#rebuild();
+    this.#scheduleSave();
   }
 
   #afterMutation(): void {
