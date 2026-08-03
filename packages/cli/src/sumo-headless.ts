@@ -5,8 +5,11 @@ import { pathToFileURL } from 'node:url';
 import { performance } from 'node:perf_hooks';
 
 import {
+  buildSumoRoadOccupancyIndex,
   buildSumoRouteDocument,
   resolveAmbientTrafficProfile,
+  sumoAuthoredOccupanciesAt,
+  sumoAuthoredOccupancySourcesAt,
   sumoActorIdHash,
   sumoNetworkHeadingToScene,
   sumoNetworkToScene,
@@ -20,6 +23,7 @@ import {
   type SumoNetworkManifest,
   type SumoNetworkWorldTransform,
   type SumoRuntimeManifest,
+  type SumoRoadOccupancyIndex,
 } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
@@ -129,6 +133,7 @@ export async function runHeadlessSumo(options: {
   });
   const routes = new TextEncoder().encode(buildSumoRouteDocument(manifest.routeCandidates, profile));
   const network = await readFile(networkFile);
+  const occupancyRoads = buildSumoRoadOccupancyIndex(new TextDecoder().decode(network), manifest.worldFromNetwork);
   const importedAt = performance.now();
   const imported = await import(pathToFileURL(moduleFile).href) as { default: SumoFactory };
   const sumo = await imported.default({
@@ -166,10 +171,11 @@ export async function runHeadlessSumo(options: {
   let finalActors = 0;
   const steps = Math.ceil(options.durationSeconds / options.sampleSeconds);
   try {
+    mirrorAuthoredActors(sumo, options.authoredTrace, 0, manifest.worldFromNetwork, occupancyRoads);
     for (let sequence = 0; sequence <= steps; sequence += 1) {
       const t = Math.min(options.durationSeconds, sequence * options.sampleSeconds);
       if (sequence > 0) {
-        mirrorAuthoredActors(sumo, options.authoredTrace, t, manifest.worldFromNetwork);
+        mirrorAuthoredActors(sumo, options.authoredTrace, t, manifest.worldFromNetwork, occupancyRoads);
         const before = performance.now();
         assertSumoOk(sumo, sumo._us_sumo_step(options.sampleSeconds));
         stepMilliseconds.push(performance.now() - before);
@@ -228,44 +234,37 @@ function mirrorAuthoredActors(
   trace: SceneTrace,
   t: number,
   transform: SumoNetworkWorldTransform,
+  roads: SumoRoadOccupancyIndex,
 ): void {
-  const sampleIndex = nearestIndex(trace.ticks.t, t);
-  for (const [actorId, track] of Object.entries(trace.ticks.actors)) {
-    if (track.present[sampleIndex] !== 1) {
-      withString(sumo, `authored:${actorId}`, (id) => assertSumoOk(sumo, sumo._us_sumo_remove(id)));
-      continue;
-    }
-    const meta = trace.header.actorMetadata?.[actorId];
-    if (meta?.static || meta?.kind === 'pedestrian' || meta?.kind === 'animal' || meta?.kind === 'static_object') continue;
-    const network = sumoSceneToNetwork({ x: track.x[sampleIndex]!, z: track.z[sampleIndex]! }, transform);
-    const sceneHeadingDegrees = track.headingRad[sampleIndex]! * 180 / Math.PI + 90;
+  const sources = sumoAuthoredOccupancySourcesAt(trace, t);
+  const occupancies = sumoAuthoredOccupanciesAt(trace, t, roads);
+  const activeIds = new Set(occupancies.map((occupancy) => occupancy.id));
+  for (const source of sources) {
+    if (activeIds.has(source.id)) continue;
+    withString(sumo, `authored:${source.id}`, (id) => assertSumoOk(sumo, sumo._us_sumo_remove(id)));
+  }
+  for (const occupancy of occupancies) {
+    const network = sumoSceneToNetwork({ x: occupancy.x, z: occupancy.z }, transform);
+    const sceneHeadingDegrees = occupancy.headingRad * 180 / Math.PI + 90;
     const networkHeading = sumoSceneHeadingToNetwork(sceneHeadingDegrees, transform);
-    withString(sumo, `authored:${actorId}`, (id) => withString(sumo, 'proxy-route', (route) => {
+    withString(sumo, `authored:${occupancy.id}`, (id) => withString(sumo, 'proxy-route', (route) => {
       assertSumoOk(sumo, sumo._us_sumo_upsert_external(
         id,
-        0,
+        occupancyKindCode(occupancy.kind),
         route,
         network.x,
         network.y,
         networkHeading,
-        track.speedMps[sampleIndex]!,
-        meta?.dims.l ?? 4.8,
-        meta?.dims.w ?? 1.9,
+        occupancy.speedMps,
+        occupancy.lengthM,
+        occupancy.widthM,
       ));
     }));
   }
 }
 
-function nearestIndex(times: readonly number[], t: number): number {
-  let low = 0;
-  let high = times.length - 1;
-  while (low < high) {
-    const mid = Math.floor((low + high) / 2);
-    if (times[mid]! < t) low = mid + 1;
-    else high = mid;
-  }
-  if (low > 0 && Math.abs(times[low - 1]! - t) <= Math.abs(times[low]! - t)) return low - 1;
-  return low;
+function occupancyKindCode(kind: 'vehicle' | 'pedestrian' | 'bicycle' | 'obstacle'): number {
+  return kind === 'pedestrian' ? 1 : kind === 'bicycle' ? 2 : kind === 'obstacle' ? 3 : 0;
 }
 
 function copyBytes(sumo: SumoModule, bytes: Uint8Array): { pointer: number; length: number } {

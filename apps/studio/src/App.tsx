@@ -700,30 +700,47 @@ export function App(): JSX.Element {
   const sumoExternalActors = useMemo<readonly SumoExternalActorView[]>(() => {
     if (authoredPlayback && playbackController) {
       const metadata = new Map(authoredPlayback.actors.map((actor) => [actor.id, actor] as const));
-      return playbackController.currentActors.flatMap((actor) => {
+      const actors = playbackController.currentActors.flatMap((actor) => {
         const detail = metadata.get(actor.id);
         if (!detail || !actor.present || actor.id.startsWith('ambient')) return [];
         return [{
           id: actor.id,
-          kind: sumoExternalKind(detail.kind, actor.static),
+          kind: detail.kind,
           x: actor.x,
           z: actor.z,
           headingRad: actor.headingRad,
-          speedMetersPerSecond: sampledTraceSpeed(authoredPlayback, actor.id, studioSession.state.time),
-          lengthMeters: actor.dims.l,
-          widthMeters: actor.dims.w,
+          speedMps: sampledTraceSpeed(authoredPlayback, actor.id, studioSession.state.time),
+          lengthM: actor.dims.l,
+          widthM: actor.dims.w,
+          static: actor.static,
+          present: actor.present,
         } satisfies SumoExternalActorView];
       });
+      const props = authoredPlayback.props.map((prop) => ({
+        id: `prop:${prop.id}`,
+        kind: 'static_object' as const,
+        x: prop.pose.x,
+        z: prop.pose.z,
+        headingRad: prop.pose.headingRad,
+        speedMps: 0,
+        lengthM: prop.dims.l * prop.scale,
+        widthM: prop.dims.w * prop.scale,
+        static: true,
+        present: true,
+      } satisfies SumoExternalActorView));
+      return [...actors, ...props];
     }
     return (state?.actors ?? []).map((actor) => ({
       id: actor.id,
-      kind: sumoExternalKind(simulationClassFor(actor.catalogId), actor.source === 'prop'),
+      kind: simulationClassFor(actor.catalogId),
       x: actor.x,
       z: actor.z,
       headingRad: actor.headingRad,
-      speedMetersPerSecond: actor.source === 'prop' ? 0 : (actor.initialSpeedKph ?? 0) / 3.6,
-      lengthMeters: actor.dims.l,
-      widthMeters: actor.dims.w,
+      speedMps: actor.source === 'prop' ? 0 : (actor.initialSpeedKph ?? 0) / 3.6,
+      lengthM: actor.dims.l,
+      widthM: actor.dims.w,
+      static: actor.source === 'prop',
+      present: true,
     }));
   }, [authoredPlayback, playbackController, playbackState?.time, state?.actors, studioSession.state.time]);
   const fallbackToNativeTraffic = useCallback((reason: string) => setSumoFallbackReason(reason), []);
@@ -1434,13 +1451,6 @@ export function actorRecordForRole(role: RoleBinding, sampled?: SampledActor): A
     initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
     sensors: role.actor.sensors,
   };
-}
-
-function sumoExternalKind(kind: string, isStatic: boolean): SumoExternalActorView['kind'] {
-  if (isStatic || kind === 'static_object') return 'obstacle';
-  if (kind === 'pedestrian') return 'pedestrian';
-  if (kind === 'bicycle' || kind === 'scooter') return 'bicycle';
-  return 'vehicle';
 }
 
 function sampledTraceSpeed(bundle: PlaybackBundle, actorId: string, time: number): number {

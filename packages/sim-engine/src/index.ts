@@ -255,6 +255,20 @@ export { Rng, normalizeSeed, seedFromString } from './core/rng.js';
 export { obbOverlap, obbCorners } from './core/math.js';
 export type { Obb, Vec2 } from './core/math.js';
 
+/* ------------------------------------------------------ SUMO authored world */
+export {
+  buildSumoAuthoredOccupancies,
+  buildSumoRoadOccupancyIndex,
+  sumoAuthoredOccupanciesAt,
+  sumoAuthoredOccupancySourcesAt,
+} from './ambient/authored-occupancy.js';
+export type {
+  SumoAuthoredOccupancy,
+  SumoAuthoredOccupancyKind,
+  SumoAuthoredOccupancySource,
+  SumoRoadOccupancyIndex,
+} from './ambient/authored-occupancy.js';
+
 /* ------------------------------------------------ physics validation */
 export {
   PHYSICS_VALIDATION_CONTRACT_VERSION,

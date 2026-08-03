@@ -18,9 +18,10 @@ function packed(actors: readonly { id: number; x: number; z: number; speed: numb
 describe('SUMO live product metrics', () => {
   it('keeps authored proxies in provider-neutral scene x/z coordinates', () => {
     expect(externalTrafficActors([{
-      id: 'actor', kind: 'vehicle', x: 552.19, z: -1582.44, headingRad: 0,
-      speedMetersPerSecond: 5, lengthMeters: 4.5, widthMeters: 1.8,
-    }])[0]).toMatchObject({ id: 'external:actor', x: 552.19, z: -1582.44 });
+      id: 'actor', kind: 'car', x: 552.19, z: -1582.44, headingRad: 0,
+      speedMps: 5, lengthM: 4.5, widthM: 1.8, static: false,
+    }], { segments: [{ ax: 540, az: -1582.44, bx: 560, bz: -1582.44, halfWidthM: 1.8 }] })[0])
+      .toMatchObject({ id: 'external:actor', kind: 'vehicle', x: 552.19, z: -1582.44 });
   });
 
   it('counts local queues, emergency braking, and completed flow vehicles deterministically', () => {

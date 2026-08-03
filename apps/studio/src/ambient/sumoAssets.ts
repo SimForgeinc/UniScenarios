@@ -1,4 +1,5 @@
 import {
+  buildSumoRoadOccupancyIndex,
   buildSumoRouteDocument as buildSharedSumoRouteDocument,
   sumoNumericSeed,
   validateSumoNetworkManifest,
@@ -6,6 +7,7 @@ import {
   type ResolvedAmbientTrafficProfile,
   type SumoNetworkManifest,
   type SumoRuntimeManifest,
+  type SumoRoadOccupancyIndex,
 } from '@uniscenarios/sim-engine';
 import type { ActorView } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
@@ -29,6 +31,7 @@ export interface LoadedSumoAssets {
   readonly demand: SumoDemandSummary;
   readonly signalTopology: SumoSignalTopology;
   readonly adjustedSignalControllers: number;
+  readonly occupancyRoads: SumoRoadOccupancyIndex;
 }
 
 export interface SumoDemandFocus { readonly x: number; readonly z: number }
@@ -101,6 +104,7 @@ export async function loadSumoAssets(
     },
     signalTopology,
     adjustedSignalControllers: synchronized.adjustedControllers,
+    occupancyRoads: buildSumoRoadOccupancyIndex(networkXml, manifest.worldFromNetwork),
   };
 }
 

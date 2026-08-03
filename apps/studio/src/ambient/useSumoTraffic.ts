@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
+import {
+  buildSumoAuthoredOccupancies,
+  type ResolvedAmbientTrafficProfile,
+  type SumoAuthoredOccupancySource,
+  type SumoRoadOccupancyIndex,
+} from '@uniscenarios/sim-engine';
 import type { ActorView } from '../editor/actorRenderer';
 import type { ActorRenderer } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
@@ -12,16 +17,7 @@ import { DISABLED_SUMO_STATUS, type SumoTrafficStatus } from './provider';
 import { decodeSumoActorViews, loadSumoAssets, SUMO_RUNTIME_MODULE_URL } from './sumoAssets';
 import type { SumoDemandFocus } from './sumoAssets';
 
-export interface SumoExternalActorView {
-  readonly id: string;
-  readonly kind: ExternalTrafficActor['kind'];
-  readonly x: number;
-  readonly z: number;
-  readonly headingRad: number;
-  readonly speedMetersPerSecond: number;
-  readonly lengthMeters: number;
-  readonly widthMeters: number;
-}
+export type SumoExternalActorView = SumoAuthoredOccupancySource;
 
 export interface UseSumoTrafficOptions {
   readonly enabled: boolean;
@@ -74,6 +70,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       missedDeadlines: 0,
       seenActorIds: new Set(),
       completedActorIds: new Set(),
+      occupancyRoads: null,
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0 });
@@ -83,6 +80,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       demand,
       signalTopology,
       adjustedSignalControllers,
+      occupancyRoads,
     }) => {
       if (cancelled) return;
       const initialized = await provider.initialize(payload);
@@ -97,11 +95,12 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       if (!initialGate.useSumo) throw new Error(`capability gate: ${initialGate.reason}`);
       // Warm the staggered departures before publishing the authoring preview.
       // This keeps the city populated before Play without a visible spawn burst.
-      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current) });
+      const first = await provider.step({ sequence: active.sequence++, deltaSeconds: demand.warmupSeconds, externalActors: externalTrafficActors(externals.current, occupancyRoads) });
       if (cancelled) return;
       active.simulationTime = first.simulationSeconds;
       active.signalTopology = signalTopology;
       active.adjustedSignalControllers = adjustedSignalControllers;
+      active.occupancyRoads = occupancyRoads;
       active.stepSamples.push(first.stepMilliseconds);
       const firstMetrics = trafficMetrics(first, options.focus, active);
       options.renderer!.syncLayer('sumo-traffic', decodeSumoActorViews(first, options.sampleHeight!));
@@ -140,7 +139,8 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
 
   useEffect(() => {
     const active = run.current;
-    if (!active || options.mode !== 'playing') return;
+    if (!active || !active.occupancyRoads || options.mode !== 'playing') return;
+    const occupancyRoads = active.occupancyRoads;
     const delta = options.time - active.lastRequestedTime;
     if (!(delta >= .04)) return;
     active.lastRequestedTime = options.time;
@@ -152,7 +152,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       const result = await active.provider.step({
         sequence: active.sequence++,
         deltaSeconds: Math.max(.001, delta),
-        externalActors: externalTrafficActors(externals.current),
+        externalActors: externalTrafficActors(externals.current, occupancyRoads),
       });
       active.simulationTime = result.simulationSeconds;
       active.stepSamples.push(result.stepMilliseconds);
@@ -200,6 +200,7 @@ interface SumoTrafficRun {
   readonly completedActorIds: Set<number>;
   signalTopology?: SumoSignalTopology;
   adjustedSignalControllers?: number;
+  occupancyRoads: SumoRoadOccupancyIndex | null;
 }
 
 export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly actorCount: number }, focus: SumoDemandFocus | null, run: Pick<SumoTrafficRun, 'seenActorIds' | 'completedActorIds'>): Pick<SumoTrafficStatus, 'nearbyActorCount' | 'queuedActorCount' | 'completedActorCount' | 'emergencyStoppingActorCount'> {
@@ -225,17 +226,20 @@ export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly 
   return { nearbyActorCount, queuedActorCount, completedActorCount: run.completedActorIds.size, emergencyStoppingActorCount };
 }
 
-export function externalTrafficActors(actors: readonly SumoExternalActorView[]): readonly ExternalTrafficActor[] {
-  return actors.map((actor) => ({
+export function externalTrafficActors(
+  actors: readonly SumoExternalActorView[],
+  roads: SumoRoadOccupancyIndex,
+): readonly ExternalTrafficActor[] {
+  return buildSumoAuthoredOccupancies(actors, roads).map((actor) => ({
     id: `external:${actor.id}`,
     kind: actor.kind,
     routeId: 'proxy-route',
     x: actor.x,
     z: actor.z,
     headingDegrees: 90 + actor.headingRad * 180 / Math.PI,
-    speedMetersPerSecond: actor.speedMetersPerSecond,
-    lengthMeters: actor.lengthMeters,
-    widthMeters: actor.widthMeters,
+    speedMetersPerSecond: actor.speedMps,
+    lengthMeters: actor.lengthM,
+    widthMeters: actor.widthM,
   }));
 }
 
