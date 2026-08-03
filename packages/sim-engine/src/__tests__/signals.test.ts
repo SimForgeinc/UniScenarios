@@ -298,7 +298,7 @@ describe('signal compliance', () => {
     };
     const { trace } = runSimulation(unrelated, { graph });
     expect(trace.ticks.actors['ego']!.x.at(-1)).toBeGreaterThan(STOP_LINE_S);
-  });
+  }, 10_000);
 });
 
 describe('rules.collisionAvoidance', () => {

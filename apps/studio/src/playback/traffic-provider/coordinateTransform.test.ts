@@ -26,4 +26,9 @@ describe('SUMO network/world coordinates', () => {
     expect(floats[3]).toBeCloseTo(110);
     expect(words[7]).toBe(9);
   });
+
+  it('rejects a truncated packed actor buffer', () => {
+    expect(() => transformPackedStatesToWorld(new ArrayBuffer(7 * 4), 1, transform))
+      .toThrow(/7 floats for 1 actors/);
+  });
 });

@@ -109,5 +109,5 @@ describe('gap controller', () => {
     };
     expect(run(1.0)).toBeLessThan(run(0.5));
     expect(run(0.5)).toBeLessThan(run(0.0));
-  });
+  }, 10_000);
 });

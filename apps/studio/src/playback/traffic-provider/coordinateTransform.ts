@@ -27,11 +27,14 @@ export function transformPackedStatesToWorld(
   transform: NetworkWorldTransform,
 ): void {
   const floats = new Float32Array(buffer);
+  if (count < 0 || floats.length < count * 8) {
+    throw new RangeError(`packed traffic state has ${floats.length} floats for ${count} actors`);
+  }
   for (let actor = 0; actor < count; actor += 1) {
     const offset = actor * 8;
-    const position = toWorld(floats[offset + 1], floats[offset + 2], transform);
+    const position = toWorld(floats[offset + 1]!, floats[offset + 2]!, transform);
     floats[offset + 1] = position.x;
     floats[offset + 2] = position.y;
-    floats[offset + 3] += transform.rotationDegrees;
+    floats[offset + 3] = floats[offset + 3]! + transform.rotationDegrees;
   }
 }
