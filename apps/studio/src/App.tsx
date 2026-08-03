@@ -33,7 +33,8 @@ import {
 } from './ambient/model';
 import { AmbientTrafficPopover } from './ambient/AmbientTrafficPanel';
 import { useAmbientTrafficPreview } from './ambient/useAmbientTrafficPreview';
-import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
+import { ambientMaterializationKey, ambientPopulationKey, PersistentAmbientWorld } from './ambient/persistentWorld';
+import type { ResolvedAmbientTrafficProfile, SimActor } from '@uniscenarios/sim-engine';
 import { contentHash } from '@uniscenarios/sim-engine';
 import {
   dashCameras,
@@ -152,12 +153,9 @@ export function App(): JSX.Element {
   const [selectedDashCameraId, setSelectedDashCameraId] = useState<string | null>(null);
   const [cameraPlaybackRequested, setCameraPlaybackRequested] = useState(false);
   const [ambientPreviewBusy, setAmbientPreviewBusy] = useState(false);
-  const ambientPreviewRun = useRef(0);
-  const [ambientTrafficBusy, setAmbientTrafficBusy] = useState(false);
   const [ambientTrafficError, setAmbientTrafficError] = useState<string | null>(null);
   const [ambientRobustnessReport, setAmbientRobustnessReport] = useState<AmbientRobustnessSummary | null>(null);
   const [ambientRobustnessBusy, setAmbientRobustnessBusy] = useState(false);
-  const ambientRun = useRef(0);
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openScenarioOpen, setOpenScenarioOpen] = useState(false);
@@ -166,12 +164,12 @@ export function App(): JSX.Element {
   const [viewSettings, setViewSettings] = useState<StudioViewSettings>(() => loadStudioViewSettings());
   const viewSettingsRef = useRef(viewSettings);
   viewSettingsRef.current = viewSettings;
-  const scenarioWorker = useRef<ScenarioWorkerClient | null>(null);
-  if (!scenarioWorker.current) scenarioWorker.current = new ScenarioWorkerClient();
   const exportWorker = useRef<ScenarioWorkerClient | null>(null);
   if (!exportWorker.current) exportWorker.current = new ScenarioWorkerClient();
   const ambientPreviewWorker = useRef<ScenarioWorkerClient | null>(null);
   if (!ambientPreviewWorker.current) ambientPreviewWorker.current = new ScenarioWorkerClient();
+  const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
+  const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const overlaysRef = useRef<MapOverlayHandle | null>(null);
@@ -319,44 +317,20 @@ export function App(): JSX.Element {
     }).catch((reason: unknown) => console.warn('[campaign] verified evidence recovery failed', reason));
     return () => { cancelled = true; };
   }, [campaignSource, editorController, map.id]);
-  const runAuthoredPlayback = useCallback(async (
-    profile: ResolvedAmbientTrafficProfile,
-    baseInstance?: PlaybackBundle['instance'],
-  ) => {
-    if (!editorController) throw new Error('The editor is not ready');
-    const id = ++ambientRun.current;
-    setAmbientTrafficBusy(true);
-    setAmbientTrafficError(null);
-    try {
-      const bundle = await scenarioWorker.current!.prepare(editorController.doc.data, map, profile, baseInstance);
-      if (ambientRun.current === id) setAuthoredPlayback(bundle);
-    } catch (reason) {
-      if (ambientRun.current === id && (reason as { name?: string } | null)?.name !== 'AbortError') {
-        setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
-      }
-      throw reason;
-    } finally {
-      if (ambientRun.current === id) setAmbientTrafficBusy(false);
-    }
-  }, [editorController, map]);
   const prepareAuthoredPlayback = useCallback(async () => {
-    if (editorController && campaignSource
-      && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash) {
-      if (canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, campaignSource.evidence.ambientTraffic)) {
-        setAuthoredPlayback(campaignSource.evidence);
-        return;
-      }
-      await runAuthoredPlayback(ambientTrafficProfile, campaignSource.evidence.instance);
-      return;
-    }
-    await runAuthoredPlayback(ambientTrafficProfile);
-  }, [ambientTrafficProfile, campaignSource, editorController, runAuthoredPlayback]);
+    if (!editorController) throw new Error('The editor is not ready');
+    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
+    const materializationKey = ambientMaterializationKey(populationKey, simulationSourceHash(editorController.doc.data));
+    const pending = ambientPreparation.current;
+    if (pending?.materializationKey === materializationKey) await pending.promise;
+    const bundle = ambientWorld.current.playback();
+    if (!bundle) throw new Error('Traffic is still preparing. Press Play again when the map population is ready.');
+    // This is the exact immutable object rendered at t=0; Play never generates
+    // or substitutes a second background population.
+    setAuthoredPlayback(bundle);
+  }, [ambientTrafficProfile, editorController, map.id]);
   const cancelAuthoredPlayback = useCallback(() => {
-    ambientRun.current += 1;
-    scenarioWorker.current?.cancel();
     setAuthoredPlayback(null);
-    setAmbientTrafficBusy(false);
-    setAmbientTrafficError(null);
     setCameraPlaybackRequested(false);
   }, []);
   const sessionOptions = useMemo(() => ({
@@ -373,14 +347,7 @@ export function App(): JSX.Element {
   const changeAmbientTraffic = useCallback((profile: ResolvedAmbientTrafficProfile) => {
     setAmbientTrafficProfile(profile);
     editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_EXTENSION_KEY, profile);
-    if (playbackBundle === null && ['paused', 'playing', 'ended'].includes(studioSession.state.mode)) {
-      const verifiedBase = editorController && campaignSource
-        && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
-        ? campaignSource.evidence.instance
-        : undefined;
-      void runAuthoredPlayback(profile, verifiedBase).catch(() => undefined);
-    }
-  }, [campaignSource, editorController, playbackBundle, runAuthoredPlayback, studioSession.state.mode]);
+  }, [editorController]);
 
   // Scenario navigation/import is authoritative. Never leak a traffic choice from
   // the previously open map or saved scenario into the next document.
@@ -395,63 +362,71 @@ export function App(): JSX.Element {
     setAmbientTrafficProfile((current) => contentHash(current) === contentHash(next) ? current : next);
   }, [editorController, authoredAmbientHash]);
 
-  // Keep a deterministic t=0 population visible while authoring. The worker does
-  // the same materialize/generate/simulate operation playback uses, so pressing
-  // Play cannot silently swap in a different population.
+  // One persistent concrete world owns both the authoring preview and playback.
+  // Authored edits rematerialize against the existing generated actors; only a
+  // map/profile/mix/seed change creates a new traffic population.
   useEffect(() => {
-    const id = ++ambientPreviewRun.current;
+    if (!editorController || playbackBundle) {
+      setAmbientPreviewBusy(false);
+      return;
+    }
+    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
+    const materializationKey = ambientMaterializationKey(populationKey, ambientPreviewSourceHash ?? 'empty');
+    const current = ambientWorld.current.current;
+    if (current?.materializationKey === materializationKey) {
+      setAmbientPreview(current.value);
+      setAmbientPreviewBusy(false);
+      return;
+    }
+    const token = ambientWorld.current.begin();
     ambientPreviewWorker.current?.cancel();
+    if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
     const verifiedFallback = editorController && campaignSource
       && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
       ? campaignSource.evidence
       : null;
-    // Gallery evidence is already the deterministic materialization of this
-    // exact editable source. Keep its authored actors visible immediately and
-    // retain it if a background-traffic regeneration is not feasible.
-    if (!editorController || !authoringEnabled) {
+    if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, verifiedFallback.ambientTraffic)) {
+      ambientWorld.current.commit(token, { populationKey, materializationKey, value: verifiedFallback });
+      setAmbientPreview(verifiedFallback);
       setAmbientPreviewBusy(false);
       return;
     }
-    setAmbientPreview(verifiedFallback);
     setAmbientPreviewBusy(true);
     setAmbientTrafficError(null);
-    const timer = window.setTimeout(() => {
-      // World population is independent of authored validity. Publish it first
-      // so an empty/invalid scenario still has a usable City preview and
-      // enabled controls, then opportunistically replace it with the screened
-      // combined bundle when authored preparation succeeds.
-      void ambientPreviewWorker.current!.prepareAmbientPreview(
-        editorController.doc.data,
-        map,
-        ambientTrafficProfile,
-      ).then(
-        async (worldBundle) => {
-          if (ambientPreviewRun.current !== id) return;
-          setAmbientPreview(worldBundle);
-          setAmbientPreviewBusy(false);
-          try {
-            const combined = await ambientPreviewWorker.current!.prepare(
-              editorController.doc.data,
-              map,
-              ambientTrafficProfile,
-              verifiedFallback?.instance,
-              { staticCollisionMode: 'skip', timeoutMs: 30_000 },
-            );
-            if (ambientPreviewRun.current === id) setAmbientPreview(combined);
-          } catch (reason) {
-            if (ambientPreviewRun.current !== id || (reason as { name?: string } | null)?.name === 'AbortError') return;
-            setAmbientTrafficError(`Authored scenario preview: ${reason instanceof Error ? reason.message : String(reason)}`);
-          }
-        },
-        (reason: unknown) => {
-          if (ambientPreviewRun.current !== id || (reason as { name?: string } | null)?.name === 'AbortError') return;
-          setAmbientTrafficError(`Ambient world preview: ${reason instanceof Error ? reason.message : String(reason)}`);
-          setAmbientPreviewBusy(false);
-        },
-      );
-    }, 220);
-    return () => window.clearTimeout(timer);
-  }, [ambientTrafficProfile, ambientPreviewSourceHash, authoringEnabled, campaignSource, editorController, map]);
+    const reusablePopulation = current?.populationKey === populationKey && current.value.ambientTraffic
+      ? {
+          provenance: current.value.ambientTraffic,
+          actors: current.value.instance.input.actors.filter((actor): actor is SimActor => actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'))),
+        }
+      : undefined;
+    const promise = ambientPreviewWorker.current!.prepare(
+      editorController.doc.data,
+      map,
+      ambientTrafficProfile,
+      verifiedFallback?.instance,
+      // Build the trace once in the background and reuse it for Play. Static
+      // map collider extraction is intentionally not on this interactive path;
+      // dynamic actor collision handling remains enabled and identical.
+      { staticCollisionMode: 'skip', timeoutMs: 30_000, ...(reusablePopulation ? { ambientPopulation: reusablePopulation } : {}) },
+    );
+    ambientPreparation.current = { materializationKey, promise };
+    void promise.then(
+      (bundle) => {
+        if (!ambientWorld.current.commit(token, { populationKey, materializationKey, value: bundle })) return;
+        setAmbientPreview(bundle);
+        setAmbientPreviewBusy(false);
+        setAmbientTrafficError(null);
+      },
+      (reason: unknown) => {
+        ambientWorld.current.fail(token);
+        if ((reason as { name?: string } | null)?.name === 'AbortError') return;
+        setAmbientTrafficError(`Traffic preparation: ${reason instanceof Error ? reason.message : String(reason)}`);
+        setAmbientPreviewBusy(false);
+      },
+    ).finally(() => {
+      if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
+    });
+  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle]);
 
   useEffect(() => () => ambientPreviewWorker.current?.cancel(), []);
   const runAmbientRobustness = useCallback(() => {
@@ -566,7 +541,15 @@ export function App(): JSX.Element {
     restoreCameraOnDispose: true,
   });
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
-  useAmbientTrafficPreview(viewer, ambientPreview, sampleHeight, authoringEnabled, editorActorIds);
+  // Keep t=0 visible through the preparing frame. The playback renderer takes
+  // ownership only after the exact same bundle has been installed.
+  useAmbientTrafficPreview(
+    viewer,
+    ambientPreview,
+    sampleHeight,
+    playbackBundle === null && authoredPlayback === null && !mapWorkspaceOpen,
+    editorActorIds,
+  );
 
   useEffect(() => {
     if (!authoredPlayback || !playbackController) return;
@@ -574,8 +557,6 @@ export function App(): JSX.Element {
     if (studioSession.state.mode === 'playing') playbackController.play();
     else playbackController.pause();
   }, [authoredPlayback, playbackController, studioSession.state.mode, studioSession.state.time]);
-
-  useEffect(() => () => scenarioWorker.current?.cancel(), []);
 
   // Playback is a viewport mode, not an editor mutation. Keep the autosave
   // document intact but hide its actors until the imported evidence is closed.
@@ -819,12 +800,6 @@ export function App(): JSX.Element {
             ) : undefined}
             rightInset={settingsOpen ? 360 : 16}
             drawerMode={timelineDrawerLayout}
-            ambientSummary={{
-              enabled: ambientTrafficProfile.preset !== 'off',
-              busy: ambientPreviewBusy || ambientTrafficBusy,
-              count: (ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic)?.actors.length ?? 0,
-              preset: ambientTrafficProfile.preset,
-            }}
             dashCameras={authoredDashCameras}
             selectedDashCameraId={selectedAuthoredDashCamera?.id ?? null}
             onDashCameraChange={setSelectedDashCameraId}
@@ -902,7 +877,7 @@ export function App(): JSX.Element {
         <AmbientTrafficPopover
           profile={ambientTrafficProfile}
           provenance={ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic ?? null}
-          busy={ambientPreviewBusy || ambientTrafficBusy}
+          busy={ambientPreviewBusy}
           error={ambientTrafficError}
           onChange={changeAmbientTraffic}
           robustnessReport={ambientRobustnessReport}

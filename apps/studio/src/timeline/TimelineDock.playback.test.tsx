@@ -21,6 +21,8 @@ describe('author timeline playback controls', () => {
     expect(markup).toContain('aria-label="Play from dash camera"');
     expect(markup).toMatch(/<button[^>]+disabled=""[^>]+data-testid="session-camera-play"/);
     expect(markup).toContain('No dash camera');
+    expect(markup).not.toContain('timeline-ambient-summary');
+    expect(markup).not.toContain('Ambient traffic');
   });
 
   it('offers a deterministic chooser when multiple actor cameras are attached', () => {
