@@ -66,7 +66,8 @@ describe('fresh page-load authoring document', () => {
     expect(fresh.data).toEqual(saved);
     expect(fresh.actors.map((actor) => actor.id)).toEqual(['saved_vehicle']);
     expect(fresh.actors[0]!.sensors).toHaveLength(1);
-    expect(fresh.data.choreography.interactions).toHaveLength(1);
+    // Initial driving routes are actor state, not synthetic timeline actions.
+    expect(fresh.data.choreography.interactions).toHaveLength(0);
     await fresh.flush();
     expect(TemplateDocument.fromJSON(await store.read(galleryName)).data).toEqual(saved);
     fresh.dispose();

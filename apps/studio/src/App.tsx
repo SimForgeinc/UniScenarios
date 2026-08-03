@@ -68,9 +68,9 @@ import { OpenScenarioWorkspace } from './openscenario/OpenScenarioWorkspace';
 import type { OpenScenarioWorkspaceState } from './openscenario/model';
 import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
-import { simulationClassFor, type ActorRecord } from './editor/document';
+import { compiledWorldMatchesRevision, simulationClassFor, type ActorRecord } from './editor/document';
 import {
-  routesForAuthoringPreview,
+  authoringRoutes,
   routesFromSimulation,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
@@ -175,7 +175,7 @@ export function App(): JSX.Element {
   const runtimeWorker = useRef<ScenarioWorkerClient | null>(null);
   if (!runtimeWorker.current) runtimeWorker.current = new ScenarioWorkerClient();
   const ambientPreviewCache = useRef(new AmbientPreviewCache<PlaybackBundle>());
-  const ambientPreparation = useRef<{ previewKey: string; promise: Promise<PlaybackBundle> } | null>(null);
+  const ambientPreparation = useRef<{ previewKey: string; revision: number; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
   const routeOverlayRenderer = useRef<VehicleRouteOverlayRenderer | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -344,9 +344,9 @@ export function App(): JSX.Element {
     const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
     const previewKey = ambientPreviewKey(candidatePoolRequestKey, simulationSourceHash(editorController.doc.data));
     const pending = ambientPreparation.current;
-    if (pending?.previewKey === previewKey) await pending.promise;
+    if (pending?.previewKey === previewKey && pending.revision === editorController.doc.revision) await pending.promise;
     throwIfPreparationAborted(signal);
-    const bundle = ambientPreviewCache.current.playback();
+    const bundle = ambientPreviewCache.current.playback(editorController.doc.revision);
     if (!bundle) throw new Error('Traffic is still loading. Press Play again when the map population is visible.');
     const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
     if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
@@ -365,6 +365,7 @@ export function App(): JSX.Element {
     void run.completion.then((completed) => {
       if (!entry || ambientPreviewCache.current.current?.value !== bundle) return;
       const token = ambientPreviewCache.current.begin();
+      if (!compiledWorldMatchesRevision(editorController.doc, entry.revision)) return;
       ambientPreviewCache.current.commit(token, { ...entry, value: completed });
     }).catch((reason: unknown) => {
       if ((reason as { name?: string } | null)?.name !== 'AbortError') {
@@ -394,17 +395,12 @@ export function App(): JSX.Element {
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
+    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
-    const concretePlayback = playbackBundle ?? authoredPlayback;
-    const routes = concretePlayback
-      ? routesFromSimulation(concretePlayback.instance.input, editorController.laneIndex, concretePlayback.trace, authoredColors)
-      : routesForAuthoringPreview(
-          editorController.doc.data,
-          editorController.laneIndex,
-          ambientPreview?.instance.input,
-          ambientPreview?.trace,
-        );
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
+    const routes = playback && concrete
+      ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
+      : authoringRoutes(editorController.doc.data, editorController.laneIndex, concrete?.instance.input, concrete?.trace);
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
     renderer.group.visible = viewSettings.routes.visible
       && !mapWorkspaceOpen
@@ -447,12 +443,13 @@ export function App(): JSX.Element {
     const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
     const previewKey = ambientPreviewKey(candidatePoolRequestKey, ambientPreviewSourceHash ?? 'empty');
     const current = ambientPreviewCache.current.current;
-    if (current?.previewKey === previewKey) {
+    if (current?.previewKey === previewKey && current.revision === editorController.doc.revision) {
       setAmbientPreview(current.value);
       setAmbientPreviewBusy(false);
       return;
     }
     const token = ambientPreviewCache.current.begin();
+    const revision = editorController.doc.revision;
     runtimeWorker.current?.cancel();
     if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
     const verifiedFallback = editorController && campaignSource
@@ -460,7 +457,9 @@ export function App(): JSX.Element {
       ? campaignSource.evidence
       : null;
     if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, verifiedFallback.ambientTraffic)) {
-      ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, value: verifiedFallback });
+      if (compiledWorldMatchesRevision(editorController.doc, revision)) {
+        ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: verifiedFallback });
+      }
       setAmbientPreview(verifiedFallback);
       setAmbientPreviewBusy(false);
       return;
@@ -477,10 +476,11 @@ export function App(): JSX.Element {
       // actor collision handling remains enabled and identical.
       { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true },
     );
-    ambientPreparation.current = { previewKey, promise };
+    ambientPreparation.current = { previewKey, revision, promise };
     void promise.then(
       (bundle) => {
-        if (!ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, value: bundle })) return;
+        if (!compiledWorldMatchesRevision(editorController.doc, revision)) return;
+        if (!ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: bundle })) return;
         setAmbientPreview(bundle);
         setAmbientPreviewBusy(false);
         setAmbientTrafficError(null);
@@ -494,7 +494,7 @@ export function App(): JSX.Element {
     ).finally(() => {
       if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
     });
-  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle]);
+  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle, state?.revision]);
 
   useEffect(() => () => runtimeWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {

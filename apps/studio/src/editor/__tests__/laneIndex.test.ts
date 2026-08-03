@@ -266,7 +266,7 @@ const YALE = fileURLToPath(
   new URL('../../../../../dev-assets/yale-street/topology-index.json.gz', import.meta.url),
 );
 
-describe.skipIf(!existsSync(YALE))('LaneIndex on Yale Street', () => {
+if (existsSync(YALE)) describe('LaneIndex on Yale Street', () => {
   const topology = JSON.parse(new TextDecoder().decode(gunzipSync(new Uint8Array(readFileSync(YALE)))));
   const index = LaneIndex.build(topology);
 
@@ -368,4 +368,7 @@ describe.skipIf(!existsSync(YALE))('LaneIndex on Yale Street', () => {
     expect(worstOffsetS).toBeLessThan(0.6);
     expect(worstOffsetT).toBeLessThan(0.12);
   });
+});
+else describe.skip('LaneIndex on Yale Street (fixture unavailable)', () => {
+  it('requires the optional Yale topology fixture', () => {});
 });

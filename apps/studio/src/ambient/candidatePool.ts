@@ -12,6 +12,8 @@ export function ambientPreviewKey(candidatePoolRequestKey: string, simulationSou
 export interface AmbientPreviewEntry<T> {
   readonly candidatePoolRequestKey: string;
   readonly previewKey: string;
+  /** EditorDocument revision this concrete preview was compiled from. */
+  readonly revision: number;
   readonly value: T;
 }
 
@@ -33,5 +35,8 @@ export class AmbientPreviewCache<T> {
     if (token === this.generation) this.generation++;
   }
 
-  playback(): T | null { return this.committed?.value ?? null; }
+  playback(revision?: number): T | null {
+    if (revision !== undefined && this.committed?.revision !== revision) return null;
+    return this.committed?.value ?? null;
+  }
 }

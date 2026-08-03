@@ -104,6 +104,8 @@ export interface ActorUpdate {
   catalogId?: CatalogId;
   bodyColor?: string;
   initialSpeedKph?: number;
+  /** Replace the actor's authored t=0 lane route; `null` clears it. */
+  routeLaneRsls?: readonly string[] | null;
 }
 
 /** Which lane a catalog id belongs in. */
@@ -342,6 +344,8 @@ export class EditorDocument {
   readonly #listeners = new Set<() => void>();
 
   #actors: ActorRecord[] = [];
+  /** Monotonic authoring revision. Background products must carry this tag. */
+  #revision = 0;
   /** Ops applied since construction; the group bookkeeping counts against it. */
   #opCount = 0;
   #groups: number[] = [];
@@ -433,6 +437,10 @@ export class EditorDocument {
 
   get data(): ScenarioTemplateV2 {
     return this.#doc.data;
+  }
+
+  get revision(): number {
+    return this.#revision;
   }
 
   get name(): string {
@@ -568,6 +576,8 @@ export class EditorDocument {
           }
         }
         if (update.initialSpeedKph !== undefined) role.initialSpeedKph = q(Math.max(0, update.initialSpeedKph));
+        if (update.routeLaneRsls === null || update.routeLaneRsls?.length === 0) delete role.initialRoute;
+        else if (update.routeLaneRsls !== undefined) role.initialRoute = { mode: 'lanePath', lanes: [...update.routeLaneRsls] };
         if (update.bodyColor !== undefined) {
           role.extensions = { ...current.extensions, 'studio.presentation.bodyColor': update.bodyColor };
         }
@@ -624,6 +634,7 @@ export class EditorDocument {
     this.#savedAt = null;
     this.#saveError = null;
     this.#namedSave = options.saveName ?? null;
+    this.#revision++;
     this.#rebuild();
     this.#scheduleSave();
     this.#emit();
@@ -731,6 +742,7 @@ export class EditorDocument {
   }
 
   #afterMutation(): void {
+    this.#revision++;
     this.#rebuild();
     this.#scheduleSave();
     this.#emit();
@@ -778,6 +790,14 @@ export class EditorDocument {
   #emit(): void {
     for (const listener of [...this.#listeners]) listener();
   }
+}
+
+/** Fail-closed boundary for installing asynchronously compiled editor worlds. */
+export function compiledWorldMatchesRevision(
+  document: Pick<EditorDocument, 'revision'>,
+  compiledRevision: number,
+): boolean {
+  return document.revision === compiledRevision;
 }
 
 function anchorFrom(laneRef: LaneRef | LaneAnchor | undefined): LaneAnchor | undefined {

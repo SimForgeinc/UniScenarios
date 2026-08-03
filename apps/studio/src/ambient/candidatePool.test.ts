@@ -10,7 +10,7 @@ describe('ambient candidate pool preview cache', () => {
     const requestKey = ambientCandidatePoolRequestKey('map-a', city);
     const previewKey = ambientPreviewKey(requestKey, 'scenario-a');
     const value = { actors: ['ambient:1'] };
-    cache.commit(cache.begin(), { candidatePoolRequestKey: requestKey, previewKey, value });
+    cache.commit(cache.begin(), { candidatePoolRequestKey: requestKey, previewKey, revision: 1, value });
     expect(cache.playback()).toBe(value);
     expect(cache.playback()).toBe(value);
   });
@@ -26,12 +26,14 @@ describe('ambient candidate pool preview cache', () => {
 
   it('retains the visible preview on errors and ignores stale work', () => {
     const cache = new AmbientPreviewCache<string>();
-    cache.commit(cache.begin(), { candidatePoolRequestKey: 'a', previewKey: 'a:1', value: 'visible' });
+    cache.commit(cache.begin(), { candidatePoolRequestKey: 'a', previewKey: 'a:1', revision: 1, value: 'visible' });
     cache.fail(cache.begin());
     expect(cache.playback()).toBe('visible');
     const stale = cache.begin();
     const current = cache.begin();
-    expect(cache.commit(stale, { candidatePoolRequestKey: 'old', previewKey: 'old', value: 'old' })).toBe(false);
-    expect(cache.commit(current, { candidatePoolRequestKey: 'new', previewKey: 'new', value: 'new' })).toBe(true);
+    expect(cache.commit(stale, { candidatePoolRequestKey: 'old', previewKey: 'old', revision: 1, value: 'old' })).toBe(false);
+    expect(cache.commit(current, { candidatePoolRequestKey: 'new', previewKey: 'new', revision: 2, value: 'new' })).toBe(true);
+    expect(cache.playback(1)).toBeNull();
+    expect(cache.playback(2)).toBe('new');
   });
 });
