@@ -26,6 +26,12 @@ export interface StudioViewSettings {
   };
   overlays: Record<MapOverlayLayer, boolean>;
   debugGraphics: boolean;
+  routes: {
+    visible: boolean;
+    ambient: boolean;
+    actual: boolean;
+    duringPlayback: boolean;
+  };
   controls: StudioCameraControlSettings;
 }
 
@@ -33,6 +39,7 @@ export const DEFAULT_STUDIO_VIEW_SETTINGS: StudioViewSettings = Object.freeze({
   layers: Object.freeze({ city: true, vegetation: true, road: true }),
   overlays: Object.freeze({ lanes: false, signals: false }),
   debugGraphics: false,
+  routes: Object.freeze({ visible: true, ambient: false, actual: false, duringPlayback: true }),
   controls: Object.freeze({
     version: 2,
     reverseHorizontalLook: true,
@@ -72,6 +79,12 @@ export function parseStudioViewSettings(value: unknown): StudioViewSettings {
       signals: typeof overlays.signals === 'boolean' ? overlays.signals : false,
     },
     debugGraphics: typeof input.debugGraphics === 'boolean' ? input.debugGraphics : false,
+    routes: {
+      visible: typeof input.routes?.visible === 'boolean' ? input.routes.visible : true,
+      ambient: typeof input.routes?.ambient === 'boolean' ? input.routes.ambient : false,
+      actual: typeof input.routes?.actual === 'boolean' ? input.routes.actual : false,
+      duringPlayback: typeof input.routes?.duringPlayback === 'boolean' ? input.routes.duringPlayback : true,
+    },
     controls: {
       version: 2,
       reverseHorizontalLook: typeof controls?.reverseHorizontalLook === 'boolean' ? controls.reverseHorizontalLook : true,
@@ -116,6 +129,7 @@ export function cloneDefaults(): StudioViewSettings {
     layers: { ...DEFAULT_STUDIO_VIEW_SETTINGS.layers },
     overlays: { ...DEFAULT_STUDIO_VIEW_SETTINGS.overlays },
     debugGraphics: DEFAULT_STUDIO_VIEW_SETTINGS.debugGraphics,
+    routes: { ...DEFAULT_STUDIO_VIEW_SETTINGS.routes },
     controls: { ...DEFAULT_STUDIO_VIEW_SETTINGS.controls },
   };
 }

@@ -16,6 +16,7 @@ describe('Studio view settings', () => {
       layers: { city: true, vegetation: true, road: true },
       overlays: { lanes: false, signals: false },
       debugGraphics: false,
+      routes: cloneDefaults().routes,
       controls: cloneDefaults().controls,
     });
   });
@@ -36,6 +37,7 @@ describe('Studio view settings', () => {
       layers: { city: true, vegetation: true, road: false },
       overlays: { lanes: false, signals: false },
       debugGraphics: false,
+      routes: cloneDefaults().routes,
       controls: cloneDefaults().controls,
     });
   });

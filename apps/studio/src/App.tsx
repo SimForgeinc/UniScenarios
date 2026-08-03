@@ -70,6 +70,11 @@ import type { OpenScenarioWorkspaceState } from './openscenario/model';
 import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { simulationClassFor, type ActorRecord } from './editor/document';
+import {
+  routesFromSimulation,
+  routesFromTemplate,
+  VehicleRouteOverlayRenderer,
+} from './editor/routeOverlay';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(): CityViewerOptions {
@@ -177,6 +182,7 @@ export function App(): JSX.Element {
   const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
   const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
+  const routeOverlayRenderer = useRef<VehicleRouteOverlayRenderer | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
   const overlaysRef = useRef<MapOverlayHandle | null>(null);
   overlaysRef.current = overlays;
@@ -301,6 +307,20 @@ export function App(): JSX.Element {
     startBlank: !hasNavigatedMaps.current,
   });
 
+  // Route guides are a viewport-owned scene layer. Prefer the immutable input
+  // that the simulator will execute; the template fallback keeps newly placed
+  // authored vehicles informative while materialization is in flight.
+  useEffect(() => {
+    if (!viewer) return;
+    const renderer = new VehicleRouteOverlayRenderer();
+    viewer.scene.add(renderer.group);
+    routeOverlayRenderer.current = renderer;
+    return () => {
+      if (routeOverlayRenderer.current === renderer) routeOverlayRenderer.current = null;
+      renderer.dispose();
+    };
+  }, [viewer]);
+
   // Older portable Gallery saves intentionally contain no scene-absolute
   // poses. Recover their immutable checked-in evidence by catalog identity and
   // stable role ids so reload has the same t=0 population and Play path as first open.
@@ -376,6 +396,27 @@ export function App(): JSX.Element {
     editorController?.doc.data.choreography.clipSeconds ?? 20,
     sessionOptions,
   );
+  useEffect(() => {
+    const renderer = routeOverlayRenderer.current;
+    if (!renderer || !editorController || !state) return;
+    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
+    const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
+    const routes = concrete
+      ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
+      : routesFromTemplate(editorController.doc.data, editorController.laneIndex);
+    const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
+    const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
+    renderer.group.visible = viewSettings.routes.visible
+      && !mapWorkspaceOpen
+      && !hiddenForCameraPlayback
+      && (!playback || viewSettings.routes.duringPlayback);
+    renderer.sync(routes, {
+      showAmbient: viewSettings.routes.ambient,
+      showActual: viewSettings.routes.actual,
+      selectedActorIds: new Set(state.selection),
+    });
+  }, [ambientPreview, authoredPlayback, cameraPlaybackRequested, editorController, mapWorkspaceOpen,
+    playbackBundle, state, studioSession.state.mode, viewSettings.routes]);
   const authoringEnabled = playbackBundle === null && studioSession.state.mode === 'authoring' && !mapWorkspaceOpen;
   const changeAmbientTraffic = useCallback((profile: ResolvedAmbientTrafficProfile) => {
     setAmbientTrafficProfile(profile);
