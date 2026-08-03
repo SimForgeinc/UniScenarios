@@ -51,7 +51,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
   {
     id: 'roads-only',
     label: 'Roads Only',
-    description: 'Authoring-only roads, lanes, intersections, signals and actors. City, vegetation and decorative street furniture are not streamed.',
+    description: 'CPU/software-rendering mode. Keeps 3D roads, every lane marking, signals and actors; city, vegetation and decorative street furniture are not downloaded.',
     live: {
       maxPixelRatio: 0.5, maxScreenSpaceError: 5000, vegetationScreenSpaceError: 10000,
       byteBudget: 512 * MB, uploadBudgetMs: 0.35, uploadPixelsPerFrame: 128e3,
@@ -164,9 +164,9 @@ export const STARTER_QUALITY_CHOICES: readonly StarterQualityChoice[] = [
   {
     id: 'roads-only',
     label: presetById('roads-only').label,
-    guidance: 'Lightest interactive authoring view. Keeps roads, signals and actors while omitting the city and vegetation.',
-    downloadGuidance: 'Measured cold load: 13–23 MB',
-    gpuMemoryGuidance: 'Resident estimate: 3–14 MB · 1 GB GPU recommended',
+    guidance: 'Lightest 3D authoring view for CPU/software rendering. Keeps every road marking, signals and actors while omitting the city and vegetation.',
+    downloadGuidance: 'Measured cold load: 11–14 MB',
+    gpuMemoryGuidance: 'Resident estimate: 1–6 MB · 0 GB dedicated GPU required',
     recommended: false,
   },
   {

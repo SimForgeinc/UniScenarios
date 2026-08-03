@@ -532,6 +532,15 @@ export class CityViewer {
       this.canvas.dataset.assetVariant = selected.variant;
       return parsed;
     } catch (error) {
+      if (selected.variant === 'roads-only' && selected.fallbackFile
+        && (error as { name?: string } | null)?.name !== 'AbortError') {
+        const fallback = await this.fetchBuffer(resolveUrl(this.assetBase, selected.fallbackFile), signal);
+        const parsed = await loader.parseAsync(fallback, '');
+        this.variantFallbacks++;
+        this.variantLoads['roads-only']++;
+        this.canvas.dataset.assetVariant = 'roads-only-v1-fallback';
+        return parsed;
+      }
       if (!allowsSourceAssetFallback(selected.variant, this.ultraLowFidelity)
         || (error as { name?: string } | null)?.name === 'AbortError') throw error;
       this.variantFallbacks++;

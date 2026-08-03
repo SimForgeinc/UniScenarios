@@ -43,7 +43,7 @@ describe('render quality preferences', () => {
         ? choice.label
         : 'unreachable');
       expect(choice.downloadGuidance).toMatch(/^Measured cold load: \d/);
-      expect(choice.gpuMemoryGuidance).toMatch(/^Resident estimate: .* · \d GB GPU recommended$/);
+      expect(choice.gpuMemoryGuidance).toMatch(/^Resident estimate: .* · \d GB (?:GPU recommended|dedicated GPU required)$/);
       expect(choice.downloadGuidance).not.toContain('pending');
     }
   });

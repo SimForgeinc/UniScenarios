@@ -287,6 +287,97 @@ export function subsetSceneNodes(sourceBuffer, selectedNodeIndices) {
 
 const ROAD_SURFACE = /^(?:roads?|terrain)[_ .-](?:(?:road|bridge|curb|gutter|ground|marking|sidewalk|terrain|uncategorized)[_ .-])?layer\d*(?:[_ .-]|$)/i;
 const TRAFFIC_SIGNAL = /traffic[_ .-]?(?:light|signal)|signal(?:[_ .-]|\w)*(?:head|post|pole|mast|light)|pole(?:[_ .-]|\w)*signal|^(?:walk[_ .-]?)?light[_ .-]?(?:red|yellow|green|walk)(?:\d|[_ .-]|$)/i;
+const MARKING_LAYER = /(?:^|[_ .-])(?:roads?|terrain)[_ .-]marking[_ .-]layer\d*(?:[_ .-]|$)/i;
+const MARKING_MATERIAL = /(?:marking|lane[_ .-]?mark|crosswalk|stop[_ .-]?(?:bar|line)|direction[_ .-]?arrow|road[_ .-]?text|handicapped|utilities|yellow[_ .-]?material)/i;
+const SUPPORT_LAYER = /(?:^|[_ .-])(?:roads?[_ .-](?:road[_ .-])?layer\d*|terrain[_ .-](?:ground[_ .-])?layer\d*)(?:[_ .-]|$)/i;
+const SUPPORT_MATERIAL = /(?:asphalt|(?:^|[_ .-])road(?:[_ .-]|$)|oilpath|linearcracks)/i;
+
+/**
+ * Creates the marking-first Roads Only v2 intermediate.
+ *
+ * The editor already renders canonical, batched OpenDRIVE signal heads, and
+ * uses semantic topology for lanes and picking. Detailed RoadRunner signal
+ * furniture is therefore redundant in the CPU-first preset and is deliberately
+ * omitted. Every primitive exported in a marking layer is retained byte-for-
+ * byte; outside those layers we retain explicitly named marking materials and
+ * the minimum asphalt support sheet. Normals, UVs, tangents and vertex colours
+ * are unnecessary because the runtime replaces these materials with a flat,
+ * unlit palette.
+ *
+ * A pinned prune/meshopt pass compacts this intermediate afterward. Keeping
+ * this classification here, rather than in the runtime, guarantees excluded
+ * geometry is never downloaded or decoded.
+ */
+export function makeMarkingFirstRoadsOnlyGlb(sourceBuffer) {
+  const { json: source, bin } = readGlb(sourceBuffer);
+  const json = structuredClone(source);
+  const meshNodeNames = new Map();
+  for (const node of json.nodes ?? []) {
+    if (!Number.isInteger(node.mesh)) continue;
+    const names = meshNodeNames.get(node.mesh) ?? [];
+    names.push(node.name ?? '');
+    meshNodeNames.set(node.mesh, names);
+  }
+
+  let sourceMarkingPrimitives = 0;
+  let keptMarkingPrimitives = 0;
+  let keptSupportPrimitives = 0;
+  let droppedPrimitives = 0;
+  const markingInventory = [];
+  const supportInventory = [];
+  for (let meshIndex = 0; meshIndex < (json.meshes ?? []).length; meshIndex++) {
+    const mesh = json.meshes[meshIndex];
+    const nodeNames = meshNodeNames.get(meshIndex) ?? [];
+    const semanticName = `${mesh.name ?? ''} ${nodeNames.join(' ')}`;
+    const markingLayer = MARKING_LAYER.test(semanticName);
+    const supportLayer = SUPPORT_LAYER.test(semanticName);
+    const kept = [];
+    for (let primitiveIndex = 0; primitiveIndex < (mesh.primitives ?? []).length; primitiveIndex++) {
+      const primitive = mesh.primitives[primitiveIndex];
+      const materialName = json.materials?.[primitive.material]?.name ?? '';
+      const isMarking = markingLayer || MARKING_MATERIAL.test(materialName);
+      const isSupport = !isMarking && supportLayer && SUPPORT_MATERIAL.test(materialName);
+      if (isMarking) sourceMarkingPrimitives++;
+      if (!isMarking && !isSupport) {
+        droppedPrimitives++;
+        continue;
+      }
+      const output = structuredClone(primitive);
+      output.attributes = { POSITION: primitive.attributes.POSITION };
+      kept.push(output);
+      const record = { mesh: mesh.name ?? '', nodes: nodeNames, primitive: primitiveIndex, material: materialName };
+      if (isMarking) {
+        keptMarkingPrimitives++;
+        markingInventory.push(record);
+      } else {
+        keptSupportPrimitives++;
+        supportInventory.push(record);
+      }
+    }
+    mesh.primitives = kept;
+  }
+
+  for (const node of json.nodes ?? []) {
+    if (Number.isInteger(node.mesh) && !(json.meshes?.[node.mesh]?.primitives?.length)) delete node.mesh;
+  }
+  if (sourceMarkingPrimitives === 0 || keptSupportPrimitives === 0) {
+    throw new Error(`Marking-first derivative requires markings and support (found ${sourceMarkingPrimitives}/${keptSupportPrimitives})`);
+  }
+  if (sourceMarkingPrimitives !== keptMarkingPrimitives) throw new Error('Marking-first derivative dropped a marking primitive');
+  return {
+    output: writeGlb(json, bin),
+    report: {
+      sourceMarkingPrimitives,
+      keptMarkingPrimitives,
+      keptSupportPrimitives,
+      droppedPrimitives,
+      markingInventory,
+      supportInventory,
+      signalRepresentation: 'canonical-opendrive-orb-overlay',
+      retainedAttributes: ['POSITION'],
+    },
+  };
+}
 
 /**
  * Select authoring-critical road and traffic-signal scene roots for a compact

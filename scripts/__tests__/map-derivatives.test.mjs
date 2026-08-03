@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import sharp from 'sharp';
-import { analyzeRoadTiling, classifyRoadsOnlySceneRoots, geometryIdentity, makeGeometryOnlyGlb, readGlb, representativeImageColor, semanticFallbackColor, subsetSceneNodes, subsetSceneRoots, writeGlb } from '../map-derivatives-lib.mjs';
+import { analyzeRoadTiling, classifyRoadsOnlySceneRoots, geometryIdentity, makeGeometryOnlyGlb, makeMarkingFirstRoadsOnlyGlb, readGlb, representativeImageColor, semanticFallbackColor, subsetSceneNodes, subsetSceneRoots, writeGlb } from '../map-derivatives-lib.mjs';
 import { inspectPinnedToolchain } from '../map-derivative-toolchain.mjs';
 
 function fixture({ crossing = false } = {}) {
@@ -123,6 +123,49 @@ test('Roads Only node subsets preserve ancestor transforms and prune sibling fur
   assert.deepEqual(subset.json.scenes[0].nodes, [0]);
   assert.deepEqual(subset.json.nodes[0].children, [1]);
   assert.deepEqual(subset.json.nodes[0].scale, [100, 100, 100]);
+});
+
+test('Roads Only v2 keeps every marking primitive, minimum support, and POSITION only', () => {
+  const parsed = readGlb(fixture());
+  parsed.json.scenes[0].nodes = [0, 1, 2];
+  parsed.json.nodes = [
+    { name: 'Roads_Road_Layer0', mesh: 0 },
+    { name: 'Roads_Marking_Layer0', mesh: 1 },
+    { name: 'Signal_3Light_Post01_mesh', mesh: 2 },
+  ];
+  parsed.json.materials = [
+    { name: 'Asphalt1_Road' },
+    { name: 'LaneMarking1_Marking' },
+    { name: 'Concrete1_Curb' },
+    { name: 'Metal_Signals' },
+  ];
+  parsed.json.meshes = [
+    { name: 'Roads_Road_Layer0', primitives: [
+      { attributes: { POSITION: 0, NORMAL: 0, TEXCOORD_0: 0 }, material: 0 },
+      { attributes: { POSITION: 0, NORMAL: 0 }, material: 2 },
+    ] },
+    { name: 'Roads_Marking_Layer0', primitives: [
+      { attributes: { POSITION: 0, NORMAL: 0 }, material: 1 },
+      // Marking layers occasionally contain a curb-labelled stop-bar/crosswalk
+      // primitive. Layer semantics win so it cannot disappear.
+      { attributes: { POSITION: 0, COLOR_0: 0 }, material: 2 },
+    ] },
+    { name: 'Signal_3Light_Post01_mesh', primitives: [
+      { attributes: { POSITION: 0, NORMAL: 0 }, material: 3 },
+    ] },
+  ];
+  const { output, report } = makeMarkingFirstRoadsOnlyGlb(writeGlb(parsed.json, parsed.bin));
+  const result = readGlb(output).json;
+  assert.equal(report.sourceMarkingPrimitives, 2);
+  assert.equal(report.keptMarkingPrimitives, 2);
+  assert.equal(report.keptSupportPrimitives, 1);
+  assert.equal(report.droppedPrimitives, 2);
+  assert.equal(result.meshes[0].primitives.length, 1);
+  assert.equal(result.meshes[1].primitives.length, 2);
+  assert.equal(result.nodes[2].mesh, undefined);
+  for (const primitive of result.meshes.flatMap((mesh) => mesh.primitives)) {
+    assert.deepEqual(Object.keys(primitive.attributes), ['POSITION']);
+  }
 });
 
 test('pinned toolchain rejects a missing or modified executable', () => {

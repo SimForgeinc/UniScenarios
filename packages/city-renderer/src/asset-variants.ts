@@ -3,6 +3,8 @@ export type CityAssetVariantId = Exclude<CityAssetVariantPreference, 'auto' | 'o
 
 export interface CityAssetVariantFile {
   file: string;
+  /** Previous known-good derivative; never a textured source asset. */
+  fallbackFile?: string;
   sourceSha256: string;
   outputSha256: string;
   bytes: number;
@@ -41,7 +43,7 @@ export function selectAssetVariant(
   sourceFile: string,
   preference: CityAssetVariantPreference,
   options: { ultraLow: boolean; roadsOnly?: boolean; ktx2Ready: boolean },
-): { variant: CityAssetVariantId | 'original'; file: string } {
+): { variant: CityAssetVariantId | 'original'; file: string; fallbackFile?: string } {
   if (!manifest || preference === 'original') return { variant: 'original', file: sourceFile };
   const requested: CityAssetVariantId | null = preference === 'auto'
     ? (options.roadsOnly ? 'roads-only' : options.ultraLow ? 'geometry-only' : options.ktx2Ready ? 'ktx2' : null)
@@ -50,6 +52,8 @@ export function selectAssetVariant(
     return { variant: 'original', file: sourceFile };
   }
   const candidate = manifest.variants[requested]?.files[sourceFile];
-  const unsafe = candidate && (/^(?:[a-z]+:|\/)/i.test(candidate.file) || /(?:^|\/)\.\.(?:\/|$)/.test(candidate.file));
-  return candidate && !unsafe ? { variant: requested, file: candidate.file } : { variant: 'original', file: sourceFile };
+  const unsafePath = (file: string): boolean => /^(?:[a-z]+:|\/)/i.test(file) || /(?:^|\/)\.\.(?:\/|$)/.test(file);
+  const unsafe = candidate && unsafePath(candidate.file);
+  const fallbackFile = candidate?.fallbackFile && !unsafePath(candidate.fallbackFile) ? candidate.fallbackFile : undefined;
+  return candidate && !unsafe ? { variant: requested, file: candidate.file, fallbackFile } : { variant: 'original', file: sourceFile };
 }

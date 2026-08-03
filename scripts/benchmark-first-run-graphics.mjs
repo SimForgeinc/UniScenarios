@@ -123,6 +123,9 @@ for (const condition of conditions) {
             p50Ms: sample.benchmark.p50FrameMs,
             p95Ms: sample.benchmark.p95FrameMs,
             p99Ms: sample.benchmark.p99FrameMs,
+            drawCalls: sample.benchmark.drawCalls,
+            residentBytes: sample.benchmark.residentBytes,
+            phases: sample.benchmark.phases,
           },
           requestInventory: completedRequests.map((entry) => {
             const pathname = (() => { try { return new URL(entry.url).pathname; } catch { return entry.url; } })();

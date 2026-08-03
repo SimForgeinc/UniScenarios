@@ -13,7 +13,7 @@ const manifest: CityAssetVariantManifest = {
     'roads-only': {
       id: 'roads-only', generatedAt: '2026-01-01T00:00:00Z',
       generator: { name: 'test', version: '1', command: 'test' },
-      files: { 'tiles/road.glb': { file: 'variants/roads-only/road.glb', sourceSha256: 'a', outputSha256: 'r', bytes: 6 } },
+      files: { 'tiles/road.glb': { file: 'variants/roads-only-v2/road.glb', fallbackFile: 'variants/roads-only-v1/road.glb', sourceSha256: 'a', outputSha256: 'r', bytes: 6 } },
     },
     ktx2: {
       id: 'ktx2', generatedAt: '2026-01-01T00:00:00Z',
@@ -31,7 +31,11 @@ describe('city asset variants', () => {
   });
 
   it('selects the dedicated fail-closed derivative for Roads Only', () => {
-    expect(selectAssetVariant(manifest, 'tiles/road.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false }).variant).toBe('roads-only');
+    expect(selectAssetVariant(manifest, 'tiles/road.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false })).toEqual({
+      variant: 'roads-only',
+      file: 'variants/roads-only-v2/road.glb',
+      fallbackFile: 'variants/roads-only-v1/road.glb',
+    });
     expect(selectAssetVariant(manifest, 'tiles/missing.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false }).variant).toBe('original');
     expect(allowsSourceAssetFallback('roads-only', true)).toBe(false);
   });
@@ -51,6 +55,13 @@ describe('city asset variants', () => {
     const unsafe = structuredClone(manifest);
     unsafe.variants['geometry-only']!.files['tiles/road.glb']!.file = '../source/road.glb';
     expect(selectAssetVariant(unsafe, 'tiles/road.glb', 'geometry-only', { ultraLow: true, ktx2Ready: false }).variant).toBe('original');
+    const unsafeFallback = structuredClone(manifest);
+    unsafeFallback.variants['roads-only']!.files['tiles/road.glb']!.fallbackFile = 'https://example.invalid/road.glb';
+    expect(selectAssetVariant(unsafeFallback, 'tiles/road.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false })).toEqual({
+      variant: 'roads-only',
+      file: 'variants/roads-only-v2/road.glb',
+      fallbackFile: undefined,
+    });
   });
 
   it('validates the versioned manifest envelope', () => {

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {
-  analyzeRoadTiling, atomicWrite, classifyRoadsOnlySceneRoots, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, readGlb, sha256, subsetSceneNodes, subsetSceneRoots,
+  analyzeRoadTiling, atomicWrite, classifyRoadsOnlySceneRoots, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, makeMarkingFirstRoadsOnlyGlb, readGlb, sha256, subsetSceneNodes, subsetSceneRoots,
 } from './map-derivatives-lib.mjs';
 import { inspectPinnedToolchain, pinnedToolEnvironment } from './map-derivative-toolchain.mjs';
 import { buildStaticColliderArtifact, serializeStaticColliderArtifact } from './static-map-colliders-lib.mjs';
@@ -33,7 +33,7 @@ const mode = arg('mode', 'dry-run');
 const variant = arg('variant', 'all');
 if (!mapId || !/^[a-z0-9-]+$/.test(mapId)) throw new Error('Pass a safe map id with --map <id>');
 if (!['dry-run', 'build'].includes(mode)) throw new Error('--mode must be dry-run or build');
-if (!['all', 'geometry-only', 'roads-only', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, roads-only, ktx2, or static-colliders');
+if (!['all', 'geometry-only', 'roads-only', 'roads-only-v2', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, roads-only, roads-only-v2, ktx2, or static-colliders');
 
 const repository = path.resolve(import.meta.dirname, '..');
 const mapRoot = path.join(repository, 'dev-assets', mapId, '3d');
@@ -156,6 +156,109 @@ if (variant === 'roads-only' || variant === 'all') {
     generator: { name: 'uniscenarios-map-derivatives', version: '1.0.0', command: process.argv.join(' ') },
     files: { [road.file]: { file: relative, sourceSha256: sha256(source), outputSha256: sha256(output), bytes: output.length } },
     audit: { keptRoots: selection.kept, droppedRootCount: selection.dropped.length },
+  };
+}
+if (variant === 'roads-only-v2' || variant === 'all') {
+  if (!road) throw new Error('Roads Only v2 requires a road static layer');
+  if (tool.status !== 0) throw new Error('Roads Only v2 build requires the pinned gltf-transform executable');
+  const source = fs.readFileSync(path.join(mapRoot, road.file));
+  const { output: geometryRoad } = await makeGeometryOnlyGlb(source);
+  const { output: markingFirst, report } = makeMarkingFirstRoadsOnlyGlb(geometryRoad);
+  const directory = `roads-only-v2-${generatedAt.replace(/[^0-9]/g, '')}`;
+  const relative = path.posix.join('variants', directory, road.file);
+  const outputPath = path.join(mapRoot, relative);
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  const temporaryFiles = [
+    `${outputPath}.marking-first-${process.pid}.glb`,
+    `${outputPath}.pruned-${process.pid}.glb`,
+    `${outputPath}.joined-${process.pid}.glb`,
+    `${outputPath}.reordered-${process.pid}.glb`,
+    `${outputPath}.tmp-${process.pid}.glb`,
+  ];
+  const stageAudit = [];
+  const recordStage = (name, file) => {
+    const bytes = fs.readFileSync(file);
+    const parsed = readGlb(bytes).json;
+    let primitives = 0;
+    let triangles = 0;
+    let decodedPositionBytes = 0;
+    let maxPositionQuantizationErrorM = 0;
+    for (const mesh of parsed.meshes ?? []) for (const primitive of mesh.primitives ?? []) {
+      primitives++;
+      const position = parsed.accessors?.[primitive.attributes?.POSITION];
+      const indices = Number.isInteger(primitive.indices) ? parsed.accessors?.[primitive.indices] : null;
+      triangles += (indices?.count ?? position?.count ?? 0) / 3;
+      const componentBytes = position?.componentType === 5126 || position?.componentType === 5125 ? 4 : position?.componentType === 5120 || position?.componentType === 5121 ? 1 : 2;
+      decodedPositionBytes += (position?.count ?? 0) * 3 * componentBytes;
+    }
+    for (const node of parsed.nodes ?? []) {
+      if (!Number.isInteger(node.mesh)) continue;
+      const quantized = parsed.meshes?.[node.mesh]?.primitives?.some((primitive) => {
+        const accessor = parsed.accessors?.[primitive.attributes?.POSITION];
+        return accessor?.componentType === 5122 && accessor.normalized === true;
+      });
+      if (!quantized) continue;
+      const scale = node.scale ?? (node.matrix
+        ? [Math.hypot(node.matrix[0], node.matrix[1], node.matrix[2]), Math.hypot(node.matrix[4], node.matrix[5], node.matrix[6]), Math.hypot(node.matrix[8], node.matrix[9], node.matrix[10])]
+        : [1, 1, 1]);
+      maxPositionQuantizationErrorM = Math.max(maxPositionQuantizationErrorM, ...scale.map((value) => Math.abs(value) / 65534));
+    }
+    stageAudit.push({
+      name,
+      bytes: bytes.length,
+      // Stage figures are comparative diagnostics, so a fast representative
+      // Brotli level keeps all-map generation practical. The published final
+      // artifact below is still measured at maximum quality.
+      brotliBytes: zlib.brotliCompressSync(bytes, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 6 } }).length,
+      nodes: parsed.nodes?.filter((node) => Number.isInteger(node.mesh)).length ?? 0,
+      meshes: parsed.meshes?.length ?? 0,
+      primitives,
+      triangles: Math.round(triangles),
+      decodedPositionBytes,
+      maxPositionQuantizationErrorM,
+    });
+  };
+  try {
+    fs.writeFileSync(temporaryFiles[0], markingFirst);
+    recordStage('marking-first', temporaryFiles[0]);
+    const commands = [
+      ['prune', temporaryFiles[0], temporaryFiles[1], '--keep-attributes', 'false', '--keep-leaves', 'false'],
+      ['join', temporaryFiles[1], temporaryFiles[2], '--keepMeshes', 'false', '--keepNamed', 'false'],
+      ['reorder', temporaryFiles[2], temporaryFiles[3], '--target', 'performance'],
+      ['meshopt', temporaryFiles[3], temporaryFiles[4], '--level', 'high', '--quantize-position', '16'],
+    ];
+    for (const args of commands) {
+      const result = childProcess.spawnSync(gltfTransformCommand, args, { stdio: 'inherit', env: toolEnvironment ?? process.env });
+      if (result.status !== 0) throw new Error(`Roads Only v2 ${args[0]} failed`);
+      recordStage(args[0], args[2]);
+    }
+    fs.renameSync(temporaryFiles[4], outputPath);
+  } finally {
+    for (const file of temporaryFiles) if (fs.existsSync(file)) fs.rmSync(file);
+  }
+  const output = fs.readFileSync(outputPath);
+  const prior = variants['roads-only']?.files?.[road.file];
+  variants['roads-only'] = {
+    id: 'roads-only', generatedAt,
+    generator: { name: 'uniscenarios-map-derivatives', version: '2.0.0', command: process.argv.join(' ') },
+    files: {
+      [road.file]: {
+        file: relative,
+        fallbackFile: prior?.fallbackFile ?? prior?.file,
+        sourceSha256: sha256(source),
+        outputSha256: sha256(output),
+        bytes: output.length,
+        brotliBytes: zlib.brotliCompressSync(output, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 11 } }).length,
+      },
+    },
+    audit: {
+      ...report,
+      sourceRoadBytes: source.length,
+      outputBytes: output.length,
+      physicalSignalFurniture: 'omitted; canonical OpenDRIVE signal orbs remain visible and interactive',
+      pipeline: ['geometry-only', 'marking-first', 'prune', 'join', 'reorder-performance', 'meshopt-high-position16'],
+      stages: stageAudit,
+    },
   };
 }
 if (variant === 'static-colliders' || variant === 'all') {
