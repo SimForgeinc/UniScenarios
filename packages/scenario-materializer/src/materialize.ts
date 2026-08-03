@@ -303,8 +303,20 @@ export interface InstanceManifest {
   readonly inputHash: string;
   readonly feasible: boolean;
   readonly issues: SimIssue[];
+  /** Commands already accepted into the concrete t=0 world rather than left
+   * for the runtime trigger evaluator. Optional for manifest-v1 compatibility. */
+  readonly initialInteractionOutcomes?: InitialInteractionOutcome[];
   /** Lowering diagnostics; only notes without informational impact denote loss. */
   readonly notes: MaterializationNote[];
+}
+
+export interface InitialInteractionOutcome {
+  readonly interactionId: string;
+  readonly actorId: string;
+  readonly verb: V2Interaction['verb'];
+  readonly timeS: number;
+  readonly outcome: 'executed';
+  readonly basis: 'folded_initial_state';
 }
 
 export interface MaterializeResult {
@@ -1183,6 +1195,7 @@ class Materializer {
   private readonly initialRules = new Map<string, Record<string, boolean | number>>();
   private readonly foldedInteractions = new Set<string>();
   private readonly foldedTriggerStart = new Map<string, number>();
+  private readonly initialInteractionOutcomes: InitialInteractionOutcome[] = [];
   private signalPlan: SiteSignalPlan | null = null;
   private roadControls: RoadControl[] = [];
   private readonly authoredControlPrograms: SignalProgram[] = [];
@@ -2019,6 +2032,7 @@ class Materializer {
       if (!route) continue;
       this.foldedInteractions.add(it.id);
       this.foldedTriggerStart.set(it.id, t);
+      this.recordInitialInteractionOutcome(it, t);
       this.notes.push({
         path: `choreography.interactions.${it.id}`,
         reason: `route(polyline) at t=${t} folded into ${roleId}'s spawn route (${route.lengthM.toFixed(1)} m), so the arrival solver can place the actor along it`,
@@ -2038,6 +2052,7 @@ class Materializer {
       if (t > 0) continue;
       this.foldedInteractions.add(it.id);
       this.foldedTriggerStart.set(it.id, t);
+      this.recordInitialInteractionOutcome(it, t);
       this.notes.push({
         path: `choreography.interactions.${it.id}`,
         reason: `route(lanePath) at t=${t} folded into ${roleId}'s spawn route (${it.target.lanes.length} connected lanes)`,
@@ -2073,8 +2088,21 @@ class Materializer {
         this.initialRules.set(interaction.actor, bucket);
         this.foldedInteractions.add(interaction.id);
         this.foldedTriggerStart.set(interaction.id, t);
+        this.recordInitialInteractionOutcome(interaction, t);
       }
     }
+  }
+
+  private recordInitialInteractionOutcome(interaction: V2Interaction, timeS: number): void {
+    if (this.initialInteractionOutcomes.some((item) => item.interactionId === interaction.id)) return;
+    this.initialInteractionOutcomes.push({
+      interactionId: interaction.id,
+      actorId: interaction.actor,
+      verb: interaction.verb,
+      timeS,
+      outcome: 'executed',
+      basis: 'folded_initial_state',
+    });
   }
 
   /* ----------------------------------------------------------- the timeline */
@@ -3162,6 +3190,7 @@ class Materializer {
       inputHash: contentHash(input),
       feasible,
       issues,
+      initialInteractionOutcomes: [...this.initialInteractionOutcomes],
       notes: [...this.notes],
     };
 

@@ -27,7 +27,7 @@ import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
-import { buildTimelineOutcomeIndex, timelineOutcomesAt } from './timeline/model';
+import { buildTimelineOutcomeIndex, initialTimelineOutcomesFromManifest, timelineOutcomesAt } from './timeline/model';
 import { defaultSpeedKph } from './timeline/actions';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient, type LivePlaybackRun } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
@@ -579,12 +579,18 @@ export function App(): JSX.Element {
   const selectedPlayback = playbackBundle ?? authoredPlayback;
   const authoredOutcomeTrace = authoredPlayback?.trace;
   const authoredInteractions = editorController?.doc.data.choreography.interactions;
+  const authoredManifest = authoredPlayback?.instance.manifest;
   const authoredOutcomeIndex = useMemo(
     () => buildTimelineOutcomeIndex(
       authoredOutcomeTrace?.events ?? [],
       authoredInteractions ?? [],
+      initialTimelineOutcomesFromManifest(
+        authoredInteractions ?? [],
+        authoredManifest?.initialInteractionOutcomes,
+        authoredManifest?.notes,
+      ),
     ),
-    [authoredInteractions, authoredOutcomeTrace],
+    [authoredInteractions, authoredManifest, authoredOutcomeTrace],
   );
   const authoredTimelineOutcomes = useMemo(
     () => studioSession.state.mode === 'authoring'

@@ -14,6 +14,20 @@ export interface TimelineOutcomeEvent {
   readonly actorId?: string;
 }
 
+export interface TimelineInitialInteractionOutcome {
+  readonly interactionId: string;
+  readonly actorId: string;
+  readonly verb: string;
+  readonly timeS: number;
+  readonly outcome: 'executed';
+  readonly basis: 'folded_initial_state';
+}
+
+export interface TimelineMaterializationNote {
+  readonly path: string;
+  readonly reason: string;
+}
+
 /**
  * Trigger evidence indexed once per concrete trace revision.
  *
@@ -26,9 +40,10 @@ export interface TimelineOutcomeEvent {
 export function buildTimelineOutcomeIndex(
   events: readonly TimelineOutcomeEvent[],
   interactions: readonly Pick<Interaction, 'id' | 'actor'>[],
+  initialOutcomes: readonly TimelineInitialInteractionOutcome[] = [],
 ): readonly TraceOutcomeMarker[] {
   const actorsByInteraction = new Map(interactions.map((interaction) => [interaction.id, interaction.actor]));
-  return events.flatMap((event): TraceOutcomeMarker[] => {
+  const runtime = events.flatMap((event): TraceOutcomeMarker[] => {
     if ((event.kind !== 'trigger_fired' && event.kind !== 'trigger_skipped') || !event.interactionId) return [];
     const actorId = actorsByInteraction.get(event.interactionId);
     if (!actorId || !Number.isFinite(event.t)) return [];
@@ -38,8 +53,68 @@ export function buildTimelineOutcomeIndex(
       time: event.t,
       kind: event.kind,
     }];
-  }).sort((left, right) => left.time - right.time
+  });
+  const initial = initialOutcomes.flatMap((outcome): TraceOutcomeMarker[] => {
+    const actorId = actorsByInteraction.get(outcome.interactionId);
+    if (!actorId || outcome.outcome !== 'executed' || !Number.isFinite(outcome.timeS)) return [];
+    return [{ interactionId: outcome.interactionId, actorId, time: outcome.timeS, kind: 'trigger_fired' }];
+  });
+  return [...initial, ...runtime].sort((left, right) => left.time - right.time
     || String(left.interactionId).localeCompare(String(right.interactionId)));
+}
+
+/**
+ * Read canonical materializer outcomes, with a compatibility bridge for
+ * manifest-v1 evidence written before the structured field existed.
+ */
+export function initialTimelineOutcomesFromManifest(
+  interactions: readonly Pick<Interaction, 'id' | 'actor' | 'verb'>[],
+  structured: unknown,
+  notes: unknown,
+): readonly TimelineInitialInteractionOutcome[] {
+  const routeIds = new Set(interactions.filter((item) => item.verb === 'route').map((item) => item.id));
+  const accepted = new Map<string, TimelineInitialInteractionOutcome>();
+  const structuredOutcomes = Array.isArray(structured)
+    ? structured.filter(isInitialInteractionOutcome)
+    : [];
+  for (const outcome of structuredOutcomes) {
+    if (!routeIds.has(outcome.interactionId) || outcome.verb !== 'route') continue;
+    accepted.set(outcome.interactionId, outcome);
+  }
+  const materializationNotes = Array.isArray(notes) ? notes.filter(isMaterializationNote) : [];
+  for (const note of materializationNotes) {
+    const match = /^choreography\.interactions\.([A-Za-z0-9_-]+)$/.exec(note.path);
+    const interactionId = match?.[1];
+    if (!interactionId || !routeIds.has(interactionId) || !/route\([^)]*\).*folded into .*spawn route/i.test(note.reason)) continue;
+    const interaction = interactions.find((item) => item.id === interactionId)!;
+    const time = /\bat t=(-?\d+(?:\.\d+)?)/i.exec(note.reason)?.[1];
+    accepted.set(interactionId, {
+      interactionId,
+      actorId: interaction.actor,
+      verb: 'route',
+      timeS: time === undefined ? 0 : Number(time),
+      outcome: 'executed',
+      basis: 'folded_initial_state',
+    });
+  }
+  return [...accepted.values()];
+}
+
+function isInitialInteractionOutcome(value: unknown): value is TimelineInitialInteractionOutcome {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item['interactionId'] === 'string'
+    && typeof item['actorId'] === 'string'
+    && typeof item['verb'] === 'string'
+    && typeof item['timeS'] === 'number'
+    && item['outcome'] === 'executed'
+    && item['basis'] === 'folded_initial_state';
+}
+
+function isMaterializationNote(value: unknown): value is TimelineMaterializationNote {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item['path'] === 'string' && typeof item['reason'] === 'string';
 }
 
 /** Project immutable canonical evidence at one playhead position. */

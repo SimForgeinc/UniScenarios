@@ -1,10 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import type { Interaction } from '@uniscenarios/scenario-model';
-import { buildTimelineOutcomeIndex, timelineOutcomesAt } from './model';
+import { buildTimelineOutcomeIndex, initialTimelineOutcomesFromManifest, timelineOutcomesAt } from './model';
 import { timelineActionOutcome } from './TimelineDock';
 
 function interaction(id: string, actor = 'car'): Pick<Interaction, 'id' | 'actor'> {
   return { id, actor } as Pick<Interaction, 'id' | 'actor'>;
+}
+
+function routeInteraction(id: string, actor = 'car'): Pick<Interaction, 'id' | 'actor' | 'verb'> {
+  return { id, actor, verb: 'route' } as Pick<Interaction, 'id' | 'actor' | 'verb'>;
 }
 
 describe('canonical timeline outcome projection', () => {
@@ -65,5 +71,59 @@ describe('canonical timeline outcome projection', () => {
     const index = buildTimelineOutcomeIndex(events, [interaction('authored', 'document-car')]);
 
     expect(index).toEqual([{ interactionId: 'authored', actorId: 'document-car', time: 3, kind: 'trigger_fired' }]);
+  });
+
+  it('executes an accepted t0 route while independently tracking a stacked speed action', () => {
+    const route = routeInteraction('baseline-route');
+    const speed = interaction('accelerate');
+    const index = buildTimelineOutcomeIndex(
+      [{ t: 0, kind: 'trigger_fired', interactionId: 'accelerate', actorId: 'car' }],
+      [route, speed],
+      [{
+        interactionId: 'baseline-route', actorId: 'car', verb: 'route', timeS: 0,
+        outcome: 'executed', basis: 'folded_initial_state',
+      }],
+    );
+
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 0), 'baseline-route')).toBe('executed');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 0), 'accelerate')).toBe('executed');
+    expect(timelineActionOutcome([], 'baseline-route')).toBe('pending');
+  });
+
+  it('leaves delayed routes pending until fired and marks an elapsed route window missed', () => {
+    const index = buildTimelineOutcomeIndex([
+      { t: 6, kind: 'trigger_fired', interactionId: 'delayed-route', actorId: 'car' },
+      { t: 5, kind: 'trigger_skipped', interactionId: 'windowed-route', actorId: 'car' },
+    ], [routeInteraction('delayed-route'), routeInteraction('windowed-route')]);
+
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 4.999), 'windowed-route')).toBe('pending');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 5), 'windowed-route')).toBe('missed');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 5), 'delayed-route')).toBe('pending');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 6), 'delayed-route')).toBe('executed');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 2), 'delayed-route')).toBe('pending');
+  });
+
+  it('projects the existing EC05 folded routes from its canonical manifest', () => {
+    const root = new URL('../../../../examples/edge-cases/05-cyclist-occlusion-conflict/', import.meta.url);
+    const template = JSON.parse(readFileSync(new URL('scenario.template.json', root), 'utf8')) as {
+      choreography: { interactions: Interaction[] };
+    };
+    const instance = JSON.parse(readFileSync(new URL('scenario.instance.json', root), 'utf8')) as {
+      manifest: { initialInteractionOutcomes?: unknown; notes?: unknown };
+    };
+    const trace = JSON.parse(gunzipSync(readFileSync(new URL('scenario.trace.json.gz', root))).toString('utf8')) as {
+      events: Array<{ t: number; kind: string; interactionId?: string; actorId?: string }>;
+    };
+    const initial = initialTimelineOutcomesFromManifest(
+      template.choreography.interactions,
+      instance.manifest.initialInteractionOutcomes,
+      instance.manifest.notes,
+    );
+    const index = buildTimelineOutcomeIndex(trace.events, template.choreography.interactions, initial);
+
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 0), 'focus-vehicle-garage-route')).toBe('executed');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 0), 'contraflow-route')).toBe('executed');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 20), 'focus-vehicle-garage-route')).not.toBe('pending');
+    expect(timelineActionOutcome(timelineOutcomesAt(index, 20), 'contraflow-route')).not.toBe('pending');
   });
 });
