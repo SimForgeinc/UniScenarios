@@ -9,6 +9,7 @@ import {
   type OpenScenarioWorkspaceState,
 } from './model';
 import { buildLocalEsminiBundle, cancelLocalEsminiRun, submitLocalEsminiRun, waitForLocalEsminiRun } from './localClient';
+import { physicsReasonLabel, physicsSummaryForTrace } from '../playback/physics';
 
 type Section = 'overview' | 'schema' | 'compatibility' | 'issues' | 'mapping' | 'validation' | 'external' | 'files';
 
@@ -112,12 +113,14 @@ function ProfileBar({ profile, onProfile, localBundle, busy, onBuild }: { profil
 
 function Overview({ snapshot, profile, localBundle }: { snapshot: OpenScenarioSnapshot; profile: OpenScenarioExportProfile; localBundle: OpenScenarioLocalBundle | null }): JSX.Element {
   const ready = snapshot.artifact.state === 'ready';
+  const physics = physicsSummaryForTrace(snapshot.concrete.trace);
   return <div style={styles.grid}>
     <Card title="Export readiness"><Status status={profile === 'native-1.4' ? (ready ? 'passed' : 'failed') : localBundle ? 'passed' : 'not-run'} text={profile === 'native-1.4' ? (ready ? 'XML 1.4 artifact ready' : 'Export rejected') : localBundle ? 'Runnable XML 1.3 bundle ready' : 'Build not run'} /><p style={styles.copy}>{profile === 'native-1.4' ? (ready ? 'This exact materialized input has a generated trajectory-replay artifact.' : `${snapshot.artifact.issues.length} unsupported or invalid feature(s) must be resolved.`) : localBundle ? 'Complete, hash-verified OpenDRIVE and canonical trace are attached.' : 'Choose Build local bundle to resolve dependencies and run the official XSD.'}</p></Card>
     <Card title="Intent"><Key label="Profile" value={localBundle?.profile ?? snapshot.artifact.profile} /><Key label="Intent" value={localBundle?.behaviorParityScope ?? snapshot.artifact.intent} /><Key label="Duration" value={`${snapshot.concrete.input.clipSeconds.toFixed(2)} s`} /><Key label="Timestep" value={`${snapshot.concrete.input.dt} s`} /></Card>
     <Card title="Immutable identity"><Hash label="Template" value={snapshot.source.templateHash} /><Hash label="Concrete input" value={snapshot.concrete.inputHash} /><Hash label="Canonical trace" value={snapshot.concrete.traceHash} /></Card>
     <Card title="Road dependency"><Key label="Map" value={snapshot.map.id} /><Key label="Logic file" value={snapshot.map.roadFile} /><Hash label="OpenDRIVE" value={snapshot.map.xodrDigest} /><Hash label="Lane graph" value={snapshot.map.laneGraphDigest} /></Card>
     <Card title="Contents"><Key label="Actors" value={String(snapshot.concrete.input.actors.length)} /><Key label="Interactions" value={String(snapshot.concrete.input.interactions.length)} /><Key label="Signals" value={String(snapshot.concrete.input.signalPrograms.length)} /><Key label="Mappings" value={String(snapshot.source.mapping.length)} /></Card>
+    <Card title="Physics provenance"><div data-testid="openscenario-physics-provenance"><Key label="Scenario mode" value={physics.legacyReplay ? 'kinematic-v1 · immutable legacy' : physics.mode} /><Key label="Dynamic actors" value={String(physics.dynamicCount)} /><Key label="Kinematic fallbacks" value={String(physics.fallbackCount)} />{physics.actors.filter((actor) => actor.mode !== 'dynamic-v1').map((actor) => <p style={styles.copy} key={actor.id}><code>{actor.label}</code> · {actor.mode ?? 'unknown'} · {physicsReasonLabel(actor.reason)}</p>)}</div></Card>
     <Card title="Important limitation"><p style={styles.copy}>Trajectory replay verifies portable motion. It does not claim editable controller-logic equivalence or round-trip XML import. External execution remains a separate validation stage.</p></Card>
   </div>;
 }

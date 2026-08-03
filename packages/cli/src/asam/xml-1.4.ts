@@ -1,5 +1,6 @@
 import {
   buildRoute,
+  actorPhysicsBackends,
   DYNAMIC_V1_DEFAULT_SUBSTEP_S,
   runSimulation,
   resolvePhysicsConfig,
@@ -1073,6 +1074,7 @@ export function exportOpenScenarioXml14(
 
   const date = options.headerDate ?? '1970-01-01T00:00:00.000Z';
   const physics = resolvePhysicsConfig(input);
+  const inputActorBackends = actorPhysicsBackends(input.actors, physics);
   const headerProperties = [
     `<Property name="uniscenarios.executionMode" value="${executionMode}"/>`,
     `<Property name="uniscenarios.export.profile" value="${capabilities.report.profile}"/>`,
@@ -1081,13 +1083,13 @@ export function exportOpenScenarioXml14(
     `<Property name="uniscenarios.input.seed" value="${xml(String(input.seed))}"/>`,
     `<Property name="uniscenarios.physics.mode" value="${physics.mode}"/>`,
     `<Property name="uniscenarios.physics.substepS" value="${finite(physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt))}"/>`,
+    `<Property name="uniscenarios.physics.actorBackends" value="${xml(Object.entries(inputActorBackends).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}`).join(','))}"/>`,
     ...(replayTrace ? [
       `<Property name="uniscenarios.trajectoryReplay.inputHash" value="${xml(replayTrace.header.inputHash)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.engineVersion" value="${xml(replayTrace.header.engineVersion)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.dt" value="${finite(replayTrace.header.dt)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.mode" value="${xml(replayTrace.header.physics.mode)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.substepS" value="${finite(replayTrace.header.physics.substepS)}"/>`,
-      `<Property name="uniscenarios.trajectoryReplay.physics.mode" value="${xml(replayTrace.header.physics.mode)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.solver" value="${xml(replayTrace.header.physics.solver)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.solverVersion" value="${xml(replayTrace.header.physics.solverVersion)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.vehicleProfileDigest" value="${xml(replayTrace.header.physics.vehicleProfileDigest ?? 'none')}"/>`,

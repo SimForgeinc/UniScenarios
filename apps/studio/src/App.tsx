@@ -16,7 +16,13 @@ import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
 import { PlaybackLoadError, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
 import { galleryCameraChoice } from './playback/controller';
-import { activePhysicsModeForTrace } from './playback/physics';
+import {
+  physicsForActor,
+  physicsReasonLabel,
+  physicsSummaryForAuthoredActors,
+  physicsSummaryForTrace,
+  type ActorPhysicsDisplay,
+} from './playback/physics';
 import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';
@@ -520,7 +526,19 @@ export function App(): JSX.Element {
     if (cameraRegistry) cameraRegistry.helpers.group.visible = viewSettings.debugGraphics;
   }, [cameraRegistry, viewSettings.debugGraphics]);
   const selectedPlayback = playbackBundle ?? authoredPlayback;
-  const activePhysicsMode = activePhysicsModeForTrace(selectedPlayback?.trace ?? null);
+  const authoredPhysicsSummary = useMemo(() => physicsSummaryForAuthoredActors((state?.actors ?? []).map((actor) => {
+    const role = editorController?.doc.data.roles.find((item) => item.id === actor.id);
+    return {
+      id: actor.id,
+      label: actor.label,
+      simulationKind: actor.source === 'prop' ? 'static_object' : role?.actor.class ?? simulationClassFor(actor.catalogId),
+      static: actor.source === 'prop' || role?.actor.static === true,
+      reverse: role?.extensions?.['motionSemantics'] === 'reverse',
+    };
+  })), [editorController, state?.actors]);
+  const activePhysicsSummary = selectedPlayback
+    ? physicsSummaryForTrace(selectedPlayback.trace)
+    : authoredPhysicsSummary;
   const playbackPresentation = playbackBundle ? campaignCameras : cameraState;
   const galleryCamera = useMemo(
     () => playbackBundle ? galleryCameraChoice(playbackBundle) : null,
@@ -854,7 +872,7 @@ export function App(): JSX.Element {
           setOpenScenarioOpen(false);
           setMapWorkspaceOpen(false);
         }}
-        activePhysicsMode={activePhysicsMode}
+        physicsSummary={activePhysicsSummary}
       />
       <div
         style={{
@@ -932,6 +950,7 @@ export function App(): JSX.Element {
       {!mapWorkspaceOpen && authoringEnabled && actorDetailsId && editorController && viewer ? (
         <ActorDetailsCallout
           actor={actorDetailsActor}
+          physics={actorDetailsActor ? physicsForActor(activePhysicsSummary, actorDetailsActor.id) : null}
           controller={editorController}
           viewer={viewer}
           host={hostRef.current}
@@ -994,7 +1013,7 @@ export function App(): JSX.Element {
               onClose={() => setAuxiliaryTool(null)}
             />
           ) : auxiliaryTool === 'validate' && editorController ? (
-            <ScenarioActionsPanel controller={editorController} onClose={() => setAuxiliaryTool(null)} />
+            <ScenarioActionsPanel controller={editorController} physicsSummary={activePhysicsSummary} onClose={() => setAuxiliaryTool(null)} />
           ) : auxiliaryTool === 'measure' ? (
             <div style={styles.measurePanel}>
               <div style={styles.drawerHeading}>Viewport performance</div>
@@ -1094,8 +1113,9 @@ export function App(): JSX.Element {
   );
 }
 
-function ActorDetailsCallout({ actor, controller, viewer, host, onClose }: {
+export function ActorDetailsCallout({ actor, physics, controller, viewer, host, onClose }: {
   actor: ActorRecord | null;
+  physics: ActorPhysicsDisplay | null;
   controller: EditorController;
   viewer: CityViewer;
   host: HTMLDivElement | null;
@@ -1151,6 +1171,11 @@ function ActorDetailsCallout({ actor, controller, viewer, host, onClose }: {
         <button type="button" role="tab" aria-selected={tab === 'sensors'} style={tab === 'sensors' ? styles.actorTabActive : styles.actorTab} onClick={() => setTab('sensors')} data-testid="actor-sensors-tab">Sensors{actor.sensors.length ? ` · ${actor.sensors.length}` : ''}</button>
       </div>
       {tab === 'appearance' ? <div role="tabpanel" aria-label="Appearance">
+        {physics ? <div style={styles.actorPhysics} role="status" data-testid="actor-physics-backend">
+          <span>Motion backend</span>
+          <strong>{physics.mode === 'dynamic-v1' ? 'Dynamic v1' : physics.mode === 'kinematic-v1' ? 'Kinematic fallback' : 'Unknown'}</strong>
+          <small>{physicsReasonLabel(physics.reason)}</small>
+        </div> : null}
         <label style={styles.actorField}><span>Catalog model</span><select value={actor.catalogId} onChange={(event) => controller.updateActorAppearance(actor.id, { catalogId: event.target.value as CatalogId })} data-testid="actor-model">
           {!known ? <option value={actor.catalogId}>Missing model · {actor.catalogId}</option> : null}
           {models.map((entry) => {
@@ -1358,6 +1383,7 @@ const styles: Record<string, CSSProperties> = {
   actorTab: { padding: '6px 7px', border: 0, borderRadius: 4, background: 'transparent', color: '#8993a1', fontSize: 10, cursor: 'pointer' },
   actorTabActive: { padding: '6px 7px', border: '1px solid #4f5967', borderRadius: 4, background: '#282d35', color: '#f0f2f5', fontSize: 10, cursor: 'pointer' },
   actorField: { display: 'flex', flexDirection: 'column', gap: 5, marginBottom: 11, color: '#9099a7', fontSize: 10 },
+  actorPhysics: { display: 'grid', gridTemplateColumns: '1fr auto', gap: '3px 8px', marginBottom: 12, padding: 9, border: '1px solid #39434a', borderRadius: 6, background: '#1c2426', color: '#96a1ae', fontSize: 10 },
   colorControl: { display: 'flex', alignItems: 'center', gap: 9, color: '#c8ced7' },
   missingAsset: { marginBottom: 9, padding: 7, borderRadius: 5, background: '#4b3523', color: '#ffd0a8', fontSize: 9 },
   actorIdentity: { paddingTop: 8, borderTop: '1px solid #393e46', color: '#747e8c', fontSize: 9, lineHeight: 1.35 },

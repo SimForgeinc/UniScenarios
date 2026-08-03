@@ -3,6 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import type { EditorController, EditorState } from './controller';
 import type { ActorRecord } from './document';
 import type { MapEntry } from '../maps';
+import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '../playback/physics';
 
 const ACCENT = '#5b8cff';
 const PANEL = '#202226';
@@ -21,7 +22,7 @@ export function WorkspaceHeader({
   onOpenScenario,
   onMapWorkspace,
   onAuthorWorkspace,
-  activePhysicsMode = 'dynamic-v1',
+  physicsSummary = physicsSummaryForTrace(null),
 }: {
   controller: EditorController | null;
   state: EditorState | null;
@@ -35,7 +36,7 @@ export function WorkspaceHeader({
   onOpenScenario?: () => void;
   onMapWorkspace?: () => void;
   onAuthorWorkspace?: () => void;
-  activePhysicsMode?: 'dynamic-v1' | 'kinematic-v1';
+  physicsSummary?: PhysicsDisplaySummary;
 }): JSX.Element {
   return (
     <header style={styles.header} data-testid="workspace-header">
@@ -58,15 +59,7 @@ export function WorkspaceHeader({
         <span style={styles.sceneName}>{state?.name ?? 'Loading scenario…'}</span>
       </div>
       <div style={styles.headerSpacer} />
-      <span
-        style={activePhysicsMode === 'dynamic-v1' ? styles.physicsBadgeDynamic : styles.physicsBadgeLegacy}
-        data-testid="active-physics-mode"
-        title={activePhysicsMode === 'dynamic-v1'
-          ? 'Force-based passenger-car motion with explicit kinematic fallbacks'
-          : 'Recorded legacy route-following motion'}
-      >
-        Physics · {activePhysicsMode === 'dynamic-v1' ? 'Dynamic' : 'Kinematic legacy'}
-      </span>
+      <PhysicsSummaryBadge summary={physicsSummary} />
       {!playback ? (
         <div style={styles.headerActions}>
           <HeaderButton
@@ -102,6 +95,33 @@ export function WorkspaceHeader({
       </button>
     </header>
   );
+}
+
+export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummary }): JSX.Element {
+  if (summary.legacyReplay || summary.mode === 'kinematic-v1') {
+    return <span style={styles.physicsBadgeLegacy} data-testid="active-physics-mode" title={summary.legacyReplay ? 'Recorded legacy route-following motion' : 'Kinematic-v1 was explicitly selected'}>
+      Physics · {summary.legacyReplay ? 'Kinematic legacy' : 'Kinematic selected'}
+    </span>;
+  }
+  const exceptions = summary.actors.filter((actor) => actor.mode !== 'dynamic-v1');
+  return <details style={styles.physicsDetails} data-testid="physics-provenance">
+    <summary
+      style={styles.physicsBadgeDynamic}
+      data-testid="active-physics-mode"
+      aria-label={`Physics Dynamic${summary.fallbackCount ? `, ${summary.fallbackCount} kinematic fallback${summary.fallbackCount === 1 ? '' : 's'}` : ''}${summary.unknownCount ? `, ${summary.unknownCount} unknown` : ''}`}
+    >
+      Physics · Dynamic{summary.fallbackCount ? ` · ${summary.fallbackCount} fallback${summary.fallbackCount === 1 ? '' : 's'}` : ''}{summary.unknownCount ? ` · ${summary.unknownCount} unknown` : ''}
+    </summary>
+    <div style={styles.physicsPopover} role="status" aria-label="Per-actor physics backends">
+      <strong>{summary.dynamicCount} dynamic · {summary.fallbackCount} kinematic fallback{summary.fallbackCount === 1 ? '' : 's'}</strong>
+      {exceptions.length === 0 ? <span style={styles.physicsNote}>Every recorded actor uses dynamic-v1.</span> : exceptions.map((actor) => (
+        <div key={actor.id} style={styles.physicsRow} data-testid={`physics-backend-${actor.id}`}>
+          <span>{actor.label}</span>
+          <small>{actor.mode === 'kinematic-v1' ? 'Kinematic fallback' : 'Unknown'} · {physicsReasonLabel(actor.reason)}</small>
+        </div>
+      ))}
+    </div>
+  </details>;
 }
 
 function HeaderButton({
@@ -296,6 +316,10 @@ const styles: Record<string, CSSProperties> = {
   playbackBadge: { color: '#9ba3af', fontSize: 11 },
   physicsBadgeDynamic: { color: '#a9e6c5', background: 'rgba(49, 145, 96, 0.18)', border: '1px solid rgba(94, 204, 143, 0.28)', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 700 },
   physicsBadgeLegacy: { color: '#f2c078', background: 'rgba(164, 106, 31, 0.18)', border: '1px solid rgba(225, 159, 70, 0.3)', borderRadius: 999, padding: '4px 8px', fontSize: 10, fontWeight: 700 },
+  physicsDetails: { position: 'relative' },
+  physicsPopover: { position: 'absolute', zIndex: 30, top: 30, right: 0, width: 300, display: 'flex', flexDirection: 'column', gap: 7, padding: 10, border: BORDER, borderRadius: 7, background: '#202226', boxShadow: '0 12px 30px rgba(0,0,0,.45)', color: '#dce2ea', fontSize: 10 },
+  physicsNote: { color: '#8e98a6' },
+  physicsRow: { display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 6, borderTop: BORDER },
   settingsButton: { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 6, border: '1px solid #34373d', borderRadius: 5, background: '#202226', color: '#b7bdc7', padding: '5px 8px', font: 'inherit', fontSize: 11, cursor: 'pointer' },
   settingsButtonActive: { color: '#fff', borderColor: '#f07f2f', background: '#34261d' },
   disabled: { opacity: 0.32, cursor: 'default' },

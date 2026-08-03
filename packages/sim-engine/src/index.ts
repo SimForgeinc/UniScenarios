@@ -151,6 +151,7 @@ export type {
   VehicleControl,
   VehicleMotionState,
 } from './sim/motion-backend.js';
+export { actorPhysicsBackend, actorPhysicsBackends, physicsBackendCounts } from './sim/physics-provenance.js';
 export {
   alongRouteGapM,
   articulatedDoorObb,

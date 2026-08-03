@@ -1,4 +1,4 @@
-import { DYNAMIC_V1_DEFAULT_SUBSTEP_S, resolvePhysicsConfig, type Interaction, type Pose, type SimActor, type SimScenarioInput } from '@uniscenarios/sim-engine';
+import { actorPhysicsBackends, DYNAMIC_V1_DEFAULT_SUBSTEP_S, resolvePhysicsConfig, type Interaction, type Pose, type SimActor, type SimScenarioInput } from '@uniscenarios/sim-engine';
 
 import {
   analyzeAsamCapabilities,
@@ -288,6 +288,7 @@ export function exportOpenScenarioDsl22(
   if (issues.length > 0) throw new AsamExportError(issues);
 
   const physics = resolvePhysicsConfig(input);
+  const inputActorBackends = actorPhysicsBackends(input.actors, physics);
   const content = [
     '# ASAM OpenSCENARIO DSL 2.2.0',
     '# Generated from a concrete UniScenarios scenario instance.',
@@ -296,6 +297,7 @@ export function exportOpenScenarioDsl22(
     `# uniscenarios.input.schemaVersion=${input.schemaVersion}`,
     `# uniscenarios.physics.mode=${physics.mode}`,
     `# uniscenarios.physics.substepS=${physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt)}`,
+    `# uniscenarios.physics.actorBackends=${Object.entries(inputActorBackends).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}`).join(',')}`,
     ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, value]) => `# uniscenarios.provenance.${key}=${String(value).replace(/[\r\n]/g, ' ')}`,
     ),

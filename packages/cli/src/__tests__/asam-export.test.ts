@@ -346,10 +346,13 @@ describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
   it('carries replay provenance in standard extension properties', () => {
     const content = exportOpenScenarioXml14(fixture(), {
       graph,
+      executionMode: 'trajectory-replay',
       provenance: { templateDigest: 'abc123', drawIndex: 7 },
     }).content;
     expect(content).toContain('<Property name="uniscenarios.provenance.templateDigest" value="abc123"/>');
     expect(content).toContain('<Property name="uniscenarios.provenance.drawIndex" value="7"/>');
+    expect(content).toContain('<Property name="uniscenarios.physics.actorBackends" value="ego:kinematic-v1:selected"/>');
+    expect(content).toContain('<Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="ego:kinematic-v1:selected"/>');
   });
 
   it('binds signal conditions to the logical scenario controller', () => {
@@ -472,6 +475,7 @@ describe('ASAM OpenSCENARIO DSL 2.2.0 export', () => {
     }));
     expect(result.content).toContain('import osc.standard');
     expect(result.content).toContain('scenario uniscenarios_instance:');
+    expect(result.content).toContain('# uniscenarios.physics.actorBackends=ego:kinematic-v1:selected');
     expect(result.content).toContain('actor_ego: vehicle with:');
     expect(result.content).toContain('route_ego_pose_0: pose_3d with:');
     expect(result.content).toContain('route_ego: path = map_ref.create_path(points: [route_ego_pose_0');
@@ -1012,7 +1016,7 @@ describe('pinned ASAM OpenSCENARIO DSL 2.2.0 grammar profile', () => {
       .replace('scenario uniscenarios_instance:', 'scenario uniscenarios_instance')
       .replace('        serial:', '       serial:');
     expect(validateOpenScenarioDsl22ProfileSyntax(malformed)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ line: 10, reason: expect.stringContaining('outside the generated') }),
+      expect.objectContaining({ line: 11, reason: expect.stringContaining('outside the generated') }),
       expect.objectContaining({ reason: 'indentation must use four-space levels' }),
     ]));
   });
