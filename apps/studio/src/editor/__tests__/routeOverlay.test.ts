@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import type { LineBasicMaterial, LineSegments } from 'three';
+import { Color, type LineBasicMaterial, type LineSegments, type Points, type PointsMaterial } from 'three';
 import { parseSimScenarioInput } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { dashedSegments, resolvedRoutePoints, routeColor, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -19,7 +19,7 @@ function index(): LaneIndex {
 function input() {
   const actor = (id: string, kind: 'car' | 'pedestrian' | 'static_object', lanes: string[], tags: string[] = [], isStatic = false) => ({
     id, kind, dims: { l: 4, w: 2, h: 1.5 },
-    initial: { laneRef: { rsl: lanes[0]!, s: 0, t: 0 }, pose: { x: 0, z: 0, headingRad: 0 }, speedMps: isStatic ? 0 : 5 },
+    initial: { laneRef: { rsl: lanes[0]!, s: lanes[0] === '3:0:1' ? 10 : 0, t: 0 }, pose: { x: 0, z: 0, headingRad: 0 }, speedMps: isStatic ? 0 : 5 },
     behavior: { route: { kind: 'lanePath' as const, lanes }, rules: { obeySignals: true, yield: true, yieldToVehicles: true, yieldToPedestrians: true, collisionAvoidance: true, aggression: .5, speedFactor: 1 } },
     presentAtStart: true, static: isStatic, tags,
   });
@@ -76,23 +76,48 @@ describe('vehicle route overlays', () => {
 
   it('creates world-length dashes and stable actor colors', () => {
     expect(dashedSegments([{ x: 0, z: 0 }, { x: 10, z: 0 }])).toHaveLength(18);
+    expect(dottedPoints([{ x: 0, z: 0 }, { x: 10, z: 0 }])).toHaveLength(7);
     expect(routeColor('ego')).toBe(routeColor('ego'));
     expect(routeColor('other')).not.toBe(routeColor('ego'));
+    expect(new Color(routeColor('black-car', '#101114')).getHSL({ h: 0, s: 0, l: 0 }).l).toBeGreaterThanOrEqual(.62);
     const spec = { kind: 'lanePath' as const, lanes: ['1:0:-1', '2:0:-1'] };
     expect(resolvedRoutePoints(spec, index())).toBe(resolvedRoutePoints(spec, index()));
+  });
+
+  it('clips an authored guide to the exact actor spawn station', () => {
+    const points = resolvedRoutePoints(
+      { kind: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] },
+      index(),
+      { laneRsl: '1:0:-1', storageS: 7 },
+    );
+    expect(points[0]).toEqual({ x: 7, z: 0 });
+    expect(points.at(-1)).toEqual({ x: 10, z: -10 });
   });
 
   it('batches muted and selected styles and keeps ambient hidden by default', () => {
     const routes = routesFromSimulation(input(), index());
     const renderer = new VehicleRouteOverlayRenderer();
     renderer.sync(routes, { showAmbient: false, showActual: false, selectedActorIds: new Set() });
-    expect(renderer.group.children).toHaveLength(2); // path batch + semantic marker batch
+    expect(renderer.group.children).toHaveLength(3); // dots + arrows + semantic marker batch
     renderer.sync(routes, { showAmbient: true, showActual: false, selectedActorIds: new Set(['ego']) });
-    expect(renderer.group.children).toHaveLength(3); // muted + selected + markers
-    const selected = renderer.group.children[1] as LineSegments<import('three').BufferGeometry, LineBasicMaterial>;
-    expect(selected.material.opacity).toBe(.96);
+    expect(renderer.group.children).toHaveLength(3); // one dots + one arrows + markers
+    const arrows = renderer.group.getObjectByName('planned-route-arrows') as LineSegments<import('three').BufferGeometry, LineBasicMaterial>;
+    const dots = renderer.group.getObjectByName('planned-route-dots') as Points<import('three').BufferGeometry, PointsMaterial>;
+    expect(arrows.material.depthTest).toBe(false);
+    expect(dots.material.depthTest).toBe(false);
     renderer.dispose();
     expect(renderer.group.children).toHaveLength(0);
+  });
+
+  it('samples terrain elevation and renders guides above occluding road geometry', () => {
+    const renderer = new VehicleRouteOverlayRenderer((x, z) => 17 + x * .01 + z * .02);
+    renderer.sync(routesFromSimulation(input(), index()), { showAmbient: false, showActual: false, selectedActorIds: new Set(['ego']) });
+    const dots = renderer.group.getObjectByName('planned-route-dots') as Points<import('three').BufferGeometry, PointsMaterial>;
+    const positions = dots.geometry.getAttribute('position');
+    expect(positions.getY(0)).toBeCloseTo(17.38);
+    expect(dots.material.depthWrite).toBe(false);
+    expect(dots.material.depthTest).toBe(false);
+    renderer.dispose();
   });
 
   it('stays inside the interactive budget for 32 cached routes', () => {

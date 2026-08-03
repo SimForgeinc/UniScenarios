@@ -406,6 +406,9 @@ export class EditorDocument {
         },
         { historyLimit: HISTORY_LIMIT },
       );
+      // A fresh editor document is already authored at its intended t=0 pose.
+      // Hidden prologue motion would make Play start somewhere else.
+      doc.setClip(undefined, 0);
     }
     return new EditorDocument(map, doc, { ...options, store });
   }
@@ -425,6 +428,7 @@ export class EditorDocument {
       },
       { historyLimit: HISTORY_LIMIT },
     );
+    doc.setClip(undefined, 0);
     return new EditorDocument(map, doc, {
       ...options,
       store,
