@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Interaction } from '@uniscenarios/scenario-model';
 import type { EditorController, EditorState } from '../editor/controller';
+import type { EditorDocument } from '../editor/document';
 import type { StudioSessionApi } from '../session/useStudioSession';
 import { actionsForActor, definitionForInteraction, interactionForAction, type ActionDefinition } from './actions';
 import { buildTimelineGroups, conflictingAction, moveInteraction, triggerLabel, type TimelineActorGroup, type TimelineItem, type TraceOutcomeMarker } from './model';
@@ -18,6 +19,67 @@ export function cameraActorForTimelineClick(surface: TimelineClickSurface, actor
 
 export interface TimelineDockProps { controller: EditorController | null; editorState: EditorState | null; session: StudioSessionApi; outcomes?: readonly TraceOutcomeMarker[]; achievedSpeeds?: Readonly<Record<string, TimelineSpeedSeries>>; rightInset?: number; drawerMode?: boolean; onActorInspect?: (actorId: string) => void; onActorDelete?: (actorId: string) => void; dashCameras?: readonly { id: string; label: string }[]; selectedDashCameraId?: string | null; onDashCameraChange?: (id: string) => void; onCameraPlay?: () => void; onPlayPause?: () => void; }
 interface ActionEditorState { actorId: string; definitionId: string; time: number; duration: number; targetSpeed: number; editingId: string | null; }
+export interface TimelineActionDraft extends ActionEditorState {}
+export type TimelineActionSubmitResult =
+  | { readonly ok: true; readonly interaction: Interaction }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Commit exactly one dialog draft against the current document revision.
+ *
+ * Keeping this boundary synchronous is intentional: the document publishes the
+ * new revision (and therefore the route overlay) before this function returns;
+ * autosave remains debounced in the background.
+ */
+export function submitTimelineAction(document: EditorDocument, draft: TimelineActionDraft): TimelineActionSubmitResult {
+  try {
+    const template = document.data;
+    const role = template.roles.find((item) => item.id === draft.actorId);
+    if (!role) return { ok: false, message: 'This actor no longer exists. Close the dialog and select another actor.' };
+    const definition = actionsForActor(role.actor.class, role.actor.catalogId).find((item) => item.id === draft.definitionId);
+    if (!definition) return { ok: false, message: 'That action is not available for this actor type.' };
+    if (!Number.isFinite(draft.time) || draft.time < 0 || draft.time > template.choreography.clipSeconds) {
+      return { ok: false, message: `Start must be between 0 and ${template.choreography.clipSeconds} seconds.` };
+    }
+    if (!Number.isFinite(draft.duration) || draft.duration < .1 || draft.duration > 20) {
+      return { ok: false, message: 'Duration must be between 0.1 and 20 seconds.' };
+    }
+    if (definition.id.includes('target_speed') && (!Number.isFinite(draft.targetSpeed) || draft.targetSpeed < 0 || draft.targetSpeed > 200)) {
+      return { ok: false, message: 'Speed must be between 0 and 200 km/h.' };
+    }
+    const customized: ActionDefinition = definition.id.includes('target_speed')
+      ? { ...definition, target: { mode: 'absolute', valueKph: draft.targetSpeed } }
+      : definition;
+    let ordinal = template.choreography.interactions.length + 1;
+    let interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ordinal);
+    const usedIds = new Set(template.choreography.interactions.map((item) => item.id));
+    while (!draft.editingId && usedIds.has(interaction.id)) {
+      interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ++ordinal);
+    }
+    if (draft.editingId) interaction = { ...interaction, id: draft.editingId } as Interaction;
+    const currentGroup = buildTimelineGroups(template).find((item) => item.actorId === draft.actorId);
+    if (!currentGroup) return { ok: false, message: 'The timeline could not find this actor.' };
+    const candidate: TimelineItem = {
+      interaction,
+      actorId: draft.actorId,
+      track: 'actions',
+      resource: customized.resource,
+      anchorTime: draft.time,
+      endTime: Math.min(template.choreography.clipSeconds, draft.time + draft.duration),
+      unresolved: false,
+    };
+    const conflict = conflictingAction(candidate, currentGroup.tracks.actions, draft.editingId ?? undefined);
+    if (conflict) {
+      return { ok: false, message: `${customized.group} action overlaps “${conflict.interaction.label ?? conflict.interaction.id}”. Move one of them so this actor has only one ${customized.resource} action at a time.` };
+    }
+    if (draft.editingId) document.replaceInteraction(draft.editingId, interaction);
+    else document.addInteraction(interaction);
+    return { ok: true, interaction };
+  } catch (reason) {
+    const detail = reason instanceof Error ? reason.message : String(reason);
+    return { ok: false, message: `Could not add this action: ${detail}` };
+  }
+}
 
 export function TimelineDock({ controller, editorState, session, outcomes = [], rightInset = 16, drawerMode = false, onActorInspect, onActorDelete, dashCameras = [], selectedDashCameraId = null, onDashCameraChange, onCameraPlay, onPlayPause }: TimelineDockProps): JSX.Element {
   const [expanded, setExpanded] = useState(true); const [selectedInteraction, setSelectedInteraction] = useState<string | null>(null); const [editor, setEditor] = useState<ActionEditorState | null>(null); const [notice, setNotice] = useState<string | null>(null); const [inspectedActor, setInspectedActor] = useState<string | null>(null);
@@ -26,7 +88,16 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
   const groupFor = (actorId: string) => groups.find((group) => group.actorId === actorId);
   const openNew = (actorId: string, time = session.state.time): void => { const group = groupFor(actorId); if (!group || readonly) return; const choices = actionsForActor(group.actorClass, group.catalogId); if (!choices.length) return; setEditor({ actorId, definitionId: choices[0]!.id, time: clamp(time, 0, duration), duration: choices[0]!.durationS, targetSpeed: Number(choices[0]!.target.valueKph ?? 30), editingId: null }); setSelectedInteraction(null); setNotice(null); };
   const selectItem = (item: TimelineItem): void => { const group = groupFor(item.actorId); if (!group) return; const choices = actionsForActor(group.actorClass, group.catalogId); const definition = definitionForInteraction(item.interaction, group.actorClass, group.catalogId) ?? choices.find((choice) => choice.verb === item.interaction.verb && choice.resource === item.resource) ?? choices[0]; if (!definition) return; setSelectedInteraction(item.interaction.id); setEditor({ actorId: item.actorId, definitionId: definition.id, time: item.anchorTime, duration: Math.max(.1, item.endTime - item.anchorTime), targetSpeed: item.interaction.verb === 'speed' && item.interaction.target.mode === 'absolute' && typeof item.interaction.target.valueKph === 'number' ? item.interaction.target.valueKph : Number(definition.target.valueKph ?? 30), editingId: item.interaction.id }); controller?.setSelection([item.actorId]); };
-  const saveEditor = (): void => { if (!controller || !editor || readonly) return; const group = groupFor(editor.actorId); if (!group) return; const definition = actionsForActor(group.actorClass, group.catalogId).find((item) => item.id === editor.definitionId); if (!definition) return; const customized: ActionDefinition = definition.id.includes('target_speed') ? { ...definition, target: { mode: 'absolute', valueKph: Math.max(0, editor.targetSpeed) } } : definition; let interaction = interactionForAction({ ...customized, durationS: editor.duration }, editor.actorId, editor.time, controller.doc.data.choreography.interactions.length + 1); if (editor.editingId) interaction = { ...interaction, id: editor.editingId } as Interaction; const candidate: TimelineItem = { interaction, actorId: editor.actorId, track: 'actions', resource: customized.resource, anchorTime: editor.time, endTime: Math.min(duration, editor.time + Math.max(.1, editor.duration)), unresolved: false }; const conflict = conflictingAction(candidate, group.tracks.actions, editor.editingId ?? undefined); if (conflict) { setNotice(`${customized.group} action overlaps “${conflict.interaction.label ?? conflict.interaction.id}”. Move one of them so this actor has only one ${customized.resource} action at a time.`); return; } if (editor.editingId) controller.doc.replaceInteraction(editor.editingId, interaction); else controller.doc.addInteraction(interaction); setSelectedInteraction(interaction.id); setEditor(null); setNotice(null); };
+  const saveEditor = (): void => {
+    if (!editor) { setNotice('The action dialog lost its draft. Close it and try again.'); return; }
+    if (!controller) { setNotice('The editor is still loading. Try again in a moment.'); return; }
+    if (readonly) { setNotice('Actions can only be changed while authoring.'); return; }
+    const result = submitTimelineAction(controller.doc, editor);
+    if (!result.ok) { setNotice(result.message); return; }
+    setSelectedInteraction(result.interaction.id);
+    setEditor(null);
+    setNotice(null);
+  };
   const moveItem = (item: TimelineItem, time: number): void => { if (!controller) return; const group = groupFor(item.actorId); if (!group) return; const candidate = { ...item, anchorTime: time, endTime: time + (item.endTime - item.anchorTime) }; const conflict = conflictingAction(candidate, group.tracks.actions, item.interaction.id); if (conflict) { setNotice(`That move would overlap another ${item.resource} action.`); return; } controller.doc.replaceInteraction(item.interaction.id, moveInteraction(item.interaction, time)); setNotice(null); };
   const deleteActor = (actorId: string): void => { if (!controller || readonly) return; controller.setSelection((editorState?.selection ?? []).filter((id) => id !== actorId)); controller.doc.remove([actorId]); if (inspectedActor === actorId) setInspectedActor(null); setSelectedInteraction(null); setEditor(null); onActorDelete?.(actorId); };
   useEffect(() => { const key = (event: KeyboardEvent): void => { if (readonly || isField(event.target)) return; if ((event.key === 'Delete' || event.key === 'Backspace') && selectedInteraction) { event.preventDefault(); controller?.doc.removeInteraction(selectedInteraction); setSelectedInteraction(null); setEditor(null); } if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z') { event.preventDefault(); event.shiftKey ? controller?.redo() : controller?.undo(); } }; window.addEventListener('keydown', key, { capture: true }); return () => window.removeEventListener('keydown', key, { capture: true }); });
@@ -39,7 +110,7 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
   </section>;
 }
 
-function ActionEditor({ state, group, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element { const choices = actionsForActor(group.actorClass, group.catalogId); const selected = choices.find((item) => item.id === state.definitionId) ?? choices[0]!; const grouped = [...new Set(choices.map((item) => item.group))]; return <aside role="dialog" aria-label={state.editingId ? 'Edit action' : 'Add action'} style={{ ...styles.editor, right: Math.max(16, rightInset) }} data-testid="interaction-editor"><div style={styles.editorHeader}><div><strong>Action</strong><div style={styles.editorContext}>{group.label}</div></div><button type="button" onClick={onClose} style={styles.close} aria-label="Close">×</button></div><label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>{selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}<label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} data-testid="interaction-time" /></label><label style={styles.field}><span>Duration</span><input type="number" min={.1} max={20} step={.1} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} /></label><div style={styles.resourceHint}>{selected.resource === 'longitudinal' || selected.resource === 'lateral' ? `Only one ${selected.resource} action can run at once.` : 'This action can run in parallel with movement.'}</div><div style={styles.editorActions}><button type="button" onClick={onSave} disabled={readOnly} style={styles.save} data-testid="save-interaction">{state.editingId ? 'Update' : 'Add to timeline'}</button>{onDelete ? <button type="button" onClick={onDelete} style={styles.delete}>Delete</button> : null}</div></aside>; }
+function ActionEditor({ state, group, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element { const choices = actionsForActor(group.actorClass, group.catalogId); const selected = choices.find((item) => item.id === state.definitionId) ?? choices[0]!; const grouped = [...new Set(choices.map((item) => item.group))]; return <aside role="dialog" aria-label={state.editingId ? 'Edit action' : 'Add action'} style={{ ...styles.editor, right: Math.max(16, rightInset) }} data-testid="interaction-editor"><div style={styles.editorHeader}><div><strong>Action</strong><div style={styles.editorContext}>{group.label}</div></div><button type="button" onClick={onClose} style={styles.close} aria-label="Close">×</button></div><form onSubmit={(event) => { event.preventDefault(); onSave(); }}><label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>{selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}<label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} data-testid="interaction-time" /></label><label style={styles.field}><span>Duration</span><input type="number" min={.1} max={20} step={.1} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} /></label><div style={styles.resourceHint}>{selected.resource === 'longitudinal' || selected.resource === 'lateral' ? `Only one ${selected.resource} action can run at once.` : 'This action can run in parallel with movement.'}</div><div style={styles.editorActions}><button type="submit" disabled={readOnly} style={styles.save} data-testid="save-interaction">{state.editingId ? 'Update' : 'Add to timeline'}</button>{onDelete ? <button type="button" onClick={onDelete} style={styles.delete}>Delete</button> : null}</div></form></aside>; }
 function TimelineClip({ item, duration, readonly, selected, onSelect, onMove, onDelete }: { item: TimelineItem; duration: number; readonly: boolean; selected: boolean; onSelect: () => void; onMove: (time: number) => void; onDelete: () => void }): JSX.Element { const drag = (event: ReactMouseEvent<HTMLButtonElement>): void => { onSelect(); if (readonly || event.button !== 0) return; const track = event.currentTarget.parentElement; if (!track) return; window.addEventListener('mouseup', (pointer) => { const bounds = track.getBoundingClientRect(); onMove(clamp((pointer.clientX - bounds.left) / bounds.width * duration, 0, duration)); }, { once: true }); }; return <button type="button" onMouseDown={drag} onDoubleClick={(event) => { event.stopPropagation(); if (!readonly) onDelete(); }} title={`${item.interaction.label ?? item.interaction.verb} · ${triggerLabel(item.interaction.trigger)}`} data-testid={`timeline-item-${item.interaction.id}`} style={{ ...styles.clip, left: `${item.anchorTime / duration * 100}%`, width: `${Math.max(3, (item.endTime - item.anchorTime) / duration * 100)}%`, ...(selected ? styles.clipSelected : null) }}>{item.interaction.label ?? item.interaction.verb}</button>; }
 function Ruler({ duration }: { duration: number }): JSX.Element { return <div style={styles.ruler}>{Array.from({ length: Math.floor(duration / 5) + 1 }, (_, index) => index * 5).map((tick) => <span key={tick} style={{ ...styles.tick, left: `${tick / duration * 100}%` }}>{tick}s</span>)}</div>; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); } function isField(target: EventTarget | null): boolean { return target instanceof HTMLInputElement || target instanceof HTMLSelectElement || target instanceof HTMLTextAreaElement; }
