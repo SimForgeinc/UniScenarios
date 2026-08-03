@@ -83,6 +83,7 @@ export async function loadSumoAssets(
       seed: numericSeed(profile.seed),
       stepSeconds: 0.05,
       worldFromNetwork: manifest.worldFromNetwork,
+      maxActorStates: profile.maxActors,
     },
     runtime,
     demand: {
@@ -119,10 +120,11 @@ export function buildSumoRouteDocument(
   // road does not receive its entire population in the same simulation tick.
   const vehicles = shuffled.slice(0, count).map((edges, index) => {
     const depart = count <= 1 ? 0 : index / (count - 1) * SUMO_DEPARTURE_WINDOW_SECONDS;
-    // Replenishing half the slots on a 40-second cadence offsets normal
-    // trip completion without doubling long-running routes. The other half
-    // are one-shot demand, keeping the population bounded at dense tiers.
-    return index % 2 === 0
+    // Replenishing one quarter of the slots on a 40-second cadence offsets
+    // normal trip completion without materially overshooting the requested
+    // cap at the 100-actor tier. The other slots are one-shot demand, keeping
+    // the population bounded even when long routes overlap a new generation.
+    return index % 4 === 0
       ? `  <flow id="sumo-${numericSeed(profile.seed).toString(16)}-${index}" type="ambient" begin="${depart.toFixed(2)}" end="3600" period="${SUMO_REPLENISHMENT_PERIOD_SECONDS}" departLane="best" departPos="random_free" departSpeed="max"><route edges="${edges.map(xml).join(' ')}"/></flow>`
       : `  <vehicle id="sumo-${numericSeed(profile.seed).toString(16)}-${index}" type="ambient" depart="${depart.toFixed(2)}" departLane="best" departPos="random_free" departSpeed="max"><route edges="${edges.map(xml).join(' ')}"/></vehicle>`;
   }

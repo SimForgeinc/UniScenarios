@@ -7,6 +7,8 @@ export interface TrafficNetworkPayload {
   readonly stepSeconds: number;
   /** world = rotate(network * scale) + translation */
   readonly worldFromNetwork: NetworkWorldTransform;
+  /** Hard bound on transferred/rendered SUMO actors; engine overflow is reported separately. */
+  readonly maxActorStates: number;
 }
 
 export interface NetworkWorldTransform {
@@ -46,6 +48,7 @@ export interface TrafficStepResult {
   /** Eight 32-bit words per actor; see SUMO_WASM_STATE_WORDS. */
   readonly states: ArrayBuffer;
   readonly actorCount: number;
+  readonly simulatedActorCount: number;
   readonly stepMilliseconds: number;
 }
 
@@ -55,6 +58,10 @@ export interface TrafficProviderInitialization {
 }
 
 export const SUMO_WASM_STATE_WORDS = 8;
+
+export function boundedTrafficActorCount(simulatedCount: number, maximum: number): number {
+  return Math.max(0, Math.min(Math.trunc(simulatedCount), Math.trunc(maximum)));
+}
 
 export type SumoWorkerRequest =
   | { readonly kind: 'init'; readonly id: number; readonly moduleUrl: string; readonly payload: TrafficNetworkPayload }

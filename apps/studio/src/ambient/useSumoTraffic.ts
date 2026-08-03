@@ -105,6 +105,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         stepP95Milliseconds: first.stepMilliseconds,
         ...firstMetrics,
         requestedActorCount: demand.requestedActors,
+        simulatedActorCount: first.simulatedActorCount,
         nearbyRouteStarts: demand.nearbyRouteStarts,
         detailedSafetyMetricsAvailable: false,
       });
@@ -147,7 +148,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
       else active.missedDeadlines = 0;
       if (active.missedDeadlines >= 3) throw new Error(`performance gate: ${p95.toFixed(1)} ms p95 exceeds realtime headroom`);
       options.renderer?.syncLayer('sumo-traffic', decodeSumoActorViews(result, options.sampleHeight!));
-      setStatus((current) => ({ ...current, phase: 'running', actorCount: result.actorCount, stepP95Milliseconds: p95, ...trafficMetrics(result, options.focus, active) }));
+      setStatus((current) => ({ ...current, phase: 'running', actorCount: result.actorCount, simulatedActorCount: result.simulatedActorCount, stepP95Milliseconds: p95, ...trafficMetrics(result, options.focus, active) }));
     }).catch((reason: unknown) => {
       const message = reason instanceof Error ? reason.message : String(reason);
       options.renderer?.clearLayer('sumo-traffic');

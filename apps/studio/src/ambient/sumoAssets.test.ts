@@ -37,7 +37,7 @@ describe('SUMO browser assets', () => {
     view.setFloat32(4, 10, true);
     view.setFloat32(8, 20, true);
     view.setFloat32(12, 90, true);
-    const [actor] = decodeSumoActorViews({ sequence: 1, simulationSeconds: .1, states, actorCount: 1, stepMilliseconds: 2 }, () => 3);
+    const [actor] = decodeSumoActorViews({ sequence: 1, simulationSeconds: .1, states, actorCount: 1, simulatedActorCount: 1, stepMilliseconds: 2 }, () => 3);
     expect(actor).toMatchObject({ id: 'sumo:00001234', x: 10, y: 3, z: 20, headingRad: 0 });
   });
 

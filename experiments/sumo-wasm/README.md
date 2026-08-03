@@ -163,10 +163,12 @@ Escape.
 Studio now ranks packaged route departures around the authored actor centroid
 (or the camera target for a blank scenario) before building demand. Departures
 are deterministically staggered over a one-second hidden warm-up, so the editor
-opens on an already populated road without a one-frame spawn burst. Half of the
-bounded slots replenish every 40 seconds; half remain one-shot trips. This
+opens on an already populated road without a one-frame spawn burst. One quarter
+of the bounded slots replenish every 40 seconds; the rest remain one-shot trips. This
 offsets finite-route completion without allowing every long route to overlap a
-second full generation. The panel derives active, nearby, queued, completed,
+second full generation. The worker also hard-caps transferred and rendered
+states at the requested actor tier while reporting any short-lived internal
+SUMO overflow separately. The panel derives active, nearby, queued, completed,
 and emergency-braking counts from the packed worker state. The lean bridge does
 not expose SUMO teleport or collision counters yet, and the UI says so rather
 than presenting inferred values as authoritative safety data.

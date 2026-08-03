@@ -83,6 +83,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
           {sumoStatus.reason ? ` · ${sumoStatus.reason}` : null}
           {sumoStatus.phase !== 'fallback' ? <>
             <div>{sumoStatus.actorCount}/{sumoStatus.requestedActorCount ?? sumoStatus.actorCount} active · {sumoStatus.nearbyRouteStarts ?? 0} local route starts · {formatBytes(sumoStatus.heapBytes)} heap</div>
+            {(sumoStatus.simulatedActorCount ?? sumoStatus.actorCount) > sumoStatus.actorCount ? <div>{sumoStatus.simulatedActorCount} simulated · presentation capped at {sumoStatus.actorCount}</div> : null}
             <div>{sumoStatus.nearbyActorCount ?? 0} nearby · {sumoStatus.queuedActorCount ?? 0} queued · {sumoStatus.completedActorCount ?? 0} completed</div>
             <div>{sumoStatus.emergencyStoppingActorCount ?? 0} emergency braking · safety counters {sumoStatus.detailedSafetyMetricsAvailable ? 'available' : 'not exposed'}</div>
             <div>{formatMs(sumoStatus.initMilliseconds)} init · {formatMs(sumoStatus.stepP95Milliseconds)} step p95</div>

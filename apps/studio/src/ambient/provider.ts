@@ -23,6 +23,7 @@ export interface SumoTrafficStatus {
   readonly completedActorCount?: number;
   readonly emergencyStoppingActorCount?: number;
   readonly requestedActorCount?: number;
+  readonly simulatedActorCount?: number;
   readonly nearbyRouteStarts?: number;
   /** The lean bridge does not currently expose SUMO's teleport/collision counters. */
   readonly detailedSafetyMetricsAvailable?: boolean;

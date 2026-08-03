@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import type { ExternalTrafficActor, NetworkWorldTransform, SumoWorkerRequest, SumoWorkerResponse } from './protocol';
+import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse } from './protocol';
 import { toNetwork, transformPackedStatesToWorld } from './coordinateTransform';
 
 interface SumoModule {
@@ -35,6 +35,7 @@ type SumoFactory = (options?: { noInitialRun?: boolean; printErr?: (message: str
 
 let module: SumoModule | undefined;
 let worldFromNetwork: NetworkWorldTransform | undefined;
+let maxActorStates = Number.POSITIVE_INFINITY;
 const mirroredIds = new Set<string>();
 const scope = self as DedicatedWorkerGlobalScope;
 
@@ -58,6 +59,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
       },
     });
     worldFromNetwork = message.payload.worldFromNetwork;
+    maxActorStates = message.payload.maxActorStates;
     const net = copyBytes(module, new Uint8Array(message.payload.network));
     const routes = copyBytes(module, new Uint8Array(message.payload.routes));
     try {
@@ -75,6 +77,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     sumo._us_sumo_close();
     module = undefined;
     worldFromNetwork = undefined;
+    maxActorStates = Number.POSITIVE_INFINITY;
     mirroredIds.clear();
     post({ kind: 'closed', id: message.id });
     return;
@@ -83,7 +86,8 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   const started = performance.now();
   mirrorExternalActors(sumo, message.request.externalActors);
   assertOk(sumo._us_sumo_step(message.request.deltaSeconds));
-  const count = sumo._us_sumo_state_count();
+  const simulatedCount = sumo._us_sumo_state_count();
+  const count = boundedTrafficActorCount(simulatedCount, maxActorStates);
   const byteLength = count * 8 * Uint32Array.BYTES_PER_ELEMENT;
   const source = new Uint8Array(sumo.HEAPU8.buffer, sumo._us_sumo_state_pointer(), byteLength);
   const states = source.slice().buffer;
@@ -95,6 +99,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     simulationSeconds: sumo._us_sumo_time(),
     states,
     actorCount: count,
+    simulatedActorCount: simulatedCount,
     stepMilliseconds: performance.now() - started,
   }, [states]);
 }
