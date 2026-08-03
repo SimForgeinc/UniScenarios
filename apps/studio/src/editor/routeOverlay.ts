@@ -30,6 +30,8 @@ export interface RouteOverlayOptions {
   readonly selectedActorIds: ReadonlySet<string>;
 }
 
+export type RouteHeightSampler = (x: number, z: number) => number | null;
+
 const VEHICLE_KINDS = new Set<SimActor['kind']>(['vehicle', 'car', 'truck', 'bus', 'van', 'motorcycle', 'bicycle', 'scooter']);
 const PALETTE = ['#55a7ff', '#ff8a65', '#8bd17c', '#d590ef', '#ffd166', '#54d6c4', '#ef6f9b'];
 const ROUTE_CACHE_LIMIT = 256;
@@ -41,26 +43,45 @@ export function clearRouteGeometryCache(): void { routeGeometryCache.clear(); }
 
 /** Stable presentation color when an actor has no authored body color. */
 export function routeColor(actorId: string, authored?: string): string {
-  if (authored && /^#[0-9a-f]{6}$/i.test(authored)) return authored;
+  if (authored && /^#[0-9a-f]{6}$/i.test(authored)) {
+    // Vehicle paint is often charcoal/black. It is a useful identity cue but a
+    // one-pixel black route disappears on asphalt, so preserve its hue while
+    // lifting it into a high-contrast guide colour.
+    const color = new Color(authored);
+    const hsl = { h: 0, s: 0, l: 0 };
+    color.getHSL(hsl);
+    color.setHSL(hsl.h, Math.max(.72, hsl.s), Math.max(.62, hsl.l));
+    return `#${color.getHexString()}`;
+  }
   let hash = 2166136261;
   for (let i = 0; i < actorId.length; i++) hash = Math.imul(hash ^ actorId.charCodeAt(i), 16777619);
   return PALETTE[(hash >>> 0) % PALETTE.length]!;
 }
 
 /** Resolve through the same Route implementation used to construct RuntimeWorld actors. */
-export function resolvedRoutePoints(spec: RouteSpec, index: LaneIndex): readonly RoutePoint[] {
+export function resolvedRoutePoints(
+  spec: RouteSpec,
+  index: LaneIndex,
+  start?: { readonly laneRsl: string; readonly storageS: number },
+): readonly RoutePoint[] {
   const graphDigest = index.stats.xodrSha256 ?? `${index.stats.mapName}:${index.stats.lanes}:${index.stats.segments}`;
-  const key = `${graphDigest}:${contentHash(spec)}`;
+  const key = `${graphDigest}:${contentHash(spec)}:${start ? `${start.laneRsl}@${start.storageS.toFixed(3)}` : 'full'}`;
   const cached = routeGeometryCache.get(key);
   if (cached) return cached;
   const built = buildRoute(index.graph, spec);
   if (!built.ok || built.route.lengthM <= 0) return [];
   const points: RoutePoint[] = [];
+  const startS = start && spec.kind === 'lanePath' && spec.lanes[0] === start.laneRsl
+    ? built.route.sOfLaneStorage(start.laneRsl, start.storageS) ?? 0
+    : 0;
   // Two-metre samples retain junction curvature while bounding 32 typical
   // routes to a few thousand vertices. Exact leg boundaries are also sampled.
-  const samples = new Set<number>([0, built.route.lengthM]);
-  for (let s = 2; s < built.route.lengthM; s += 2) samples.add(s);
-  for (const leg of built.route.legs) { samples.add(leg.sStart); samples.add(leg.sStart + leg.lengthM); }
+  const samples = new Set<number>([startS, built.route.lengthM]);
+  for (let s = startS + 2; s < built.route.lengthM; s += 2) samples.add(s);
+  for (const leg of built.route.legs) {
+    if (leg.sStart >= startS) samples.add(leg.sStart);
+    if (leg.sStart + leg.lengthM >= startS) samples.add(leg.sStart + leg.lengthM);
+  }
   for (const s of [...samples].sort((a, b) => a - b)) {
     const pose = built.route.poseAt(s);
     const x = Object.is(pose.point.x, -0) ? 0 : pose.point.x;
@@ -74,7 +95,10 @@ export function resolvedRoutePoints(spec: RouteSpec, index: LaneIndex): readonly
 }
 
 function routePoints(actor: SimActor, index: LaneIndex): readonly RoutePoint[] {
-  return resolvedRoutePoints(actor.behavior.route, index);
+  const laneRef = actor.initial.laneRef;
+  return resolvedRoutePoints(actor.behavior.route, index, laneRef
+    ? { laneRsl: laneRef.rsl, storageS: laneRef.s }
+    : undefined);
 }
 
 function actualPoints(actorId: string, trace?: SceneTrace): RoutePoint[] {
@@ -201,7 +225,10 @@ export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneInde
     const reroute = reroutes.get(role.id);
     const lanes = reroute?.target.mode === 'lanePath' ? reroute.target.lanes : role.kind === 'scene_absolute' ? role.initialRoute?.lanes : undefined;
     if (!lanes?.length) return [];
-    const planned = resolvedRoutePoints({ kind: 'lanePath', lanes }, index);
+    const planned = resolvedRoutePoints({ kind: 'lanePath', lanes }, index,
+      role.kind === 'scene_absolute' && role.laneRef
+        ? { laneRsl: `${role.laneRef.roadId}:${role.laneRef.section}:${role.laneRef.laneId}`, storageS: role.laneRef.s }
+        : undefined);
     if (planned.length < 2) return [];
     const authoredColor = role.extensions?.['studio.presentation.bodyColor'];
     return [{
@@ -260,9 +287,34 @@ export function dashedSegments(points: readonly RoutePoint[], dashM = 2.2, gapM 
   return out;
 }
 
+/** Fixed-world-spacing route dots, stable across source sampling density. */
+export function dottedPoints(points: readonly RoutePoint[], spacingM = 1.8): RoutePoint[] {
+  if (points.length === 0) return [];
+  const out: RoutePoint[] = [points[0]!];
+  let carried = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    const length = Math.hypot(b.x - a.x, b.z - a.z);
+    if (length < 1e-5) continue;
+    let at = spacingM - carried;
+    while (at <= length + 1e-6) {
+      const t = Math.min(1, at / length);
+      out.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t });
+      at += spacingM;
+    }
+    carried = (carried + length) % spacingM;
+  }
+  const last = points.at(-1)!;
+  if (Math.hypot(out.at(-1)!.x - last.x, out.at(-1)!.z - last.z) > spacingM * .45) out.push(last);
+  return out;
+}
+
 function appendArrows(target: number[], points: readonly RoutePoint[], y: number): void {
   let travelled = 0;
-  let next = 15;
+  // Put the first arrow close enough to a newly placed actor to be visible
+  // when it is framed, then repeat frequently enough to communicate direction.
+  let next = 6;
   for (let i = 1; i < points.length; i++) {
     const a = points[i - 1]!;
     const b = points[i]!;
@@ -276,7 +328,7 @@ function appendArrows(target: number[], points: readonly RoutePoint[], y: number
       const tip = { x: x + ux * 1.1, z: z + uz * 1.1 };
       pushSegment(target, tip, { x: x - ux * .65 - uz * .7, z: z - uz * .65 + ux * .7 }, y);
       pushSegment(target, tip, { x: x - ux * .65 + uz * .7, z: z - uz * .65 - ux * .7 }, y);
-      next += 22;
+      next += 16;
     }
     travelled += length;
   }
@@ -286,34 +338,59 @@ export class VehicleRouteOverlayRenderer {
   readonly group = new Group();
   private objects: Array<LineSegments | Points> = [];
 
-  constructor() { this.group.name = 'vehicle-route-overlays'; this.group.renderOrder = 20; }
+  constructor(private readonly sampleHeight?: RouteHeightSampler) {
+    this.group.name = 'vehicle-route-overlays';
+    this.group.renderOrder = 20;
+  }
 
   sync(routes: readonly VehicleRouteOverlay[], options: RouteOverlayOptions): void {
     this.clear();
     const visible = routes.filter((route) => !route.ambient || options.showAmbient);
-    // One vertex-colored draw call for muted planned paths and one for selected paths.
-    for (const selected of [false, true]) {
-      const positions: number[] = [];
-      const colors: number[] = [];
-      for (const route of visible) {
-        if (options.selectedActorIds.has(route.actorId) !== selected) continue;
-        const segments = dashedSegments(route.planned);
-        appendArrows(segments, route.planned, 0);
-        const color = new Color(route.color).multiplyScalar(selected ? 1 : .62);
-        for (let i = 0; i < segments.length; i += 3) {
-          positions.push(segments[i]!, .22, segments[i + 2]!);
-          colors.push(color.r, color.g, color.b);
-        }
+    // One dot batch and one arrow batch for all paths. Selection is encoded in
+    // vertex colour so adding actors never adds draw calls.
+    const plannedPositions: number[] = [];
+    const plannedColors: number[] = [];
+    const arrowPositions: number[] = [];
+    const arrowColors: number[] = [];
+    for (const route of visible) {
+      const selected = options.selectedActorIds.has(route.actorId);
+      const color = new Color(route.color).multiplyScalar(selected ? 1 : .34);
+      for (const point of dottedPoints(route.planned)) {
+        plannedPositions.push(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + (selected ? .38 : .27), point.z);
+        plannedColors.push(color.r, color.g, color.b);
       }
-      if (positions.length) this.addLines(positions, colors, selected ? .96 : .43);
+      const arrows: number[] = [];
+      appendArrows(arrows, route.planned, 0);
+      for (let i = 0; i < arrows.length; i += 3) {
+        const x = arrows[i]!;
+        const z = arrows[i + 2]!;
+        arrowPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .4 : .29), z);
+        arrowColors.push(color.r, color.g, color.b);
+      }
     }
+    if (plannedPositions.length) {
+      const geometry = new BufferGeometry();
+      geometry.setAttribute('position', new BufferAttribute(Float32Array.from(plannedPositions), 3));
+      geometry.setAttribute('color', new BufferAttribute(Float32Array.from(plannedColors), 3));
+      geometry.computeBoundingSphere();
+      const points = new Points(geometry, new PointsMaterial({ size: .48, vertexColors: true, transparent: true, opacity: .98, depthTest: false, depthWrite: false, sizeAttenuation: true }));
+      points.name = 'planned-route-dots';
+      points.renderOrder = 21;
+      this.group.add(points); this.objects.push(points);
+    }
+    if (arrowPositions.length) this.addLines(arrowPositions, arrowColors, .98, 'planned-route-arrows');
     if (options.showActual) {
       const positions: number[] = [];
       const colors: number[] = [];
       for (const route of visible) {
         const color = new Color(route.color);
         for (let i = 1; i < route.actual.length; i++) {
-          pushSegment(positions, route.actual[i - 1]!, route.actual[i]!, .29);
+          const a = route.actual[i - 1]!;
+          const b = route.actual[i]!;
+          positions.push(
+            a.x, (this.sampleHeight?.(a.x, a.z) ?? 0) + .38, a.z,
+            b.x, (this.sampleHeight?.(b.x, b.z) ?? 0) + .38, b.z,
+          );
           colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
         }
       }
@@ -322,7 +399,7 @@ export class VehicleRouteOverlayRenderer {
     const markerPositions: number[] = [];
     const markerColors: number[] = [];
     for (const route of visible) for (const marker of route.markers) {
-      markerPositions.push(marker.point.x, .42, marker.point.z);
+      markerPositions.push(marker.point.x, (this.sampleHeight?.(marker.point.x, marker.point.z) ?? 0) + .52, marker.point.z);
       const color = marker.kind === 'stop' ? new Color('#ff4d5a') : marker.kind === 'speed-change' ? new Color('#ffd166') : new Color(route.color);
       markerColors.push(color.r, color.g, color.b);
     }
@@ -330,7 +407,9 @@ export class VehicleRouteOverlayRenderer {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(Float32Array.from(markerPositions), 3));
       geometry.setAttribute('color', new BufferAttribute(Float32Array.from(markerColors), 3));
-      const points = new Points(geometry, new PointsMaterial({ size: .65, vertexColors: true, transparent: true, opacity: .9, depthWrite: false, sizeAttenuation: true }));
+      const points = new Points(geometry, new PointsMaterial({ size: .9, vertexColors: true, transparent: true, opacity: 1, depthTest: false, depthWrite: false, sizeAttenuation: true }));
+      points.name = 'route-action-markers';
+      points.renderOrder = 23;
       points.frustumCulled = true;
       this.group.add(points); this.objects.push(points);
     }
@@ -338,12 +417,14 @@ export class VehicleRouteOverlayRenderer {
 
   dispose(): void { this.clear(); this.group.removeFromParent(); }
 
-  private addLines(positions: number[], colors: number[], opacity: number): void {
+  private addLines(positions: number[], colors: number[], opacity: number, name = 'route-lines'): void {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(Float32Array.from(positions), 3));
     geometry.setAttribute('color', new BufferAttribute(Float32Array.from(colors), 3));
     geometry.computeBoundingSphere();
-    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthWrite: false }));
+    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthTest: false, depthWrite: false }));
+    lines.name = name;
+    lines.renderOrder = opacity > .9 ? 22 : 21;
     lines.frustumCulled = true;
     this.group.add(lines); this.objects.push(lines);
   }

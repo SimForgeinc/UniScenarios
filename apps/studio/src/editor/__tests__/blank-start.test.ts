@@ -42,6 +42,7 @@ function expectCompletelyBlank(template: ScenarioTemplateV2): void {
   expect(template.invariants).toEqual([]);
   expect(template.variants).toEqual([]);
   expect(template.extensions ?? {}).toEqual({});
+  expect(template.choreography.warmupSeconds).toBe(0);
 }
 
 describe('fresh page-load authoring document', () => {
@@ -70,6 +71,18 @@ describe('fresh page-load authoring document', () => {
     expect(fresh.data.choreography.interactions).toHaveLength(0);
     await fresh.flush();
     expect(TemplateDocument.fromJSON(await store.read(galleryName)).data).toEqual(saved);
+    fresh.dispose();
+  });
+
+  it('preserves an explicitly authored research warmup on import', async () => {
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const source = TemplateDocument.create({ name: 'Research scenario' });
+    source.setClip(20, 7);
+    const fresh = await EditorDocument.openBlank(map, { store, autosaveMs: 60_000 });
+
+    fresh.importTemplate(source.data);
+
+    expect(fresh.data.choreography.warmupSeconds).toBe(7);
     fresh.dispose();
   });
 

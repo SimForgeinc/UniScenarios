@@ -124,6 +124,23 @@ describe('buildSeededPlacementRoute', () => {
     expect(result.downstreamM).toBeCloseTo(41);
   });
 
+  it('persists a meaningful connected continuation when the starting lane alone is long enough', () => {
+    const graph = buildLaneGraph(topology([
+      { rsl: '1:0:-1', x0: 0, x1: 200, successors: ['2:0:-1'] },
+      { rsl: '2:0:-1', x0: 200, x1: 220, predecessors: ['1:0:-1'] },
+    ]));
+
+    const result = buildSeededPlacementRoute(graph, {
+      startRsl: '1:0:-1', startStorageS: 10, requiredDownstreamM: 100,
+      seed: 'meaningful-preview', actorId: 'vehicle_01',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.lanes).toEqual(['1:0:-1', '2:0:-1']);
+    expect(result.route.legs.map((leg) => leg.rsl)).toEqual(result.lanes);
+  });
+
   it('returns a stable no-route error when available runway is insufficient', () => {
     const graph = buildLaneGraph(topology([
       { rsl: '1:0:-1', x0: 0, x1: 10, successors: ['2:0:-1'] },
