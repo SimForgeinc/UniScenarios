@@ -43,8 +43,9 @@ function laneIndex(): LaneIndex {
   return LaneIndex.build({
     mapName: 'timeline-submit',
     lanes: {
-      '5:0:-3': { roadId: 5, section: 0, laneId: -3, laneType: 'driving', successors: ['6:0:-3'], polyline: [{ x: 0, y: 0 }, { x: 10, y: 0 }] },
+      '5:0:-3': { roadId: 5, section: 0, laneId: -3, laneType: 'driving', successors: ['6:0:-3', '7:0:-3'], polyline: [{ x: 0, y: 0 }, { x: 10, y: 0 }] },
       '6:0:-3': { roadId: 6, section: 0, laneId: -3, laneType: 'driving', predecessors: ['5:0:-3'], polyline: [{ x: 10, y: 0 }, { x: 20, y: 0 }] },
+      '7:0:-3': { roadId: 7, section: 0, laneId: -3, laneType: 'driving', predecessors: ['5:0:-3'], polyline: [{ x: 10, y: 0 }, { x: 10, y: 10 }] },
     },
   });
 }
@@ -78,11 +79,19 @@ describe('timeline action dialog submission', () => {
     expect(submitTimelineAction(document, draft(actorId, 'accelerate')).ok).toBe(true);
     const before = document.revision;
 
-    const result = submitTimelineAction(document, draft(actorId, 'turn_left'));
+    const result = submitTimelineAction(
+      document,
+      draft(actorId, 'turn_left'),
+      (_id, turn) => turn === 'left' ? ['5:0:-3', '7:0:-3'] : null,
+    );
 
     expect(result.ok).toBe(true);
     expect(document.revision).toBe(before + 1);
     const group = buildTimelineGroups(document.data)[0]!;
+    expect(document.data.choreography.interactions.at(-1)).toMatchObject({
+      verb: 'route',
+      target: { mode: 'lanePath', lanes: ['5:0:-3', '7:0:-3'] },
+    });
     expect(group.lanes).toHaveLength(2);
     expect(group.lanes.map((lane) => lane.items[0]!.interaction.label).sort()).toEqual(['Accelerate', 'Turn left']);
     expect(routesFromTemplate(document.data, laneIndex())[0]!.markers.some((marker) => marker.kind === 'turn-left')).toBe(true);

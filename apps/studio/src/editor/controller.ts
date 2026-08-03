@@ -39,7 +39,7 @@
 import { Raycaster, Vector2, Vector3, type Intersection } from 'three';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
-import { buildSeededPlacementRoute } from '@uniscenarios/sim-engine';
+import { buildDefaultPlacementRoute, buildFollowRoute } from '@uniscenarios/sim-engine';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
 import {
   actorKindFor,
@@ -926,7 +926,7 @@ export class EditorController {
         this.flash('Place road vehicles on a valid driving lane so a route can be created');
         return;
       }
-      const planned = this.planLaneRoute(actorId, pose.laneRef, drivingSpeedKph);
+      const planned = this.planLaneRoute(pose.laneRef, drivingSpeedKph);
       if (!planned) {
         this.flash('No usable road route from that position');
         return;
@@ -1099,21 +1099,36 @@ export class EditorController {
   private routeForLaneMutation(actor: ActorRecord, anchor: LaneAnchor): readonly string[] | null {
     const speedKph = actor.initialSpeedKph ?? defaultDrivingSpeedKph(actor.catalogId);
     if (speedKph === null) return actor.routeLaneRsls ?? [];
-    return this.planLaneRoute(actor.id, anchor, speedKph);
+    return this.planLaneRoute(anchor, speedKph);
   }
 
-  private planLaneRoute(actorId: string, anchor: LaneAnchor, speedKph: number): readonly string[] | null {
+  private planLaneRoute(anchor: LaneAnchor, speedKph: number): readonly string[] | null {
     const startRsl = `${anchor.roadId}:${anchor.section}:${anchor.laneId}`;
     const duration = this.doc.data.choreography.clipSeconds + this.doc.data.choreography.warmupSeconds;
     const requiredDownstreamM = Math.max(100, (speedKph / 3.6) * duration + 10);
-    const planned = buildSeededPlacementRoute(this.laneIndex.graph, {
+    const planned = buildDefaultPlacementRoute(this.laneIndex.graph, {
       startRsl,
       startStorageS: anchor.s,
       requiredDownstreamM,
-      seed: this.doc.routeSeed,
-      actorId,
     });
     return planned.ok ? planned.lanes : null;
+  }
+
+  /** Materialize a timeline turn into an exact map-bound lane path. Unlike a
+   * lane change, this is an explicit request to replace downstream intent. */
+  planTimelineTurn(actorId: string, turn: 'left' | 'right'): readonly string[] | null {
+    const actor = this.doc.actor(actorId);
+    if (!actor?.laneRef) return null;
+    const startRsl = `${actor.laneRef.roadId}:${actor.laneRef.section}:${actor.laneRef.laneId}`;
+    const speedKph = actor.initialSpeedKph ?? defaultDrivingSpeedKph(actor.catalogId) ?? 30;
+    const duration = this.doc.data.choreography.clipSeconds + this.doc.data.choreography.warmupSeconds;
+    const built = buildFollowRoute(
+      this.laneIndex.graph,
+      startRsl,
+      [turn === 'left' ? 'Left' : 'Right'],
+      Math.max(100, (speedKph / 3.6) * duration + 10),
+    );
+    return built.ok ? built.route.legs.map((leg) => leg.rsl) : null;
   }
 
   /** Drop any in-flight gesture without writing to the document. */

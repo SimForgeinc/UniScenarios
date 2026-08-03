@@ -53,14 +53,18 @@ export interface RouteBuildError {
   detail?: Record<string, unknown>;
 }
 
-export interface SeededPlacementRouteOptions {
+export interface PlacementRouteOptions {
   readonly startRsl: LaneRsl;
   /** Lane-local s in topology storage direction. */
   readonly startStorageS: number;
   readonly requiredDownstreamM: number;
-  readonly seed: string;
-  readonly actorId: string;
   readonly maxLegs?: number;
+}
+
+/** @deprecated Seeds no longer alter default routing; retained for API compatibility. */
+export interface SeededPlacementRouteOptions extends PlacementRouteOptions {
+  readonly seed?: string;
+  readonly actorId?: string;
 }
 
 export type SeededPlacementRouteResult =
@@ -334,12 +338,15 @@ export function buildLanePathRoute(
 
 /**
  * Choose a connected, legal-direction lane path for a newly placed road actor.
- * Candidate order is pseudo-random but entirely derived from document seed and
- * stable actor id; the exact chosen lane chain is intended to be persisted.
+ * The exact chosen lane chain is intended to be persisted. At every branch we
+ * prefer a topology-labelled Straight movement, then the geometrically
+ * straightest continuation. Turns are therefore a fallback rather than an
+ * implicit random behaviour; an authored route interaction remains the only
+ * way to request a different movement.
  */
-export function buildSeededPlacementRoute(
+export function buildDefaultPlacementRoute(
   graph: LaneGraph,
-  options: SeededPlacementRouteOptions,
+  options: PlacementRouteOptions,
 ): SeededPlacementRouteResult {
   const geometry = graph.geometry(options.startRsl);
   if (!geometry || geometry.lane.laneType !== 'driving') {
@@ -350,76 +357,44 @@ export function buildSeededPlacementRoute(
   const nominal = graph.nominalReversed(options.startRsl);
   const orientations = nominal === null ? [false, true] : [nominal];
 
-  const fallback: { best: { lanes: LaneRsl[]; downstreamM: number } | null } = { best: null };
-
-  const rememberBest = (lanes: LaneRsl[], downstreamM: number): void => {
-    if (fallback.best === null || downstreamM > fallback.best.downstreamM + 1e-6) {
-      fallback.best = { lanes, downstreamM };
-    }
-  };
-
-  const search = (
-    current: DirectedLane,
-    lanes: LaneRsl[],
-    downstreamM: number,
-    visited: ReadonlySet<string>,
-  ): { lanes: LaneRsl[]; downstreamM: number } | null => {
-    rememberBest(lanes, downstreamM);
-    const candidates = graph.successors(current)
-      .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === 'driving')
-      .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
-      .sort((a, b) => {
-        const ah = stableRouteHash(`${options.seed}|${options.actorId}|${routeDirectedKey(current)}|${routeDirectedKey(a)}`);
-        const bh = stableRouteHash(`${options.seed}|${options.actorId}|${routeDirectedKey(current)}|${routeDirectedKey(b)}`);
-        return ah - bh || routeDirectedKey(a).localeCompare(routeDirectedKey(b));
-      });
-    // A long starting lane can satisfy the distance requirement by itself, but
-    // a route ending there provides no visible authored choice. Prefer one
-    // connected continuation whenever one exists. Terminal roads remain valid.
-    if (downstreamM >= required && (lanes.length > 1 || candidates.length === 0)) return { lanes, downstreamM };
-    if (lanes.length >= maxLegs) return null;
-    for (const next of candidates) {
-      const nextVisited = new Set(visited);
-      nextVisited.add(routeDirectedKey(next));
-      const found = search(next, [...lanes, next.rsl], downstreamM + graph.lengthOf(next.rsl), nextVisited);
-      if (found) return found;
-    }
-    return null;
-  };
-
   for (const reversed of orientations) {
     const start: DirectedLane = { rsl: options.startRsl, reversed };
     const startAhead = reversed
       ? Math.max(0, Math.min(geometry.lengthM, options.startStorageS))
       : Math.max(0, geometry.lengthM - Math.max(0, Math.min(geometry.lengthM, options.startStorageS)));
-    const found = search(start, [options.startRsl], startAhead, new Set([routeDirectedKey(start)]));
-    if (!found) continue;
-    const built = buildLanePathRoute(graph, found.lanes);
+    const lanes: LaneRsl[] = [options.startRsl];
+    const visited = new Set([routeDirectedKey(start)]);
+    let current = start;
+    let downstreamM = startAhead;
+
+    while (lanes.length < maxLegs) {
+      const candidates = graph.successors(current)
+        .filter((candidate) => graph.geometry(candidate.rsl)?.lane.laneType === 'driving')
+        .filter((candidate) => !visited.has(routeDirectedKey(candidate)))
+        .sort((a, b) => compareContinuation(graph, current, a, b));
+      // Persist one meaningful continuation even if the starting lane alone is
+      // long enough. After that, the requested distance is only a preview
+      // length; it never justifies replacing an available straight movement
+      // with a turn that happens to have more runway.
+      if (downstreamM >= required && (lanes.length > 1 || candidates.length === 0)) break;
+      const next = candidates[0];
+      if (!next) break;
+      lanes.push(next.rsl);
+      visited.add(routeDirectedKey(next));
+      downstreamM += graph.lengthOf(next.rsl);
+      current = next;
+    }
+
+    const built = buildLanePathRoute(graph, lanes);
     if (!built.ok) continue;
     const spawnS = built.route.sOfLaneStorage(options.startRsl, options.startStorageS);
     if (spawnS === null) continue;
-    const downstreamM = built.route.lengthM - spawnS;
-    if (downstreamM + 1e-6 < required) continue;
-    return { ok: true, route: built.route, lanes: found.lanes, downstreamM };
-  }
-
-  // The requested distance is a planning preference, not a placement gate.
-  // A short or terminal lane is still a valid place to author a vehicle: use
-  // the longest connected path available and let route-end behaviour stop it
-  // naturally instead of rejecting the actor.
-  if (fallback.best !== null) {
-    const built = buildLanePathRoute(graph, fallback.best.lanes);
-    if (built.ok) {
-      const spawnS = built.route.sOfLaneStorage(options.startRsl, options.startStorageS);
-      if (spawnS !== null) {
-        return {
-          ok: true,
-          route: built.route,
-          lanes: fallback.best.lanes,
-          downstreamM: Math.max(0, built.route.lengthM - spawnS),
-        };
-      }
-    }
+    return {
+      ok: true,
+      route: built.route,
+      lanes,
+      downstreamM: Math.max(0, built.route.lengthM - spawnS),
+    };
   }
   return {
     ok: false,
@@ -431,13 +406,25 @@ export function buildSeededPlacementRoute(
   };
 }
 
-function stableRouteHash(value: string): number {
-  let hash = 0x811c9dc5;
-  for (let i = 0; i < value.length; i += 1) {
-    hash ^= value.charCodeAt(i);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return hash >>> 0;
+/** @deprecated Use `buildDefaultPlacementRoute`; default routes are no longer random. */
+export function buildSeededPlacementRoute(
+  graph: LaneGraph,
+  options: SeededPlacementRouteOptions,
+): SeededPlacementRouteResult {
+  return buildDefaultPlacementRoute(graph, options);
+}
+
+function compareContinuation(graph: LaneGraph, current: DirectedLane, a: DirectedLane, b: DirectedLane): number {
+  const gates = graph.gatesFrom(current.rsl);
+  const relation = (candidate: DirectedLane): TurnRelation | null =>
+    (gates.find((gate) => gate.connectingLaneRsl === candidate.rsl)?.turnRelation as TurnRelation | undefined) ?? null;
+  const score = (candidate: DirectedLane): number => {
+    if (relation(candidate) === 'Straight') return -1;
+    const from = graph.sampleDirected(current, graph.lengthOf(current.rsl)).headingRad;
+    const to = graph.sampleDirected(candidate, 0).headingRad;
+    return Math.abs(normalizeAngle(to - from));
+  };
+  return score(a) - score(b) || routeDirectedKey(a).localeCompare(routeDirectedKey(b));
 }
 
 const TURN_FALLBACK_ORDER: TurnRelation[] = ['Straight', 'Right', 'Left', 'UTurnRight', 'UTurnLeft'];
@@ -469,7 +456,9 @@ export function buildFollowRoute(
 
   while (legs[legs.length - 1]!.sStart + legs[legs.length - 1]!.lengthM < maxLengthM) {
     const current = legs[legs.length - 1]!;
-    const succ = graph.successors(current).filter((d) => !visited.has(`${d.rsl}#${d.reversed ? 'r' : 'f'}`));
+    const succ = graph.successors(current)
+      .filter((d) => !visited.has(`${d.rsl}#${d.reversed ? 'r' : 'f'}`))
+      .sort((a, b) => compareContinuation(graph, current, a, b));
     if (succ.length === 0) break;
 
     let chosen = succ[0]!;
@@ -537,7 +526,7 @@ export function retargetToNeighbour(
   const built = buildFollowRoute(
     graph,
     neighbour.rsl,
-    opts.remainingTurns ?? [],
+    retainedTurns(route, sNow, opts.remainingTurns),
     opts.maxLengthM ?? 2000,
     leg.reversed,
   );
@@ -568,7 +557,7 @@ export function retargetToLane(
   const built = buildFollowRoute(
     graph,
     targetRsl,
-    opts.remainingTurns ?? [],
+    retainedTurns(route, sNow, opts.remainingTurns),
     opts.maxLengthM ?? 2000,
     leg?.reversed,
   );
@@ -576,6 +565,21 @@ export function retargetToLane(
   const proj = built.route.projectPoint(pose.point);
   const lateral = built.route.lateralOffsetAt(proj.s, pose.point);
   return { route: built.route, s: proj.s, separationM: -lateral };
+}
+
+/** Preserve the route's already-authored junction intent across a lateral lane
+ * change. A lane change changes lateral position, not the next turn. */
+function retainedTurns(
+  route: Route,
+  sNow: number,
+  explicit: readonly TurnRelation[] | undefined,
+): readonly TurnRelation[] {
+  if (explicit && explicit.length > 0) return explicit;
+  const currentLeg = route.legIndexAt(sNow);
+  return route.legs
+    .slice(Math.max(0, currentLeg + 1))
+    .map((leg) => leg.turnRelation)
+    .filter((turn): turn is TurnRelation => turn !== null);
 }
 
 /** Distance along a shared route between two arc lengths, or `null`. */

@@ -109,11 +109,12 @@ export {
   buildFollowRoute,
   buildLanePathRoute,
   buildSeededPlacementRoute,
+  buildDefaultPlacementRoute,
   Route,
   retargetToLane,
   retargetToNeighbour,
 } from './map/route.js';
-export type { RouteLeg, RoutePose, RouteBuildError, SeededPlacementRouteOptions, SeededPlacementRouteResult } from './map/route.js';
+export type { PlacementRouteOptions, RouteLeg, RoutePose, RouteBuildError, SeededPlacementRouteOptions, SeededPlacementRouteResult } from './map/route.js';
 
 /* ------------------------------------------------------------------ engine */
 export { createFixedStepSimulation, runSimulation } from './sim/engine.js';

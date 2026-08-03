@@ -31,7 +31,11 @@ export type TimelineActionSubmitResult =
  * new revision (and therefore the route overlay) before this function returns;
  * autosave remains debounced in the background.
  */
-export function submitTimelineAction(document: EditorDocument, draft: TimelineActionDraft): TimelineActionSubmitResult {
+export function submitTimelineAction(
+  document: EditorDocument,
+  draft: TimelineActionDraft,
+  resolveTurn?: (actorId: string, turn: 'left' | 'right') => readonly string[] | null,
+): TimelineActionSubmitResult {
   try {
     const template = document.data;
     const role = template.roles.find((item) => item.id === draft.actorId);
@@ -47,9 +51,15 @@ export function submitTimelineAction(document: EditorDocument, draft: TimelineAc
     if (definition.id.includes('target_speed') && (!Number.isFinite(draft.targetSpeed) || draft.targetSpeed < 0 || draft.targetSpeed > 200)) {
       return { ok: false, message: 'Speed must be between 0 and 200 km/h.' };
     }
-    const customized: ActionDefinition = definition.id.includes('target_speed')
+    let customized: ActionDefinition = definition.id.includes('target_speed')
       ? { ...definition, target: { mode: 'absolute', valueKph: draft.targetSpeed } }
       : definition;
+    const requestedTurn = definition.id.endsWith('turn_left') ? 'left' : definition.id.endsWith('turn_right') ? 'right' : null;
+    if (requestedTurn && resolveTurn) {
+      const lanes = resolveTurn(draft.actorId, requestedTurn);
+      if (!lanes?.length) return { ok: false, message: `No legal ${requestedTurn} turn is reachable from this actor's lane.` };
+      customized = { ...customized, target: { mode: 'lanePath', lanes } };
+    }
     let ordinal = template.choreography.interactions.length + 1;
     let interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ordinal);
     const usedIds = new Set(template.choreography.interactions.map((item) => item.id));
@@ -92,7 +102,7 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
     if (!editor) { setNotice('The action dialog lost its draft. Close it and try again.'); return; }
     if (!controller) { setNotice('The editor is still loading. Try again in a moment.'); return; }
     if (readonly) { setNotice('Actions can only be changed while authoring.'); return; }
-    const result = submitTimelineAction(controller.doc, editor);
+    const result = submitTimelineAction(controller.doc, editor, (actorId, turn) => controller.planTimelineTurn(actorId, turn));
     if (!result.ok) { setNotice(result.message); return; }
     setSelectedInteraction(result.interaction.id);
     setEditor(null);
