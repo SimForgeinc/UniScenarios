@@ -16,7 +16,7 @@ import {
 import { defaultDrivingSpeedKph, deterministicActorCatalog } from '../controller';
 
 describe('default placed-vehicle route lifecycle', () => {
-  it('groups actor, exact route and cruise speed into one undoable, persisted gesture', async () => {
+  it('groups actor, exact route and actor default speed into one undoable, persisted gesture', async () => {
     const map = MAPS[0]!;
     const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
     const document = await EditorDocument.open(map, { store, autosaveMs: 1 });
@@ -43,6 +43,7 @@ describe('default placed-vehicle route lifecycle', () => {
 
     expect(actorId).toBe('vehicle_default_route');
     expect(document.data.roles.map((role) => role.id)).toContain(actorId);
+    expect(document.data.roles.find((role) => role.id === actorId)?.initialSpeedKph).toBe(DEFAULT_AUTHORED_VEHICLE_SPEED_KPH);
     expect(document.data.choreography.interactions).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: `route_${actorId}_initial`,
@@ -50,13 +51,6 @@ describe('default placed-vehicle route lifecycle', () => {
         label: 'Random turns',
         verb: 'route',
         target: { mode: 'lanePath', lanes: route },
-      }),
-      expect.objectContaining({
-        id: `speed_${actorId}_initial`,
-        actor: actorId,
-        label: '30 mph',
-        verb: 'speed',
-        target: { mode: 'absolute', valueKph: DEFAULT_AUTHORED_VEHICLE_SPEED_KPH },
       }),
     ]));
     expect(document.validation.ok).toBe(true);
@@ -68,7 +62,7 @@ describe('default placed-vehicle route lifecycle', () => {
 
     expect(document.redo()).toBe(true);
     expect(document.actor(actorId!)).toBeDefined();
-    expect(document.data.choreography.interactions.filter((item) => item.actor === actorId)).toHaveLength(2);
+    expect(document.data.choreography.interactions.filter((item) => item.actor === actorId)).toHaveLength(1);
 
     await document.flush();
     const saved = TemplateDocument.fromJSON(await store.read(autosaveName(map.id)));
@@ -84,7 +78,6 @@ describe('default placed-vehicle route lifecycle', () => {
         verb: 'route',
         target: { mode: 'lanePath', lanes: route },
       }),
-      expect.objectContaining({ actor: actorId, verb: 'speed' }),
     ]));
     reopened.dispose();
   });
@@ -124,6 +117,24 @@ describe('default placed-vehicle route lifecycle', () => {
     const reopened = await EditorDocument.open(map, { store, autosaveMs: 1 });
     expect(reopened.actor(id!)).toMatchObject({ catalogId: 'vehicle.suv', bodyColor: '#abcdef', x: 1, y: 2, z: 3 });
     reopened.dispose();
+  });
+
+  it('atomically prunes actions that do not apply when the actor type changes', async () => {
+    const document = await EditorDocument.open(MAPS[0]!, { store: new WebTemplateFileStore({ storage: new MemoryStorage() }), autosaveMs: 1 });
+    const [id] = document.add([{ id: 'changing_type', catalogId: 'vehicle.sedan', x: 0, y: 0, z: 0, headingRad: 0 }]);
+    document.addInteraction({ id: 'car_horn', actor: id!, trigger: { kind: 'at', t: 1 }, verb: 'set', target: { key: 'audio.horn', value: true } });
+    document.addInteraction({ id: 'car_speed', actor: id!, trigger: { kind: 'at', t: 2 }, verb: 'speed', target: { mode: 'delta', deltaKph: 5 }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } });
+
+    document.update([{ id: id!, catalogId: 'vehicle.bicycle' }]);
+    expect(document.data.roles.find((role) => role.id === id)?.actor.class).toBe('bicycle');
+    expect(document.data.roles.find((role) => role.id === id)?.initialSpeedKph).toBe(18);
+    expect(document.data.choreography.interactions.map((item) => item.id)).toContain('car_speed');
+    expect(document.data.choreography.interactions.map((item) => item.id)).not.toContain('car_horn');
+
+    expect(document.undo()).toBe(true);
+    expect(document.data.roles.find((role) => role.id === id)?.actor.class).toBe('car');
+    expect(document.data.choreography.interactions.map((item) => item.id)).toEqual(expect.arrayContaining(['car_horn', 'car_speed']));
+    document.dispose();
   });
 
   it('persists dash-camera edits and groups each sensor action into undo history', async () => {

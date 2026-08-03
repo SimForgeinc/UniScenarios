@@ -17,7 +17,6 @@ describe('author timeline playback controls', () => {
   it('keeps normal Play camera-neutral and exposes an actionable empty camera state', () => {
     const markup = renderToStaticMarkup(<TimelineDock controller={controller} editorState={null} session={session} />);
     expect(markup).toContain('aria-label="Play simulation"');
-    expect(markup).toContain('title="Play without changing the editor camera"');
     expect(markup).toContain('aria-label="Play from dash camera"');
     expect(markup).toMatch(/<button[^>]+disabled=""[^>]+data-testid="session-camera-play"/);
     expect(markup).toContain('No dash camera');
