@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { parseTemplate, TemplateDocument } from '@uniscenarios/scenario-model';
 import { materializeMapBound } from '@uniscenarios/scenario-materializer';
-import { buildSeededPlacementRoute, runSimulation } from '@uniscenarios/sim-engine';
+import { buildSeededPlacementRoute, createFixedStepSimulation, runSimulation } from '@uniscenarios/sim-engine';
 import { loadMap } from '../maps.js';
 
 function xy(point: { x: number; y: number } | readonly [number, number]): { x: number; y: number } {
@@ -218,5 +218,65 @@ describe('map-bound Studio materialization', () => {
     expect(product.manifest.arrival.some((solution) => solution.interactionId === 'arrival-brake')).toBe(true);
     expect(product.input.interactions.find((interaction) => interaction.id === 'arrival-brake')?.trigger.kind).toBe('at');
     expect(product.input.interactions.find((interaction) => interaction.id === 'change-lane')).toMatchObject({ verb: 'changeLane' });
+  }, 30_000);
+
+  it('keeps two distinct Belmont authoring poses exact at Play t=0', async () => {
+    const bundle = await loadMap('belmont-research-center');
+    const speedKph = 48.28032;
+    const requiredDownstreamM = speedKph / 3.6 * 20 + 10;
+    const usable = Object.values(bundle.topology.lanes)
+      .filter((lane) => lane.laneType === 'driving')
+      .sort((a, b) => a.rsl.localeCompare(b.rsl))
+      .flatMap((lane, ordinal) => {
+        const storageS = (lane.widthSamples?.at(-1)?.s ?? 0) * (ordinal % 2 ? .25 : .65);
+        const planned = buildSeededPlacementRoute(bundle.graph, {
+          startRsl: lane.rsl, startStorageS: storageS, requiredDownstreamM,
+          seed: 'belmont-two-car-t0', actorId: `authored-${ordinal}`,
+        });
+        return planned.ok ? [{ lane, storageS, planned }] : [];
+      });
+    const first = usable[0]!;
+    const firstRouteS = first.planned.route.sOfLaneStorage(first.lane.rsl, first.storageS)!;
+    const firstPoint = first.planned.route.poseAt(firstRouteS).point;
+    const second = usable.find((candidate) => {
+      const routeS = candidate.planned.route.sOfLaneStorage(candidate.lane.rsl, candidate.storageS)!;
+      const point = candidate.planned.route.poseAt(routeS).point;
+      return Math.hypot(point.x - firstPoint.x, point.y - firstPoint.y) > 100;
+    })!;
+    const doc = TemplateDocument.create({
+      name: 'Belmont exact authoring t0', sourceMap: { mapId: bundle.mapId, mapName: bundle.mapId },
+      anchor: { features: [], pin: { mapId: bundle.mapId } },
+    });
+    doc.setClip(20, 0);
+    for (const [ordinal, candidate] of [first, second].entries()) {
+      const id = `authored-car-${ordinal + 1}`;
+      const routeS = candidate.planned.route.sOfLaneStorage(candidate.lane.rsl, candidate.storageS)!;
+      const pose = candidate.planned.route.poseAt(routeS);
+      const [roadId, section, laneId] = candidate.lane.rsl.split(':');
+      doc.addRole({
+        id, kind: 'scene_absolute', actor: { class: 'car', catalogId: 'vehicle.sedan', static: false, sensors: [] },
+        initialSpeedKph: speedKph,
+        pose: { position: { x: pose.point.x, y: 0, z: -pose.point.y }, headingRad: pose.headingRad },
+        laneRef: { roadId: roadId!, section: Number(section), laneId: Number(laneId), s: candidate.storageS, t: 0, headingOffsetRad: 0 },
+        initialRoute: { mode: 'lanePath', lanes: [...candidate.planned.lanes] }, essentiality: 'required',
+      });
+    }
+
+    const product = materializeMapBound(doc.toJSON(), bundle);
+    const play = (): ReturnType<typeof createFixedStepSimulation> => createFixedStepSimulation(product.input, { graph: bundle.graph, guards: 'throw' });
+    const firstPlay = play().advance(2).trace;
+    const resetPlay = play().advance(2).trace;
+
+    for (const actor of product.input.actors) {
+      const role = doc.role(actor.id)!;
+      if (role.kind !== 'scene_absolute') throw new Error('fixture role must be scene_absolute');
+      const track = firstPlay.ticks.actors[actor.id]!;
+      expect(actor.initial.pose).toMatchObject({ x: role.pose.position.x, z: role.pose.position.z });
+      expect(firstPlay.ticks.t[0]).toBe(0);
+      expect(Math.hypot(track.x[0]! - role.pose.position.x, -track.y[0]! - role.pose.position.z)).toBeLessThan(1e-9);
+      expect(Math.hypot(track.x[1]! - track.x[0]!, track.y[1]! - track.y[0]!)).toBeLessThan(speedKph / 3.6 * product.input.dt * 1.1);
+      expect(resetPlay.ticks.actors[actor.id]!.x[0]).toBe(track.x[0]);
+      expect(resetPlay.ticks.actors[actor.id]!.y[0]).toBe(track.y[0]);
+    }
   }, 30_000);
 });

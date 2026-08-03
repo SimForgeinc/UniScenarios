@@ -101,6 +101,7 @@ interface PosePatch {
   z: number;
   headingRad: number;
   laneRef?: LaneAnchor | null;
+  routeLaneRsls?: readonly string[] | null;
 }
 
 interface GrabSession {
@@ -531,22 +532,27 @@ export class EditorController {
     const update: ActorUpdate = { id, x, z, y: this.groundY(x, z, actor.y), headingRad };
 
     if (actor.laneRef) {
-      const lane = this.laneFor(actor.laneRef);
-      if (lane) {
-        const hit = this.laneIndex.project(lane, x, z);
-        if (Math.abs(hit.t) <= lane.widthM) {
-          update.laneRef = {
-            ...actor.laneRef,
-            s: hit.s,
-            t: hit.t,
-            headingOffsetRad: headingDelta(hit.headingRad, headingRad),
-          };
-        } else {
-          update.laneRef = null;
-          this.flash('moved off its lane — anchor cleared');
+      const hit = this.laneIndex.nearest(x, z, SNAP_RADIUS_M);
+      if (hit && Math.abs(hit.t) <= hit.lane.widthM) {
+        const anchor: LaneAnchor = {
+          roadId: hit.lane.roadId,
+          section: hit.lane.section,
+          laneId: hit.lane.laneId,
+          s: hit.s,
+          t: hit.t,
+          headingOffsetRad: headingDelta(hit.headingRad, headingRad),
+        };
+        const route = this.routeForLaneMutation(actor, anchor);
+        if (!route) {
+          this.flash('No usable route from that road position — move cancelled');
+          return;
         }
+        update.laneRef = anchor;
+        update.routeLaneRsls = route;
       } else {
         update.laneRef = null;
+        update.routeLaneRsls = null;
+        this.flash('moved off the road — anchor and route cleared');
       }
     }
     this.doc.update([update]);
@@ -562,6 +568,12 @@ export class EditorController {
     const s = Math.min(lane.length, Math.max(0, patch.s ?? actor.laneRef.s));
     const t = patch.t ?? actor.laneRef.t;
     const pose = this.laneIndex.poseAt(lane, s, t);
+    const anchor = { ...actor.laneRef, s, t };
+    const route = this.routeForLaneMutation(actor, anchor);
+    if (!route) {
+      this.flash('No usable route from that lane station — move cancelled');
+      return;
+    }
     this.doc.update([
       {
         id,
@@ -569,7 +581,8 @@ export class EditorController {
         z: pose.z,
         y: this.groundY(pose.x, pose.z, actor.y),
         headingRad: normalizeHeading(pose.headingRad + actor.laneRef.headingOffsetRad),
-        laneRef: { ...actor.laneRef, s, t },
+        laneRef: anchor,
+        routeLaneRsls: route,
       },
     ]);
   }
@@ -913,23 +926,12 @@ export class EditorController {
         this.flash('Place road vehicles on a valid driving lane so a route can be created');
         return;
       }
-      const startRsl = `${pose.laneRef.roadId}:${pose.laneRef.section}:${pose.laneRef.laneId}`;
-      const duration = this.doc.data.choreography.clipSeconds + this.doc.data.choreography.warmupSeconds;
-      // Cover warm-up plus every recorded frame at exactly 30 mph. A small
-      // runway margin prevents the actor from landing on the terminal sample.
-      const requiredDownstreamM = Math.max(100, (drivingSpeedKph / 3.6) * duration + 10);
-      const planned = buildSeededPlacementRoute(this.laneIndex.graph, {
-        startRsl,
-        startStorageS: pose.laneRef.s,
-        requiredDownstreamM,
-        seed: this.doc.routeSeed,
-        actorId,
-      });
-      if (!planned.ok) {
-        this.flash(`No usable road route here — ${planned.error.reason}`);
+      const planned = this.planLaneRoute(actorId, pose.laneRef, drivingSpeedKph);
+      if (!planned) {
+        this.flash('No usable road route from that position');
         return;
       }
-      routeLaneRsls = planned.lanes;
+      routeLaneRsls = planned;
     }
     const ids = this.doc.add([{
       id: actorId,
@@ -981,7 +983,7 @@ export class EditorController {
       const lane = !breakAnchor && actor.laneRef ? this.laneFor(actor.laneRef) : null;
       if (lane && actor.laneRef) {
         // Anchored: the drag slides along the lane, it does not leave the road
-        // network. Lanes are short — a junction lane on Yale Street can be 8 m —
+      // network. Lanes are short — a junction lane on Yale Street can be 8 m —
         // so a drag that runs off the end hands over to whichever lane is now
         // nearest instead of piling up at the terminus. That keeps "drag a car
         // down the street" working across road and section boundaries, which a
@@ -1001,9 +1003,15 @@ export class EditorController {
                 section: use.lane.section,
                 laneId: use.lane.laneId,
                 s: use.s,
-                t: actor.laneRef.t,
+                t: use.t,
                 headingOffsetRad: actor.laneRef.headingOffsetRad,
               };
+        const route = this.routeForLaneMutation(actor, anchor);
+        if (!route) {
+          this.preview.clear();
+          this.flash('No usable route from that road position — move cancelled');
+          return;
+        }
         const pose = this.laneIndex.poseAt(use.lane, anchor.s, anchor.t);
         this.preview.set(actor.id, {
           x: pose.x,
@@ -1011,6 +1019,7 @@ export class EditorController {
           z: pose.z,
           headingRad: normalizeHeading(pose.headingRad + anchor.headingOffsetRad),
           laneRef: anchor,
+          routeLaneRsls: route,
         });
         continue;
       }
@@ -1020,6 +1029,7 @@ export class EditorController {
         z: targetZ,
         headingRad: actor.headingRad,
         laneRef: breakAnchor && actor.laneRef ? null : undefined,
+        routeLaneRsls: breakAnchor && actor.laneRef ? null : undefined,
       });
     }
     this.syncScene();
@@ -1071,6 +1081,7 @@ export class EditorController {
         z: patch.z,
         headingRad: patch.headingRad,
         ...(patch.laneRef === undefined ? {} : { laneRef: patch.laneRef }),
+        ...(patch.routeLaneRsls === undefined ? {} : { routeLaneRsls: patch.routeLaneRsls }),
       });
     }
     const broke = this.grab?.broke === true;
@@ -1082,6 +1093,27 @@ export class EditorController {
     if (broke) this.flash('lane anchor cleared');
     this.syncScene();
     this.notify();
+  }
+
+  /** Plan the exact persisted route paired with a lane-bound pose mutation. */
+  private routeForLaneMutation(actor: ActorRecord, anchor: LaneAnchor): readonly string[] | null {
+    const speedKph = actor.initialSpeedKph ?? defaultDrivingSpeedKph(actor.catalogId);
+    if (speedKph === null) return actor.routeLaneRsls ?? [];
+    return this.planLaneRoute(actor.id, anchor, speedKph);
+  }
+
+  private planLaneRoute(actorId: string, anchor: LaneAnchor, speedKph: number): readonly string[] | null {
+    const startRsl = `${anchor.roadId}:${anchor.section}:${anchor.laneId}`;
+    const duration = this.doc.data.choreography.clipSeconds + this.doc.data.choreography.warmupSeconds;
+    const requiredDownstreamM = Math.max(100, (speedKph / 3.6) * duration + 10);
+    const planned = buildSeededPlacementRoute(this.laneIndex.graph, {
+      startRsl,
+      startStorageS: anchor.s,
+      requiredDownstreamM,
+      seed: this.doc.routeSeed,
+      actorId,
+    });
+    return planned.ok ? planned.lanes : null;
   }
 
   /** Drop any in-flight gesture without writing to the document. */
