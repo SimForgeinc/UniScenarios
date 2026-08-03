@@ -167,6 +167,11 @@ export {
   FLOAT_DECIMALS,
 } from './serialize.js';
 
+export {
+  migrateLegacyInitialRoutes,
+  type InitialRouteMigrationResult,
+} from './initial-route-migration.js';
+
 // --- schema v2: the portable ScenarioTemplate -------------------------------
 
 export * from './schema/v2/index.js';

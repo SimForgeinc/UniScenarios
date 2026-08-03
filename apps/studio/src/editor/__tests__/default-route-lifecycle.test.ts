@@ -44,15 +44,11 @@ describe('default placed-vehicle route lifecycle', () => {
     expect(actorId).toBe('vehicle_default_route');
     expect(document.data.roles.map((role) => role.id)).toContain(actorId);
     expect(document.data.roles.find((role) => role.id === actorId)?.initialSpeedKph).toBe(DEFAULT_AUTHORED_VEHICLE_SPEED_KPH);
-    expect(document.data.choreography.interactions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: `route_${actorId}_initial`,
-        actor: actorId,
-        label: 'Random turns',
-        verb: 'route',
-        target: { mode: 'lanePath', lanes: route },
-      }),
-    ]));
+    expect(document.data.roles.find((role) => role.id === actorId)).toMatchObject({
+      initialRoute: { mode: 'lanePath', lanes: route },
+    });
+    expect(document.actor(actorId!)?.routeLaneRsls).toEqual(route);
+    expect(document.data.choreography.interactions).toEqual([]);
     expect(document.validation.ok).toBe(true);
 
     expect(document.undo()).toBe(true);
@@ -62,7 +58,8 @@ describe('default placed-vehicle route lifecycle', () => {
 
     expect(document.redo()).toBe(true);
     expect(document.actor(actorId!)).toBeDefined();
-    expect(document.data.choreography.interactions.filter((item) => item.actor === actorId)).toHaveLength(1);
+    expect(document.data.roles.find((role) => role.id === actorId)).toMatchObject({ initialRoute: { lanes: route } });
+    expect(document.data.choreography.interactions.filter((item) => item.actor === actorId)).toHaveLength(0);
 
     await document.flush();
     const saved = TemplateDocument.fromJSON(await store.read(autosaveName(map.id)));
@@ -72,13 +69,39 @@ describe('default placed-vehicle route lifecycle', () => {
 
     const reopened = await EditorDocument.open(map, { store, autosaveMs: 1 });
     expect(reopened.actor(actorId!)).toBeDefined();
-    expect(reopened.data.choreography.interactions).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        actor: actorId,
-        verb: 'route',
-        target: { mode: 'lanePath', lanes: route },
-      }),
-    ]));
+    expect(reopened.data.roles.find((role) => role.id === actorId)).toMatchObject({
+      initialRoute: { mode: 'lanePath', lanes: route },
+    });
+    expect(reopened.data.choreography.interactions).toEqual([]);
+    reopened.dispose();
+  });
+
+  it('migrates a legacy generated t=0 route on open but keeps genuine reroutes', async () => {
+    const map = MAPS[0]!;
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const source = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    const [id] = source.add([{ id: 'legacy_route_actor', catalogId: 'vehicle.sedan', x: 0, y: 0, z: 0, headingRad: 0 }]);
+    source.addInteraction({
+      id: `route_${id}_initial`, actor: id!, label: 'Random turns', trigger: { kind: 'at', t: 0 }, verb: 'route',
+      target: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] },
+    });
+    source.addInteraction({
+      id: 'authored_reroute', actor: id!, trigger: { kind: 'at', t: 4 }, verb: 'route',
+      target: { mode: 'lanePath', lanes: ['2:0:-1', '3:0:-1'] },
+    });
+    await source.flush();
+    source.dispose();
+
+    const reopened = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    expect(reopened.data.roles.find((role) => role.id === id)).toMatchObject({
+      initialRoute: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] },
+    });
+    expect(reopened.data.choreography.interactions.map((item) => item.id)).toEqual(['authored_reroute']);
+    expect(reopened.canUndo).toBe(false);
+    await reopened.flush();
+    const persisted = TemplateDocument.fromJSON(await store.read(autosaveName(map.id)));
+    expect(persisted.data.roles.find((role) => role.id === id)).toMatchObject({ initialRoute: { lanes: ['1:0:-1', '2:0:-1'] } });
+    expect(persisted.data.choreography.interactions.map((item) => item.id)).toEqual(['authored_reroute']);
     reopened.dispose();
   });
 

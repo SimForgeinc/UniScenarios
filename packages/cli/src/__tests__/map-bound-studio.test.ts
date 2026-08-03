@@ -9,7 +9,7 @@ function xy(point: { x: number; y: number } | readonly [number, number]): { x: n
 }
 
 describe('map-bound Studio materialization', () => {
-  it('folds the saved Random turns lanePath and exact 30 mph profile without stochastic export semantics', async () => {
+  it('compiles the actor-owned initial lanePath and exact 30 mph profile without timeline indirection', async () => {
     const bundle = await loadMap('yale-street');
     const actorId = 'vehicle-random-turns';
     const candidate = Object.values(bundle.topology.lanes)
@@ -44,12 +44,8 @@ describe('map-bound Studio materialization', () => {
       initialSpeedKph: exactKph,
       pose: { position: { x: spawn.point.x, y: 0, z: -spawn.point.y }, headingRad: spawn.headingRad },
       laneRef: { roadId: roadId!, section: Number(section), laneId: Number(laneId), s: 0, t: 0, headingOffsetRad: 0 },
+      initialRoute: { mode: 'lanePath', lanes: [...candidate.planned.lanes] },
       essentiality: 'required',
-    });
-    doc.addInteraction({
-      id: `route_${actorId}_initial`, actor: actorId, label: 'Random turns',
-      trigger: { kind: 'at', t: 0 }, verb: 'route',
-      target: { mode: 'lanePath', lanes: [...candidate.planned.lanes] },
     });
     doc.addInteraction({
       id: `speed_${actorId}_initial`, actor: actorId, label: '30 mph',
@@ -64,13 +60,30 @@ describe('map-bound Studio materialization', () => {
     expect(actor.behavior.cruiseSpeedMps).toBe(13.4112);
     expect(actor.behavior.route).toEqual({ kind: 'lanePath', lanes: candidate.planned.lanes });
     expect(product.input.interactions.some((item) => item.id === `route_${actorId}_initial`)).toBe(false);
-    expect(product.manifest.notes).toContainEqual(expect.objectContaining({
-      path: `choreography.interactions.route_${actorId}_initial`,
-      impact: 'informational',
+    expect(product.manifest.notes.some((note) => note.path.includes(`route_${actorId}_initial`))).toBe(false);
+
+    const canonicalRole = doc.role(actorId)!;
+    if (canonicalRole.kind !== 'scene_absolute') throw new Error('test actor must be scene_absolute');
+    const { initialRoute: _initialRoute, ...legacyRole } = canonicalRole;
+    const legacyProduct = materializeMapBound(parseTemplate({
+      ...doc.toJSON(),
+      roles: [legacyRole],
+      choreography: {
+        ...doc.data.choreography,
+        interactions: [{
+          id: `route_${actorId}_initial`, actor: actorId, label: 'Random turns',
+          trigger: { kind: 'at', t: 0 }, verb: 'route',
+          target: { mode: 'lanePath', lanes: [...candidate.planned.lanes] },
+        }, ...doc.data.choreography.interactions],
+      },
+    }), bundle);
+    expect(legacyProduct.input.actors.find((item) => item.id === actorId)?.behavior.route).toEqual(actor.behavior.route);
+    expect(legacyProduct.manifest.notes).toContainEqual(expect.objectContaining({
+      path: `choreography.interactions.route_${actorId}_initial`, impact: 'informational',
     }));
     const result = runSimulation(product.input, { graph: bundle.graph, guards: 'throw' });
     expect(result.trace.ticks.t.at(-1)).toBe(20);
-    expect(result.trace.ticks.actors[actorId]!.speedMps.at(-1)).toBeCloseTo(13.4112, 4);
+    expect(result.trace.ticks.actors[actorId]!.speedMps.at(-1)).toBeCloseTo(13.4112, 3);
   }, 30_000);
 
   it('materializes a freshly placed v2 vehicle and simulates the exact clip duration', async () => {

@@ -44,7 +44,7 @@ import {
   InteractionRefSchema,
   RoleRefSchema,
 } from './common.js';
-import { FramePoseSchema } from './roles.js';
+import { FramePoseSchema, SceneAbsoluteInitialRouteSchema } from './roles.js';
 import { SetValueSchema } from './set-keys.js';
 
 /** Comparison operators available to threshold conditions. */
@@ -337,7 +337,7 @@ export const RouteTargetSchema = z.discriminatedUnion('mode', [
    * only portable together with scene_absolute roles and deliberately retains
    * the concrete directed-road choice for deterministic save/reopen playback.
    */
-  z.strictObject({ mode: z.literal('lanePath'), lanes: z.array(z.string().min(1)).min(1).max(128) }),
+  SceneAbsoluteInitialRouteSchema,
   /** Drive to a specific pose and stop being routed. */
   z.strictObject({ mode: z.literal('acquire'), pose: FramePoseSchema }),
 ]);

@@ -28,6 +28,7 @@ import {
   type ScenarioTemplateV2,
   type TemplateFileStore,
   type ValidationReport,
+  migrateLegacyInitialRoutes,
 } from '@uniscenarios/scenario-model';
 import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import type { MapEntry } from '../maps';
@@ -66,6 +67,8 @@ export interface ActorRecord {
   /** Studio-only presentation color, persisted with the role and ignored by export. */
   readonly bodyColor: string | undefined;
   readonly initialSpeedKph?: number;
+  /** Exact authored lane chain, available without materializing or scanning actions. */
+  readonly routeLaneRsls?: readonly string[];
   /** Physical sensors mounted to this actor. */
   readonly sensors: readonly ActorSensor[];
 }
@@ -202,6 +205,8 @@ export function normalizeAuthoringGraph(template: ScenarioTemplateV2): {
   readonly template: ScenarioTemplateV2;
   readonly plan: AuthoringGraphPrunePlan;
 } {
+  const initialRoutes = migrateLegacyInitialRoutes(template);
+  template = initialRoutes.template;
   const plan = authoringGraphPrunePlan(template);
   const changed = plan.interactionIds.length > 0 || plan.propIds.length > 0
     || plan.invariantIds.length > 0 || plan.variantIds.length > 0 || plan.clearMetricSubject;
@@ -515,21 +520,12 @@ export class EditorDocument {
           ...(input.label === undefined ? {} : { label: input.label }),
           initialSpeedKph: q(Math.max(0, input.initialSpeedKph ?? defaultSpeedKph(simulationClassFor(input.catalogId), input.catalogId))),
           ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
+          ...(input.routeLaneRsls && input.routeLaneRsls.length > 0
+            ? { initialRoute: { mode: 'lanePath' as const, lanes: [...input.routeLaneRsls] } }
+            : {}),
           essentiality: kind === 'prop' ? 'preferred' : 'required',
           ...(input.bodyColor ? { extensions: { 'studio.presentation.bodyColor': input.bodyColor } } : {}),
         });
-        if (input.routeLaneRsls && input.routeLaneRsls.length > 0) {
-          this.#doc.addInteraction({
-            id: `route_${id}_initial`.slice(0, 64),
-            actor: id,
-            // This is deliberately a presentation label over a concrete,
-            // deterministic lanePath. It is not a new simulator/export verb.
-            label: 'Random turns',
-            trigger: { kind: 'at', t: 0 },
-            verb: 'route',
-            target: { mode: 'lanePath', lanes: [...input.routeLaneRsls] },
-          });
-        }
         ids.push(id);
       }
     });
@@ -819,6 +815,7 @@ function recordFromRole(role: RoleBinding): ActorRecord | null {
       ? role.extensions['studio.presentation.bodyColor']
       : undefined,
     initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
+    routeLaneRsls: role.initialRoute?.lanes,
     sensors: role.actor.sensors,
   };
 }
