@@ -658,6 +658,23 @@ export class EditorDocument {
     this.#transaction(() => { this.#doc.replaceInteraction(id, interaction); });
   }
 
+  /** Commit a timeline gesture's semantic edit and presentation layout as one
+   * undoable/autosaved transaction. Unrelated presentation keys are retained. */
+  replaceInteractionWithPresentation(
+    id: string,
+    interaction: Interaction,
+    key: string,
+    value: unknown,
+  ): void {
+    if (!key.startsWith('studio.presentation.')) {
+      throw new Error(`presentation extension key must start with "studio.presentation.": ${key}`);
+    }
+    this.#transaction(() => {
+      this.#doc.replaceInteraction(id, interaction);
+      this.#doc.setExtension(key, value);
+    });
+  }
+
   /** Delete one semantic timeline interaction. Validation surfaces dangling references. */
   removeInteraction(id: string): void {
     this.#transaction(() => { this.#doc.removeInteraction(id); });

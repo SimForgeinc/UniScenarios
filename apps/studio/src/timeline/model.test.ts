@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Interaction, MapSignalPlan, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, triggerAnchor, type TimelineItem } from './model';
+import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, triggerAnchor, type TimelineItem } from './model';
 
 const speed: Interaction = { id: 'speed_ego', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'speed', target: { mode: 'stop' }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } };
 const item = (interaction: Interaction, resource: TimelineItem['resource'], start: number, end: number): TimelineItem => ({ interaction, actorId: interaction.actor, track: 'actions', resource, anchorTime: start, endTime: end, unresolved: false });
@@ -9,6 +9,32 @@ describe('action-only timeline projection', () => {
   it('resolves trigger chains and moves actions with typed at triggers', () => { const after: Interaction = { ...speed, id: 'after', trigger: { kind: 'after', of: speed.id, event: 'start', delayS: 2 } }; expect(triggerAnchor(after.trigger, [speed, after], 20)).toEqual({ time: 5, unresolved: false }); expect(moveInteraction(speed, 7.126).trigger).toEqual({ kind: 'at', t: 7.126 }); });
   it('moves a clip without changing its strict execution-window duration', () => { const clip = { ...speed, until: { kind: 'at', t: 5 } } as Interaction; const moved = moveInteraction(clip, 8); expect(moved.trigger).toEqual({ kind: 'at', t: 8 }); expect(moved.until).toEqual({ kind: 'at', t: 10 }); });
   it('packs overlapping independent actions onto automatic parallel lanes', () => { const horn = { id: 'horn', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'set', target: { key: 'audio.horn', value: true } } as Interaction; expect(packActionLanes([item(speed, 'longitudinal', 3, 5), item(horn, 'horn', 4, 5)]).map((lane) => lane.items.length)).toEqual([1, 1]); });
+  it('honors vertical relocation and spills an occupied target into a new row', () => {
+    const second = { ...speed, id: 'second' } as Interaction;
+    const third = { ...speed, id: 'third' } as Interaction;
+    const lanes = packActionLanes([
+      item(speed, 'longitudinal', 0, 4), item(second, 'longitudinal', 1, 3), item(third, 'longitudinal', 6, 8),
+    ], { speed_ego: 0, second: 0, third: 1 });
+    expect(lanes.map((lane) => lane.items.map((entry) => entry.interaction.id))).toEqual([['speed_ego'], ['second', 'third']]);
+  });
+  it('compacts empty preferred rows without imposing a row limit', () => {
+    const far = item({ ...speed, id: 'far' } as Interaction, 'longitudinal', 0, 1);
+    expect(packActionLanes([far], { far: 50 })).toEqual([{ index: 0, items: [far] }]);
+    expect(packActionLanes([far], { far: Number.MAX_SAFE_INTEGER })).toEqual([{ index: 0, items: [far] }]);
+  });
+  it('moves and edge-resizes inside bounds with a useful minimum', () => {
+    expect(editTimelineClipRange({ start: 2, end: 5 }, 'move', -10, 20)).toEqual({ start: 0, end: 3 });
+    expect(editTimelineClipRange({ start: 18, end: 20 }, 'move', 10, 20)).toEqual({ start: 18, end: 20 });
+    expect(editTimelineClipRange({ start: 2, end: 5 }, 'resize-start', 10, 20)).toEqual({ start: 4.8, end: 5 });
+    expect(editTimelineClipRange({ start: 2, end: 5 }, 'resize-end', -10, 20)).toEqual({ start: 2, end: 2.2 });
+  });
+  it('edits eligibility bounds without changing canonical maneuver duration or style', () => {
+    const laneChange = { id: 'lane', actor: 'ego', trigger: { kind: 'at', t: 1 }, until: { kind: 'at', t: 4 }, verb: 'changeLane', target: { mode: 'relative', dk: 1 }, dynamics: { shape: 'cubic', constraint: 'time', value: 3 }, maneuverDurationS: 3, maneuverStyle: 'assertive' } as Interaction;
+    const resized = interactionWithTimelineRange(laneChange, { start: 6, end: 10 });
+    expect(resized.trigger).toEqual({ kind: 'at', t: 6 });
+    expect(resized.until).toEqual({ kind: 'at', t: 10 });
+    expect(resized).toMatchObject({ maneuverDurationS: 3, maneuverStyle: 'assertive' });
+  });
   it('rejects overlap on longitudinal or lateral resources but allows independent overlap', () => { const existing = item(speed, 'longitudinal', 3, 5); expect(conflictingAction(item({ ...speed, id: 'other' }, 'longitudinal', 4, 6), [existing])?.interaction.id).toBe(speed.id); expect(conflictingAction(item({ ...speed, id: 'horn' }, 'horn', 4, 6), [existing])).toBeUndefined(); });
   it('uses one actions collection and hides incompatible legacy commands', () => { const lane: Interaction = { id: 'left', actor: 'ego', trigger: { kind: 'at', t: 6 }, verb: 'changeLane', target: { mode: 'relative', dk: 1 }, dynamics: { shape: 'linear', constraint: 'time', value: 2 } }; const advanced: Interaction = { id: 'exist', actor: 'ego', trigger: { kind: 'at', t: 0 }, verb: 'exist', target: { state: 'present' } }; const template = { schemaVersion: 2, roles: [{ id: 'ego', label: 'Ego', actor: { class: 'car', static: false }, kind: 'scene_absolute', pose: { position: { x: 0, y: 0, z: 0 }, headingRad: 0 } }], choreography: { clipSeconds: 20, warmupSeconds: 0, interactions: [speed, lane, advanced] }, invariants: [], variants: [] } as unknown as ScenarioTemplateV2; const [group] = buildTimelineGroups(template); expect(Object.keys(group!.tracks)).toEqual(['actions']); expect(group!.tracks.actions.map((entry) => entry.interaction.id)).toEqual(['speed_ego', 'left']); });
 });

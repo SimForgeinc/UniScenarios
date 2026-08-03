@@ -4,7 +4,7 @@ import { EditorDocument } from '../editor/document';
 import { LaneIndex } from '../editor/laneIndex';
 import { routesFromTemplate } from '../editor/routeOverlay';
 import { MAPS } from '../maps';
-import { buildTimelineGroups } from './model';
+import { buildTimelineGroups, interactionWithTimelineRange, TIMELINE_LAYOUT_EXTENSION_KEY, timelineLayoutExtension } from './model';
 import { submitTimelineAction, type TimelineActionDraft } from './TimelineDock';
 
 function memoryStore(): { store: TemplateFileStore; files: Map<string, unknown> } {
@@ -36,7 +36,7 @@ async function boxTruck(store: TemplateFileStore): Promise<{ document: EditorDoc
 }
 
 function draft(actorId: string, definitionId: string, time = 2): TimelineActionDraft {
-  return { actorId, definitionId, time, duration: definitionId === 'turn_left' ? 2 : 1, targetSpeed: 30, editingId: null };
+  return { actorId, definitionId, time, duration: definitionId === 'turn_left' ? 2 : 1, targetSpeed: 30, maneuverDuration: 3, maneuverStyle: 'normal', editingId: null };
 }
 
 function laneIndex(): LaneIndex {
@@ -98,7 +98,7 @@ describe('timeline action dialog submission', () => {
     document.dispose();
   });
 
-  it('rejects conflicting longitudinal actions with a visible-ready error instead of a no-op', async () => {
+  it('keeps conflicting resources as stacked diagnostics instead of blocking authoring', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);
     expect(submitTimelineAction(document, draft(actorId, 'accelerate')).ok).toBe(true);
@@ -106,10 +106,51 @@ describe('timeline action dialog submission', () => {
 
     const result = submitTimelineAction(document, draft(actorId, 'decelerate'));
 
-    expect(result).toMatchObject({ ok: false });
-    if (!result.ok) expect(result.message).toContain('overlaps “Accelerate”');
-    expect(document.revision).toBe(before);
-    expect(document.data.choreography.interactions).toHaveLength(1);
+    expect(result).toMatchObject({ ok: true, warning: expect.stringContaining('overlaps “Accelerate”') });
+    expect(document.revision).toBe(before + 1);
+    expect(document.data.choreography.interactions).toHaveLength(2);
+    expect(buildTimelineGroups(document.data)[0]!.lanes).toHaveLength(2);
+    document.dispose();
+  });
+
+  it('commits retime and vertical placement as one undoable document gesture', async () => {
+    const { store } = memoryStore();
+    const { document, actorId } = await boxTruck(store);
+    const added = submitTimelineAction(document, draft(actorId, 'accelerate'));
+    expect(added.ok).toBe(true);
+    if (!added.ok) return;
+    const original = structuredClone(added.interaction);
+    const before = document.revision;
+    document.replaceInteractionWithPresentation(
+      original.id,
+      interactionWithTimelineRange(original, { start: 6, end: 9 }),
+      TIMELINE_LAYOUT_EXTENSION_KEY,
+      timelineLayoutExtension({ [original.id]: 3 }),
+    );
+    expect(document.revision).toBe(before + 1);
+    expect(document.data.choreography.interactions[0]).toMatchObject({ trigger: { kind: 'at', t: 6 }, until: { kind: 'at', t: 9 } });
+    expect(document.data.extensions?.[TIMELINE_LAYOUT_EXTENSION_KEY]).toEqual({ version: 1, lanes: { [original.id]: 3 } });
+    expect(document.undo()).toBe(true);
+    expect(document.data.choreography.interactions[0]).toEqual(original);
+    expect(document.data.extensions?.[TIMELINE_LAYOUT_EXTENSION_KEY]).toBeUndefined();
+    expect(document.redo()).toBe(true);
+    expect(document.data.choreography.interactions[0]).toMatchObject({ trigger: { t: 6 }, until: { t: 9 } });
+    document.dispose();
+  });
+
+  it('stores a lane-change maneuver independently from its eligibility window', async () => {
+    const { store } = memoryStore();
+    const { document, actorId } = await boxTruck(store);
+    const result = submitTimelineAction(document, {
+      ...draft(actorId, 'lane_left'), duration: 8, maneuverDuration: 6, maneuverStyle: 'assertive',
+    });
+    expect(result.ok).toBe(true);
+    expect(document.data.choreography.interactions[0]).toMatchObject({
+      trigger: { kind: 'at', t: 2 }, until: { kind: 'at', t: 10 },
+      dynamics: { shape: 'sinusoidal', constraint: 'time', value: 6 },
+      maneuverDurationS: 6,
+      maneuverStyle: 'assertive',
+    });
     document.dispose();
   });
 

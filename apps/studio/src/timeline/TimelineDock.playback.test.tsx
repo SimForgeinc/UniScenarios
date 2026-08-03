@@ -57,6 +57,10 @@ describe('author timeline playback controls', () => {
       outcomes={[]}
     />);
     expect(resetMarkup).toMatch(/data-outcome="pending"[^>]*data-testid="timeline-item-go-straight"/);
+    expect(resetMarkup).toContain('aria-label="Resize start of route"');
+    expect(resetMarkup).toContain('aria-label="Edit and move route"');
+    expect(resetMarkup).toContain('aria-label="Resize end of route"');
+    expect(resetMarkup).toContain('data-lane="0"');
   });
   it('keeps normal Play camera-neutral and exposes an actionable empty camera state', () => {
     const markup = renderToStaticMarkup(<TimelineDock controller={controller} editorState={null} session={session} />);
