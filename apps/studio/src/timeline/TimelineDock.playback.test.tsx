@@ -37,6 +37,18 @@ describe('author timeline playback controls', () => {
       outcomes={[{ interactionId: 'go-straight', actorId: 'car', time: 3, kind: 'trigger_fired' }]}
     />);
     expect(markup).toMatch(/data-outcome="executed"[^>]*data-testid="timeline-item-go-straight"/);
+    expect(markup).toContain('border-width:1px');
+    expect(markup).toContain('border-style:solid');
+    expect(markup).toContain('border-color:#67d99a');
+
+    const missedMarkup = renderToStaticMarkup(<TimelineDock
+      controller={outcomeController}
+      editorState={null}
+      session={{ ...session, state: { ...session.state, mode: 'playing', time: 5 } }}
+      outcomes={[{ interactionId: 'go-straight', actorId: 'car', time: 5, kind: 'trigger_skipped' }]}
+    />);
+    expect(missedMarkup).toMatch(/data-outcome="missed"[^>]*data-testid="timeline-item-go-straight"/);
+    expect(missedMarkup).toContain('border-color:#ff788c');
 
     const resetMarkup = renderToStaticMarkup(<TimelineDock
       controller={outcomeController}
