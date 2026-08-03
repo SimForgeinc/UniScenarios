@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import type { Interaction } from '@uniscenarios/scenario-model';
 import { buildTimelineOutcomeIndex, initialTimelineOutcomesFromManifest, timelineOutcomesAt } from './model';
-import { timelineActionOutcome } from './TimelineDock';
+import { TimelineDock, timelineActionOutcome } from './TimelineDock';
 
 function interaction(id: string, actor = 'car'): Pick<Interaction, 'id' | 'actor'> {
   return { id, actor } as Pick<Interaction, 'id' | 'actor'>;
@@ -125,5 +127,19 @@ describe('canonical timeline outcome projection', () => {
     expect(timelineActionOutcome(timelineOutcomesAt(index, 0), 'contraflow-route')).toBe('executed');
     expect(timelineActionOutcome(timelineOutcomesAt(index, 20), 'focus-vehicle-garage-route')).not.toBe('pending');
     expect(timelineActionOutcome(timelineOutcomesAt(index, 20), 'contraflow-route')).not.toBe('pending');
+
+    const markup = renderToStaticMarkup(createElement(TimelineDock, {
+      controller: { doc: { data: template } } as never,
+      editorState: null,
+      session: {
+        state: { mode: 'playing', time: 0, duration: 20, validation: 'passed', error: null },
+        playPause: () => undefined,
+        stop: () => undefined,
+        seek: () => undefined,
+      } as never,
+      outcomes: timelineOutcomesAt(index, 0),
+    }));
+    expect(markup).toMatch(/data-outcome="executed"[^>]*data-testid="timeline-item-focus-vehicle-garage-route"/);
+    expect(markup).toMatch(/data-outcome="executed"[^>]*data-testid="timeline-item-contraflow-route"/);
   });
 });
