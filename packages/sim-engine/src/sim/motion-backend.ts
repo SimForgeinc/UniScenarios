@@ -1,5 +1,5 @@
 import type { Vec2 } from '../core/math.js';
-import type { VehiclePhysicsProfile } from '../schema/input.js';
+import type { ActorKind, Dims, VehiclePhysicsProfile } from '../schema/input.js';
 
 /**
  * Solver-neutral command produced by scenario choreography.  This is kept to
@@ -7,6 +7,8 @@ import type { VehiclePhysicsProfile } from '../schema/input.js';
  * without depending on engine objects or route classes.
  */
 export interface MotionIntent {
+  /** Body longitudinal direction: +1 forward, -1 reverse. */
+  readonly motionDirection?: 1 | -1;
   readonly targetSpeedMps: number;
   readonly targetAccelerationMps2: number;
   readonly previewPoint: Vec2;
@@ -57,6 +59,9 @@ export interface MotionStepResult {
 
 export interface MotionActorInitialization {
   readonly actorId: string;
+  readonly kind?: ActorKind;
+  readonly dimensions?: Pick<Dims, 'l' | 'w'>;
+  readonly motionDirection?: 1 | -1;
   readonly state: Pick<VehicleMotionState, 'x' | 'y' | 'yawRad' | 'longitudinalVelocityMps'> &
     Partial<Omit<VehicleMotionState, 'x' | 'y' | 'yawRad' | 'longitudinalVelocityMps'>>;
   readonly profile?: VehiclePhysicsProfile;

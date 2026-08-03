@@ -58,9 +58,9 @@ import {
   desiredGapM,
 } from './controllers.js';
 import { transitionDuration } from './dynamics.js';
-import { DynamicV1Backend, DYNAMIC_V1_DEFAULT_SUBSTEP_S } from './dynamic-v1.js';
+import { ACTOR_PHYSICS_PROFILES, DynamicV1Backend, DYNAMIC_V1_DEFAULT_SUBSTEP_S } from './dynamic-v1.js';
 import type { MotionBackend, PhysicsTelemetrySample } from './motion-backend.js';
-import { actorPhysicsBackend, actorPhysicsBackends } from './physics-provenance.js';
+import { actorPhysicsBackends } from './physics-provenance.js';
 import {
   articulatedDoorObb,
   alongRouteGapM,
@@ -260,9 +260,7 @@ class Simulation {
 
     const input = this.resolvedInput;
     this.physicsConfig = resolvePhysicsConfig(input);
-    this.dynamicBackend = this.physicsConfig.mode === 'dynamic-v1'
-      ? new DynamicV1Backend(this.physicsConfig.substepS ?? DYNAMIC_V1_DEFAULT_SUBSTEP_S)
-      : null;
+    this.dynamicBackend = new DynamicV1Backend(this.physicsConfig.substepS ?? DYNAMIC_V1_DEFAULT_SUBSTEP_S);
     this.motionBackend = this.dynamicBackend;
     this.dt = input.dt;
     this.warmupTicks = Math.round(input.warmupSeconds / input.dt);
@@ -345,10 +343,13 @@ class Simulation {
       const rt = this.buildActor(spec);
       this.actors.push(rt);
       this.byId.set(rt.id, rt);
-      if (this.motionBackend && this.supportsDynamicV1(rt)) {
+      if (this.motionBackend && !rt.static && rt.kind !== 'static_object') {
         this.dynamicActorIds.add(rt.id);
         this.motionBackend.register({
           actorId: rt.id,
+          kind: rt.kind,
+          dimensions: { l: rt.dims.l, w: rt.dims.w },
+          motionDirection: isReverseMotion(rt) ? -1 : 1,
           state: {
             x: rt.position.x,
             y: rt.position.y,
@@ -357,7 +358,6 @@ class Simulation {
           },
           profile: this.physicsConfig.vehicleProfiles?.[rt.id],
         });
-        this.dynamicBackend!.registerDimensions(rt.id, rt.dims.l, rt.dims.w);
       }
       this.tracks.set(rt.id, {
         x: [],
@@ -404,16 +404,6 @@ class Simulation {
     };
   }
 
-  /** dynamic-v1's first slice is deliberately limited to forward passenger cars. */
-  private supportsDynamicV1(a: ActorRuntime): boolean {
-    return this.dynamicFallbackReason(a) === null;
-  }
-
-  private dynamicFallbackReason(a: ActorRuntime): 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind' | null {
-    const backend = actorPhysicsBackend(a, this.physicsConfig);
-    return backend.mode === 'dynamic-v1' ? null : backend.reason === 'selected' ? null : backend.reason;
-  }
-
   /* ------------------------------------------------------------ actor setup */
 
   private buildActor(spec: SimActor): ActorRuntime {
@@ -426,8 +416,12 @@ class Simulation {
     const route = built.route;
     const posePoint = localFromScene(spec.initial.pose);
 
-    let routeS: number;
-    let lateral: number;
+    // The authored scene transform is the t=0 source of truth. Lane metadata
+    // may be stale after an editor move, so it can validate the route but may
+    // never relocate the visible actor when Play starts.
+    const projectedSpawn = route.projectPoint(posePoint);
+    let routeS = projectedSpawn.s;
+    let lateral = route.lateralOffsetAt(projectedSpawn.s, posePoint);
     const laneRef = spec.initial.laneRef;
     if (laneRef) {
       const s = route.sOfLaneStorage(laneRef.rsl, laneRef.s);
@@ -441,20 +435,21 @@ class Simulation {
             'warning',
           ),
         );
-        const proj = route.projectPoint(posePoint);
-        routeS = proj.s;
-        lateral = route.lateralOffsetAt(proj.s, posePoint);
       } else {
-        routeS = s;
-        lateral = laneRef.tFrac * route.widthAt(s);
+        const declared = route.pointWithOffset(s, laneRef.tFrac * route.widthAt(s));
+        const mismatchM = Math.hypot(declared.x - posePoint.x, declared.y - posePoint.y);
+        if (mismatchM > 0.25) {
+          this.issues.push(issue(
+            'spawn_lane_pose_mismatch',
+            `actors.${spec.id}.initial`,
+            `authored pose and lane station differ by ${mismatchM.toFixed(2)} m; the authored pose is preserved and lane progress is reprojected`,
+            { rsl: laneRef.rsl, authoredS: laneRef.s, projectedS: routeS, mismatchM },
+            'warning',
+          ));
+        }
       }
-    } else {
-      const proj = route.projectPoint(posePoint);
-      routeS = proj.s;
-      lateral = route.lateralOffsetAt(proj.s, posePoint);
     }
 
-    const pose = route.poseAt(routeS);
     const rules = { ...spec.behavior.rules };
     const rt: ActorRuntime = {
       id: spec.id,
@@ -476,8 +471,8 @@ class Simulation {
       accelMps2: 0,
       lateralOffsetM: lateral,
       lateralRateMps: 0,
-      position: route.pointWithOffset(routeS, lateral),
-      headingRad: normalizeAngle(pose.headingRad + (spec.tags.includes('motion:reverse') ? Math.PI : 0)),
+      position: posePoint,
+      headingRad: normalizeAngle(spec.initial.pose.headingRad),
       present: spec.presentAtStart,
       retired: false,
       longCmd: null,
@@ -487,6 +482,8 @@ class Simulation {
       roadControlStates: new Map(),
       standstillSinceS: null,
       requiredDecelMax: 0,
+      crashDisabledAtS: null,
+      crashDisabledReason: null,
     };
     rt.cruiseSpeedMps = spec.static ? 0 : cruiseSpeed(rt, this.speedLimitAt(rt));
     return rt;
@@ -831,6 +828,16 @@ class Simulation {
         : { colliderA: contact.colliderA, colliderB: contact.colliderB };
       this.events.push({ t: contact.t, kind: 'collision', a: contact.a, b: contact.b, ...detail });
       this.metrics.collisions.push({ t: contact.t, a: contact.a, b: contact.b, ...detail });
+      for (const [actorId, otherId] of [[contact.a, contact.b], [contact.b, contact.a]] as const) {
+        const actor = this.byId.get(actorId);
+        if (!actor || actor.static || actor.crashDisabledAtS != null) continue;
+        actor.crashDisabledAtS = contact.t;
+        actor.crashDisabledReason = `material-collision:${otherId}`;
+        actor.longCmd = null;
+        actor.latCmd = null;
+        actor.untilByAxis.clear();
+        this.events.push({ t: contact.t, kind: 'crash_disabled', actorId, otherId, reason: 'material-collision' });
+      }
     }
 
     this.world.activeCollisions.clear();
@@ -913,6 +920,19 @@ class Simulation {
         continue;
       }
       if (!verdict.fire) continue;
+      const targetActor = this.byId.get(tr.interaction.actorId);
+      if (targetActor?.crashDisabledAtS != null) {
+        tr.status = 'skipped';
+        this.events.push({
+          t,
+          kind: 'trigger_skipped',
+          interactionId: tr.interaction.id,
+          actorId: tr.interaction.actorId,
+          reason: 'actor-crash-disabled',
+        });
+        this.metrics.triggerNeverFired.push(tr.interaction.id);
+        continue;
+      }
       tr.status = 'fired';
       tr.firedAt = t;
       tr.forced = verdict.forced;
@@ -958,6 +978,10 @@ class Simulation {
   private applyInteraction(it: Interaction, t: number): void {
     const a = this.byId.get(it.actorId);
     if (!a) return;
+    if (a.crashDisabledAtS != null) {
+      this.events.push({ t, kind: 'trigger_skipped', interactionId: it.id, actorId: a.id, reason: 'actor-crash-disabled' });
+      return;
+    }
     const axis = axisOf(it);
     this.preempt(a, axis, it, t);
 
@@ -1454,6 +1478,34 @@ class Simulation {
       return plan;
     }
 
+    if (a.crashDisabledAtS != null) {
+      const frictionScale = this.resolvedInput.operationalConditions.effects.frictionScale;
+      const emergencyDecel = Math.min(limitsFor(a).brakeHard * frictionScale, Math.max(0, a.speedMps / this.dt));
+      const speed = Math.max(0, a.speedMps - emergencyDecel * this.dt);
+      plan.accel = -emergencyDecel;
+      plan.speed = speed;
+      plan.routeS = a.routeS;
+      if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
+        const result = this.motionBackend.step(a.id, {
+          motionDirection: isReverseMotion(a) ? -1 : 1,
+          targetSpeedMps: 0,
+          targetAccelerationMps2: -emergencyDecel,
+          previewPoint: { x: a.position.x + Math.cos(a.headingRad), y: a.position.y + Math.sin(a.headingRad) },
+          previewHeadingRad: a.headingRad,
+        }, this.dt, frictionScale);
+        plan.speed = Math.abs(result.state.longitudinalVelocityMps);
+        plan.accel = result.state.longitudinalAccelerationMps2 * (isReverseMotion(a) ? -1 : 1);
+        plan.position = { x: result.state.x, y: result.state.y };
+        plan.heading = result.state.yawRad;
+        const projected = a.route.projectPoint(plan.position);
+        plan.routeS = projected.s;
+        plan.lateralOffset = a.route.lateralOffsetAt(projected.s, plan.position);
+        plan.lateralRate = result.state.lateralVelocityMps;
+        this.physicsTelemetry.set(a.id, result.telemetry);
+      }
+      return plan;
+    }
+
     const lim = limitsFor(a);
     const limit = this.curvatureSpeedCap(a, this.speedLimitAt(a));
 
@@ -1510,6 +1562,7 @@ class Simulation {
       );
       const previewPose = a.route.poseAt(previewS);
       const result = this.motionBackend.step(a.id, {
+        motionDirection: isReverseMotion(a) ? -1 : 1,
         targetSpeedMps: speed,
         targetAccelerationMps2: accel,
         previewPoint: a.route.pointWithOffset(previewS, plan.lateralOffset),
@@ -1521,7 +1574,7 @@ class Simulation {
         y: result.state.y,
       });
       const allowedCenterOffsetM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.25);
-      if (a.tags.includes('ambient') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
+      if (!a.tags.includes('motion:off-road') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
         // Never publish the first off-corridor integration. Hold the last valid
         // map pose and retire this generated actor; a later population refresh
         // may replace it from a new connected candidate. Authored off-road and
@@ -1544,8 +1597,8 @@ class Simulation {
         });
         return plan;
       }
-      plan.speed = Math.max(0, result.state.longitudinalVelocityMps);
-      plan.accel = result.state.longitudinalAccelerationMps2;
+      plan.speed = Math.abs(result.state.longitudinalVelocityMps);
+      plan.accel = result.state.longitudinalAccelerationMps2 * (isReverseMotion(a) ? -1 : 1);
       plan.routeS = projected.s;
       plan.lateralOffset = projectedOffset;
       plan.lateralRate = result.state.lateralVelocityMps;
@@ -1671,11 +1724,8 @@ class Simulation {
     this.resolveDynamicContacts();
   }
 
-  /**
-   * Kinematic fallback actors have infinite mass: they transfer their authored
-   * surface velocity but collision response never moves them. Static actors,
-   * props, and map proxies are the same policy with zero surface velocity.
-   */
+  /** Resolve all moving bodies together. Only explicit fixed/static actors,
+   * props, and map proxies have infinite mass. */
   private resolveDynamicContacts(): void {
     if (!this.dynamicBackend) return;
     const activeActors = this.actors
@@ -1690,7 +1740,7 @@ class Simulation {
         this.collisionSnapshots.get(actor.id)?.shapes,
       )) nearbyStatics.set(shape.id, shape);
     }
-    const fallbacks = this.actors
+    const fixedActors = this.actors
       .filter((actor) => !this.dynamicActorIds.has(actor.id) && actor.present && !actor.retired)
       .map((actor) => {
         const direction = isReverseMotion(actor) ? -1 : 1;
@@ -1709,7 +1759,7 @@ class Simulation {
         ...[...nearbyStatics.values()]
           .sort((a, b) => a.id.localeCompare(b.id))
           .map((shape) => ({ id: shape.id, obb: shape.obb })),
-        ...fallbacks,
+        ...fixedActors,
       ],
       this.dt,
     );
@@ -1718,7 +1768,7 @@ class Simulation {
       const state = this.dynamicBackend.state(actor.id)!;
       actor.position = { x: state.x, y: state.y };
       actor.headingRad = state.yawRad;
-      actor.speedMps = Math.max(0, state.longitudinalVelocityMps);
+      actor.speedMps = Math.abs(state.longitudinalVelocityMps);
       actor.lateralRateMps = state.lateralVelocityMps;
       const projected = actor.route.projectPoint(actor.position);
       actor.routeS = projected.s;
@@ -1841,7 +1891,18 @@ class Simulation {
           vehicleProfileDigest: this.physicsConfig.vehicleProfiles
             ? contentHash(this.physicsConfig.vehicleProfiles)
             : null,
+          resolvedProfileDigest: contentHash({
+            version: 1,
+            profiles: ACTOR_PHYSICS_PROFILES,
+            overrides: this.physicsConfig.vehicleProfiles ?? {},
+          }),
           actorBackends: actorPhysicsBackends(this.actors, this.physicsConfig),
+          crashes: Object.fromEntries(this.actors
+            .filter((actor) => actor.crashDisabledAtS != null)
+            .map((actor) => {
+              const otherId = actor.crashDisabledReason?.slice('material-collision:'.length) ?? 'unknown';
+              return [actor.id, { t: actor.crashDisabledAtS!, otherId, reason: 'material-collision' as const }];
+            })),
         },
       },
       ticks: { t: this.tArray, actors, signals },

@@ -666,6 +666,11 @@ export const vehiclePhysicsProfileSchema = z.object({
   steerRateRadPerS: positive.optional(),
   steerTimeConstantS: positive.optional(),
   tireMu: positive.optional(),
+  maxLongitudinalAccelMps2: positive.optional(),
+  maxLongitudinalDecelMps2: positive.optional(),
+  maxJerkMps3: positive.optional(),
+  maxLateralAccelerationMps2: positive.optional(),
+  maxYawRateRadps: positive.optional(),
 });
 export type VehiclePhysicsProfile = z.infer<typeof vehiclePhysicsProfileSchema>;
 
@@ -686,7 +691,12 @@ export interface ResolvedPhysicsConfig {
 
 /** Resolve the current simulation default without mutating hash-covered input. */
 export function resolvePhysicsConfig(input: Pick<SimScenarioInput, 'physics'>): ResolvedPhysicsConfig {
-  return input.physics ?? { mode: DEFAULT_MOTION_PHYSICS_MODE };
+  // Editable inputs from releases before 0.4 may still carry an explicit
+  // kinematic pin. New simulation always migrates that document to the native
+  // dynamic solver; immutable recorded traces retain their original header.
+  return input.physics?.mode === 'dynamic-v1'
+    ? input.physics
+    : { ...input.physics, mode: DEFAULT_MOTION_PHYSICS_MODE };
 }
 
 /* ------------------------------------------------------------- the document */

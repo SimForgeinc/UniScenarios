@@ -103,21 +103,27 @@ export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummar
       Physics · {summary.legacyReplay ? 'Kinematic legacy' : 'Kinematic selected'}
     </span>;
   }
-  const exceptions = summary.actors.filter((actor) => actor.mode !== 'dynamic-v1');
+  const exceptions = summary.actors.filter((actor) => actor.mode === null || actor.mode === 'kinematic-v1');
+  const profileCounts = [...summary.actors.reduce((counts, actor) => {
+    if (actor.mode !== 'dynamic-v1' || !actor.profile) return counts;
+    counts.set(actor.profile, (counts.get(actor.profile) ?? 0) + 1);
+    return counts;
+  }, new Map<string, number>())].sort(([a], [b]) => a.localeCompare(b));
   return <details style={styles.physicsDetails} data-testid="physics-provenance">
     <summary
       style={styles.physicsBadgeDynamic}
       data-testid="active-physics-mode"
-      aria-label={`Physics Dynamic${summary.fallbackCount ? `, ${summary.fallbackCount} kinematic fallback${summary.fallbackCount === 1 ? '' : 's'}` : ''}${summary.unknownCount ? `, ${summary.unknownCount} unknown` : ''}`}
+      aria-label={`Physics Dynamic, ${summary.dynamicCount} moving${summary.staticCount ? `, ${summary.staticCount} fixed` : ''}${summary.unknownCount ? `, ${summary.unknownCount} unknown` : ''}`}
     >
-      Physics · Dynamic{summary.fallbackCount ? ` · ${summary.fallbackCount} fallback${summary.fallbackCount === 1 ? '' : 's'}` : ''}{summary.unknownCount ? ` · ${summary.unknownCount} unknown` : ''}
+      Physics · Dynamic · {summary.dynamicCount} moving{summary.staticCount ? ` · ${summary.staticCount} fixed` : ''}{summary.unknownCount ? ` · ${summary.unknownCount} unknown` : ''}
     </summary>
     <div style={styles.physicsPopover} role="status" aria-label="Per-actor physics backends">
-      <strong>{summary.dynamicCount} dynamic · {summary.fallbackCount} kinematic fallback{summary.fallbackCount === 1 ? '' : 's'}</strong>
-      {exceptions.length === 0 ? <span style={styles.physicsNote}>Every recorded actor uses dynamic-v1.</span> : exceptions.map((actor) => (
+      <strong>{summary.dynamicCount} class-native dynamic · {summary.staticCount} fixed</strong>
+      {profileCounts.length ? <span style={styles.physicsNote}>Profiles · {profileCounts.map(([profile, count]) => `${profile} ${count}`).join(' · ')}</span> : null}
+      {exceptions.length === 0 ? <span style={styles.physicsNote}>Every moving actor uses its class-native dynamic-v1 profile.</span> : exceptions.map((actor) => (
         <div key={actor.id} style={styles.physicsRow} data-testid={`physics-backend-${actor.id}`}>
           <span>{actor.label}</span>
-          <small>{actor.mode === 'kinematic-v1' ? 'Kinematic fallback' : 'Unknown'} · {physicsReasonLabel(actor.reason)}</small>
+          <small>{actor.mode === 'kinematic-v1' ? 'Legacy kinematic' : 'Unknown'} · {physicsReasonLabel(actor.reason)}</small>
         </div>
       ))}
     </div>

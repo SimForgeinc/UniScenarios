@@ -50,24 +50,24 @@ describe('simplified editor settings UI', () => {
     expect(markup).not.toContain('Playback');
   });
 
-  it('shows an accessible aggregate fallback count with per-actor reasons', () => {
+  it('shows accessible class-native dynamic and fixed actor counts', () => {
     const markup = renderToStaticMarkup(<WorkspaceHeader
       controller={null} state={null} map={{ id: 'test', label: 'Test map' } as never}
       playback={false} authoringEnabled settingsOpen={false} onSettings={vi.fn()}
       physicsSummary={{
-        mode: 'dynamic-v1', legacyReplay: false, dynamicCount: 1, fallbackCount: 2, unknownCount: 0,
+        mode: 'dynamic-v1', legacyReplay: false, dynamicCount: 3, staticCount: 1, fallbackCount: 0, unknownCount: 0,
         actors: [
-          { id: 'car', label: 'Car', mode: 'dynamic-v1', reason: 'selected' },
-          { id: 'ped', label: 'Walker', mode: 'kinematic-v1', reason: 'unsupported-actor-kind' },
-          { id: 'reverse', label: 'Reversing car', mode: 'kinematic-v1', reason: 'reverse-motion' },
+          { id: 'car', label: 'Car', mode: 'dynamic-v1', reason: 'selected', profile: 'car' },
+          { id: 'ped', label: 'Walker', mode: 'dynamic-v1', reason: 'selected', profile: 'pedestrian' },
+          { id: 'reverse', label: 'Reversing car', mode: 'dynamic-v1', reason: 'selected', profile: 'car' },
+          { id: 'barrier', label: 'Barrier', mode: 'fixed-static-v1', reason: 'static-actor', profile: 'fixed-static' },
         ],
       }}
     />);
-    expect(markup).toContain('Physics · Dynamic · 2 fallbacks');
+    expect(markup).toContain('Physics · Dynamic · 3 moving · 1 fixed');
     expect(markup).toContain('aria-label="Per-actor physics backends"');
-    expect(markup).toContain('Walker');
-    expect(markup).toContain('This actor kind is not supported by dynamic-v1');
-    expect(markup).toContain('Reverse motion is not supported by dynamic-v1 yet');
+    expect(markup).toContain('pedestrian 1');
+    expect(markup).toContain('Every moving actor uses its class-native dynamic-v1 profile');
   });
 
   it('keeps road and traffic-light overlays off and diagnostics hidden by default', () => {

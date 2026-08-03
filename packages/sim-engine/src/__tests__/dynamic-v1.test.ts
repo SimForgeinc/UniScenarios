@@ -40,8 +40,8 @@ function advance(
   return result!;
 }
 
-describe('dynamic-v1 passenger car', () => {
-  it('defaults omitted physics to dynamic-v1 while an explicit legacy pin remains kinematic', () => {
+describe('dynamic-v1 class-native actors', () => {
+  it('defaults omitted physics to dynamic-v1 and migrates an editable legacy pin', () => {
     const graph = syntheticGraph();
     const pinnedFixture = scenario(graph, {
       actors: [vehicle(graph, { id: 'car', rsl: LANE_LEFT, s: 20, speedMps: 8, cruiseSpeedMps: 12 })],
@@ -56,11 +56,12 @@ describe('dynamic-v1 passenger car', () => {
     expect(implicitTrace.ticks.actors.car!.physics).toBeDefined();
     expect(implicitTrace.header.physics.mode).toBe('dynamic-v1');
     expect(implicitTrace.header.physics.substepS).toBe(0.005);
-    expect(kinematicTrace.ticks.actors.car!.physics).toBeUndefined();
-    expect(kinematicTrace.header.physics.actorBackends?.car).toEqual({ mode: 'kinematic-v1', reason: 'selected' });
+    expect(kinematicTrace.ticks).toEqual(dynamicTrace.ticks);
+    expect(kinematicTrace.ticks.actors.car!.physics).toBeDefined();
+    expect(kinematicTrace.header.physics.actorBackends?.car).toEqual({ mode: 'dynamic-v1', reason: 'selected', profile: 'vehicle' });
   });
 
-  it('records explicit kinematic fallbacks for unsupported dynamic actors', () => {
+  it('uses a native bus profile instead of a kinematic fallback', () => {
     const graph = syntheticGraph();
     const car = vehicle(graph, { id: 'car', rsl: LANE_LEFT, s: 20, speedMps: 8 });
     const bus = {
@@ -71,10 +72,10 @@ describe('dynamic-v1 passenger car', () => {
     const input = scenario(graph, { actors: [car, bus], physics: { mode: 'dynamic-v1' } });
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.header.physics.actorBackends).toEqual({
-      bus: { mode: 'kinematic-v1', reason: 'unsupported-actor-kind' },
-      car: { mode: 'dynamic-v1', reason: 'selected' },
+      bus: { mode: 'dynamic-v1', reason: 'selected', profile: 'bus' },
+      car: { mode: 'dynamic-v1', reason: 'selected', profile: 'vehicle' },
     });
-    expect(trace.ticks.actors.bus!.physics).toBeUndefined();
+    expect(trace.ticks.actors.bus!.physics).toBeDefined();
     expect(trace.ticks.actors.car!.physics).toBeDefined();
   });
 
@@ -88,7 +89,7 @@ describe('dynamic-v1 passenger car', () => {
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.header.physics.mode).toBe('dynamic-v1');
     expect(trace.header.physics.actorBackends).toEqual({
-      'ambient-car': { mode: 'dynamic-v1', reason: 'selected' },
+      'ambient-car': { mode: 'dynamic-v1', reason: 'selected', profile: 'vehicle' },
     });
     expect(trace.ticks.actors['ambient-car']!.physics).toBeDefined();
   });
@@ -103,11 +104,44 @@ describe('dynamic-v1 passenger car', () => {
     const input = scenario(graph, { actors: [authored, ambient], physics: { mode: 'dynamic-v1' } });
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.header.physics.actorBackends).toEqual({
-      'ambient-car': { mode: 'dynamic-v1', reason: 'selected' },
-      authored: { mode: 'dynamic-v1', reason: 'selected' },
+      'ambient-car': { mode: 'dynamic-v1', reason: 'selected', profile: 'vehicle' },
+      authored: { mode: 'dynamic-v1', reason: 'selected', profile: 'vehicle' },
     });
     expect(trace.ticks.actors['ambient-car']!.physics).toBeDefined();
     expect(trace.ticks.actors.authored!.physics).toBeDefined();
+  });
+
+  it('provides a dynamic plant and exact provenance for every moving actor kind', () => {
+    const graph = syntheticGraph();
+    const kinds = ['vehicle', 'car', 'truck', 'bus', 'van', 'motorcycle', 'bicycle', 'pedestrian', 'scooter', 'animal'] as const;
+    for (const kind of kinds) {
+      const actor = { ...vehicle(graph, { id: kind, rsl: LANE_LEFT, s: 20, speedMps: kind === 'pedestrian' ? 1 : 4 }), kind };
+      const trace = runSimulation(scenario(graph, { actors: [actor], clipSeconds: 0.2, warmupSeconds: 0, physics: { mode: 'dynamic-v1' } }), { graph, guards: 'collect' }).trace;
+      expect(trace.header.physics.actorBackends?.[kind]).toEqual({ mode: 'dynamic-v1', reason: 'selected', profile: kind });
+      expect(trace.ticks.actors[kind]!.physics).toBeDefined();
+    }
+  });
+
+  it('records scenery as fixed static provenance rather than a motion fallback', () => {
+    const graph = syntheticGraph();
+    const base = vehicle(graph, { id: 'barrier', rsl: LANE_LEFT, s: 40, speedMps: 0 });
+    const actor = { ...base, kind: 'static_object' as const, static: true };
+    const trace = runSimulation(scenario(graph, { actors: [actor], clipSeconds: 0.1, warmupSeconds: 0, physics: { mode: 'dynamic-v1' } }), { graph, guards: 'collect' }).trace;
+    expect(trace.header.physics.actorBackends?.barrier).toEqual({ mode: 'fixed-static-v1', reason: 'static-actor', profile: 'fixed-static' });
+    expect(trace.ticks.actors.barrier!.physics).toBeUndefined();
+  });
+
+  it('preserves authored t=0 poses when lane stations are stale and evolves continuously', () => {
+    const graph = syntheticGraph();
+    const first = vehicle(graph, { id: 'first', rsl: LANE_LEFT, s: 20, speedMps: 5 });
+    const second = vehicle(graph, { id: 'second', rsl: LANE_RIGHT, s: 80, speedMps: 5 });
+    const authoredFirst = { ...first, initial: { ...first.initial, pose: { ...first.initial.pose, x: first.initial.pose.x + 12 } } };
+    const authoredSecond = { ...second, initial: { ...second.initial, pose: { ...second.initial.pose, x: second.initial.pose.x - 9 } } };
+    const trace = runSimulation(scenario(graph, { actors: [authoredFirst, authoredSecond], clipSeconds: 0.1, warmupSeconds: 0, dt: 0.02, physics: { mode: 'dynamic-v1' } }), { graph, guards: 'collect' }).trace;
+    expect(trace.ticks.actors.first!.x[0]).toBeCloseTo(authoredFirst.initial.pose.x, 8);
+    expect(trace.ticks.actors.second!.x[0]).toBeCloseTo(authoredSecond.initial.pose.x, 8);
+    expect(Math.abs(trace.ticks.actors.first!.x[1]! - trace.ticks.actors.first!.x[0]!)).toBeLessThan(0.25);
+    expect(Math.abs(trace.ticks.actors.second!.x[1]! - trace.ticks.actors.second!.x[0]!)).toBeLessThan(0.25);
   });
 
   it('does not let ambient provenance change a supported vehicle trace', () => {
@@ -161,12 +195,22 @@ describe('dynamic-v1 passenger car', () => {
             rules: { collisionAvoidance: false },
           }),
         ],
+        interactions: [{
+          id: 'resume-after-impact', actorId: 'car', trigger: { kind: 'at', t: 4 }, verb: 'speed',
+          target: { mode: 'absolute', value: 20 }, dynamics: { shape: 'step', constraint: 'time', value: 0.1 },
+        }],
       }),
       physics: { mode: 'dynamic-v1' },
     };
     const trace = runSimulation(input, { graph, guards: 'collect' }).trace;
     expect(trace.events.some((event) => event.kind === 'collision')).toBe(true);
+    expect(trace.events.some((event) => event.kind === 'crash_disabled' && event.actorId === 'car')).toBe(true);
+    expect(trace.header.physics.crashes?.car).toMatchObject({ reason: 'material-collision', otherId: 'obstacle' });
+    expect(trace.events.some((event) => event.kind === 'trigger_skipped' && event.interactionId === 'resume-after-impact' && event.reason === 'actor-crash-disabled')).toBe(true);
     expect(Math.max(...trace.ticks.actors.car!.physics!.collisionImpulseNs)).toBeGreaterThan(0);
+    const crashT = trace.header.physics.crashes!.car!.t;
+    const after = trace.ticks.t.findIndex((t) => t >= crashT + 0.5);
+    expect(trace.ticks.actors.car!.speedMps.at(-1)!).toBeLessThan(trace.ticks.actors.car!.speedMps[Math.max(after, 0)]! + 1e-6);
   });
 
   it('cannot tunnel through a static map wall and records contact telemetry', () => {
@@ -203,6 +247,7 @@ describe('dynamic-v1 passenger car', () => {
     expect(Math.max(...car.physics!.collisionImpulseNs)).toBeGreaterThan(10_000);
     expect(trace.events.some((event) => event.kind === 'collision' &&
       (event.a === 'map:test-wall' || event.b === 'map:test-wall'))).toBe(true);
+    expect(trace.header.physics.crashes?.car?.otherId).toBe('map:test-wall');
   });
 
   it('accelerates, coasts under resistance, and brakes deterministically', () => {
@@ -343,6 +388,7 @@ describe('dynamic-v1 passenger car', () => {
 
   it('keeps a deterministic City-sized ambient population inside the interactive budget', () => {
     const graph = syntheticGraph();
+    const fleet = ['car', 'van', 'truck', 'motorcycle', 'bus', 'bicycle', 'pedestrian'] as const;
     const actors = Array.from({ length: 32 }, (_, index) => ({
       ...vehicle(graph, {
         id: `ambient-${String(index).padStart(2, '0')}`,
@@ -351,6 +397,7 @@ describe('dynamic-v1 passenger car', () => {
         speedMps: 8,
         cruiseSpeedMps: 10,
       }),
+      kind: fleet[index % fleet.length]!,
       tags: ['ambient', 'ambient:v1'],
     }));
     const input = scenario(graph, {

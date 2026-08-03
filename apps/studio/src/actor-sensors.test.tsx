@@ -36,19 +36,19 @@ function controllerFor(record: ActorRecord, actorClass: string): EditorControlle
 }
 
 describe('ActorSensorsPanel', () => {
-  it('discloses the selected actor backend and fallback reason in the inspector', () => {
+  it('discloses the selected class-native actor backend in the inspector', () => {
     const record = actor('pedestrian');
     const markup = renderToStaticMarkup(<ActorDetailsCallout
       actor={record}
-      physics={{ id: record.id, label: record.label ?? record.id, mode: 'kinematic-v1', reason: 'unsupported-actor-kind' }}
+      physics={{ id: record.id, label: record.label ?? record.id, mode: 'dynamic-v1', reason: 'selected', profile: 'pedestrian' }}
       controller={controllerFor(record, 'pedestrian')}
       viewer={{ camera: {} } as never}
       host={null}
       onClose={() => undefined}
     />);
     expect(markup).toContain('data-testid="actor-physics-backend"');
-    expect(markup).toContain('Kinematic fallback');
-    expect(markup).toContain('This actor kind is not supported by dynamic-v1');
+    expect(markup).toContain('Dynamic v1 · pedestrian');
+    expect(markup).toContain('Selected backend');
   });
   it('renders add, enable, configure and remove affordances for vehicle cameras', () => {
     const camera = defaultDashCamera({ class: 'car' }, 'test-dash-camera');

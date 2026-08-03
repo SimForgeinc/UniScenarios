@@ -146,6 +146,9 @@ export interface ActorRuntime {
   standstillSinceS: number | null;
   /** Running max of the decel that would have been required to stay safe. */
   requiredDecelMax: number;
+  /** Latched after the first material contact; propulsion never resumes. */
+  crashDisabledAtS?: number | null;
+  crashDisabledReason?: string | null;
 }
 
 /** Circumscribed radius used by the coarse pair metrics (TTC, min distance). */

@@ -1,4 +1,4 @@
-import type { ActorKind, MotionPhysicsMode, ResolvedPhysicsConfig } from '../schema/input.js';
+import type { ActorKind, ResolvedPhysicsConfig } from '../schema/input.js';
 import type { ActorPhysicsBackendProvenance } from '../trace/trace.js';
 
 /**
@@ -10,13 +10,11 @@ export function actorPhysicsBackend(
   actor: { readonly kind: ActorKind; readonly static: boolean; readonly tags: readonly string[] },
   physics: Pick<ResolvedPhysicsConfig, 'mode'>,
 ): ActorPhysicsBackendProvenance {
-  if (physics.mode === 'kinematic-v1') return { mode: 'kinematic-v1', reason: 'selected' };
-  if (actor.static) return { mode: 'kinematic-v1', reason: 'static-actor' };
-  if (actor.tags.includes('motion:reverse')) return { mode: 'kinematic-v1', reason: 'reverse-motion' };
-  if (actor.kind !== 'vehicle' && actor.kind !== 'car') {
-    return { mode: 'kinematic-v1', reason: 'unsupported-actor-kind' };
+  void physics;
+  if (actor.static || actor.kind === 'static_object') {
+    return { mode: 'fixed-static-v1', reason: 'static-actor', profile: 'fixed-static' };
   }
-  return { mode: 'dynamic-v1', reason: 'selected' };
+  return { mode: 'dynamic-v1', reason: 'selected', profile: actor.kind };
 }
 
 export function actorPhysicsBackends(
@@ -27,13 +25,15 @@ export function actorPhysicsBackends(
 }
 
 export function physicsBackendCounts(
-  backends: Readonly<Record<string, { readonly mode: MotionPhysicsMode }>>,
-): { readonly dynamic: number; readonly kinematic: number } {
+  backends: Readonly<Record<string, { readonly mode: ActorPhysicsBackendProvenance['mode'] }>>,
+): { readonly dynamic: number; readonly kinematic: number; readonly fixed: number } {
   let dynamic = 0;
   let kinematic = 0;
+  let fixed = 0;
   for (const backend of Object.values(backends)) {
     if (backend.mode === 'dynamic-v1') dynamic += 1;
+    else if (backend.mode === 'fixed-static-v1') fixed += 1;
     else kinematic += 1;
   }
-  return { dynamic, kinematic };
+  return { dynamic, kinematic, fixed };
 }

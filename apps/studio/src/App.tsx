@@ -1196,7 +1196,7 @@ export function ActorDetailsCallout({ actor, physics, controller, viewer, host, 
       {tab === 'appearance' ? <div role="tabpanel" aria-label="Appearance">
         {physics ? <div style={styles.actorPhysics} role="status" data-testid="actor-physics-backend">
           <span>Motion backend</span>
-          <strong>{physics.mode === 'dynamic-v1' ? 'Dynamic v1' : physics.mode === 'kinematic-v1' ? 'Kinematic fallback' : 'Unknown'}</strong>
+          <strong>{physics.mode === 'dynamic-v1' ? `Dynamic v1 · ${physics.profile ?? 'class profile'}` : physics.mode === 'fixed-static-v1' ? 'Fixed static' : physics.mode === 'kinematic-v1' ? 'Legacy kinematic replay' : 'Unknown'}</strong>
           <small>{physicsReasonLabel(physics.reason)}</small>
         </div> : null}
         <label style={styles.actorField}><span>Catalog model</span><select value={actor.catalogId} onChange={(event) => controller.updateActorAppearance(actor.id, { catalogId: event.target.value as CatalogId })} data-testid="actor-model">

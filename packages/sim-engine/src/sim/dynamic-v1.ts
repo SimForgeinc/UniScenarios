@@ -1,5 +1,5 @@
 import { angleDelta, clamp, normalizeAngle } from '../core/math.js';
-import type { VehiclePhysicsProfile } from '../schema/input.js';
+import type { ActorKind, VehiclePhysicsProfile } from '../schema/input.js';
 import type {
   MotionActorInitialization,
   MotionBackend,
@@ -20,6 +20,8 @@ const G = 9.80665;
 export const DYNAMIC_V1_DEFAULT_SUBSTEP_S = 0.005;
 
 export interface ResolvedVehiclePhysicsProfile {
+  readonly kind: ActorKind;
+  readonly dynamicsModel: 'single-track' | 'pedestrian-agent';
   readonly massKg: number;
   readonly yawInertiaKgM2: number;
   readonly wheelbaseM: number;
@@ -36,10 +38,17 @@ export interface ResolvedVehiclePhysicsProfile {
   readonly steerRateRadPerS: number;
   readonly steerTimeConstantS: number;
   readonly tireMu: number;
+  readonly maxLongitudinalAccelMps2: number;
+  readonly maxLongitudinalDecelMps2: number;
+  readonly maxJerkMps3: number;
+  readonly maxLateralAccelerationMps2: number;
+  readonly maxYawRateRadps: number;
 }
 
 /** Calibrated generic 1.5-tonne passenger car; not a make/model claim. */
 export const GENERIC_PASSENGER_CAR_PROFILE: ResolvedVehiclePhysicsProfile = {
+  kind: 'car',
+  dynamicsModel: 'single-track',
   massKg: 1_500,
   yawInertiaKgM2: 2_500,
   wheelbaseM: 2.7,
@@ -56,12 +65,112 @@ export const GENERIC_PASSENGER_CAR_PROFILE: ResolvedVehiclePhysicsProfile = {
   steerRateRadPerS: 4.5,
   steerTimeConstantS: 0.12,
   tireMu: 1,
+  maxLongitudinalAccelMps2: 3.7,
+  maxLongitudinalDecelMps2: 9,
+  maxJerkMps3: 8,
+  maxLateralAccelerationMps2: 7,
+  maxYawRateRadps: 1.8,
+};
+
+/** Class-level effective parameters. They model a representative class, not a
+ * particular make. Values are deliberately conservative and remain overrideable
+ * per actor through the hash-covered physics profile envelope. */
+export const ACTOR_PHYSICS_PROFILES: Readonly<Record<Exclude<ActorKind, 'static_object'>, ResolvedVehiclePhysicsProfile>> = {
+  vehicle: { ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'vehicle' },
+  car: GENERIC_PASSENGER_CAR_PROFILE,
+  van: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'van', massKg: 2_600, yawInertiaKgM2: 5_200,
+    wheelbaseM: 3.35, cgToFrontM: 1.55, cgHeightM: 0.78, wheelRadiusM: 0.36,
+    corneringStiffnessFrontNPerRad: 105_000, corneringStiffnessRearNPerRad: 118_000,
+    dragCoefficientNPerMps2: 0.72, rollingResistanceCoefficient: 0.014,
+    maxDriveForceN: 7_500, maxBrakeForceN: 22_000, maxSteerRad: 0.54,
+    steerRateRadPerS: 2.5, steerTimeConstantS: 0.2, tireMu: 0.92,
+    maxLongitudinalAccelMps2: 2.5, maxLongitudinalDecelMps2: 7.2,
+    maxJerkMps3: 5, maxLateralAccelerationMps2: 5, maxYawRateRadps: 1.25,
+  },
+  truck: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'truck', massKg: 12_000, yawInertiaKgM2: 48_000,
+    wheelbaseM: 5.2, cgToFrontM: 2.25, cgHeightM: 1.25, wheelRadiusM: 0.5,
+    corneringStiffnessFrontNPerRad: 230_000, corneringStiffnessRearNPerRad: 310_000,
+    dragCoefficientNPerMps2: 2.1, rollingResistanceCoefficient: 0.009,
+    maxDriveForceN: 42_000, maxBrakeForceN: 92_000, maxSteerRad: 0.44,
+    steerRateRadPerS: 0.75, steerTimeConstantS: 0.38, tireMu: 0.78,
+    maxLongitudinalAccelMps2: 1.5, maxLongitudinalDecelMps2: 5.5,
+    maxJerkMps3: 2.5, maxLateralAccelerationMps2: 3.1, maxYawRateRadps: 0.65,
+  },
+  bus: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'bus', massKg: 13_500, yawInertiaKgM2: 66_000,
+    wheelbaseM: 6.0, cgToFrontM: 2.7, cgHeightM: 1.15, wheelRadiusM: 0.51,
+    corneringStiffnessFrontNPerRad: 250_000, corneringStiffnessRearNPerRad: 330_000,
+    dragCoefficientNPerMps2: 1.85, rollingResistanceCoefficient: 0.01,
+    maxDriveForceN: 39_000, maxBrakeForceN: 105_000, maxSteerRad: 0.46,
+    steerRateRadPerS: 0.68, steerTimeConstantS: 0.42, tireMu: 0.8,
+    maxLongitudinalAccelMps2: 1.35, maxLongitudinalDecelMps2: 5.2,
+    maxJerkMps3: 2.2, maxLateralAccelerationMps2: 2.8, maxYawRateRadps: 0.58,
+  },
+  motorcycle: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'motorcycle', massKg: 240, yawInertiaKgM2: 145,
+    wheelbaseM: 1.45, cgToFrontM: 0.68, cgHeightM: 0.58, wheelRadiusM: 0.3,
+    corneringStiffnessFrontNPerRad: 14_000, corneringStiffnessRearNPerRad: 17_000,
+    dragCoefficientNPerMps2: 0.28, rollingResistanceCoefficient: 0.015,
+    maxDriveForceN: 1_750, maxBrakeForceN: 2_200, maxSteerRad: 0.62,
+    steerRateRadPerS: 3.2, steerTimeConstantS: 0.16, tireMu: 0.95,
+    maxLongitudinalAccelMps2: 4.8, maxLongitudinalDecelMps2: 8.2,
+    maxJerkMps3: 7, maxLateralAccelerationMps2: 6.5, maxYawRateRadps: 2.4,
+  },
+  bicycle: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'bicycle', massKg: 95, yawInertiaKgM2: 28,
+    wheelbaseM: 1.08, cgToFrontM: 0.48, cgHeightM: 0.75, wheelRadiusM: 0.34,
+    corneringStiffnessFrontNPerRad: 1_100, corneringStiffnessRearNPerRad: 1_350,
+    dragCoefficientNPerMps2: 0.3, rollingResistanceCoefficient: 0.006,
+    maxDriveForceN: 420, maxBrakeForceN: 750, maxSteerRad: 0.7,
+    steerRateRadPerS: 2.2, steerTimeConstantS: 0.24, tireMu: 0.82,
+    maxLongitudinalAccelMps2: 1.8, maxLongitudinalDecelMps2: 5,
+    maxJerkMps3: 3.5, maxLateralAccelerationMps2: 3.5, maxYawRateRadps: 2.1,
+  },
+  scooter: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'scooter', massKg: 115, yawInertiaKgM2: 34,
+    wheelbaseM: 1.15, cgToFrontM: 0.52, cgHeightM: 0.67, wheelRadiusM: 0.25,
+    corneringStiffnessFrontNPerRad: 1_800, corneringStiffnessRearNPerRad: 2_100,
+    dragCoefficientNPerMps2: 0.32, rollingResistanceCoefficient: 0.012,
+    maxDriveForceN: 620, maxBrakeForceN: 950, maxSteerRad: 0.68,
+    steerRateRadPerS: 2.5, steerTimeConstantS: 0.2, tireMu: 0.86,
+    maxLongitudinalAccelMps2: 2.4, maxLongitudinalDecelMps2: 5.8,
+    maxJerkMps3: 4, maxLateralAccelerationMps2: 3.8, maxYawRateRadps: 2.2,
+  },
+  pedestrian: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'pedestrian', dynamicsModel: 'pedestrian-agent',
+    massKg: 78, yawInertiaKgM2: 9, wheelbaseM: 0.5, cgToFrontM: 0.25,
+    cgHeightM: 0.9, wheelRadiusM: 0.16, corneringStiffnessFrontNPerRad: 1,
+    corneringStiffnessRearNPerRad: 1, dragCoefficientNPerMps2: 0.08,
+    rollingResistanceCoefficient: 0, maxDriveForceN: 350, maxBrakeForceN: 500,
+    maxSteerRad: 0.01, steerRateRadPerS: 0.01, steerTimeConstantS: 0.25,
+    tireMu: 0.9, maxLongitudinalAccelMps2: 1.6, maxLongitudinalDecelMps2: 3.2,
+    maxJerkMps3: 4, maxLateralAccelerationMps2: 1.8, maxYawRateRadps: 3,
+  },
+  animal: {
+    ...GENERIC_PASSENGER_CAR_PROFILE, kind: 'animal', dynamicsModel: 'pedestrian-agent',
+    massKg: 45, yawInertiaKgM2: 5, wheelbaseM: 0.5, cgToFrontM: 0.25,
+    cgHeightM: 0.5, wheelRadiusM: 0.14, corneringStiffnessFrontNPerRad: 1,
+    corneringStiffnessRearNPerRad: 1, dragCoefficientNPerMps2: 0.08,
+    rollingResistanceCoefficient: 0, maxDriveForceN: 310, maxBrakeForceN: 390,
+    maxSteerRad: 0.01, steerRateRadPerS: 0.01, steerTimeConstantS: 0.2,
+    tireMu: 0.9, maxLongitudinalAccelMps2: 2.5, maxLongitudinalDecelMps2: 3.8,
+    maxJerkMps3: 5, maxLateralAccelerationMps2: 2.5, maxYawRateRadps: 3.5,
+  },
 };
 
 export function resolveVehiclePhysicsProfile(
   override: VehiclePhysicsProfile | undefined,
 ): ResolvedVehiclePhysicsProfile {
-  const profile = { ...GENERIC_PASSENGER_CAR_PROFILE, ...override };
+  return resolveActorPhysicsProfile('car', override);
+}
+
+export function resolveActorPhysicsProfile(
+  kind: Exclude<ActorKind, 'static_object'>,
+  override: VehiclePhysicsProfile | undefined,
+): ResolvedVehiclePhysicsProfile {
+  const profile = { ...ACTOR_PHYSICS_PROFILES[kind], ...override };
   // The schema validates authored input. These relational checks also protect
   // direct library callers and keep axle geometry physically meaningful.
   if (profile.cgToFrontM >= profile.wheelbaseM) {
@@ -87,6 +196,7 @@ interface VehicleEntry {
   readonly state: MutableVehicleState;
   previous: Pick<MutableVehicleState, 'x' | 'y' | 'yawRad'>;
   telemetry: PhysicsTelemetrySample;
+  commandedAccelerationMps2: number;
 }
 
 const ZERO_CONTROL: VehicleControl = { throttle: 0, brake: 0, steer: 0 };
@@ -112,10 +222,16 @@ function controlFor(
   profile: ResolvedVehiclePhysicsProfile,
   intent: MotionIntent,
 ): VehicleControl {
-  const speedError = intent.targetSpeedMps - state.longitudinalVelocityMps;
-  const desiredAccel = intent.targetAccelerationMps2 + 1.25 * speedError;
+  const direction = intent.motionDirection ?? 1;
+  const travelSpeed = direction * state.longitudinalVelocityMps;
+  const speedError = intent.targetSpeedMps - travelSpeed;
+  const desiredAccel = clamp(
+    intent.targetAccelerationMps2 + 1.25 * speedError,
+    -profile.maxLongitudinalDecelMps2,
+    profile.maxLongitudinalAccelMps2,
+  );
   const resistance =
-    profile.dragCoefficientNPerMps2 * state.longitudinalVelocityMps ** 2 +
+    profile.dragCoefficientNPerMps2 * travelSpeed ** 2 +
     profile.rollingResistanceCoefficient * profile.massKg * G;
   const requestedForce = profile.massKg * desiredAccel + resistance;
   const throttle = clamp(requestedForce / profile.maxDriveForceN, 0, 1);
@@ -125,10 +241,11 @@ function controlFor(
   const dy = intent.previewPoint.y - state.y;
   const previewDistance = Math.max(Math.hypot(dx, dy), 1);
   const bearing = Math.atan2(dy, dx);
-  const alpha = angleDelta(state.yawRad, bearing);
+  const trackingYaw = normalizeAngle(state.yawRad + (direction < 0 ? Math.PI : 0));
+  const alpha = angleDelta(trackingYaw, bearing);
   const purePursuit = Math.atan2(2 * profile.wheelbaseM * Math.sin(alpha), previewDistance);
-  const headingCorrection = 0.35 * angleDelta(state.yawRad, intent.previewHeadingRad);
-  const steerRad = clamp(purePursuit + headingCorrection, -profile.maxSteerRad, profile.maxSteerRad);
+  const headingCorrection = 0.35 * angleDelta(trackingYaw, intent.previewHeadingRad);
+  const steerRad = clamp(direction * (purePursuit + headingCorrection), -profile.maxSteerRad, profile.maxSteerRad);
   return { throttle, brake, steer: steerRad / profile.maxSteerRad };
 }
 
@@ -157,8 +274,9 @@ export class DynamicV1Backend implements MotionBackend {
   }
 
   register(input: MotionActorInitialization): void {
-    const u = input.state.longitudinalVelocityMps;
-    const profile = resolveVehiclePhysicsProfile(input.profile);
+    const u = (input.motionDirection ?? 1) * Math.abs(input.state.longitudinalVelocityMps);
+    if (input.kind === 'static_object') throw new Error('fixed static actors cannot be registered with dynamic-v1');
+    const profile = resolveActorPhysicsProfile(input.kind ?? 'car', input.profile);
     this.vehicles.set(input.actorId, {
       profile,
       state: {
@@ -174,7 +292,10 @@ export class DynamicV1Backend implements MotionBackend {
       },
       previous: { x: input.state.x, y: input.state.y, yawRad: input.state.yawRad },
       telemetry: zeroTelemetry(this.substepS),
+      commandedAccelerationMps2: input.state.longitudinalAccelerationMps2 ?? 0,
     });
+    const dimensions = input.dimensions ?? { l: 4.8, w: 1.9 };
+    this.registerDimensions(input.actorId, dimensions.l, dimensions.w);
   }
 
   state(actorId: string): VehicleMotionState | undefined {
@@ -281,9 +402,13 @@ export class DynamicV1Backend implements MotionBackend {
     h: number,
     frictionScale: number,
   ): PhysicsTelemetrySample {
+    if (entry.profile.dynamicsModel === 'pedestrian-agent') {
+      return this.integratePedestrian(entry, intent, h, frictionScale);
+    }
     const s = entry.state;
     const p = entry.profile;
-    const control = controlFor(s, p, intent);
+    const boundedIntent = this.boundedIntent(entry, intent, h);
+    const control = controlFor(s, p, boundedIntent);
     const steerTarget = control.steer * p.maxSteerRad;
     const steerDerivative = clamp(
       (steerTarget - s.steerRad) / p.steerTimeConstantS,
@@ -292,11 +417,12 @@ export class DynamicV1Backend implements MotionBackend {
     );
     s.steerRad = clamp(s.steerRad + steerDerivative * h, -p.maxSteerRad, p.maxSteerRad);
 
-    const driveN = control.throttle * p.maxDriveForceN;
+    const motionDirection = intent.motionDirection ?? 1;
+    const driveN = motionDirection * control.throttle * p.maxDriveForceN;
     const brakeN = control.brake * p.maxBrakeForceN;
     const direction = Math.abs(s.longitudinalVelocityMps) > 0.05
       ? Math.sign(s.longitudinalVelocityMps)
-      : 1;
+      : motionDirection;
     const dragN = p.dragCoefficientNPerMps2 * s.longitudinalVelocityMps * Math.abs(s.longitudinalVelocityMps);
     const rollingN = p.rollingResistanceCoefficient * p.massKg * G *
       Math.tanh(s.longitudinalVelocityMps / 0.1);
@@ -342,13 +468,20 @@ export class DynamicV1Backend implements MotionBackend {
       mu,
     );
 
+    const rawLateralN = rear.force + front.force * Math.cos(s.steerRad);
+    const lateralScale = Math.abs(rawLateralN) > p.massKg * p.maxLateralAccelerationMps2
+      ? p.massKg * p.maxLateralAccelerationMps2 / Math.abs(rawLateralN)
+      : 1;
+    const frontFy = front.force * lateralScale;
+    const rearFy = rear.force * lateralScale;
+
     const cosSteer = Math.cos(s.steerRad);
     const sinSteer = Math.sin(s.steerRad);
-    const totalFx = rearFx + frontFx * cosSteer - front.force * sinSteer;
+    const totalFx = rearFx + frontFx * cosSteer - frontFy * sinSteer;
     const uDot = totalFx / p.massKg + s.lateralVelocityMps * s.yawRateRadps;
-    const vDot = (rear.force + front.force * cosSteer + frontFx * sinSteer) / p.massKg -
+    const vDot = (rearFy + frontFy * cosSteer + frontFx * sinSteer) / p.massKg -
       s.longitudinalVelocityMps * s.yawRateRadps;
-    const yawDot = (lf * (front.force * cosSteer + frontFx * sinSteer) - lr * rear.force) /
+    const yawDot = (lf * (frontFy * cosSteer + frontFx * sinSteer) - lr * rearFy) /
       p.yawInertiaKgM2;
 
     const oldU = s.longitudinalVelocityMps;
@@ -356,9 +489,9 @@ export class DynamicV1Backend implements MotionBackend {
     const oldYawRate = s.yawRateRadps;
     const oldYaw = s.yawRad;
     s.longitudinalVelocityMps += uDot * h;
-    if (intent.targetSpeedMps >= 0 && s.longitudinalVelocityMps < 0) s.longitudinalVelocityMps = 0;
+    if (motionDirection * s.longitudinalVelocityMps < 0) s.longitudinalVelocityMps = 0;
     s.lateralVelocityMps += vDot * h;
-    s.yawRateRadps += yawDot * h;
+    s.yawRateRadps = clamp(s.yawRateRadps + yawDot * h, -p.maxYawRateRadps, p.maxYawRateRadps);
     s.yawRad = normalizeAngle(oldYaw + 0.5 * (oldYawRate + s.yawRateRadps) * h);
     const oldWorldX = oldU * Math.cos(oldYaw) - oldV * Math.sin(oldYaw);
     const oldWorldY = oldU * Math.sin(oldYaw) + oldV * Math.cos(oldYaw);
@@ -378,8 +511,8 @@ export class DynamicV1Backend implements MotionBackend {
     return {
       control,
       longitudinalForceN: totalFx,
-      frontLateralForceN: front.force,
-      rearLateralForceN: rear.force,
+      frontLateralForceN: frontFy,
+      rearLateralForceN: rearFy,
       frontNormalForceN: frontNormal,
       rearNormalForceN: rearNormal,
       tireUtilization: Math.max(front.utilization, rear.utilization),
@@ -387,6 +520,55 @@ export class DynamicV1Backend implements MotionBackend {
       substepS: h,
       collisionImpulseNs: 0,
       collisionCount: 0,
+    };
+  }
+
+  private boundedIntent(entry: VehicleEntry, intent: MotionIntent, h: number): MotionIntent {
+    const p = entry.profile;
+    const requested = clamp(intent.targetAccelerationMps2, -p.maxLongitudinalDecelMps2, p.maxLongitudinalAccelMps2);
+    const delta = clamp(requested - entry.commandedAccelerationMps2, -p.maxJerkMps3 * h, p.maxJerkMps3 * h);
+    entry.commandedAccelerationMps2 += delta;
+    return { ...intent, targetAccelerationMps2: entry.commandedAccelerationMps2 };
+  }
+
+  /** Bounded social-force-style point agent for walkers and animals. It owns
+   * continuous velocity/heading state but intentionally has no wheel or tyre
+   * semantics. */
+  private integratePedestrian(
+    entry: VehicleEntry,
+    intent: MotionIntent,
+    h: number,
+    frictionScale: number,
+  ): PhysicsTelemetrySample {
+    const s = entry.state;
+    const p = entry.profile;
+    const bounded = this.boundedIntent(entry, intent, h);
+    const speedError = bounded.targetSpeedMps - (bounded.motionDirection ?? 1) * s.longitudinalVelocityMps;
+    const accel = clamp(
+      bounded.targetAccelerationMps2 + 1.5 * speedError,
+      -p.maxLongitudinalDecelMps2 * frictionScale,
+      p.maxLongitudinalAccelMps2 * frictionScale,
+    );
+    const desiredHeading = Math.atan2(bounded.previewPoint.y - s.y, bounded.previewPoint.x - s.x);
+    const yawRate = clamp(angleDelta(s.yawRad, desiredHeading) / 0.22, -p.maxYawRateRadps, p.maxYawRateRadps);
+    const oldSpeed = s.longitudinalVelocityMps;
+    s.longitudinalVelocityMps = Math.max(0, oldSpeed + accel * h);
+    s.longitudinalAccelerationMps2 = accel;
+    s.yawRateRadps = yawRate;
+    s.yawRad = normalizeAngle(s.yawRad + yawRate * h);
+    s.lateralVelocityMps = 0;
+    s.steerRad = 0;
+    s.wheelAngularSpeedRadps = 0;
+    const averageSpeed = 0.5 * (oldSpeed + s.longitudinalVelocityMps);
+    s.x += Math.cos(s.yawRad) * averageSpeed * h;
+    s.y += Math.sin(s.yawRad) * averageSpeed * h;
+    const force = accel * p.massKg;
+    return {
+      control: { throttle: accel > 0 ? accel / p.maxLongitudinalAccelMps2 : 0, brake: accel < 0 ? -accel / p.maxLongitudinalDecelMps2 : 0, steer: yawRate / p.maxYawRateRadps },
+      longitudinalForceN: force, frontLateralForceN: 0, rearLateralForceN: 0,
+      frontNormalForceN: p.massKg * G, rearNormalForceN: 0,
+      tireUtilization: 0, substeps: 1, substepS: h,
+      collisionImpulseNs: 0, collisionCount: 0,
     };
   }
 }

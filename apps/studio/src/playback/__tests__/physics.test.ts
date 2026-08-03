@@ -23,9 +23,9 @@ describe('Studio physics migration', () => {
     expect(withEditablePhysicsDefault(migrated)).toBe(migrated);
   });
 
-  it('preserves an explicit legacy pin and treats provenance-less evidence as kinematic', () => {
+  it('migrates an editable legacy pin and treats provenance-less evidence as kinematic', () => {
     const pinned = { ...legacy, physics: { mode: 'kinematic-v1' as const } };
-    expect(withEditablePhysicsDefault(pinned)).toBe(pinned);
+    expect(withEditablePhysicsDefault(pinned)).toEqual({ ...pinned, physics: { mode: 'dynamic-v1' } });
     expect(activePhysicsModeForTrace({ header: {} } as never)).toBe('kinematic-v1');
     expect(activePhysicsModeForTrace(null)).toBe('dynamic-v1');
   });
@@ -55,18 +55,18 @@ describe('Studio physics migration', () => {
     const before = JSON.stringify(actors);
     const summary = physicsSummaryForAuthoredActors(actors);
     expect(JSON.stringify(actors)).toBe(before);
-    expect(summary).toMatchObject({ mode: 'dynamic-v1', dynamicCount: 1, fallbackCount: 3, unknownCount: 0 });
+    expect(summary).toMatchObject({ mode: 'dynamic-v1', dynamicCount: 3, staticCount: 1, fallbackCount: 0, unknownCount: 0 });
     expect(summary.actors.map(({ id, mode, reason }) => ({ id, mode, reason }))).toEqual([
       { id: 'car', mode: 'dynamic-v1', reason: 'selected' },
-      { id: 'ped', mode: 'kinematic-v1', reason: 'unsupported-actor-kind' },
-      { id: 'parked', mode: 'kinematic-v1', reason: 'static-actor' },
-      { id: 'reverse', mode: 'kinematic-v1', reason: 'reverse-motion' },
+      { id: 'ped', mode: 'dynamic-v1', reason: 'selected' },
+      { id: 'parked', mode: 'fixed-static-v1', reason: 'static-actor' },
+      { id: 'reverse', mode: 'dynamic-v1', reason: 'selected' },
     ]);
   });
 
   it('keeps provenance-less immutable evidence visibly legacy', () => {
     expect(physicsSummaryForTrace({ header: { actorIds: ['car'] } })).toEqual({
-      mode: 'kinematic-v1', legacyReplay: true, actors: [], dynamicCount: 0, fallbackCount: 0, unknownCount: 0,
+      mode: 'kinematic-v1', legacyReplay: true, actors: [], dynamicCount: 0, staticCount: 0, fallbackCount: 0, unknownCount: 0,
     });
   });
 });

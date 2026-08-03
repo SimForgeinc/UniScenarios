@@ -101,6 +101,7 @@ export type SimEvent =
       lateralErrorM: number;
       allowedCenterOffsetM: number;
     }
+  | { t: number; kind: 'crash_disabled'; actorId: string; otherId: string; reason: 'material-collision' }
   | { t: number; kind: 'spawn'; actorId: string }
   | { t: number; kind: 'despawn'; actorId: string; reason: 'route_end' | 'interaction' | 'clip_end' }
   | { t: number; kind: 'state_set'; actorId: string; key: string; value: boolean | number | string };
@@ -306,13 +307,19 @@ export interface PhysicsTraceProvenance {
   readonly substepS: number;
   /** sha256 of vehicleProfiles, or null when no profiles were supplied. */
   readonly vehicleProfileDigest: string | null;
+  /** Digest of the complete class defaults plus per-actor overrides. */
+  readonly resolvedProfileDigest?: string;
   /** Executed backend per actor; dynamic-v1 fallbacks are explicit and reasoned. */
   readonly actorBackends?: Record<string, ActorPhysicsBackendProvenance>;
+  /** First material impact per moving actor. Absent means no crash occurred. */
+  readonly crashes?: Record<string, { readonly t: number; readonly otherId: string; readonly reason: 'material-collision' }>;
 }
 
 export interface ActorPhysicsBackendProvenance {
-  readonly mode: MotionPhysicsMode;
-  readonly reason: 'selected' | 'static-actor' | 'reverse-motion' | 'unsupported-actor-kind';
+  readonly mode: MotionPhysicsMode | 'fixed-static-v1';
+  readonly reason: 'selected' | 'static-actor';
+  /** Exact class-native dynamics profile used by the moving solver. */
+  readonly profile: ActorKind | 'fixed-static';
 }
 
 export interface TraceActorMetadata {

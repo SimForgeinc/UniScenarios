@@ -1083,7 +1083,7 @@ export function exportOpenScenarioXml14(
     `<Property name="uniscenarios.input.seed" value="${xml(String(input.seed))}"/>`,
     `<Property name="uniscenarios.physics.mode" value="${physics.mode}"/>`,
     `<Property name="uniscenarios.physics.substepS" value="${finite(physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt))}"/>`,
-    `<Property name="uniscenarios.physics.actorBackends" value="${xml(Object.entries(inputActorBackends).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}`).join(','))}"/>`,
+    `<Property name="uniscenarios.physics.actorBackends" value="${xml(Object.entries(inputActorBackends).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}:${backend.profile}`).join(','))}"/>`,
     ...(replayTrace ? [
       `<Property name="uniscenarios.trajectoryReplay.inputHash" value="${xml(replayTrace.header.inputHash)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.engineVersion" value="${xml(replayTrace.header.engineVersion)}"/>`,
@@ -1093,7 +1093,7 @@ export function exportOpenScenarioXml14(
       `<Property name="uniscenarios.trajectoryReplay.physics.solver" value="${xml(replayTrace.header.physics.solver)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.solverVersion" value="${xml(replayTrace.header.physics.solverVersion)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.vehicleProfileDigest" value="${xml(replayTrace.header.physics.vehicleProfileDigest ?? 'none')}"/>`,
-      `<Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="${xml(Object.entries(replayTrace.header.physics.actorBackends ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}`).join(','))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="${xml(Object.entries(replayTrace.header.physics.actorBackends ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}:${backend.profile}`).join(','))}"/>`,
     ] : []),
     ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, value]) => `<Property name="uniscenarios.provenance.${xml(key)}" value="${xml(String(value))}"/>`,

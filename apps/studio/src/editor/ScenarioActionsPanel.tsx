@@ -50,12 +50,9 @@ export function ScenarioActionsPanel({ controller, physicsSummary, onClose }: Sc
         <div style={styles.verdict}>
           {physicsSummary.legacyReplay ? 'Kinematic legacy replay' : `Dynamic v1 · ${physicsSummary.dynamicCount} actor${physicsSummary.dynamicCount === 1 ? '' : 's'}`}
         </div>
-        {physicsSummary.fallbackCount > 0 ? <div style={styles.physicsWarning} role="status">
-          {physicsSummary.fallbackCount} actor{physicsSummary.fallbackCount === 1 ? '' : 's'} will use explicit kinematic fallback.
-        </div> : null}
         {physicsSummary.actors.map((actor) => <div key={actor.id} style={styles.physicsRow}>
           <code style={styles.path}>{actor.label}</code>
-          <span>{actor.mode === 'dynamic-v1' ? 'dynamic-v1' : actor.mode === 'kinematic-v1' ? 'kinematic-v1' : 'unknown'} · {physicsReasonLabel(actor.reason)}</span>
+          <span>{actor.mode === 'dynamic-v1' ? `dynamic-v1 · ${actor.profile ?? 'class profile'}` : actor.mode === 'fixed-static-v1' ? 'fixed-static-v1' : actor.mode === 'kinematic-v1' ? 'legacy kinematic-v1' : 'unknown'} · {physicsReasonLabel(actor.reason)}</span>
         </div>)}
         <div style={styles.hint}>The same per-actor backend and reason are retained in canonical trace diagnostics and trajectory-replay export provenance.</div>
       </section>

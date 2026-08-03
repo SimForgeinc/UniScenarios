@@ -10,8 +10,9 @@ export type PhysicsDisplayReason = ActorPhysicsBackendProvenance['reason'] | 'pr
 export interface ActorPhysicsDisplay {
   readonly id: string;
   readonly label: string;
-  readonly mode: MotionPhysicsMode | null;
+  readonly mode: ActorPhysicsBackendProvenance['mode'] | null;
   readonly reason: PhysicsDisplayReason;
+  readonly profile?: ActorPhysicsBackendProvenance['profile'];
 }
 
 export interface PhysicsDisplaySummary {
@@ -20,6 +21,7 @@ export interface PhysicsDisplaySummary {
   readonly actors: readonly ActorPhysicsDisplay[];
   readonly dynamicCount: number;
   readonly fallbackCount: number;
+  readonly staticCount: number;
   readonly unknownCount: number;
 }
 
@@ -39,7 +41,9 @@ type PhysicsTrace = {
  * this helper: playback uses its recorded trace directly.
  */
 export function withEditablePhysicsDefault(input: SimScenarioInput): SimScenarioInput {
-  return input.physics ? input : { ...input, physics: { mode: 'dynamic-v1' } };
+  return input.physics?.mode === 'dynamic-v1'
+    ? input
+    : { ...input, physics: { ...input.physics, mode: 'dynamic-v1' } };
 }
 
 /** Trace v1 predates explicit provenance and is therefore legacy kinematic. */
@@ -51,8 +55,6 @@ export function physicsReasonLabel(reason: PhysicsDisplayReason): string {
   switch (reason) {
     case 'selected': return 'Selected backend';
     case 'static-actor': return 'Static actor';
-    case 'reverse-motion': return 'Reverse motion is not supported by dynamic-v1 yet';
-    case 'unsupported-actor-kind': return 'This actor kind is not supported by dynamic-v1';
     case 'provenance-unavailable': return 'Per-actor provenance was not recorded';
   }
 }
@@ -64,6 +66,7 @@ function summarize(mode: MotionPhysicsMode, legacyReplay: boolean, actors: reado
     actors,
     dynamicCount: actors.filter((actor) => actor.mode === 'dynamic-v1').length,
     fallbackCount: actors.filter((actor) => actor.mode === 'kinematic-v1' && actor.reason !== 'selected').length,
+    staticCount: actors.filter((actor) => actor.mode === 'fixed-static-v1').length,
     unknownCount: actors.filter((actor) => actor.mode === null).length,
   };
 }

@@ -119,8 +119,11 @@ export function actorKindFor(catalogId: CatalogId): ActorKind {
 }
 
 /** Preserve the semantic simulation class for specialized catalog actors. */
-export function simulationClassFor(catalogId: CatalogId): 'car' | 'bus' | 'motorcycle' | 'bicycle' | 'scooter' | 'pedestrian' | 'static_object' {
+export function simulationClassFor(catalogId: CatalogId): 'car' | 'truck' | 'bus' | 'van' | 'motorcycle' | 'bicycle' | 'scooter' | 'pedestrian' | 'static_object' {
   if (catalogId === 'vehicle.tram') return 'bus';
+  if (catalogId === 'vehicle.bus') return 'bus';
+  if (catalogId === 'vehicle.van' || catalogId === 'vehicle.ambulance') return 'van';
+  if (catalogId === 'vehicle.pickup' || catalogId === 'vehicle.box_truck' || catalogId === 'vehicle.semi_truck') return 'truck';
   if (catalogId === 'vehicle.motorcycle') return 'motorcycle';
   if (catalogId === 'vehicle.bicycle') return 'bicycle';
   if (catalogId === 'vehicle.mobility_scooter' || catalogId === 'street.shopping_cart') return 'scooter';
