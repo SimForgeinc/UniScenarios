@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { defaultAmbientTrafficProfile, profileForPreset } from './model';
-import { ambientCandidatePoolRequestKey, ambientPreviewKey, AmbientPreviewCache } from './candidatePool';
+import {
+  ambientCandidatePoolRequestKey,
+  ambientPreviewKey,
+  AmbientPreviewCache,
+  previewForRevision,
+} from './candidatePool';
 
 describe('ambient candidate pool preview cache', () => {
   const city = defaultAmbientTrafficProfile();
@@ -35,5 +40,33 @@ describe('ambient candidate pool preview cache', () => {
     expect(cache.commit(current, { candidatePoolRequestKey: 'new', previewKey: 'new', revision: 2, value: 'new' })).toBe(true);
     expect(cache.playback(1)).toBeNull();
     expect(cache.playback(2)).toBe('new');
+  });
+
+  it('hides an authored preview immediately after edit, controller rebind, or undo', () => {
+    const green = { selectedController: 'controller-a', phase: 'green' };
+    const revisionOne = { previewKey: 'map:controller-a:green', revision: 1, value: green };
+
+    expect(previewForRevision(revisionOne, revisionOne.previewKey, 1)).toBe(green);
+    // A different map/source cannot borrow a coincidentally equal revision number.
+    expect(previewForRevision(revisionOne, 'other-map:controller-a:green', 1)).toBeNull();
+    // Editing the phase or rebinding its exact controller advances the document revision.
+    expect(previewForRevision(revisionOne, 'map:controller-b:yellow', 2)).toBeNull();
+    // Undo is a new document revision too; it must rebuild rather than revive revision 1.
+    expect(previewForRevision(revisionOne, revisionOne.previewKey, 3)).toBeNull();
+  });
+
+  it('keeps a rejected rematerialization from reclaiming the visible revision', () => {
+    const cache = new AmbientPreviewCache<string>();
+    cache.commit(cache.begin(), {
+      candidatePoolRequestKey: 'map',
+      previewKey: 'map:green',
+      revision: 1,
+      value: 'green',
+    });
+    const rejected = cache.begin();
+
+    expect(cache.fail(rejected)).toBe(true);
+    expect(cache.playback(2)).toBeNull();
+    expect(previewForRevision(null, 'map:yellow', 2)).toBeNull();
   });
 });

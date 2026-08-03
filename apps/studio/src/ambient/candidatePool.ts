@@ -17,6 +17,24 @@ export interface AmbientPreviewEntry<T> {
   readonly value: T;
 }
 
+/** A rendered preview is owned by the exact document revision that produced it. */
+export interface RevisionOwnedPreview<T> {
+  readonly previewKey: string;
+  readonly revision: number;
+  readonly value: T;
+}
+
+/** Never expose a compiled preview across an edit, rebind, undo, or failed rebuild. */
+export function previewForRevision<T>(
+  preview: RevisionOwnedPreview<T> | null,
+  previewKey: string | null,
+  revision?: number,
+): T | null {
+  return revision !== undefined && preview?.revision === revision && preview.previewKey === previewKey
+    ? preview.value
+    : null;
+}
+
 /** Race-safe cache for the latest compiled preview. Candidate identity lives in the engine pool. */
 export class AmbientPreviewCache<T> {
   private committed: AmbientPreviewEntry<T> | null = null;
@@ -31,8 +49,10 @@ export class AmbientPreviewCache<T> {
     return true;
   }
 
-  fail(token: number): void {
-    if (token === this.generation) this.generation++;
+  fail(token: number): boolean {
+    if (token !== this.generation) return false;
+    this.generation++;
+    return true;
   }
 
   playback(revision?: number): T | null {

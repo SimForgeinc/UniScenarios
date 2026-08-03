@@ -49,7 +49,13 @@ import {
 } from './ambient/provider';
 import { useSumoTraffic, type SumoExternalActorView } from './ambient/useSumoTraffic';
 import { useAmbientTrafficPreview } from './ambient/useAmbientTrafficPreview';
-import { ambientCandidatePoolRequestKey, ambientPreviewKey, AmbientPreviewCache } from './ambient/candidatePool';
+import {
+  ambientCandidatePoolRequestKey,
+  ambientPreviewKey,
+  AmbientPreviewCache,
+  previewForRevision,
+  type RevisionOwnedPreview,
+} from './ambient/candidatePool';
 import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import { contentHash, resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import {
@@ -179,7 +185,7 @@ export function App(): JSX.Element {
   const [ambientTrafficProfile, setAmbientTrafficProfile] = useState<ResolvedAmbientTrafficProfile>(() => defaultAmbientTrafficProfile());
   const [ambientTrafficProvider, setAmbientTrafficProvider] = useState<AmbientTrafficProviderId>('sumo');
   const [sumoFallbackReason, setSumoFallbackReason] = useState<string | null>(null);
-  const [ambientPreview, setAmbientPreview] = useState<PlaybackBundle | null>(null);
+  const [ambientPreviewState, setAmbientPreviewState] = useState<RevisionOwnedPreview<PlaybackBundle> | null>(null);
   const [actorDetailsId, setActorDetailsId] = useState<string | null>(null);
   const [selectedDashCameraId, setSelectedDashCameraId] = useState<string | null>(null);
   const [cameraPlaybackRequested, setCameraPlaybackRequested] = useState(false);
@@ -362,6 +368,9 @@ export function App(): JSX.Element {
     // per-map resume behavior.
     startBlank: !hasNavigatedMaps.current,
   });
+  // Ambient actors may remain visible while their next revision materializes;
+  // authored signal colors are gated separately below.
+  const ambientPreview = ambientPreviewState?.value ?? null;
 
   // Route guides are a viewport-owned scene layer. Prefer the immutable input
   // that the simulator will execute; the template fallback keeps newly placed
@@ -565,6 +574,17 @@ export function App(): JSX.Element {
   // Key expensive generation only to the simulation-bearing authored source;
   // the profile remains its own dependency below.
   const ambientPreviewSourceHash = editorController ? simulationSourceHash(editorController.doc.data) : null;
+  const currentAmbientPreviewKey = editorController
+    ? ambientPreviewKey(
+      ambientCandidatePoolRequestKey(map.id, materializedAmbientProfile),
+      ambientPreviewSourceHash ?? 'empty',
+    )
+    : null;
+  const authoredSignalPreview = previewForRevision(
+    ambientPreviewState,
+    currentAmbientPreviewKey,
+    editorController?.doc.revision,
+  );
   useEffect(() => {
     const next = ambientTrafficProfileFromExtensions(editorController?.doc.data.extensions);
     setAmbientTrafficProfile((current) => contentHash(current) === contentHash(next) ? current : next);
@@ -587,23 +607,27 @@ export function App(): JSX.Element {
     const previewKey = ambientPreviewKey(candidatePoolRequestKey, ambientPreviewSourceHash ?? 'empty');
     const current = ambientPreviewCache.current.current;
     if (current?.previewKey === previewKey && current.revision === editorController.doc.revision) {
-      setAmbientPreview(current.value);
+      setAmbientPreviewState({ previewKey, revision: current.revision, value: current.value });
       setAmbientPreviewBusy(false);
       return;
     }
     const token = ambientPreviewCache.current.begin();
     const revision = editorController.doc.revision;
     runtimeWorker.current?.cancel();
-    if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
+    // Keep the persistent actor population on same-map edits. The revision-keyed
+    // signal source above becomes null immediately, clearing authored lamp colors.
+    if (current && current.value.instance.input.mapId !== map.id) setAmbientPreviewState(null);
     const verifiedFallback = editorController && campaignSource
       && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
       ? campaignSource.evidence
       : null;
     if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(materializedAmbientProfile, verifiedFallback.ambientTraffic)) {
-      if (compiledWorldMatchesRevision(editorController.doc, revision)) {
-        ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: verifiedFallback });
+      if (!compiledWorldMatchesRevision(editorController.doc, revision)
+        || !ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: verifiedFallback })) {
+        setAmbientPreviewBusy(false);
+        return;
       }
-      setAmbientPreview(verifiedFallback);
+      setAmbientPreviewState({ previewKey, revision, value: verifiedFallback });
       setAmbientPreviewBusy(false);
       return;
     }
@@ -624,15 +648,15 @@ export function App(): JSX.Element {
       (bundle) => {
         if (!compiledWorldMatchesRevision(editorController.doc, revision)) return;
         if (!ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: bundle })) return;
-        setAmbientPreview(bundle);
+        setAmbientPreviewState({ previewKey, revision, value: bundle });
         setAmbientPreviewBusy(false);
         setAmbientTrafficError(null);
       },
       (reason: unknown) => {
-        ambientPreviewCache.current.fail(token);
+        if (!ambientPreviewCache.current.fail(token)) return;
+        setAmbientPreviewBusy(false);
         if ((reason as { name?: string } | null)?.name === 'AbortError') return;
         setAmbientTrafficError(`Traffic preparation: ${reason instanceof Error ? reason.message : String(reason)}`);
-        setAmbientPreviewBusy(false);
       },
     ).finally(() => {
       if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
@@ -874,14 +898,13 @@ export function App(): JSX.Element {
   }, [map.id, overlays, sumoOwnsSignalStates]);
   useEffect(() => {
     if (!overlays || !hasAuthoredMapSignals || studioSession.state.mode !== 'authoring') return;
-    const source = ambientPreview ?? authoredPlayback;
-    if (!source) return;
-    const headStates = evaluatePlaybackSignalHeadStates(source, studioSession.state.time);
+    if (!authoredSignalPreview) return;
+    const headStates = evaluatePlaybackSignalHeadStates(authoredSignalPreview, studioSession.state.time);
     if (Object.keys(headStates).length > 0) {
       overlays.setSignalStates(headStates, studioSession.state.time);
     }
     return () => overlays.clearSignalStates();
-  }, [ambientPreview, authoredPlayback, hasAuthoredMapSignals, overlays, studioSession.state.mode, studioSession.state.time]);
+  }, [authoredSignalPreview, hasAuthoredMapSignals, overlays, studioSession.state.mode, studioSession.state.time]);
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
   // Keep t=0 visible through the preparing frame. The playback renderer takes
   // ownership only after the exact same bundle has been installed.
