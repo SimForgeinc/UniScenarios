@@ -27,7 +27,7 @@ describe.skipIf(!haveArtifacts)('red-light ambulance preemption route', () => {
     const ambulance = instance.input.actors.find((actor) => actor.id === 'ambulance')!;
     const focus = instance.input.actors.find((actor) => actor.id === 'focus-vehicle')!;
 
-    expect(ambulance.initial.laneRef).toMatchObject({ rsl: '773:0:1', s: 40.15070367719396 });
+    expect(ambulance.initial.laneRef).toMatchObject({ rsl: '93:0:1', s: 13.734383391386212 });
     expect(ambulance.behavior.route.kind).toBe('lanePath');
     if (ambulance.behavior.route.kind !== 'lanePath') throw new Error('ambulance route must be lane-bound');
 
@@ -69,7 +69,7 @@ describe.skipIf(!haveArtifacts)('red-light ambulance preemption route', () => {
       y: -focus.initial.pose.z,
     });
     expect(spawnRouteS).not.toBeNull();
-    expect(focusProjection.s - spawnRouteS!).toBeCloseTo(118, 6);
+    expect(focusProjection.s - spawnRouteS!).toBeCloseTo(7.2825, 4);
 
     const result = runSimulation(instance.input, { graph: bundle.graph, guards: 'collect' });
     const ambulanceInteractionIds = new Set(instance.input.interactions
@@ -83,6 +83,98 @@ describe.skipIf(!haveArtifacts)('red-light ambulance preemption route', () => {
       ambulanceInteractionIds.has(interactionId))).toEqual([]);
     expect(result.trace.events.some((event) =>
       event.kind === 'road_departure_prevented' && event.actorId === 'ambulance')).toBe(false);
-    expect(result.trace.ticks.actors.ambulance!.laneRsl).toContain('1207:0:1');
+    const track = result.trace.ticks.actors.ambulance!;
+    const connectorIndex = track.laneRsl.indexOf('1207:0:1');
+    const exitIndex = track.laneRsl.indexOf('92:0:1');
+    const downstreamIndex = track.laneRsl.indexOf('1181:0:1');
+    const finalPresentIndex = track.present.lastIndexOf(1);
+    expect(connectorIndex).toBeGreaterThanOrEqual(0);
+    expect(exitIndex).toBeGreaterThan(connectorIndex);
+    expect(downstreamIndex).toBeGreaterThan(exitIndex);
+    expect(finalPresentIndex).toBeGreaterThanOrEqual(downstreamIndex);
+
+    const ambulanceEvents = result.trace.events.filter((event) =>
+      'actorId' in event && event.actorId === 'ambulance');
+    const completed = ambulanceEvents.filter((event) => event.kind === 'interaction_completed');
+    expect(completed.map((event) => event.interactionId)).toEqual(expect.arrayContaining([
+      'ambulance-enters-refuge',
+      'ambulance-centers-for-junction',
+    ]));
+    expect(ambulanceEvents.filter((event) =>
+      event.kind === 'interaction_aborted' || event.kind === 'trigger_skipped')).toEqual([]);
+    const despawns = ambulanceEvents.filter((event) => event.kind === 'despawn');
+    expect(despawns).toEqual([{ t: 18.14, kind: 'despawn', actorId: 'ambulance', reason: 'interaction' }]);
+    expect(track.present.slice(finalPresentIndex + 1).every((present) => present === 0)).toBe(true);
+
+    // Independent footprint closure: every oriented ambulance corner must lie
+    // inside the union of map-authored driving-lane strips while it is present.
+    // This does not consult the runtime's departure guard or authored offset.
+    const drivingLanes = bundle.graph.laneRsls().flatMap((rsl) => {
+      const geometry = bundle.graph.requireGeometry(rsl);
+      if (geometry.lane.laneType !== 'driving') return [];
+      const maxHalfWidth = Math.max(
+        geometry.widthM,
+        ...(geometry.lane.widthSamples ?? []).map((sample) => sample.widthM),
+      ) / 2;
+      const xs = geometry.points.map((point) => point.x);
+      const ys = geometry.points.map((point) => point.y);
+      return [{
+        rsl,
+        maxHalfWidth,
+        minX: Math.min(...xs),
+        maxX: Math.max(...xs),
+        minY: Math.min(...ys),
+        maxY: Math.max(...ys),
+      }];
+    });
+    let minimumFootprintMarginM = Number.POSITIVE_INFINITY;
+    let minimumAt = -1;
+    for (let index = 0; index <= finalPresentIndex; index += 1) {
+      if (track.present[index] !== 1) continue;
+      const heading = track.headingRad[index]!;
+      const forwardX = Math.cos(heading);
+      const forwardY = Math.sin(heading);
+      const leftX = -forwardY;
+      const leftY = forwardX;
+      for (const longitudinalSign of [-1, 1]) {
+        for (const lateralSign of [-1, 1]) {
+          const point = {
+            x: track.x[index]!
+              + longitudinalSign * forwardX * ambulance.dims.l / 2
+              + lateralSign * leftX * ambulance.dims.w / 2,
+            y: track.y[index]!
+              + longitudinalSign * forwardY * ambulance.dims.l / 2
+              + lateralSign * leftY * ambulance.dims.w / 2,
+          };
+          let unionMarginM = Number.NEGATIVE_INFINITY;
+          for (const lane of drivingLanes) {
+            if (point.x < lane.minX - lane.maxHalfWidth || point.x > lane.maxX + lane.maxHalfWidth
+              || point.y < lane.minY - lane.maxHalfWidth || point.y > lane.maxY + lane.maxHalfWidth) continue;
+            const projection = bundle.graph.projectOnto(lane.rsl, point);
+            if (!projection) continue;
+            unionMarginM = Math.max(
+              unionMarginM,
+              bundle.graph.widthAt(lane.rsl, projection.s) / 2 - projection.d,
+            );
+          }
+          if (unionMarginM < minimumFootprintMarginM) {
+            minimumFootprintMarginM = unionMarginM;
+            minimumAt = index;
+          }
+        }
+      }
+    }
+    expect({ minimumFootprintMarginM, t: result.trace.ticks.t[minimumAt] }).toMatchObject({
+      minimumFootprintMarginM: expect.any(Number),
+    });
+    expect(minimumFootprintMarginM).toBeGreaterThan(0.1);
+
+    for (let index = 1; index <= finalPresentIndex; index += 1) {
+      const displacementM = Math.hypot(
+        track.x[index]! - track.x[index - 1]!,
+        track.y[index]! - track.y[index - 1]!,
+      );
+      expect(displacementM).toBeLessThan(0.5);
+    }
   }, 30_000);
 });

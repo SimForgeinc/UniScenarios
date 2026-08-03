@@ -144,7 +144,7 @@
       "kind": "relative_to",
       "ref": "focus-vehicle",
       "dLane": 0,
-      "dsM": -118,
+      "dsM": -7.282487,
       "tFrac": 0,
       "headingOffsetRad": 0,
       "label": "ambulance approaching from behind with audible siren",
@@ -157,7 +157,7 @@
           "height": 2.65
         }
       },
-      "initialSpeedKph": 24,
+      "initialSpeedKph": 0,
       "extensions": {
         "emergencyVehicle": "ambulance"
       }
@@ -409,7 +409,7 @@
         "verb": "speed",
         "trigger": {
           "kind": "at",
-          "t": 12.2
+          "t": 11
         },
         "target": {
           "mode": "stop"
@@ -426,19 +426,17 @@
         "actor": "focus-vehicle",
         "verb": "laneOffset",
         "trigger": {
-          "kind": "after",
-          "of": "pedestrian-clears",
-          "event": "end",
-          "delayS": 0.4
+          "kind": "at",
+          "t": 11.5
         },
         "target": {
-          "tFrac": -0.82,
+          "tFrac": -1,
           "reference": "lane_center"
         },
         "dynamics": {
           "shape": "sinusoidal",
           "constraint": "time",
-          "value": 1.8
+          "value": 2.2
         },
         "label": "Focus vehicle moves right only after both protected conflicts clear"
       },
@@ -447,20 +445,12 @@
         "actor": "focus-vehicle",
         "verb": "speed",
         "trigger": {
-          "kind": "after",
-          "of": "pedestrian-clears",
-          "event": "end",
-          "delayS": 0.4
-        },
-        "until": {
-          "kind": "after",
-          "of": "focus-vehicle-creeps",
-          "event": "start",
-          "delayS": 2
+          "kind": "at",
+          "t": 11.9
         },
         "target": {
           "mode": "absolute",
-          "valueKph": 6
+          "valueKph": 7.92
         },
         "dynamics": {
           "shape": "linear",
@@ -474,10 +464,8 @@
         "actor": "focus-vehicle",
         "verb": "speed",
         "trigger": {
-          "kind": "after",
-          "of": "focus-vehicle-creeps",
-          "event": "start",
-          "delayS": 2
+          "kind": "at",
+          "t": 14.5
         },
         "target": {
           "mode": "stop"
@@ -494,21 +482,19 @@
         "actor": "ambulance",
         "verb": "laneOffset",
         "trigger": {
-          "kind": "after",
-          "of": "pedestrian-clears",
-          "event": "end",
-          "delayS": 0.4
+          "kind": "at",
+          "t": 12.5
         },
         "target": {
-          "tFrac": 0.82,
+          "tFrac": 0.04,
           "reference": "lane_center"
         },
         "dynamics": {
           "shape": "sinusoidal",
           "constraint": "time",
-          "value": 1.8
+          "value": 1.6
         },
-        "label": "Ambulance enters the refuge opposite the yielding focus vehicle"
+        "label": "Ambulance makes a small legal lateral alignment within the approach lane"
       },
       {
         "id": "ambulance-centers-for-junction",
@@ -516,32 +502,30 @@
         "verb": "laneOffset",
         "trigger": {
           "kind": "at",
-          "t": 17.8
+          "t": 16
         },
         "target": {
-          "tFrac": 0.3,
+          "tFrac": 0,
           "reference": "lane_center"
         },
         "dynamics": {
           "shape": "sinusoidal",
           "constraint": "time",
-          "value": 1.8
+          "value": 1.2
         },
-        "label": "Ambulance recenters before entering the narrower junction connector"
+        "label": "Ambulance recenters fully before clearing the junction connector"
       },
       {
         "id": "ambulance-passes",
         "actor": "ambulance",
         "verb": "speed",
         "trigger": {
-          "kind": "after",
-          "of": "focus-vehicle-stops-pocket",
-          "event": "end",
-          "delayS": 0.2
+          "kind": "at",
+          "t": 15
         },
         "target": {
           "mode": "absolute",
-          "valueKph": 38
+          "valueKph": 57.6
         },
         "dynamics": {
           "shape": "linear",
@@ -555,15 +539,26 @@
         "actor": "ambulance",
         "verb": "set",
         "trigger": {
-          "kind": "after",
-          "of": "ambulance-passes",
-          "event": "start",
-          "delayS": 0
+          "kind": "at",
+          "t": 15
         },
         "target": {
           "key": "rules.collisionAvoidance",
           "value": false
         }
+      },
+      {
+        "id": "ambulance-clears-scene",
+        "actor": "ambulance",
+        "verb": "exist",
+        "trigger": {
+          "kind": "at",
+          "t": 18.14
+        },
+        "target": {
+          "state": "absent"
+        },
+        "label": "Ambulance leaves the scenario only after traversing the connector and exit lane"
       }
     ]
   },

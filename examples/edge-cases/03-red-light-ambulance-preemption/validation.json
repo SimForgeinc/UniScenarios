@@ -1,6 +1,6 @@
 {
   "schema": "uniscenarios.gallery-validation.v1",
-  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "validatedAt": "2026-08-03T13:57:36.000Z",
   "provider": "native",
   "command": "uniscenarios debug 03-red-light-ambulance-preemption/scenario.instance.json --sample 0.1 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
   "acceptance": {
@@ -12,17 +12,17 @@
     "kind": "instance",
     "mapId": "yale-street",
     "provider": "native",
-    "inputHash": "e53b20eb4c9d134230a2ca3fbab3b99b93367d9d4312d5b851d739ba66f57a58",
-    "traceDigest": "4de7c66066ebdd3b034f78c630e71ab62d67af309f33915139498c474755c74a",
+    "inputHash": "5c82d66208b3af13f9bb4216f42536aa841713b03bd7ed241ecd10c143fe0b6e",
+    "traceDigest": "a811e538ea18270e1e5fae810e6f6fc7032238a8f11ea537767bb93e47798e1a",
     "durationSeconds": 20,
     "sampleSeconds": 0.1
   },
   "compile": {
-    "milliseconds": 374.161375,
+    "milliseconds": 349.143125,
     "feasible": true,
     "manifest": {
       "instanceId": "ec-03-03-red-light-ambulance-preemption-v2#0",
-      "inputHash": "e53b20eb4c9d134230a2ca3fbab3b99b93367d9d4312d5b851d739ba66f57a58",
+      "inputHash": "5c82d66208b3af13f9bb4216f42536aa841713b03bd7ed241ecd10c143fe0b6e",
       "replayKey": {
         "mapId": "yale-street",
         "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
@@ -36,9 +36,9 @@
           "id": "ambulance",
           "actorKind": "car",
           "roleKind": "supporting",
-          "laneRsl": "773:0:1",
-          "spawnS": 40.15070367719396,
-          "initialSpeedMps": 6.666667,
+          "laneRsl": "93:0:1",
+          "spawnS": 13.734383391386212,
+          "initialSpeedMps": 0,
           "bindingStatus": "bound"
         },
         {
@@ -83,9 +83,9 @@
     }
   },
   "performance": {
-    "nativeMilliseconds": 156.421916,
-    "nativeTicksPerSecond": 6399.359026,
-    "simulatedSecondsPerWallSecond": 127.859321,
+    "nativeMilliseconds": 195.117584,
+    "nativeTicksPerSecond": 5130.239825,
+    "simulatedSecondsPerWallSecond": 102.502294,
     "sumo": null
   },
   "summary": {
@@ -93,7 +93,7 @@
     "actorCount": 5,
     "ambientActorCount": 0,
     "signalCount": 0,
-    "interactionCount": 19,
+    "interactionCount": 20,
     "collisionCount": 0,
     "roadDepartureCount": 1,
     "neverFiredCount": 0,
@@ -101,28 +101,22 @@
       "ambulance": {
         "samples": 201,
         "start": {
-          "x": 466.084398,
-          "z": -1919.546646,
-          "laneRsl": "773:0:1"
+          "x": 399.877826,
+          "z": -1834.827211,
+          "laneRsl": "93:0:1"
         },
         "end": {
-          "x": 385.581858,
-          "z": -1811.182135,
-          "laneRsl": "1207:0:1"
+          "x": 380.245888,
+          "z": -1805.249431,
+          "laneRsl": "1181:0:1"
         },
-        "displacementM": 134.994541,
-        "maxSpeedMps": 10.445397,
+        "displacementM": 35.500114,
+        "maxSpeedMps": 14.132235,
         "observedLanes": [
-          "773:0:1",
-          "95:3:1",
-          "95:2:1",
-          "95:1:1",
-          "95:0:1",
-          "994:0:1",
-          "94:0:1",
-          "1145:0:1",
           "93:0:1",
-          "1207:0:1"
+          "1207:0:1",
+          "92:0:1",
+          "1181:0:1"
         ]
       },
       "cross-traffic": {
@@ -133,15 +127,17 @@
           "laneRsl": "57:0:1"
         },
         "end": {
-          "x": 395.88666,
-          "z": -1809.082984,
-          "laneRsl": "1221:0:1"
+          "x": 407.756144,
+          "z": -1841.349015,
+          "laneRsl": "1146:0:-1"
         },
-        "displacementM": 14.146288,
+        "displacementM": 40.214338,
         "maxSpeedMps": 9.444444,
         "observedLanes": [
           "57:0:1",
-          "1221:0:1"
+          "1221:0:1",
+          "93:0:-1",
+          "1146:0:-1"
         ]
       },
       "downstream-queue": {
@@ -168,12 +164,12 @@
           "laneRsl": "93:0:1"
         },
         "end": {
-          "x": 393.091381,
-          "z": -1826.323174,
+          "x": 392.282878,
+          "z": -1826.520352,
           "laneRsl": "93:0:1"
         },
-        "displacementM": 3.684905,
-        "maxSpeedMps": 2.139167,
+        "displacementM": 4.218487,
+        "maxSpeedMps": 2.725322,
         "observedLanes": [
           "93:0:1"
         ]
@@ -186,11 +182,11 @@
           "laneRsl": null
         },
         "end": {
-          "x": 370.829937,
-          "z": -1799.283439,
+          "x": 369.972444,
+          "z": -1800.712594,
           "laneRsl": null
         },
-        "displacementM": 11.33136,
+        "displacementM": 9.664693,
         "maxSpeedMps": 1.620024,
         "observedLanes": []
       }
@@ -202,21 +198,21 @@
       "actorId": "ambulance",
       "trigger": {
         "kind": "at",
-        "t": 17.8
+        "t": 16
       },
       "verb": "laneOffset",
       "target": {
         "mode": "fraction",
-        "value": 0.3
+        "value": 0
       },
       "dynamics": {
         "shape": "sinusoidal",
         "constraint": "time",
-        "value": 1.8
+        "value": 1.2
       },
       "events": [
         {
-          "t": 17.8,
+          "t": 16,
           "kind": "trigger_fired",
           "interactionId": "ambulance-centers-for-junction",
           "actorId": "ambulance",
@@ -224,19 +220,50 @@
           "forced": false
         },
         {
-          "t": 17.8,
-          "kind": "preemption",
+          "t": 16,
+          "kind": "lateral_maneuver_planned",
           "actorId": "ambulance",
-          "axis": "lateral",
-          "byInteractionId": "ambulance-centers-for-junction",
-          "preemptedInteractionId": "ambulance-enters-refuge"
+          "interactionId": "ambulance-centers-for-junction",
+          "requestedDurationS": 1.2,
+          "effectiveDurationS": 1.2,
+          "displacementM": -0.11691818688479053
         },
         {
-          "t": 20,
-          "kind": "interaction_aborted",
+          "t": 17.18,
+          "kind": "interaction_completed",
           "interactionId": "ambulance-centers-for-junction",
           "actorId": "ambulance",
-          "reason": "clip_end"
+          "finalLateralOffsetM": 0
+        },
+        {
+          "t": 17.18,
+          "kind": "released",
+          "actorId": "ambulance",
+          "axis": "lateral",
+          "interactionId": "ambulance-centers-for-junction",
+          "reason": "complete"
+        }
+      ]
+    },
+    {
+      "id": "ambulance-clears-scene",
+      "actorId": "ambulance",
+      "trigger": {
+        "kind": "at",
+        "t": 18.14
+      },
+      "verb": "exist",
+      "target": {
+        "state": "absent"
+      },
+      "events": [
+        {
+          "t": 18.14,
+          "kind": "trigger_fired",
+          "interactionId": "ambulance-clears-scene",
+          "actorId": "ambulance",
+          "verb": "exist",
+          "forced": false
         }
       ]
     },
@@ -245,7 +272,7 @@
       "actorId": "ambulance",
       "trigger": {
         "kind": "at",
-        "t": 15.7
+        "t": 15
       },
       "verb": "set",
       "target": {
@@ -254,7 +281,7 @@
       },
       "events": [
         {
-          "t": 15.700000000000001,
+          "t": 15,
           "kind": "trigger_fired",
           "interactionId": "ambulance-commits",
           "actorId": "ambulance",
@@ -268,21 +295,21 @@
       "actorId": "ambulance",
       "trigger": {
         "kind": "at",
-        "t": 13.1
+        "t": 12.5
       },
       "verb": "laneOffset",
       "target": {
         "mode": "fraction",
-        "value": 0.82
+        "value": 0.04
       },
       "dynamics": {
         "shape": "sinusoidal",
         "constraint": "time",
-        "value": 1.8
+        "value": 1.6
       },
       "events": [
         {
-          "t": 13.1,
+          "t": 12.5,
           "kind": "trigger_fired",
           "interactionId": "ambulance-enters-refuge",
           "actorId": "ambulance",
@@ -290,19 +317,28 @@
           "forced": false
         },
         {
-          "t": 17.8,
-          "kind": "interaction_aborted",
-          "interactionId": "ambulance-enters-refuge",
+          "t": 12.5,
+          "kind": "lateral_maneuver_planned",
           "actorId": "ambulance",
-          "reason": "preempted"
+          "interactionId": "ambulance-enters-refuge",
+          "requestedDurationS": 1.6,
+          "effectiveDurationS": 1.6,
+          "displacementM": 0.11441145022266308
         },
         {
-          "t": 17.8,
-          "kind": "preemption",
+          "t": 14.08,
+          "kind": "interaction_completed",
+          "interactionId": "ambulance-enters-refuge",
+          "actorId": "ambulance",
+          "finalLateralOffsetM": 0.11440258902986922
+        },
+        {
+          "t": 14.08,
+          "kind": "released",
           "actorId": "ambulance",
           "axis": "lateral",
-          "byInteractionId": "ambulance-centers-for-junction",
-          "preemptedInteractionId": "ambulance-enters-refuge"
+          "interactionId": "ambulance-enters-refuge",
+          "reason": "complete"
         }
       ]
     },
@@ -403,12 +439,12 @@
       "actorId": "ambulance",
       "trigger": {
         "kind": "at",
-        "t": 15.7
+        "t": 15
       },
       "verb": "speed",
       "target": {
         "mode": "absolute",
-        "value": 10
+        "value": 16
       },
       "dynamics": {
         "shape": "linear",
@@ -417,7 +453,7 @@
       },
       "events": [
         {
-          "t": 15.700000000000001,
+          "t": 15,
           "kind": "trigger_fired",
           "interactionId": "ambulance-passes",
           "actorId": "ambulance",
@@ -528,12 +564,12 @@
       "actorId": "focus-vehicle",
       "trigger": {
         "kind": "at",
-        "t": 13.1
+        "t": 11.9
       },
       "verb": "speed",
       "target": {
         "mode": "absolute",
-        "value": 1.666667
+        "value": 2.2
       },
       "dynamics": {
         "shape": "linear",
@@ -542,7 +578,7 @@
       },
       "events": [
         {
-          "t": 13.1,
+          "t": 11.9,
           "kind": "trigger_fired",
           "interactionId": "focus-vehicle-creeps",
           "actorId": "focus-vehicle",
@@ -550,7 +586,7 @@
           "forced": false
         },
         {
-          "t": 13.1,
+          "t": 11.9,
           "kind": "preemption",
           "actorId": "focus-vehicle",
           "axis": "longitudinal",
@@ -558,7 +594,7 @@
           "preemptedInteractionId": "focus-vehicle-holds"
         },
         {
-          "t": 15.1,
+          "t": 14.5,
           "kind": "preemption",
           "actorId": "focus-vehicle",
           "axis": "longitudinal",
@@ -593,7 +629,7 @@
           "forced": false
         },
         {
-          "t": 13.1,
+          "t": 11.9,
           "kind": "preemption",
           "actorId": "focus-vehicle",
           "axis": "longitudinal",
@@ -607,21 +643,21 @@
       "actorId": "focus-vehicle",
       "trigger": {
         "kind": "at",
-        "t": 13.1
+        "t": 11.5
       },
       "verb": "laneOffset",
       "target": {
         "mode": "fraction",
-        "value": -0.82
+        "value": -1
       },
       "dynamics": {
         "shape": "sinusoidal",
         "constraint": "time",
-        "value": 1.8
+        "value": 2.2
       },
       "events": [
         {
-          "t": 13.1,
+          "t": 11.5,
           "kind": "trigger_fired",
           "interactionId": "focus-vehicle-nudges-right",
           "actorId": "focus-vehicle",
@@ -629,11 +665,28 @@
           "forced": false
         },
         {
-          "t": 20,
-          "kind": "interaction_aborted",
+          "t": 11.5,
+          "kind": "lateral_maneuver_planned",
+          "actorId": "focus-vehicle",
+          "interactionId": "focus-vehicle-nudges-right",
+          "requestedDurationS": 2.2,
+          "effectiveDurationS": 2.7764844311053722,
+          "displacementM": -2.85380611527309
+        },
+        {
+          "t": 14.26,
+          "kind": "interaction_completed",
           "interactionId": "focus-vehicle-nudges-right",
           "actorId": "focus-vehicle",
-          "reason": "clip_end"
+          "finalLateralOffsetM": -2.8538173952869657
+        },
+        {
+          "t": 14.26,
+          "kind": "released",
+          "actorId": "focus-vehicle",
+          "axis": "lateral",
+          "interactionId": "focus-vehicle-nudges-right",
+          "reason": "complete"
         }
       ]
     },
@@ -665,7 +718,7 @@
       "actorId": "focus-vehicle",
       "trigger": {
         "kind": "at",
-        "t": 15.1
+        "t": 14.5
       },
       "verb": "speed",
       "target": {
@@ -678,7 +731,7 @@
       },
       "events": [
         {
-          "t": 15.1,
+          "t": 14.5,
           "kind": "trigger_fired",
           "interactionId": "focus-vehicle-stops-pocket",
           "actorId": "focus-vehicle",
@@ -686,7 +739,7 @@
           "forced": false
         },
         {
-          "t": 15.1,
+          "t": 14.5,
           "kind": "preemption",
           "actorId": "focus-vehicle",
           "axis": "longitudinal",
@@ -700,7 +753,7 @@
       "actorId": "pedestrian",
       "trigger": {
         "kind": "at",
-        "t": 12.2
+        "t": 11
       },
       "verb": "speed",
       "target": {
@@ -713,7 +766,7 @@
       },
       "events": [
         {
-          "t": 12.200000000000001,
+          "t": 11,
           "kind": "trigger_fired",
           "interactionId": "pedestrian-clears",
           "actorId": "pedestrian",
@@ -721,7 +774,7 @@
           "forced": false
         },
         {
-          "t": 12.200000000000001,
+          "t": 11,
           "kind": "preemption",
           "actorId": "pedestrian",
           "axis": "longitudinal",
@@ -757,7 +810,7 @@
           "forced": false
         },
         {
-          "t": 12.200000000000001,
+          "t": 11,
           "kind": "preemption",
           "actorId": "pedestrian",
           "axis": "longitudinal",
@@ -773,27 +826,27 @@
         "code": "lateral_duration_clamped",
         "severity": "warning",
         "path": "interactions.focus-vehicle-nudges-right.dynamics.value",
-        "reason": "requested 1.80 s lateral manoeuvre is infeasible for car; clamped to 1.96 s",
+        "reason": "requested 2.20 s lateral manoeuvre is infeasible for car; clamped to 2.78 s",
         "detail": {
           "actorId": "focus-vehicle",
-          "requestedDurationS": 1.8,
-          "effectiveDurationS": 1.9619669120632657,
-          "displacementM": -2.3401024038650617,
+          "requestedDurationS": 2.2,
+          "effectiveDurationS": 2.7764844311053722,
+          "displacementM": -2.85380611527309,
           "lateralRateMaxMps": 2.5,
           "lateralAccelMaxMps2": 3,
-          "lateralJerkMaxMps3": 6
+          "lateralJerkMaxMps3": 8
         }
       }
     ],
     "collisions": [],
     "roadDepartures": [
       {
-        "t": 1.8,
+        "t": 14.280000000000001,
         "kind": "road_departure_prevented",
-        "actorId": "cross-traffic",
-        "laneRsl": "1221:0:1",
-        "lateralErrorM": 0.2132754374637412,
-        "allowedCenterOffsetM": 0.2
+        "actorId": "focus-vehicle",
+        "laneRsl": "93:0:1",
+        "lateralErrorM": 1.7660402209308472,
+        "allowedCenterOffsetM": 1.015709496931919
       }
     ],
     "laneChangeRejections": [],
@@ -801,7 +854,7 @@
     "neverFired": [],
     "preemptions": [
       {
-        "t": 12.200000000000001,
+        "t": 11,
         "kind": "preemption",
         "actorId": "pedestrian",
         "axis": "longitudinal",
@@ -809,7 +862,7 @@
         "preemptedInteractionId": "pedestrian-enters"
       },
       {
-        "t": 13.1,
+        "t": 11.9,
         "kind": "preemption",
         "actorId": "focus-vehicle",
         "axis": "longitudinal",
@@ -817,20 +870,12 @@
         "preemptedInteractionId": "focus-vehicle-holds"
       },
       {
-        "t": 15.1,
+        "t": 14.5,
         "kind": "preemption",
         "actorId": "focus-vehicle",
         "axis": "longitudinal",
         "byInteractionId": "focus-vehicle-stops-pocket",
         "preemptedInteractionId": "focus-vehicle-creeps"
-      },
-      {
-        "t": 17.8,
-        "kind": "preemption",
-        "actorId": "ambulance",
-        "axis": "lateral",
-        "byInteractionId": "ambulance-centers-for-junction",
-        "preemptedInteractionId": "ambulance-enters-refuge"
       }
     ],
     "fallbacks": [],
@@ -851,24 +896,18 @@
             "93:0:1",
             "1207:0:1",
             "92:0:1",
-            "1181:0:1",
-            "65:0:1"
+            "1181:0:1"
           ]
         },
-        "initialLane": "773:0:1",
+        "initialLane": "93:0:1",
         "observedLanes": [
-          "773:0:1",
-          "95:3:1",
-          "95:2:1",
-          "95:1:1",
-          "95:0:1",
-          "994:0:1",
-          "94:0:1",
-          "1145:0:1",
           "93:0:1",
-          "1207:0:1"
+          "1145:0:1",
+          "1207:0:1",
+          "92:0:1",
+          "1181:0:1"
         ],
-        "routeDistanceM": 138.325545,
+        "routeDistanceM": 36.066567,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -898,9 +937,11 @@
         "initialLane": "57:0:1",
         "observedLanes": [
           "57:0:1",
-          "1221:0:1"
+          "1221:0:1",
+          "93:0:-1",
+          "1146:0:-1"
         ],
-        "routeDistanceM": 14.15967,
+        "routeDistanceM": 52.134776,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -945,7 +986,7 @@
         "observedLanes": [
           "93:0:1"
         ],
-        "routeDistanceM": 3.553956,
+        "routeDistanceM": 3.83528,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -968,7 +1009,7 @@
         },
         "initialLane": null,
         "observedLanes": [],
-        "routeDistanceM": 11.331324,
+        "routeDistanceM": 9.664621,
         "backend": {
           "mode": "dynamic-v1",
           "reason": "selected",
@@ -979,10 +1020,10 @@
   },
   "metrics": {
     "minTTC": {
-      "value": 4.747,
-      "t": 13.26,
+      "value": 0.738,
+      "t": 5.38,
       "pair": [
-        "ambulance",
+        "cross-traffic",
         "focus-vehicle"
       ]
     },
@@ -992,29 +1033,29 @@
           "ambulance",
           "focus-vehicle"
         ],
-        "minDistanceM": 0,
-        "t": 17.86
+        "minDistanceM": 1.391,
+        "t": 11.94
       },
       {
         "pair": [
           "cross-traffic",
           "focus-vehicle"
         ],
-        "minDistanceM": 14.531,
-        "t": 1.8
+        "minDistanceM": 0,
+        "t": 6.04
       },
       {
         "pair": [
           "focus-vehicle",
           "pedestrian"
         ],
-        "minDistanceM": 32.08,
-        "t": 20
+        "minDistanceM": 31.17,
+        "t": 14.28
       }
     ],
     "requiredDecelMax": {
-      "ambulance": 0.696,
-      "cross-traffic": 0.155,
+      "ambulance": 0.01,
+      "cross-traffic": 0,
       "downstream-queue": 0,
       "focus-vehicle": 0,
       "pedestrian": 0
@@ -1026,6 +1067,22 @@
     "triggerNeverFired": [],
     "clippedCriticality": false,
     "ticksSimulated": 1001
+  },
+  "ambulanceRouteClosure": {
+    "method": "independent oriented-bounding-box corners against map-authored driving-lane union",
+    "minimumFootprintMarginMGreaterThan": 0.1,
+    "connectorLane": "1207:0:1",
+    "exitLane": "92:0:1",
+    "downstreamLane": "1181:0:1",
+    "connectorFirstOccupiedS": 16.2,
+    "exitFirstOccupiedS": 17.74,
+    "downstreamFirstOccupiedS": 18.1,
+    "finalPresentS": 18.12,
+    "despawnS": 18.14,
+    "completedManeuvers": [
+      "ambulance-enters-refuge",
+      "ambulance-centers-for-junction"
+    ]
   },
   "adaptationsDeclaredIn": "intent.json"
 }
