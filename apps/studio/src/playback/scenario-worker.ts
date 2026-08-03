@@ -5,17 +5,21 @@ import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
 import { adaptTemplate, buildMapControlPlan, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, type MapBundle, type MapControlPlan } from '@uniscenarios/scenario-materializer';
 import {
-  applyAmbientTraffic,
   buildLaneGraph,
   contentHash,
   createFixedStepSimulation,
+  createAmbientCandidatePool,
   pruneDanglingAfterInteractions,
   evaluateAmbientRobustness,
   evaluateIntentRubric,
   runSimulation,
+  materializeAmbientCandidatePool,
+  resolveAmbientTrafficProfile,
   traceDigest,
   type AmbientTrafficProfile,
   type AmbientTrafficProvenance,
+  type AmbientTrafficResult,
+  type AmbientCandidatePool,
   type EvaluateFilters,
   type IntentRubricInput,
   type SimScenarioInput,
@@ -25,7 +29,6 @@ import {
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { ambientRobustnessGate } from '../ambient/robustnessGate';
-import { isAmbientSimActor, reuseAmbientPopulation, type AmbientPopulationSnapshot } from '../ambient/persistentPopulation';
 import { createAmbientWorldPreviewInput } from '../ambient/worldPreview';
 import type { OpenScenarioSnapshot, OpenScenarioSourceMapping } from '../openscenario/model';
 import { selectPlayableSite } from './site-selection';
@@ -58,8 +61,8 @@ export interface ScenarioWorkerRequest {
     readonly manifest: Record<string, unknown>;
     readonly input: SimScenarioInput;
   };
-  /** Exact generated actors from the persistent authoring world. */
-  ambientPopulation?: AmbientPopulationSnapshot;
+  /** Stable map/profile candidates returned by an earlier preparation. */
+  ambientCandidatePool?: AmbientCandidatePool;
   staticCollisionMode?: 'skip' | 'bounded';
   operation?: 'prepare' | 'materialize' | 'robustness';
   evaluationFilters?: EvaluateFilters;
@@ -107,7 +110,7 @@ export interface AmbientRobustnessSummary {
 }
 
 export type ScenarioWorkerResponse =
-  | { id: number; revision: string; ok: true; kind: 'prepare'; runtimeKey: string; cache: 'cold' | 'warm'; timing?: { totalMs: number; compileCache: 'hit' | 'miss' }; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
+  | { id: number; revision: string; ok: true; kind: 'prepare'; runtimeKey: string; cache: 'cold' | 'warm'; timing?: { totalMs: number; compileCache: 'hit' | 'miss' }; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; ambientCandidatePool: AmbientCandidatePool; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
   | { id: number; revision: string; ok: true; kind: 'robustness'; report: AmbientRobustnessSummary }
   | { id: number; revision: string; ok: true; kind: 'ready' | 'progress' | 'complete'; trace: SimTrace; recordedUntil: number }
   | { id: number; revision: string; ok: false; error: string };
@@ -231,6 +234,7 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
       trace: result.trace,
       siteId: 'ambient-world',
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
     };
   }
@@ -275,6 +279,7 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
       trace: result.trace,
       siteId: String(replayKey?.['siteId'] ?? 'verified-base'),
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
       ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
     };
@@ -305,6 +310,7 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
       trace: result.trace,
       siteId: product.manifest.replayKey.siteId,
       ambientTraffic: ambient.provenance,
+      ambientCandidatePool: ambient.candidatePool,
       mapCollisions: staticCollision.diagnostics,
       ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
     };
@@ -350,6 +356,7 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
     trace: result.trace,
     siteId: site.siteId,
     ambientTraffic: ambient.provenance,
+    ambientCandidatePool: ambient.candidatePool,
     mapCollisions: staticCollision.diagnostics,
     ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
   };
@@ -477,9 +484,24 @@ function applyRequestedAmbientPopulation(
   graph: ReturnType<typeof buildLaneGraph>,
   request: ScenarioWorkerRequest,
   options: { maxAchievableDecelMps2?: number },
-): ReturnType<typeof applyAmbientTraffic> {
-  return reuseAmbientPopulation(base, request.ambientTraffic, request.ambientPopulation)
-    ?? applyAmbientTraffic(base, graph, request.ambientTraffic, options);
+): AmbientTrafficResult & { readonly candidatePool: AmbientCandidatePool } {
+  const requestedProfileHash = contentHash(resolveAmbientTrafficProfile(request.ambientTraffic));
+  const reusable = request.ambientCandidatePool;
+  const candidatePool = reusable
+    && reusable.mapGraphDigest === graph.topologyDigest
+    && reusable.profileHash === requestedProfileHash
+    ? reusable
+    : createAmbientCandidatePool(graph, request.ambientTraffic);
+  return {
+    ...materializeAmbientCandidatePool(base, graph, candidatePool, options),
+    candidatePool,
+  };
+}
+
+function isAmbientSimActor(actor: { readonly id: string; readonly tags: readonly string[] }): boolean {
+  return actor.id.startsWith('ambient:')
+    || actor.id.startsWith('ambient-')
+    || actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'));
 }
 
 
@@ -661,6 +683,9 @@ function ambientInstance(
     id: actor.id,
     actorKind: actor.kind,
     roleKind: 'ambient',
+    origin: 'ambient',
+    timelineVisible: false,
+    editable: false,
     laneRsl: actor.initial.laneRef?.rsl ?? null,
     spawnS: actor.initial.laneRef?.s ?? 0,
     initialSpeedMps: actor.initial.speedMps,

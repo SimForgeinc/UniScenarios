@@ -277,11 +277,15 @@ export type {
 export {
   ambientTrafficProfileSchema,
   applyAmbientTraffic,
+  createAmbientCandidatePool,
+  materializeAmbientCandidatePool,
   promoteAmbientActor,
   resolveAmbientTrafficProfile,
 } from './ambient/traffic.js';
 export type {
   AmbientActorProvenance,
+  AmbientCandidate,
+  AmbientCandidatePool,
   AmbientReservation,
   AmbientScreeningReason,
   AmbientTrafficOptions,

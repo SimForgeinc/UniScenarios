@@ -1,0 +1,37 @@
+import { contentHash, type ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
+
+/** Request identity; the worker replaces mapId with the loaded graph digest. */
+export function ambientCandidatePoolRequestKey(mapId: string, profile: ResolvedAmbientTrafficProfile): string {
+  return contentHash({ mapId, profile });
+}
+
+export function ambientPreviewKey(candidatePoolRequestKey: string, simulationSourceHash: string): string {
+  return contentHash({ candidatePoolRequestKey, simulationSourceHash });
+}
+
+export interface AmbientPreviewEntry<T> {
+  readonly candidatePoolRequestKey: string;
+  readonly previewKey: string;
+  readonly value: T;
+}
+
+/** Race-safe cache for the latest compiled preview. Candidate identity lives in the engine pool. */
+export class AmbientPreviewCache<T> {
+  private committed: AmbientPreviewEntry<T> | null = null;
+  private generation = 0;
+
+  get current(): AmbientPreviewEntry<T> | null { return this.committed; }
+  begin(): number { return ++this.generation; }
+
+  commit(token: number, entry: AmbientPreviewEntry<T>): boolean {
+    if (token !== this.generation) return false;
+    this.committed = entry;
+    return true;
+  }
+
+  fail(token: number): void {
+    if (token === this.generation) this.generation++;
+  }
+
+  playback(): T | null { return this.committed?.value ?? null; }
+}

@@ -1,7 +1,6 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { contentHash, type AmbientTrafficProfile, type EvaluateFilters, type IntentRubricInput } from '@uniscenarios/sim-engine';
+import { contentHash, type AmbientCandidatePool, type AmbientTrafficProfile, type EvaluateFilters, type IntentRubricInput } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
-import type { AmbientPopulationSnapshot } from '../ambient/persistentPopulation';
 import { parsePlaybackPair, type PlaybackBundle } from './model';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
@@ -30,6 +29,7 @@ export class ScenarioWorkerClient {
   private activeCompile: number | null = null;
   private activeLive: number | null = null;
   private runtimeByInput = new Map<string, string>();
+  private ambientCandidatePool: AmbientCandidatePool | undefined;
 
   prepare(
     template: ScenarioTemplateV2,
@@ -39,7 +39,6 @@ export class ScenarioWorkerClient {
     options: {
       staticCollisionMode?: 'skip' | 'bounded';
       timeoutMs?: number;
-      ambientPopulation?: AmbientPopulationSnapshot;
       /** Build only the warmed t=0 authoring world; Play streams the trace live. */
       materializeOnly?: boolean;
     } = {},
@@ -74,6 +73,7 @@ export class ScenarioWorkerClient {
           const bundle = parsePlaybackPair(message.instance, message.trace, {
             instanceName: 'authored scenario', traceName: 'simulation worker',
           });
+          this.ambientCandidatePool = message.ambientCandidatePool;
           const result = {
             ...bundle,
             ambientTraffic: message.ambientTraffic,
@@ -92,8 +92,8 @@ export class ScenarioWorkerClient {
         revision,
         template,
         ambientTraffic,
+        ...(this.ambientCandidatePool ? { ambientCandidatePool: this.ambientCandidatePool } : {}),
         ...(baseInstance ? { baseInstance } : {}),
-        ...(options.ambientPopulation ? { ambientPopulation: options.ambientPopulation } : {}),
         operation: options.materializeOnly ? 'materialize' : 'prepare',
         staticCollisionMode: options.staticCollisionMode ?? 'bounded',
         map: {

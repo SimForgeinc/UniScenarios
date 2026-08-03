@@ -163,7 +163,9 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
         {provenance ? <div style={styles.status} data-testid="ambient-traffic-provenance">
           <div data-testid="ambient-traffic-preview-count"><strong>{provenance.actors.length} visible</strong> · {provenance.eligibleLaneKm.toFixed(1)} lane km</div>
           <div data-testid="ambient-traffic-safety-summary">
-            Safety screen {provenance.screening.evaluated ? `${provenance.screening.count} removed over ${provenance.screening.passes} pass${provenance.screening.passes === 1 ? '' : 'es'}` : 'not evaluated'}
+            {provenance.screening.evaluated
+              ? `Safety screen ${provenance.screening.count} removed over ${provenance.screening.passes} pass${provenance.screening.passes === 1 ? '' : 'es'}`
+              : 'Live selection · full-clip checks run only in the robustness test'}
           </div>
           <div>profile {provenance.profileHash.slice(0, 10)} · seed {String(provenance.profile.seed)}</div>
           {provenance.warnings.map((warning) => <div key={warning} style={styles.warning}>{warning}</div>)}

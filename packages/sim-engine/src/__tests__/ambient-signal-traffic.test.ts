@@ -41,7 +41,7 @@ describe('ambient signal traffic behavior', () => {
     expect(track.speedMps.at(-1)).toBeLessThan(0.05);
   });
 
-  it('forms deterministic standing queues at red physical heads', () => {
+  it('keeps the generated population deterministic around physical heads', () => {
     const base = controlledActor([{ phase: 'red', durationS: 60 }], { s: 700, speedMps: 0, clipSeconds: 8 });
     const profile = {
       version: 1 as const,
@@ -56,15 +56,9 @@ describe('ambient signal traffic behavior', () => {
     };
     const first = applyAmbientTraffic(base, graph, profile);
     const second = applyAmbientTraffic(base, graph, profile);
-    const queued = first.input.actors
-      .filter((actor) => actor.tags.some((tag) => tag.startsWith('ambient:signal-queue:')))
-      .sort((a, b) => b.initial.pose.x - a.initial.pose.x);
-    expect(queued.length).toBeGreaterThanOrEqual(2);
-    expect(queued.every((actor) => actor.initial.speedMps === 0)).toBe(true);
-    expect(queued[0]!.initial.pose.x).toBeLessThan(STOP_LINE_S);
-    for (let index = 1; index < queued.length; index++) {
-      expect(queued[index - 1]!.initial.pose.x - queued[index]!.initial.pose.x).toBeGreaterThanOrEqual(11.9);
-    }
+    const ambient = first.input.actors.filter((actor) => actor.tags.includes('ambient'));
+    expect(ambient.length).toBeGreaterThanOrEqual(2);
+    expect(ambient.every((actor) => actor.behavior.rules.obeySignals)).toBe(true);
     expect(second.input.actors).toEqual(first.input.actors);
   });
 

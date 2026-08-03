@@ -35,8 +35,8 @@ import {
 } from './ambient/model';
 import { AmbientTrafficPopover } from './ambient/AmbientTrafficPanel';
 import { useAmbientTrafficPreview } from './ambient/useAmbientTrafficPreview';
-import { ambientMaterializationKey, ambientPopulationKey, PersistentAmbientWorld } from './ambient/persistentWorld';
-import type { ResolvedAmbientTrafficProfile, SimActor } from '@uniscenarios/sim-engine';
+import { ambientCandidatePoolRequestKey, ambientPreviewKey, AmbientPreviewCache } from './ambient/candidatePool';
+import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import { contentHash } from '@uniscenarios/sim-engine';
 import {
   dashCameras,
@@ -174,8 +174,8 @@ export function App(): JSX.Element {
   viewSettingsRef.current = viewSettings;
   const runtimeWorker = useRef<ScenarioWorkerClient | null>(null);
   if (!runtimeWorker.current) runtimeWorker.current = new ScenarioWorkerClient();
-  const ambientWorld = useRef(new PersistentAmbientWorld<PlaybackBundle>());
-  const ambientPreparation = useRef<{ materializationKey: string; promise: Promise<PlaybackBundle> } | null>(null);
+  const ambientPreviewCache = useRef(new AmbientPreviewCache<PlaybackBundle>());
+  const ambientPreparation = useRef<{ previewKey: string; promise: Promise<PlaybackBundle> } | null>(null);
   const [auxiliaryTool, setAuxiliaryTool] = useState<Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null>(null);
   const routeOverlayRenderer = useRef<VehicleRouteOverlayRenderer | null>(null);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -341,12 +341,12 @@ export function App(): JSX.Element {
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
     if (!editorController) throw new Error('The editor is not ready');
-    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
-    const materializationKey = ambientMaterializationKey(populationKey, simulationSourceHash(editorController.doc.data));
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const previewKey = ambientPreviewKey(candidatePoolRequestKey, simulationSourceHash(editorController.doc.data));
     const pending = ambientPreparation.current;
-    if (pending?.materializationKey === materializationKey) await pending.promise;
+    if (pending?.previewKey === previewKey) await pending.promise;
     throwIfPreparationAborted(signal);
-    const bundle = ambientWorld.current.playback();
+    const bundle = ambientPreviewCache.current.playback();
     if (!bundle) throw new Error('Traffic is still loading. Press Play again when the map population is visible.');
     const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
     if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
@@ -357,15 +357,15 @@ export function App(): JSX.Element {
     }
     // Start the canonical fixed-step engine from the exact visible population.
     // Only a small lead is recorded before playback becomes visible.
-    const entry = ambientWorld.current.current;
+    const entry = ambientPreviewCache.current.current;
     const run = await runtimeWorker.current!.start(bundle, map);
     throwIfPreparationAborted(signal);
     livePlayback.current = run;
     setAuthoredPlayback(run.bundle);
     void run.completion.then((completed) => {
-      if (!entry || ambientWorld.current.current?.value !== bundle) return;
-      const token = ambientWorld.current.begin();
-      ambientWorld.current.commit(token, { ...entry, value: completed });
+      if (!entry || ambientPreviewCache.current.current?.value !== bundle) return;
+      const token = ambientPreviewCache.current.begin();
+      ambientPreviewCache.current.commit(token, { ...entry, value: completed });
     }).catch((reason: unknown) => {
       if ((reason as { name?: string } | null)?.name !== 'AbortError') {
         setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
@@ -444,15 +444,15 @@ export function App(): JSX.Element {
       setAmbientPreviewBusy(false);
       return;
     }
-    const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
-    const materializationKey = ambientMaterializationKey(populationKey, ambientPreviewSourceHash ?? 'empty');
-    const current = ambientWorld.current.current;
-    if (current?.materializationKey === materializationKey) {
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const previewKey = ambientPreviewKey(candidatePoolRequestKey, ambientPreviewSourceHash ?? 'empty');
+    const current = ambientPreviewCache.current.current;
+    if (current?.previewKey === previewKey) {
       setAmbientPreview(current.value);
       setAmbientPreviewBusy(false);
       return;
     }
-    const token = ambientWorld.current.begin();
+    const token = ambientPreviewCache.current.begin();
     runtimeWorker.current?.cancel();
     if (current && current.value.instance.input.mapId !== map.id) setAmbientPreview(null);
     const verifiedFallback = editorController && campaignSource
@@ -460,19 +460,13 @@ export function App(): JSX.Element {
       ? campaignSource.evidence
       : null;
     if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, verifiedFallback.ambientTraffic)) {
-      ambientWorld.current.commit(token, { populationKey, materializationKey, value: verifiedFallback });
+      ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, value: verifiedFallback });
       setAmbientPreview(verifiedFallback);
       setAmbientPreviewBusy(false);
       return;
     }
     setAmbientPreviewBusy(true);
     setAmbientTrafficError(null);
-    const reusablePopulation = current?.populationKey === populationKey && current.value.ambientTraffic
-      ? {
-          provenance: current.value.ambientTraffic,
-          actors: current.value.instance.input.actors.filter((actor): actor is SimActor => actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'))),
-        }
-      : undefined;
     const promise = runtimeWorker.current!.prepare(
       editorController.doc.data,
       map,
@@ -481,18 +475,18 @@ export function App(): JSX.Element {
       // Build only the warmed t=0 world in the background. Static map collider
       // extraction is intentionally not on this interactive path; dynamic
       // actor collision handling remains enabled and identical.
-      { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true, ...(reusablePopulation ? { ambientPopulation: reusablePopulation } : {}) },
+      { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true },
     );
-    ambientPreparation.current = { materializationKey, promise };
+    ambientPreparation.current = { previewKey, promise };
     void promise.then(
       (bundle) => {
-        if (!ambientWorld.current.commit(token, { populationKey, materializationKey, value: bundle })) return;
+        if (!ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, value: bundle })) return;
         setAmbientPreview(bundle);
         setAmbientPreviewBusy(false);
         setAmbientTrafficError(null);
       },
       (reason: unknown) => {
-        ambientWorld.current.fail(token);
+        ambientPreviewCache.current.fail(token);
         if ((reason as { name?: string } | null)?.name === 'AbortError') return;
         setAmbientTrafficError(`Traffic preparation: ${reason instanceof Error ? reason.message : String(reason)}`);
         setAmbientPreviewBusy(false);
