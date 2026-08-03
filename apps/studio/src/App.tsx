@@ -32,7 +32,14 @@ import { defaultSpeedKph } from './timeline/actions';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient, type LivePlaybackRun } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
-import { loadQualityPreference } from './performance/quality';
+import {
+  inspectQualityPreference,
+  selectAndSaveQualityPreset,
+  shouldDeferWorldLoading,
+  type QualityPreference,
+  type QualityPresetId,
+} from './performance/quality';
+import { FirstRunGraphicsChooser } from './performance/FirstRunGraphicsChooser';
 import { VariationsPanel } from './variations';
 import {
   AMBIENT_TRAFFIC_EXTENSION_KEY,
@@ -99,9 +106,8 @@ import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializ
 import { WorldLoadingOverlay } from './WorldLoadingOverlay';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
-function optionsFromUrl(): CityViewerOptions {
+function optionsFromUrl(quality: QualityPreference): CityViewerOptions {
   const params = new URLSearchParams(window.location.search);
-  const quality = loadQualityPreference();
   const num = (key: string): number | undefined => {
     const raw = params.get(key);
     return raw === null || raw === '' ? undefined : Number(raw);
@@ -144,6 +150,21 @@ declare global {
 }
 
 export function App(): JSX.Element {
+  const initial = useRef<ReturnType<typeof inspectQualityPreference> | null>(null);
+  if (!initial.current) initial.current = inspectQualityPreference();
+  const [quality, setQuality] = useState<QualityPreference | null>(
+    shouldDeferWorldLoading(initial.current.state) ? null : initial.current.preference,
+  );
+
+  const chooseQuality = useCallback((preset: Exclude<QualityPresetId, 'custom'>) => {
+    setQuality(selectAndSaveQualityPreset(preset));
+  }, []);
+
+  if (!quality) return <FirstRunGraphicsChooser onChoose={chooseQuality} />;
+  return <StudioApp initialQuality={quality} />;
+}
+
+function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): JSX.Element {
   // Below this width a permanent 360 px timeline would leave too little room
   // for useful map interaction. Tablet widths (including 707–900 px) remain a
   // true split; phone widths deliberately switch the timeline to a drawer.
@@ -214,7 +235,7 @@ export function App(): JSX.Element {
   const hostRef = useRef<HTMLDivElement>(null);
   const overlaysRef = useRef<MapOverlayHandle | null>(null);
   overlaysRef.current = overlays;
-  const optionsRef = useRef<CityViewerOptions>(optionsFromUrl());
+  const optionsRef = useRef<CityViewerOptions>(optionsFromUrl(initialQuality));
   const pendingMapId = useRef(mapId);
   const hasNavigatedMaps = useRef(false);
   pendingMapId.current = mapId;

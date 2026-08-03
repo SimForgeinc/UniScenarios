@@ -1,10 +1,50 @@
 import { describe, expect, it } from 'vitest';
-import { QUALITY_STORAGE_KEY, defaultQualityPreference, loadQualityPreference, preferenceForPreset, saveQualityPreference } from './quality';
+import {
+  QUALITY_STORAGE_KEY,
+  STARTER_QUALITY_CHOICES,
+  defaultQualityPreference,
+  inspectQualityPreference,
+  loadQualityPreference,
+  preferenceForPreset,
+  saveQualityPreference,
+  selectAndSaveQualityPreset,
+  shouldDeferWorldLoading,
+} from './quality';
 
 describe('render quality preferences', () => {
   it('falls back to Balanced when storage is empty or corrupt', () => {
     expect(loadQualityPreference({ getItem: () => null }).preset).toBe('balanced');
     expect(loadQualityPreference({ getItem: () => '{oops' }).preset).toBe('balanced');
+  });
+
+  it('distinguishes a first visit, saved user, invalid value, and unavailable storage', () => {
+    expect(inspectQualityPreference({ getItem: () => null }).state).toBe('missing');
+    expect(inspectQualityPreference({ getItem: () => '{oops' }).state).toBe('invalid');
+    expect(inspectQualityPreference({ getItem: () => { throw new Error('denied'); } }).state).toBe('unavailable');
+    const saved = preferenceForPreset('high');
+    const result = inspectQualityPreference({ getItem: () => JSON.stringify(saved) });
+    expect(result).toEqual({ preference: saved, state: 'stored' });
+    expect(shouldDeferWorldLoading('missing')).toBe(true);
+    expect(shouldDeferWorldLoading('invalid')).toBe(true);
+    expect(shouldDeferWorldLoading('unavailable')).toBe(true);
+    expect(shouldDeferWorldLoading('stored')).toBe(false);
+  });
+
+  it('uses exactly the three canonical starter presets with one recommendation', () => {
+    expect(STARTER_QUALITY_CHOICES.map(({ id, label }) => ({ id, label }))).toEqual([
+      { id: 'ultra-low-3d', label: 'Ultra Low' },
+      { id: 'minimal', label: 'Minimal' },
+      { id: 'high', label: 'High' },
+    ]);
+    expect(STARTER_QUALITY_CHOICES.filter((choice) => choice.recommended).map((choice) => choice.id)).toEqual(['minimal']);
+    for (const choice of STARTER_QUALITY_CHOICES) {
+      expect(choice.label).toBe(preferenceForPreset(choice.id).preset === choice.id
+        ? choice.label
+        : 'unreachable');
+      expect(choice.downloadGuidance).toMatch(/^Measured cold load: \d/);
+      expect(choice.gpuMemoryGuidance).toMatch(/^Resident estimate: .* · \d GB GPU recommended$/);
+      expect(choice.downloadGuidance).not.toContain('pending');
+    }
   });
 
   it('creates independent preset values', () => {
@@ -43,5 +83,20 @@ describe('render quality preferences', () => {
     preference.live.vegetationMaxDistance = 120;
     saveQualityPreference(preference, { setItem: (key, value) => { expect(key).toBe(QUALITY_STORAGE_KEY); stored = value; } });
     expect(loadQualityPreference({ getItem: () => stored })).toEqual(preference);
+  });
+
+  it('does not block the in-memory selection when persistence fails', () => {
+    const selected = selectAndSaveQualityPreset('minimal', { setItem: () => { throw new Error('quota'); } });
+    expect(selected.preset).toBe('minimal');
+  });
+
+  it('persists and returns the exact selected preset for immediate application', () => {
+    let stored = '';
+    const selected = selectAndSaveQualityPreset('ultra-low-3d', { setItem: (key, value) => {
+      expect(key).toBe(QUALITY_STORAGE_KEY);
+      stored = value;
+    } });
+    expect(selected).toEqual(preferenceForPreset('ultra-low-3d'));
+    expect(loadQualityPreference({ getItem: () => stored })).toEqual(selected);
   });
 });

@@ -18,6 +18,15 @@ export interface QualityPreset {
   recreate: { antialias: boolean };
 }
 
+export interface StarterQualityChoice {
+  id: 'ultra-low-3d' | 'minimal' | 'high';
+  label: string;
+  guidance: string;
+  downloadGuidance: string;
+  gpuMemoryGuidance: string;
+  recommended: boolean;
+}
+
 const MB = 1024 * 1024;
 
 export const QUALITY_PRESETS: readonly QualityPreset[] = [
@@ -40,7 +49,7 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
   },
   {
     id: 'ultra-low-3d',
-    label: 'Ultra Low 3D / CPU',
+    label: 'Ultra Low',
     description: 'Real navigable 3D roads, buildings and actors with flat unlit colors, no textures, lighting, environment, vegetation or nonessential overlays.',
     live: {
       maxPixelRatio: 0.6, maxScreenSpaceError: 2200, vegetationScreenSpaceError: 10000,
@@ -137,6 +146,34 @@ export const QUALITY_PRESETS: readonly QualityPreset[] = [
   },
 ] as const;
 
+/** The approachable first-run subset. IDs and labels come from QUALITY_PRESETS. */
+export const STARTER_QUALITY_CHOICES: readonly StarterQualityChoice[] = [
+  {
+    id: 'ultra-low-3d',
+    label: presetById('ultra-low-3d').label,
+    guidance: 'Best for older computers and remote sessions. Flat 3D with the lightest GPU load.',
+    downloadGuidance: 'Measured cold load: 18–58 MB',
+    gpuMemoryGuidance: 'Resident estimate: 11–47 MB · 1 GB GPU recommended',
+    recommended: false,
+  },
+  {
+    id: 'minimal',
+    label: presetById('minimal').label,
+    guidance: 'A responsive starting point with roads and simplified city context.',
+    downloadGuidance: 'Measured cold load: 45–534 MB',
+    gpuMemoryGuidance: 'Resident estimate: 370–640 MB · 2 GB GPU recommended',
+    recommended: true,
+  },
+  {
+    id: 'high',
+    label: presetById('high').label,
+    guidance: 'Sharper detail, vegetation, and a larger resident scene for capable GPUs.',
+    downloadGuidance: 'Measured cold load: 44–816 MB',
+    gpuMemoryGuidance: 'Resident estimate: 377–1,601 MB · 4 GB GPU recommended',
+    recommended: false,
+  },
+] as const;
+
 export interface QualityPreference {
   preset: QualityPresetId;
   live: CityViewerLiveQuality;
@@ -161,19 +198,23 @@ export function preferenceForPreset(id: Exclude<QualityPresetId, 'custom'>): Qua
   return { preset: preset.id, live: { ...preset.live }, runtime: { ...preset.runtime }, recreate: { ...preset.recreate } };
 }
 
-export function loadQualityPreference(storage: Pick<Storage, 'getItem'> | null = globalThis.localStorage): QualityPreference {
-  if (!storage) return defaultQualityPreference();
+export type QualityPreferenceStorageState = 'stored' | 'missing' | 'invalid' | 'unavailable';
+
+function defaultStorage(): Pick<Storage, 'getItem' | 'setItem'> | null {
   try {
-    const raw = storage.getItem(QUALITY_STORAGE_KEY);
-    if (!raw) return defaultQualityPreference();
+    return globalThis.localStorage ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function parseQualityPreference(raw: string): QualityPreference | null {
+  try {
     const parsed = JSON.parse(raw) as Partial<QualityPreference>;
+    if (parsed.preset !== 'custom' && !QUALITY_PRESETS.some((preset) => preset.id === parsed.preset)) return null;
     const base = parsed.preset === 'custom'
       ? defaultQualityPreference()
-      : preferenceForPreset(
-          QUALITY_PRESETS.some((preset) => preset.id === parsed.preset)
-            ? (parsed.preset as Exclude<QualityPresetId, 'custom'>)
-            : 'balanced',
-        );
+      : preferenceForPreset(parsed.preset as Exclude<QualityPresetId, 'custom'>);
     if (parsed.preset !== 'custom') return base;
     const live = { ...base.live };
     for (const key of Object.keys(live) as (keyof CityViewerLiveQuality)[]) {
@@ -191,20 +232,56 @@ export function loadQualityPreference(storage: Pick<Storage, 'getItem'> | null =
       recreate: { antialias: parsed.recreate?.antialias !== false },
     };
   } catch {
-    return defaultQualityPreference();
+    return null;
   }
+}
+
+export function inspectQualityPreference(
+  storage: Pick<Storage, 'getItem'> | null | undefined = undefined,
+): { preference: QualityPreference; state: QualityPreferenceStorageState } {
+  const resolved = storage === undefined ? defaultStorage() : storage;
+  if (!resolved) return { preference: defaultQualityPreference(), state: 'unavailable' };
+  try {
+    const raw = resolved.getItem(QUALITY_STORAGE_KEY);
+    if (!raw) return { preference: defaultQualityPreference(), state: 'missing' };
+    const preference = parseQualityPreference(raw);
+    return preference
+      ? { preference, state: 'stored' }
+      : { preference: defaultQualityPreference(), state: 'invalid' };
+  } catch {
+    return { preference: defaultQualityPreference(), state: 'unavailable' };
+  }
+}
+
+export function loadQualityPreference(storage: Pick<Storage, 'getItem'> | null | undefined = undefined): QualityPreference {
+  return inspectQualityPreference(storage).preference;
+}
+
+/** The world stays unmounted until a first-use browser has made an explicit choice. */
+export function shouldDeferWorldLoading(state: QualityPreferenceStorageState): boolean {
+  return state !== 'stored';
 }
 
 export function saveQualityPreference(
   preference: QualityPreference,
-  storage: Pick<Storage, 'setItem'> | null = globalThis.localStorage,
+  storage: Pick<Storage, 'setItem'> | null | undefined = undefined,
 ): void {
   try {
-    storage?.setItem(QUALITY_STORAGE_KEY, JSON.stringify(preference));
-    if (storage === globalThis.localStorage && typeof globalThis.dispatchEvent === 'function') {
+    const resolved = storage === undefined ? defaultStorage() : storage;
+    resolved?.setItem(QUALITY_STORAGE_KEY, JSON.stringify(preference));
+    if (storage === undefined && typeof globalThis.dispatchEvent === 'function') {
       globalThis.dispatchEvent(new CustomEvent(QUALITY_CHANGE_EVENT, { detail: preference }));
     }
   } catch {
     // Storage can be unavailable in private/embedded contexts; quality remains live for this session.
   }
+}
+
+export function selectAndSaveQualityPreset(
+  preset: Exclude<QualityPresetId, 'custom'>,
+  storage: Pick<Storage, 'setItem'> | null | undefined = undefined,
+): QualityPreference {
+  const preference = preferenceForPreset(preset);
+  saveQualityPreference(preference, storage);
+  return preference;
 }
