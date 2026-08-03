@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Interaction, MapSignalPlan, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, triggerAnchor, type TimelineItem } from './model';
+import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, timelineLanePreferencesForDrop, triggerAnchor, type TimelineItem } from './model';
 
 const speed: Interaction = { id: 'speed_ego', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'speed', target: { mode: 'stop' }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } };
 const item = (interaction: Interaction, resource: TimelineItem['resource'], start: number, end: number): TimelineItem => ({ interaction, actorId: interaction.actor, track: 'actions', resource, anchorTime: start, endTime: end, unresolved: false });
@@ -16,6 +16,25 @@ describe('action-only timeline projection', () => {
       item(speed, 'longitudinal', 0, 4), item(second, 'longitudinal', 1, 3), item(third, 'longitudinal', 6, 8),
     ], { speed_ego: 0, second: 0, third: 1 });
     expect(lanes.map((lane) => lane.items.map((entry) => entry.interaction.id))).toEqual([['speed_ego'], ['second', 'third']]);
+  });
+  it('pins derived rows and creates Parallel 3 when a moved clip is dropped onto occupied Parallel 2', () => {
+    const horn = item({ ...speed, id: 'horn' } as Interaction, 'horn', 2, 2.5);
+    const pullOver = item({ ...speed, id: 'pull-over' } as Interaction, 'lateral', 14.66, 16.26);
+    const pass = item({ ...speed, id: 'pass' } as Interaction, 'longitudinal', 15, 15.8);
+    const center = item({ ...speed, id: 'center' } as Interaction, 'lateral', 16, 17.2);
+    const beforeDrop = packActionLanes([horn, pullOver, pass, center], { 'pull-over': 0 });
+    expect(beforeDrop.map((lane) => lane.items.map((entry) => entry.interaction.id))).toEqual([
+      ['horn', 'pull-over'], ['pass', 'center'],
+    ]);
+
+    const preferences = timelineLanePreferencesForDrop(
+      beforeDrop, 'pull-over', { start: 14.66, end: 16.26 }, 1, { 'pull-over': 0 },
+    );
+    const afterDrop = packActionLanes([horn, pullOver, pass, center], preferences);
+    expect(preferences).toMatchObject({ horn: 0, pass: 1, center: 1, 'pull-over': 2 });
+    expect(afterDrop.map((lane) => lane.items.map((entry) => entry.interaction.id))).toEqual([
+      ['horn'], ['pass', 'center'], ['pull-over'],
+    ]);
   });
   it('compacts empty preferred rows without imposing a row limit', () => {
     const far = item({ ...speed, id: 'far' } as Interaction, 'longitudinal', 0, 1);

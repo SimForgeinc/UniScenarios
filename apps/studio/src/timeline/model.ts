@@ -179,6 +179,29 @@ export function timelineLayoutExtension(lanes: TimelineLanePreferences): { reado
   return { version: 1, lanes: Object.fromEntries(Object.entries(lanes).filter(([, lane]) => Number.isInteger(lane) && lane >= 0)) };
 }
 
+/** Preserve the rows visible at gesture start, then resolve an occupied-row
+ * drop into one new compact lane. This prevents derived rows from collapsing
+ * underneath the pointer when only the moved clip previously had a persisted
+ * preference. Row occupancy is visual interval occupancy, independent of the
+ * semantic resource-conflict diagnostic. */
+export function timelineLanePreferencesForDrop(
+  lanes: readonly TimelineActionLane[],
+  interactionId: string,
+  range: TimelineClipRange,
+  requestedLane: number,
+  preferences: TimelineLanePreferences = {},
+): TimelineLanePreferences {
+  const next: Record<string, number> = { ...preferences };
+  for (const lane of lanes) {
+    for (const item of lane.items) next[item.interaction.id] = lane.index;
+  }
+  const target = clamp(Math.floor(requestedLane), 0, lanes.length);
+  const occupied = lanes[target]?.items.some((item) => item.interaction.id !== interactionId
+    && range.start < item.endTime && item.anchorTime < range.end) ?? false;
+  next[interactionId] = occupied ? lanes.length : target;
+  return next;
+}
+
 export function buildTimelineGroups(template: ScenarioTemplateV2, lanePreferences = timelineLanePreferences(template.extensions)): TimelineActorGroup[] {
   return template.roles.map((role) => {
     const items = template.choreography.interactions.flatMap((interaction): TimelineItem[] => {
