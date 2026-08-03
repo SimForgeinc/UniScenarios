@@ -178,6 +178,7 @@ export function App(): JSX.Element {
   overlaysRef.current = overlays;
   const optionsRef = useRef<CityViewerOptions>(optionsFromUrl());
   const pendingMapId = useRef(mapId);
+  const hasNavigatedMaps = useRef(false);
   pendingMapId.current = mapId;
 
   const viewer = session && session.mapId === mapId ? session.viewer : null;
@@ -190,6 +191,7 @@ export function App(): JSX.Element {
   const selectMap = useCallback(
     (next: MapEntry) => {
       if (next.id === pendingMapId.current) return;
+      hasNavigatedMaps.current = true;
       rememberMapId(next.id);
       setOverlayError(null);
       setMapId(next.id);
@@ -289,6 +291,10 @@ export function App(): JSX.Element {
     map,
     sampleHeight,
     hostRef,
+    // A browser load always begins from a clean authored scenario. Explicit
+    // map navigation within this mounted Studio session retains the existing
+    // per-map resume behavior.
+    startBlank: !hasNavigatedMaps.current,
   });
 
   // Older portable Gallery saves intentionally contain no scene-absolute

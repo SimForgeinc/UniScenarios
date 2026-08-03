@@ -169,7 +169,7 @@ export function authoringGraphPrunePlan(
       || (occludes && (!remainingRoles.has(occludes.observer) || !remainingRoles.has(occludes.target)));
   }).map((prop) => prop.id);
   const invariantIds = template.invariants.filter((invariant) => invariant.kind === 'event_order'
-    ? invariant.events.some((id) => removedInteractions.has(id)
+    ? invariant.events.some((id) => removedInteractions.has(id))
     : invariantReferencesMissingRole(invariant as unknown as Record<string, unknown>, remainingRoles)).map((invariant) => invariant.id);
   const removedProps = new Set(propIds);
   const removedInvariants = new Set(invariantIds);
@@ -219,7 +219,8 @@ function conditionReferencesMissingRole(condition: Record<string, unknown>, role
 
 function targetReferencesMissingRole(target: Interaction['target'], roles: ReadonlySet<string>): boolean {
   if (!isRecord(target)) return false;
-  return typeof target.role === 'string' && !roles.has(target.role);
+  const candidate = target as unknown as Record<string, unknown>;
+  return typeof candidate.role === 'string' && !roles.has(candidate.role);
 }
 
 function invariantReferencesMissingRole(invariant: Record<string, unknown>, roles: ReadonlySet<string>): boolean {
@@ -267,6 +268,8 @@ export interface EditorDocumentOptions {
   store?: TemplateFileStore;
   /** Override the debounce (tests, verification scripts). */
   autosaveMs?: number;
+  /** Internal save slot override used by isolated, fresh authoring sessions. */
+  autosaveSlot?: string;
 }
 
 /**
@@ -280,12 +283,22 @@ export function autosaveName(mapId: string): string {
   return `autosave-${mapId}`;
 }
 
+/**
+ * A fresh page-load draft must never replace the last resumable map autosave.
+ * The slot is deliberately stable: each new page load starts from a newly
+ * constructed blank document and may replace only the previous blank draft.
+ */
+export function blankAutosaveName(mapId: string): string {
+  return `blank-autosave-${mapId}`;
+}
+
 export class EditorDocument {
   readonly map: MapEntry;
 
   #doc: TemplateDocument;
   readonly #store: TemplateFileStore;
   readonly #autosaveMs: number;
+  readonly #autosaveSlot: string;
   readonly #listeners = new Set<() => void>();
 
   #actors: ActorRecord[] = [];
@@ -307,6 +320,7 @@ export class EditorDocument {
     this.#doc = doc;
     this.#store = options.store ?? new WebTemplateFileStore();
     this.#autosaveMs = options.autosaveMs ?? AUTOSAVE_DEBOUNCE_MS;
+    this.#autosaveSlot = options.autosaveSlot ?? autosaveName(map.id);
     this.#unsubscribe = doc.subscribe((change) => {
       if (change.reason === 'apply') this.#opCount++;
     });
@@ -336,6 +350,28 @@ export class EditorDocument {
       );
     }
     return new EditorDocument(map, doc, { ...options, store });
+  }
+
+  /**
+   * Start a clean, untitled authoring session without reading or overwriting
+   * either the map's resumable autosave or any named Gallery scenario.
+   */
+  static async openBlank(map: MapEntry, options: EditorDocumentOptions = {}): Promise<EditorDocument> {
+    const store = options.store ?? new WebTemplateFileStore();
+    const doc = TemplateDocument.create(
+      {
+        name: 'Untitled scenario',
+        sourceMap: { mapId: map.id, mapName: map.label },
+        anchor: { features: [], pin: { mapId: map.id } },
+        appVersion: APP_VERSION,
+      },
+      { historyLimit: HISTORY_LIMIT },
+    );
+    return new EditorDocument(map, doc, {
+      ...options,
+      store,
+      autosaveSlot: blankAutosaveName(map.id),
+    });
   }
 
   // ------------------------------------------------------------------ reads
@@ -681,8 +717,8 @@ export class EditorDocument {
     // Serialise writes: two overlapping saves would race on the same key.
     const run = async (): Promise<void> => {
       try {
-        await this.#store.write(autosaveName(this.map.id), this.#doc);
-        if (this.#namedSave && this.#namedSave !== autosaveName(this.map.id)) {
+        await this.#store.write(this.#autosaveSlot, this.#doc);
+        if (this.#namedSave && this.#namedSave !== this.#autosaveSlot) {
           await this.#store.write(this.#namedSave, this.#doc);
         }
         this.#doc.markClean();
