@@ -1,6 +1,7 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { AmbientTrafficProfile, EvaluateFilters, IntentRubricInput } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
+import type { AmbientPopulationSnapshot } from '../ambient/persistentPopulation';
 import { parsePlaybackPair, type PlaybackBundle } from './model';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 
@@ -18,7 +19,11 @@ export class ScenarioWorkerClient {
     map: MapEntry,
     ambientTraffic: AmbientTrafficProfile,
     baseInstance?: PlaybackBundle['instance'],
-    options: { staticCollisionMode?: 'skip' | 'bounded'; timeoutMs?: number; operation?: 'prepare' | 'ambient-preview' } = {},
+    options: {
+      staticCollisionMode?: 'skip' | 'bounded';
+      timeoutMs?: number;
+      ambientPopulation?: AmbientPopulationSnapshot;
+    } = {},
   ): Promise<PlaybackBundle> {
     this.cancel();
     const id = ++this.sequence;
@@ -77,7 +82,8 @@ export class ScenarioWorkerClient {
         template,
         ambientTraffic,
         ...(baseInstance ? { baseInstance } : {}),
-        operation: options.operation ?? 'prepare',
+        ...(options.ambientPopulation ? { ambientPopulation: options.ambientPopulation } : {}),
+        operation: 'prepare',
         staticCollisionMode: options.staticCollisionMode ?? 'bounded',
         map: {
           id: map.id,
@@ -89,19 +95,6 @@ export class ScenarioWorkerClient {
           signals: map.signals,
         },
       } satisfies ScenarioWorkerRequest);
-    });
-  }
-
-  /** Map-only City population; independent of authored scenario validity. */
-  prepareAmbientPreview(
-    template: ScenarioTemplateV2,
-    map: MapEntry,
-    ambientTraffic: AmbientTrafficProfile,
-  ): Promise<PlaybackBundle> {
-    return this.prepare(template, map, ambientTraffic, undefined, {
-      operation: 'ambient-preview',
-      staticCollisionMode: 'skip',
-      timeoutMs: 30_000,
     });
   }
 

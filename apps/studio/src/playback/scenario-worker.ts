@@ -23,6 +23,7 @@ import {
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { ambientRobustnessGate } from '../ambient/robustnessGate';
+import { isAmbientSimActor, reuseAmbientPopulation, type AmbientPopulationSnapshot } from '../ambient/persistentPopulation';
 import { createAmbientWorldPreviewInput } from '../ambient/worldPreview';
 import type { OpenScenarioSnapshot, OpenScenarioSourceMapping } from '../openscenario/model';
 import { selectPlayableSite } from './site-selection';
@@ -50,8 +51,10 @@ export interface ScenarioWorkerRequest {
     readonly manifest: Record<string, unknown>;
     readonly input: SimScenarioInput;
   };
+  /** Exact generated actors from the persistent authoring world. */
+  ambientPopulation?: AmbientPopulationSnapshot;
   staticCollisionMode?: 'skip' | 'bounded';
-  operation?: 'prepare' | 'ambient-preview' | 'robustness';
+  operation?: 'prepare' | 'robustness';
   evaluationFilters?: EvaluateFilters;
   /** Optional canonical intent rubric. Without it robustness is incomplete, never accepted. */
   intentRubric?: IntentRubricInput;
@@ -105,50 +108,6 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerRequest>): void => {
 };
 
 async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerResponse> {
-  if (request.operation === 'ambient-preview') {
-    const [topology, derived, locations, xodr, signals] = await Promise.all([
-      fetchJson(request.map.topology),
-      fetchJson(request.map.derivedTopology),
-      fetchJson(request.map.locations),
-      fetchText(request.map.xodr),
-      fetchJson(request.map.signals),
-    ]);
-    const topologyIndex = topology as TopologyIndex;
-    const graph = buildLaneGraph(topologyIndex);
-    const index = normalizeDerivedMapIndex(derived, {
-      mapId: request.map.id,
-      topology: topologyIndex as never,
-      locations,
-    });
-    const bundle: MapBundle = {
-      mapId: request.map.id,
-      catalog: locations as MapBundle['catalog'],
-      derived: derived as MapBundle['derived'],
-      topology: topologyIndex,
-      index,
-      graph,
-      signalCatalog: parseMapSignalCatalog(xodr, signals),
-    };
-    const base = withMapControls(createAmbientWorldPreviewInput(request.map.id), buildMapControlPlan(bundle));
-    const ambient = applyAmbientTraffic(base, graph, request.ambientTraffic);
-    const result = runSimulation(ambient.input, { graph, guards: 'throw' });
-    const manifest = {
-      instanceId: `ambient-world:${request.map.id}`,
-      inputHash: contentHash(base),
-      replayKey: { mapId: request.map.id, engineGraphDigest: graph.topologyDigest, siteId: 'ambient-world' },
-      actors: [],
-    };
-    return {
-      id: request.id,
-      ok: true,
-      kind: 'prepare',
-      instance: ambientInstance(manifest, ambient.input, ambient.provenance),
-      trace: result.trace,
-      siteId: 'ambient-world',
-      ambientTraffic: ambient.provenance,
-      mapCollisions: emptyStaticColliderBundle('skipped', 'Ambient world preview does not require static map collision extraction.').diagnostics,
-    };
-  }
   const [topology, derived, locations, xodr, signals] = await Promise.all([
     fetchJson(request.map.topology),
     fetchJson(request.map.derivedTopology),
@@ -179,6 +138,33 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
   };
   const mapControls = buildMapControlPlan(bundle);
 
+  // A blank editor still owns one normal concrete world. It has no authored
+  // rows yet, but its ambient SimActors use the same routes, controls, physics,
+  // collision handling and trace format as every later authored scenario.
+  if (request.template.roles.length === 0 && !request.baseInstance) {
+    const base = withMapControls(withEditablePhysicsDefault(createAmbientWorldPreviewInput(request.map.id)), mapControls);
+    const ambient = applyRequestedAmbientPopulation(base, graph, request, {
+      maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
+    });
+    const result = runSimulation(ambient.input, { graph, guards: 'throw', staticColliders: staticCollision.colliders });
+    const manifest = {
+      instanceId: `ambient-world:${request.map.id}`,
+      inputHash: contentHash(base),
+      replayKey: { mapId: request.map.id, engineGraphDigest: graph.topologyDigest, siteId: 'ambient-world' },
+      actors: [],
+    };
+    return {
+      id: request.id,
+      ok: true,
+      kind: 'prepare',
+      instance: ambientInstance(manifest, ambient.input, ambient.provenance),
+      trace: result.trace,
+      siteId: 'ambient-world',
+      ambientTraffic: ambient.provenance,
+      mapCollisions: staticCollision.diagnostics,
+    };
+  }
+
   if (request.baseInstance) {
     if (request.baseInstance.input.mapId !== request.map.id) {
       throw new Error(`Verified base targets ${request.baseInstance.input.mapId}, not ${request.map.id}`);
@@ -189,9 +175,10 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     const repaired = pruneDanglingAfterInteractions(request.baseInstance.input.interactions);
     const editableInput = withMapControls(withEditablePhysicsDefault({
       ...request.baseInstance.input,
+      actors: request.baseInstance.input.actors.filter((actor) => !isAmbientSimActor(actor)),
       interactions: repaired.interactions,
     }), mapControls);
-    const generated = applyAmbientTraffic(editableInput, graph, request.ambientTraffic, {
+    const generated = applyRequestedAmbientPopulation(editableInput, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
     const ambient = repaired.removed.length === 0 ? generated : {
@@ -228,7 +215,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
       throw new Error(`Scenario is not feasible: ${errors.map((issue) => issue.reason).join(' · ')}`);
     }
     const controlledInput = withMapControls(product.input, mapControls);
-    const ambient = applyAmbientTraffic(controlledInput, graph, request.ambientTraffic, {
+    const ambient = applyRequestedAmbientPopulation(controlledInput, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
     if (request.operation === 'robustness') return robustnessResponse(request, controlledInput, graph);
@@ -270,7 +257,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
   });
   const { site, product } = selected;
   const controlledInput = withMapControls(product.input, mapControls);
-  const ambient = applyAmbientTraffic(controlledInput, graph, request.ambientTraffic, {
+  const ambient = applyRequestedAmbientPopulation(controlledInput, graph, request, {
     maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
   });
   if (request.operation === 'robustness') return robustnessResponse(request, controlledInput, graph);
@@ -287,6 +274,16 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     mapCollisions: staticCollision.diagnostics,
     openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr),
   };
+}
+
+function applyRequestedAmbientPopulation(
+  base: SimScenarioInput,
+  graph: ReturnType<typeof buildLaneGraph>,
+  request: ScenarioWorkerRequest,
+  options: { maxAchievableDecelMps2?: number },
+): ReturnType<typeof applyAmbientTraffic> {
+  return reuseAmbientPopulation(base, request.ambientTraffic, request.ambientPopulation)
+    ?? applyAmbientTraffic(base, graph, request.ambientTraffic, options);
 }
 
 
