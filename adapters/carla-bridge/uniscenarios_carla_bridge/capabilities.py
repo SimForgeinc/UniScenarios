@@ -16,6 +16,7 @@ class Capability:
 BRIDGE_CAPABILITIES: dict[str, Capability] = {
     "actor.lifecycle": Capability("exact", "approximate", "Bridge spawns/destroys on authoritative frame edges."),
     "actor.trajectory": Capability("exact", "approximate", "Bridge applies authoritative world poses and velocity each fixed step."),
+    "actor.native_controls": Capability("exact", "unsupported", "Bridge applies explicit fixed-step vehicle/walker controls; CARLA physics owns the observed trajectory."),
     "actor.route": Capability("exact", "approximate", "Route result is baked into the authoritative trajectory."),
     "actor.lane_change": Capability("exact", "approximate", "Lane-change result is baked; native dynamics are not claimed."),
     "actor.speed": Capability("exact", "exact", "Absolute speed is in the documented ScenarioRunner subset."),
