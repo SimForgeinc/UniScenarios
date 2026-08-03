@@ -146,7 +146,14 @@ describe('buildSignalOverlay', () => {
     expect(new Set(data.signalIds).size).toBe(59);
     expect(Object.values(data.states).every((state) => state === 'unknown')).toBe(true);
     expect(points.geometry.getAttribute('position').count).toBe(59);
-    expect((points.material as ShaderMaterial).uniforms.pointSize!.value).toBe(18);
+    const material = points.material as ShaderMaterial;
+    expect(material.uniforms.pointSize!.value).toBe(18);
+    expect(material.vertexColors).toBe(true);
+    // ShaderMaterial injects the built-in `color` attribute whenever
+    // vertexColors is enabled. Declaring it again in the custom shader makes
+    // the final WebGL program invalid (`color` redefinition).
+    expect(material.vertexShader).not.toMatch(/attribute\s+vec3\s+color\s*;/);
+    expect(material.vertexShader).toContain('pointColor = color;');
     expect(orbs.visible).toBe(true);
     // A sibling layer remains independently visible when furniture is hidden.
     expect(furniture.visible).toBe(false);

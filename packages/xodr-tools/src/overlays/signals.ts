@@ -539,7 +539,6 @@ const TRAFFIC_LIGHT_ORB_RGB = Object.fromEntries(
 
 const ORB_VERTEX_SHADER = /* glsl */ `
   uniform float pointSize;
-  attribute vec3 color;
   varying vec3 pointColor;
   void main() {
     pointColor = color;
