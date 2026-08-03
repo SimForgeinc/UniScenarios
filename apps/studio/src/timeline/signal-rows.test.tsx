@@ -22,8 +22,8 @@ const session = {
 
 const catalog: MapSignalCatalog = {
   heads: [{ id: 'head', roadId: '1', s: 10, dynamic: true }], roadControls: [], speedLimits: [], applicability: [],
-  controllers: [{ id: 'ctrl', sequence: 0, signalIds: ['head'] }],
-  junctions: [{ junctionId: '447', controllerIds: ['ctrl'] }],
+  controllers: [{ id: 'ctrl', sequence: 0, signalIds: ['head'] }, { id: 'alternate', sequence: 1, signalIds: ['head'] }],
+  junctions: [{ junctionId: '447', controllerIds: ['ctrl', 'alternate'] }],
 };
 
 describe('controller-level signal timeline UI', () => {
@@ -42,6 +42,12 @@ describe('controller-level signal timeline UI', () => {
     expect(markup).toContain('data-testid="selected-signal-head"');
     expect(markup).toContain('Intersection 447');
     expect(markup).toContain('data-testid="timeline-add-signal-controller"');
+  });
+
+  it('fails visibly and disables authoring when exact runtime ownership is unresolved', () => {
+    const markup = renderToStaticMarkup(<TimelineDock controller={{ doc: { data: template } } as never} editorState={null} session={session as never} signalCatalog={catalog} signalControlDigest="digest" selectedSignalHeadId="head" selectedSignalResolved={false} />);
+    expect(markup).toContain('Unbound signal — exact controller ownership is unavailable');
+    expect(markup).toContain('disabled="" data-testid="timeline-add-signal-controller"');
   });
 
   it('commits a new clip by replacing its plan exactly once', () => {

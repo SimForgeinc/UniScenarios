@@ -1,5 +1,5 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import type { MapSignalCatalog } from '@uniscenarios/scenario-materializer';
+import type { MapSignalCatalog, SignalControlIndex } from '@uniscenarios/scenario-materializer';
 import { contentHash, type AmbientCandidatePool, type AmbientTrafficProfile, type EvaluateFilters, type IntentRubricInput } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
 import { parsePlaybackPair, type PlaybackBundle } from './model';
@@ -24,6 +24,7 @@ export interface LivePlaybackRun {
 
 export interface SignalAuthoringCatalog {
   readonly signalCatalog: MapSignalCatalog;
+  readonly signalControlIndex: SignalControlIndex;
   readonly controlDigest: string;
 }
 
@@ -68,7 +69,11 @@ export class ScenarioWorkerClient {
           reject(new Error('Simulation worker returned an unexpected response to a signal-catalog request'));
           return;
         }
-        resolve(deepFreeze({ signalCatalog: message.signalCatalog, controlDigest: message.controlDigest }));
+        resolve(deepFreeze({
+          signalCatalog: message.signalCatalog,
+          signalControlIndex: message.signalControlIndex,
+          controlDigest: message.controlDigest,
+        }));
       }});
       worker.postMessage({
         kind: 'inspect-signals', id, revision,

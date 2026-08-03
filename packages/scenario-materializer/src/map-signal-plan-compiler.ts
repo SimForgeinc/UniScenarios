@@ -2,6 +2,11 @@ import type { MapSignalPlan, MapSignalPlanClip } from '@uniscenarios/scenario-mo
 import type { ControlIndication, SignalProgram, TopologyIndex } from '@uniscenarios/sim-engine';
 
 import type { MapSignalCatalog } from './map-signals.js';
+import {
+  buildSignalControlIndex,
+  evaluateSignalReferencePhase,
+  selectSignalReference,
+} from './signal-control.js';
 
 export type MapSignalPlanCompileErrorCode =
   | 'map_signal_plan_map_mismatch'
@@ -91,7 +96,7 @@ function validateControllerStage(
   programs: readonly SignalProgram[],
   options: CompileMapSignalPlansOptions,
   path: string,
-): ReadonlySet<string> {
+): SignalProgram {
   const junction = options.signalCatalog.junctions.find((item) => item.junctionId === plan.binding.junctionId);
   const controller = options.signalCatalog.controllers.find((item) => item.id === clip.reference.controllerId);
   if (!junction || !junction.controllerIds.includes(clip.reference.controllerId) || !controller) {
@@ -121,7 +126,6 @@ function validateControllerStage(
   }
 
   const active = controllerStagePrograms(programs, clip.reference.controllerId);
-  const activeIds = new Set(active.map((program) => program.id));
   const activeConnectingLanes = new Set(active.flatMap((program) =>
     program.stopLines.flatMap((line) => line.connectingLaneRsls),
   ));
@@ -137,28 +141,7 @@ function validateControllerStage(
       );
     }
   }
-  return activeIds;
-}
-
-function authoredPhase(
-  program: SignalProgram,
-  programs: readonly SignalProgram[],
-  plan: MapSignalPlan,
-  clip: MapSignalPlanClip,
-  activeIds: ReadonlySet<string>,
-): ControlIndication {
-  if (program.mapBinding?.junctionId !== plan.binding.junctionId) {
-    throw new Error('internal map signal compiler junction mismatch');
-  }
-  // Fail-safe phase semantics are deliberately expanded here so every consumer
-  // (preview, engine, trace, SUMO ownership and OSC export) sees one atomic
-  // controller evaluation rather than independently interpreting a clip.
-  if (clip.indication === 'red') return 'red';
-  if (clip.indication === 'flashing_red') return 'flashing_red';
-  if (clip.indication === 'flashing_yellow') {
-    return activeIds.has(program.id) ? 'flashing_yellow' : 'flashing_red';
-  }
-  return activeIds.has(program.id) ? clip.indication : 'red';
+  return referenceProgram;
 }
 
 function compileJunction(
@@ -200,11 +183,39 @@ function compileJunction(
     );
   }
 
-  const activeByClip = new Map<string, ReadonlySet<string>>();
+  const controlIndex = buildSignalControlIndex(
+    junctionPrograms,
+    options.signalCatalog.heads.map((head) => head.id),
+  );
+  const phasesByClip = new Map<string, ReadonlyMap<string, ControlIndication>>();
   plan.clips.forEach((clip, clipIndex) => {
-    activeByClip.set(clip.id, validateControllerStage(
+    const referenceProgram = validateControllerStage(
       plan, clip, junctionPrograms, options, `${prefix}.clips.${clipIndex}`,
-    ));
+    );
+    const selection = selectSignalReference(controlIndex, clip.reference.headId, referenceProgram.id);
+    if (!selection || selection.junctionId !== plan.binding.junctionId) {
+      throw new MapSignalPlanCompileError(
+        'map_signal_plan_reference_unbound',
+        `head "${clip.reference.headId}" cannot resolve an exact movement at junction "${plan.binding.junctionId}"`,
+        `${prefix}.clips.${clipIndex}.reference`,
+      );
+    }
+    const evaluation = evaluateSignalReferencePhase(controlIndex, selection, {
+      timeSeconds: clip.startS,
+      referencePhase: clip.indication,
+    });
+    phasesByClip.set(clip.id, new Map(junctionPrograms.map((program) => {
+      const headStates = (program.mapBinding?.headIds ?? []).map((headId) => evaluation.headStates[headId] ?? 'red');
+      const distinct = [...new Set(headStates)];
+      if (distinct.length !== 1) {
+        throw new MapSignalPlanCompileError(
+          'map_signal_plan_controller_conflict',
+          `program "${program.id}" received incompatible physical-head states ${distinct.join(', ')}`,
+          `${prefix}.clips.${clipIndex}.reference`,
+        );
+      }
+      return [program.id, distinct[0]!] as const;
+    })));
   });
 
   const startS = -options.warmupSeconds;
@@ -228,7 +239,7 @@ function compileJunction(
       const sample = from + (to - from) / 2;
       const clip = plan.clips.find((candidate) => sample >= candidate.startS && sample < candidate.endS);
       const phase = clip
-        ? authoredPhase(program, junctionPrograms, plan, clip, activeByClip.get(clip.id)!)
+        ? phasesByClip.get(clip.id)!.get(program.id)!
         : phaseAt(program, sample, options.warmupSeconds);
       const previous = phases[phases.length - 1];
       if (previous?.phase === phase) previous.durationS += to - from;

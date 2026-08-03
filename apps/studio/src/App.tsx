@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Vector3 } from 'three';
+import { Raycaster, Vector2, Vector3 } from 'three';
 import { CityView } from '@uniscenarios/city-renderer/react';
 import type { BenchResult, CityViewer, CityViewerOptions } from '@uniscenarios/city-renderer';
 import { SettingsPanel } from './LayerPanel';
@@ -87,6 +87,8 @@ import {
   routesFromSimulation,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
+import { StudioSignalSelectionModel } from './signalSelection';
+import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializer';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(): CityViewerOptions {
@@ -191,6 +193,7 @@ export function App(): JSX.Element {
   const [openScenarioState, setOpenScenarioState] = useState<OpenScenarioWorkspaceState>({ status: 'empty', reason: 'Place at least one actor before generating an interchange artifact.' });
   const [signalAuthoringCatalog, setSignalAuthoringCatalog] = useState<Awaited<ReturnType<ScenarioWorkerClient['inspectSignals']>> | null>(null);
   const [selectedSignalHeadId, setSelectedSignalHeadId] = useState<string | null>(null);
+  const [selectedSignalReference, setSelectedSignalReference] = useState<SignalReferenceSelection | null>(null);
   const [viewSettings, setViewSettings] = useState<StudioViewSettings>(() => loadStudioViewSettings());
   const viewSettingsRef = useRef(viewSettings);
   viewSettingsRef.current = viewSettings;
@@ -214,6 +217,7 @@ export function App(): JSX.Element {
     let cancelled = false;
     setSignalAuthoringCatalog(null);
     setSelectedSignalHeadId(null);
+    setSelectedSignalReference(null);
     void runtimeWorker.current!.inspectSignals(map).then((catalog) => {
       if (!cancelled) setSignalAuthoringCatalog(catalog);
     }).catch((reason: unknown) => {
@@ -221,6 +225,19 @@ export function App(): JSX.Element {
     });
     return () => { cancelled = true; };
   }, [map]);
+
+  const signalSelectionModel = useMemo(
+    () => signalAuthoringCatalog
+      ? new StudioSignalSelectionModel(signalAuthoringCatalog.signalControlIndex)
+      : null,
+    [signalAuthoringCatalog],
+  );
+
+  useEffect(() => {
+    if (!signalSelectionModel) return;
+    setSelectedSignalReference(signalSelectionModel.snapshot);
+    return signalSelectionModel.subscribe(setSelectedSignalReference);
+  }, [signalSelectionModel]);
 
 
   const onReady = useCallback((next: CityViewer) => {
@@ -473,6 +490,53 @@ export function App(): JSX.Element {
   }, [ambientPreview, authoredPlayback, cameraPlaybackRequested, editorController, mapWorkspaceOpen,
     playbackBundle, state, studioSession.state.mode, viewSettings.routes]);
   const authoringEnabled = playbackBundle === null && studioSession.state.mode === 'authoring' && !mapWorkspaceOpen;
+  const signalPickingEnabled = authoringEnabled && state?.mode === 'idle';
+
+  useEffect(() => {
+    if (!overlays) return;
+    overlays.setSignalHighlight(selectedSignalReference ?? (
+      selectedSignalHeadId ? { selectedHeadId: selectedSignalHeadId } : null
+    ));
+    return () => { overlays.setSignalHighlight(null); };
+  }, [overlays, selectedSignalHeadId, selectedSignalReference]);
+
+  useEffect(() => {
+    const host = hostRef.current;
+    if (!host || !viewer || !overlays || !signalSelectionModel || !signalPickingEnabled) return;
+    const raycaster = new Raycaster();
+    const pointer = new Vector2();
+    let press: { pointerId: number; x: number; y: number } | null = null;
+    const onPointerDown = (event: PointerEvent): void => {
+      if (event.button !== 0 || !event.composedPath().includes(viewer.renderer.domElement)) return;
+      press = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+    };
+    const onPointerUp = (event: PointerEvent): void => {
+      const start = press;
+      press = null;
+      if (!start || start.pointerId !== event.pointerId || event.button !== 0) return;
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 5) return;
+      const canvas = viewer.renderer.domElement;
+      if (!event.composedPath().includes(canvas)) return;
+      const bounds = canvas.getBoundingClientRect();
+      if (bounds.width <= 0 || bounds.height <= 0) return;
+      pointer.set(
+        ((event.clientX - bounds.left) / bounds.width) * 2 - 1,
+        -((event.clientY - bounds.top) / bounds.height) * 2 + 1,
+      );
+      raycaster.setFromCamera(pointer, viewer.camera);
+      const headId = overlays.pickSignalOrb(raycaster);
+      setSelectedSignalHeadId(headId);
+      if (headId) signalSelectionModel.selectHead(headId);
+      else signalSelectionModel.clear();
+    };
+    host.addEventListener('pointerdown', onPointerDown, { capture: true });
+    host.addEventListener('pointerup', onPointerUp, { capture: true });
+    return () => {
+      host.removeEventListener('pointerdown', onPointerDown, { capture: true });
+      host.removeEventListener('pointerup', onPointerUp, { capture: true });
+    };
+  }, [overlays, signalPickingEnabled, signalSelectionModel, viewer]);
+
   const changeAmbientTraffic = useCallback((profile: ResolvedAmbientTrafficProfile) => {
     setAmbientTrafficProfile(profile);
     setSumoFallbackReason(null);
@@ -1128,6 +1192,9 @@ export function App(): JSX.Element {
             signalCatalog={signalAuthoringCatalog?.signalCatalog ?? null}
             signalControlDigest={signalAuthoringCatalog?.controlDigest ?? null}
             selectedSignalHeadId={selectedSignalHeadId}
+            selectedSignalJunctionId={selectedSignalReference?.junctionId ?? null}
+            selectedSignalControllerId={selectedSignalReference?.controllerIds[0] ?? null}
+            selectedSignalResolved={selectedSignalHeadId === null || selectedSignalReference !== null}
           />
         </div>
       ) : null}

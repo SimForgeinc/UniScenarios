@@ -3,7 +3,7 @@
 import { matchAnchorReport, normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
 import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
 import { AsamExportError } from '@uniscenarios/cli/asam/types';
-import { adaptTemplate, buildMapControlPlan, compileMapSignalPlans, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan, type MapSignalCatalog } from '@uniscenarios/scenario-materializer';
+import { adaptTemplate, buildMapControlPlan, buildSignalControlIndex, compileMapSignalPlans, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan, type MapSignalCatalog, type SignalControlIndex } from '@uniscenarios/scenario-materializer';
 import {
   buildLaneGraph,
   contentHash,
@@ -123,7 +123,7 @@ export interface AmbientRobustnessSummary {
 }
 
 export type ScenarioWorkerResponse =
-  | { id: number; revision: string; ok: true; kind: 'signal-catalog'; signalCatalog: MapSignalCatalog; controlDigest: string }
+  | { id: number; revision: string; ok: true; kind: 'signal-catalog'; signalCatalog: MapSignalCatalog; signalControlIndex: SignalControlIndex; controlDigest: string }
   | { id: number; revision: string; ok: true; kind: 'prepare'; runtimeKey: string; cache: 'cold' | 'warm'; timing?: { totalMs: number; compileCache: 'hit' | 'miss' }; instance: unknown; trace: SimTrace; siteId: string; ambientTraffic: AmbientTrafficProvenance; ambientCandidatePool: AmbientCandidatePool; openScenario?: OpenScenarioSnapshot; mapCollisions: StaticColliderDiagnostics }
   | { id: number; revision: string; ok: true; kind: 'robustness'; report: AmbientRobustnessSummary }
   | { id: number; revision: string; ok: true; kind: 'ready' | 'progress' | 'complete'; trace: SimTrace; recordedUntil: number }
@@ -194,6 +194,10 @@ scope.onmessage = (event: MessageEvent<ScenarioWorkerMessage>): void => {
         ok: true,
         kind: 'signal-catalog',
         signalCatalog: runtime.bundle.signalCatalog,
+        signalControlIndex: buildSignalControlIndex(
+          runtime.controls.signalPrograms,
+          runtime.bundle.signalCatalog.heads.map((head) => head.id),
+        ),
         controlDigest: runtime.identity.controlDigest,
       } satisfies ScenarioWorkerResponse),
       (reason: unknown) => postFailure(request.id, request.revision, reason),

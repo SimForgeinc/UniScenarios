@@ -28,6 +28,18 @@ export function physicalSignalChoices(
     || left.controllerId.localeCompare(right.controllerId));
 }
 
+/** Keep a shared physical head on the exact junction/controller stage derived
+ * by the executable reverse index; catalog order is never treated as ownership. */
+export function physicalSignalChoiceIndex(
+  choices: readonly PhysicalSignalChoice[],
+  junctionId: string | null | undefined,
+  controllerId: string | null | undefined,
+): number {
+  const exact = choices.findIndex((choice) => choice.junctionId === junctionId
+    && choice.controllerId === controllerId);
+  return exact >= 0 ? exact : 0;
+}
+
 export function createMapSignalPlan(
   mapId: string,
   controlDigest: string,
@@ -59,4 +71,3 @@ export function ownedSignalHeadIds(
     .filter((controller) => controllerIds.has(controller.id))
     .flatMap((controller) => controller.signalIds));
 }
-
