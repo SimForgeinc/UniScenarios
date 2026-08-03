@@ -1,0 +1,555 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+      "templateVersion": 2,
+      "templateDigest": "a071b7d58f5cab1b",
+      "mapId": "el-camino-road",
+      "matcherIndexDigest": "986a9135415f3b045a7fb5d8f552bea3a1e7bdc9f35aba33e70092ee1dbd91d0",
+      "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
+      "siteId": "studio:el-camino-road",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.2.6",
+      "paramSeed": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+      "drawIndex": 0
+    },
+    "instanceId": "ec-09-09-stalled-vehicle-beyond-sight-v2#0",
+    "archetype": "gallery.09-stalled-vehicle-beyond-sight",
+    "negativeControl": false,
+    "metricSubject": "focus-vehicle",
+    "operationalVariant": null,
+    "site": {
+      "siteId": "studio:el-camino-road",
+      "score": 1,
+      "verdict": "exact",
+      "originFeatureId": "map:el-camino-road",
+      "entryLaneRsl": "71:0:3",
+      "egoTurn": null,
+      "degradationSummary": "exact map-bound Studio placement",
+      "matchedReasons": [
+        "anchor.pin.mapId",
+        "scene_absolute"
+      ]
+    },
+    "params": {
+      "values": {
+        "egoSpeedKph": 35,
+        "cartSpeedKph": 9
+      },
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "focus-vehicle",
+        "actorKind": "car",
+        "roleKind": "focus",
+        "laneRsl": "71:0:3",
+        "spawnS": 9.920763285649912,
+        "initialSpeedMps": 9.722222222222223,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "oncoming-glare",
+        "actorKind": "car",
+        "roleKind": "supporting",
+        "laneRsl": "685:0:-1",
+        "spawnS": 40.769997743948764,
+        "initialSpeedMps": 8.88888888888889,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "shopper",
+        "actorKind": "pedestrian",
+        "roleKind": "supporting",
+        "laneRsl": "7:0:-2",
+        "spawnS": 8.247138914322363,
+        "initialSpeedMps": 1.1111111111111112,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "stalled-vehicle",
+        "actorKind": "car",
+        "roleKind": "supporting",
+        "laneRsl": "7:0:-2",
+        "spawnS": 13.247138914322363,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "umbrella-pedestrian",
+        "actorKind": "pedestrian",
+        "roleKind": "supporting",
+        "laneRsl": "7:0:-2",
+        "spawnS": 27.247138914322363,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      }
+    ],
+    "props": [],
+    "arrival": [],
+    "inputHash": "f38564b35983fb73ba48b5aae8bb87d53950087dcd696cd3d8d537a0dcfa933c",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "roles.shopper.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.shopper.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.shopper.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.focus-vehicle.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      },
+      {
+        "path": "roles.cart.extensions.placementFeature",
+        "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "el-camino-road",
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "dt": 0.02,
+    "seed": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+    "operationalConditions": {
+      "weather": "rain",
+      "timeOfDay": "dusk",
+      "traffic": "moderate",
+      "visibility": "directional-glare",
+      "effects": {
+        "visibilityRangeM": 105,
+        "frictionScale": 0.58,
+        "trafficSpeedFactor": 1
+      }
+    },
+    "metricSubject": "focus-vehicle",
+    "actors": [
+      {
+        "id": "focus-vehicle",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "71:0:3",
+            "s": 9.920763285649912,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 1318.2152238430003,
+            "z": -1322.2130499378243,
+            "headingRad": 2.5517081137100868
+          },
+          "speedMps": 9.722222222222223
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "71:0:3",
+              "815:0:1",
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4",
+              "74:0:-4",
+              "595:0:-1",
+              "79:0:-2"
+            ]
+          },
+          "cruiseSpeedMps": 9.722222222222223
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:focus-vehicle",
+          "class:car",
+          "binding:scene_absolute",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "oncoming-glare",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "685:0:-1",
+            "s": 40.769997743948764,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 1134.9050365492174,
+            "z": -1432.49990295292,
+            "headingRad": -0.5683943981876284
+          },
+          "speedMps": 8.88888888888889
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "685:0:-1",
+              "69:0:-2",
+              "2030:0:-1",
+              "46:0:-2",
+              "820:0:-1",
+              "92:0:-1",
+              "92:1:-1"
+            ]
+          },
+          "cruiseSpeedMps": 8.88888888888889
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:oncoming-glare",
+          "class:car",
+          "binding:scene_absolute",
+          "catalog:vehicle.suv"
+        ]
+      },
+      {
+        "id": "shopper",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "7:0:-2",
+            "s": 8.247138914322363,
+            "tFrac": -1
+          },
+          "pose": {
+            "x": 1274.9764995195173,
+            "z": -1356.3241845092414,
+            "headingRad": 2.529191678973946
+          },
+          "speedMps": 1.1111111111111112
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4"
+            ]
+          },
+          "cruiseSpeedMps": 1.1111111111111112
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:shopper",
+          "class:pedestrian",
+          "binding:scene_absolute",
+          "catalog:pedestrian.adult_walking"
+        ]
+      },
+      {
+        "id": "stalled-vehicle",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "7:0:-2",
+            "s": 13.247138914322363,
+            "tFrac": -0.8935565691491273
+          },
+          "pose": {
+            "x": 1270.6563298352626,
+            "z": -1358.8552355526194,
+            "headingRad": 2.5258646078943743
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": false,
+            "yieldToVehicles": false,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": false,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4"
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:stalled-vehicle",
+          "class:car",
+          "catalog:vehicle.suv",
+          "hazard:disabled"
+        ]
+      },
+      {
+        "id": "umbrella-pedestrian",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "7:0:-2",
+            "s": 27.247138914322363,
+            "tFrac": -0.8265030769172005
+          },
+          "pose": {
+            "x": 1258.827178750204,
+            "z": -1366.5357126622525,
+            "headingRad": 2.560913247413888
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "7:0:-2",
+              "735:0:-1",
+              "73:0:-4",
+              "365:0:-4"
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:umbrella-pedestrian",
+          "class:pedestrian",
+          "binding:scene_absolute",
+          "catalog:pedestrian.adult_walking"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "focus-vehicle-progressive-brake",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 3.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "cubic",
+          "constraint": "time",
+          "value": 2.7
+        }
+      },
+      {
+        "id": "pedestrian-notices-cart",
+        "actorId": "umbrella-pedestrian",
+        "trigger": {
+          "kind": "at",
+          "t": 14
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "pedestrian-steps",
+        "actorId": "umbrella-pedestrian",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 0.8333333333333334
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "shopper-chases",
+        "actorId": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 1.1111111111111112
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "shopper-path",
+        "actorId": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "route",
+        "target": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 1278.4917605528792,
+              "z": -1354.26875329166
+            },
+            {
+              "x": 1275.0166353780426,
+              "z": -1356.381317509884
+            }
+          ]
+        }
+      },
+      {
+        "id": "shopper-stops",
+        "actorId": "shopper",
+        "trigger": {
+          "kind": "at",
+          "t": 6.8
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        }
+      },
+      {
+        "id": "stalled-vehicle-hazards-on",
+        "actorId": "stalled-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "lights.hazard",
+          "value": true
+        }
+      }
+    ],
+    "signalPrograms": [],
+    "roadControls": [],
+    "props": [],
+    "occluders": [],
+    "occlusionPairs": []
+  }
+}

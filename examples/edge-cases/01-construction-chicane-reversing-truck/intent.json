@@ -1,0 +1,131 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-01-01-construction-chicane-reversing-truck-v2",
+  "ordinal": 1,
+  "title": "Construction Chicane with a Reversing Truck",
+  "durationSeconds": 20,
+  "mapId": "belmont-research-center",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle negotiates an alternating-flow construction chicane while a work vehicle reverses and a worker enters the constrained corridor.",
+  "tags": [
+    "construction",
+    "chicane",
+    "reversing-truck"
+  ],
+  "interactionIds": [
+    "focus-vehicle-enters-cautiously",
+    "focus-vehicle-ignores-stale-red",
+    "focus-vehicle-keeps-right",
+    "focus-vehicle-resumes-after-both-clear",
+    "focus-vehicle-stops-for-worker",
+    "signal-behind-turns-red",
+    "van-clears",
+    "van-keeps-clear-of-work-zone",
+    "van-retains-exit",
+    "worker-clears",
+    "worker-emerges",
+    "worker-enters-shared-lane"
+  ],
+  "windows": [
+    {
+      "interactionId": "focus-vehicle-enters-cautiously",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 2.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-ignores-stale-red",
+      "actorId": "focus-vehicle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "focus-vehicle-keeps-right",
+      "actorId": "focus-vehicle",
+      "startS": 3,
+      "endS": 5.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-resumes-after-both-clear",
+      "actorId": "focus-vehicle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "focus-vehicle-stops-for-worker",
+      "actorId": "focus-vehicle",
+      "startS": 10.2,
+      "endS": 12.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-behind-turns-red",
+      "actorId": "focus-vehicle",
+      "startS": 4,
+      "endS": 4.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "van-clears",
+      "actorId": "reversing-truck",
+      "startS": 16.4,
+      "endS": 16.9,
+      "dependent": false
+    },
+    {
+      "interactionId": "van-keeps-clear-of-work-zone",
+      "actorId": "reversing-truck",
+      "startS": 0,
+      "endS": 1,
+      "dependent": false
+    },
+    {
+      "interactionId": "van-retains-exit",
+      "actorId": "reversing-truck",
+      "startS": 4,
+      "endS": 4.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "worker-clears",
+      "actorId": "worker",
+      "startS": 16.8,
+      "endS": 17.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "worker-emerges",
+      "actorId": "worker",
+      "startS": 10,
+      "endS": 10.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "worker-enters-shared-lane",
+      "actorId": "worker",
+      "startS": 12.5,
+      "endS": 12.75,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The shipped truck has no reverse gear animation; the validated oncoming work-van motion is used as an explicit reversing-truck surrogate.",
+    "The carried pipe is an attached collidable construction prop."
+  ]
+}

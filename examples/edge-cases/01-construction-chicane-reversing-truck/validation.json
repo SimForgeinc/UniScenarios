@@ -1,0 +1,980 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "provider": "native",
+  "command": "uniscenarios debug 01-construction-chicane-reversing-truck/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/01-construction-chicane-reversing-truck/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "belmont-research-center",
+    "provider": "native",
+    "inputHash": "c81054d5d3ce0cc6c20df10459b932d4cca38898a42fdd1b487490c1505df9a5",
+    "traceDigest": "f51d29198a72ec25f224f37824192505128e16bc0ddc629ceb7c31c38e5b5eda",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 189.482334,
+    "feasible": true,
+    "manifest": {
+      "kind": "scenario-instance-manifest",
+      "manifestVersion": 1,
+      "replayKey": {
+        "templateId": "ec-01-01-construction-chicane-reversing-truck-v2",
+        "templateVersion": 2,
+        "templateDigest": "e19adfb773196dc3",
+        "mapId": "belmont-research-center",
+        "matcherIndexDigest": "f7a0c32a33a8f97daca1d0c24aee8022dc2d6d5221c63ccbdf3e6ae6e7e1518f",
+        "engineGraphDigest": "35cf2b16a1d308c6436089a0edf66f20c87a79da12e79472a03a2f568ba28f63",
+        "siteId": "0a4650e5055bf351",
+        "matcherVersion": "1.0.0",
+        "solverVersion": "0.2.5",
+        "paramSeed": "ec-01-01-construction-chicane-reversing-truck-v2",
+        "drawIndex": 0
+      },
+      "instanceId": "ec-01-01-construction-chicane-reversing-truck-v2#0",
+      "archetype": "gallery.01-construction-chicane-reversing-truck",
+      "negativeControl": false,
+      "metricSubject": "focus-vehicle",
+      "operationalVariant": null,
+      "site": {
+        "siteId": "0a4650e5055bf351",
+        "score": 0.5335,
+        "verdict": "degraded",
+        "originFeatureId": "seg_9f72bc3e7b10c33b",
+        "entryLaneRsl": "93:0:-1",
+        "egoTurn": null,
+        "degradationSummary": "Degraded match (score 0.53). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=-180 m, wanted [25, 55]. Presentation was relaxed; the scenario still tests what it was written to test.",
+        "matchedReasons": [
+          "corridor.curvatureDegPer10m holds over the whole interval (worst 0.3)",
+          "231.03 m of runway available, 180 m needed",
+          "180 m of runway available, 180 m needed",
+          "corridor.throughLanesOpposing holds over the whole interval (worst 1)",
+          "corridor.throughLanesSameDir holds over the whole interval (worst 1)"
+        ]
+      },
+      "params": {
+        "values": {
+          "chicaneSpeedKph": 14,
+          "workerSpeedKph": 5.2
+        },
+        "categorical": {},
+        "rejectedConstraints": []
+      },
+      "actors": [
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": "119:0:1",
+          "spawnS": 49.595410426467964,
+          "initialSpeedMps": 7.777777777777779,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "reversing-truck",
+          "actorKind": "truck",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 1.5,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "worker",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": "402:0:1",
+          "spawnS": 6.389371289480245,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        }
+      ],
+      "props": [
+        {
+          "id": "excavator",
+          "catalogId": "construction.excavator",
+          "pose": {
+            "x": -139.5196074222747,
+            "z": -43.15030205640363,
+            "headingRad": -0.9460018243362232
+          },
+          "dims": {
+            "l": 5.15,
+            "w": 2.24,
+            "h": 2.71
+          },
+          "scale": 0.3,
+          "collidable": true,
+          "essentiality": "required",
+          "occludes": {
+            "observer": "focus-vehicle",
+            "target": "worker"
+          },
+          "targetRevealToConflictS": 1.2
+        },
+        {
+          "id": "far-portable-signal",
+          "catalogId": "construction.portable_signal",
+          "pose": {
+            "x": -82.1457538007079,
+            "z": -17.00654863158384,
+            "headingRad": 5.607693653952516
+          },
+          "dims": {
+            "l": 1.45,
+            "w": 1.2,
+            "h": 3.25
+          },
+          "scale": 1,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "left-barrier-run-0",
+          "groupId": "left-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -114.78220188322571,
+            "z": -39.72414137541257,
+            "headingRad": -0.008793205442471641
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "left-barrier-run-1",
+          "groupId": "left-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -107.78164511706701,
+            "z": -39.6248845466767,
+            "headingRad": -0.009137761799782977
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "left-barrier-run-2",
+          "groupId": "left-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -100.77848826850473,
+            "z": -39.52021028769721,
+            "headingRad": -0.01028672200841169
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "left-barrier-run-3",
+          "groupId": "left-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -93.77687046691273,
+            "z": -39.406255180110456,
+            "headingRad": -0.011023003514342433
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "near-portable-signal",
+          "catalogId": "construction.portable_signal",
+          "pose": {
+            "x": -147.4279888606256,
+            "z": -104.72861804908584,
+            "headingRad": -1.5781514716113687
+          },
+          "dims": {
+            "l": 1.45,
+            "w": 1.2,
+            "h": 3.25
+          },
+          "scale": 1,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "right-barrier-run-0",
+          "groupId": "right-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -147.67273256354204,
+            "z": -74.72942235739416,
+            "headingRad": -1.5780945517411453
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "right-barrier-run-1",
+          "groupId": "right-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -147.72908934957238,
+            "z": -67.72937922607464,
+            "headingRad": -1.5780119476658205
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "right-barrier-run-2",
+          "groupId": "right-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -147.78477949557802,
+            "z": -60.72924685246429,
+            "headingRad": -1.5779036457718814
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "right-barrier-run-3",
+          "groupId": "right-barrier-run",
+          "catalogId": "construction.jersey_barrier_run",
+          "pose": {
+            "x": -147.83962026699317,
+            "z": -53.729023585144844,
+            "headingRad": -1.577769646056443
+          },
+          "dims": {
+            "l": 12.2,
+            "w": 0.61,
+            "h": 0.81
+          },
+          "scale": 0.7,
+          "collidable": true,
+          "essentiality": "required"
+        },
+        {
+          "id": "worker-pipe",
+          "catalogId": "construction.long_pipe",
+          "pose": {
+            "x": -144.12498939349356,
+            "z": -116.70464814855733,
+            "headingRad": -1.578038198275027
+          },
+          "attachment": {
+            "actorId": "worker",
+            "longitudinalM": 0,
+            "lateralM": -4,
+            "heightM": 1.1,
+            "headingOffsetRad": 0
+          },
+          "dims": {
+            "l": 8,
+            "w": 0.62,
+            "h": 0.62
+          },
+          "scale": 1,
+          "collidable": true,
+          "essentiality": "required"
+        }
+      ],
+      "arrival": [],
+      "inputHash": "c81054d5d3ce0cc6c20df10459b932d4cca38898a42fdd1b487490c1505df9a5",
+      "feasible": true,
+      "issues": [],
+      "notes": [
+        {
+          "path": "roles.reversing-truck.route",
+          "reason": "lane chain extended upstream by 2 lane(s) to reach the site-evaluated spawn at frame s=95.0 m"
+        },
+        {
+          "path": "props.excavator",
+          "reason": "occlusion declared between focus-vehicle and worker; reveal-to-conflict is reported by the engine, not solved for"
+        }
+      ]
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 120.273334,
+    "nativeTicksPerSecond": 8322.709338,
+    "simulatedSecondsPerWallSecond": 166.287899,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 3,
+    "ambientActorCount": 0,
+    "signalCount": 2,
+    "interactionCount": 12,
+    "collisionCount": 0,
+    "roadDepartureCount": 1,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": -144.312255,
+          "z": -91.220283,
+          "laneRsl": "119:0:1"
+        },
+        "end": {
+          "x": -143.75258,
+          "z": -43.863161,
+          "laneRsl": "402:0:1"
+        },
+        "displacementM": 47.360429,
+        "maxSpeedMps": 7.171626,
+        "observedLanes": [
+          "119:0:1",
+          "402:0:1"
+        ]
+      },
+      "reversing-truck": {
+        "samples": 41,
+        "start": {
+          "x": -123.297203,
+          "z": -37.502161,
+          "laneRsl": null
+        },
+        "end": {
+          "x": -112.797203,
+          "z": -34.707731,
+          "laneRsl": null
+        },
+        "displacementM": 10.865488,
+        "maxSpeedMps": 1.525055,
+        "observedLanes": []
+      },
+      "worker": {
+        "samples": 41,
+        "start": {
+          "x": -137.579669,
+          "z": -41.222341,
+          "laneRsl": "402:0:1"
+        },
+        "end": {
+          "x": -140.925714,
+          "z": -36.069468,
+          "laneRsl": null
+        },
+        "displacementM": 6.14395,
+        "maxSpeedMps": 1.680642,
+        "observedLanes": [
+          "402:0:1"
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "focus-vehicle-enters-cautiously",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 3.8888888888888893
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 2.5
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-enters-cautiously",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 10.200000000000001,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-stops-for-worker",
+          "preemptedInteractionId": "focus-vehicle-enters-cautiously"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-ignores-stale-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "signal-behind-turns-red",
+        "delayS": 0.02
+      },
+      "verb": "set",
+      "target": {
+        "key": "rules.obeySignals",
+        "value": false
+      },
+      "events": [
+        {
+          "t": 4.0200000000000005,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-ignores-stale-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-keeps-right",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 3
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": -0.35
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "time",
+        "value": 2.5
+      },
+      "events": [
+        {
+          "t": 3,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-keeps-right",
+          "actorId": "focus-vehicle",
+          "verb": "laneOffset",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-resumes-after-both-clear",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "worker-clears",
+        "delayS": 2.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 3.3333333333333335
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.5
+      },
+      "events": [
+        {
+          "t": 19.3,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-resumes-after-both-clear",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 19.3,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-resumes-after-both-clear",
+          "preemptedInteractionId": "focus-vehicle-stops-for-worker"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-stops-for-worker",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 10.2
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 2
+      },
+      "events": [
+        {
+          "t": 10.200000000000001,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-stops-for-worker",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 10.200000000000001,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-stops-for-worker",
+          "preemptedInteractionId": "focus-vehicle-enters-cautiously"
+        },
+        {
+          "t": 19.3,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-resumes-after-both-clear",
+          "preemptedInteractionId": "focus-vehicle-stops-for-worker"
+        }
+      ]
+    },
+    {
+      "id": "signal-behind-turns-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 4
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:control:near-portal-signal.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 4,
+          "kind": "trigger_fired",
+          "interactionId": "signal-behind-turns-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "van-clears",
+      "actorId": "reversing-truck",
+      "trigger": {
+        "kind": "at",
+        "t": 16.4
+      },
+      "verb": "set",
+      "target": {
+        "key": "lights.indicator",
+        "value": "right"
+      },
+      "events": [
+        {
+          "t": 16.4,
+          "kind": "trigger_fired",
+          "interactionId": "van-clears",
+          "actorId": "reversing-truck",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "van-keeps-clear-of-work-zone",
+      "actorId": "reversing-truck",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": -0.8
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "time",
+        "value": 1
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "van-keeps-clear-of-work-zone",
+          "actorId": "reversing-truck",
+          "verb": "laneOffset",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "van-retains-exit",
+      "actorId": "reversing-truck",
+      "trigger": {
+        "kind": "at",
+        "t": 4
+      },
+      "verb": "set",
+      "target": {
+        "key": "rules.collisionAvoidance",
+        "value": true
+      },
+      "events": [
+        {
+          "t": 4,
+          "kind": "trigger_fired",
+          "interactionId": "van-retains-exit",
+          "actorId": "reversing-truck",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "worker-clears",
+      "actorId": "worker",
+      "trigger": {
+        "kind": "at",
+        "t": 16.8
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.4
+      },
+      "events": [
+        {
+          "t": 16.8,
+          "kind": "trigger_fired",
+          "interactionId": "worker-clears",
+          "actorId": "worker",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 16.8,
+          "kind": "preemption",
+          "actorId": "worker",
+          "axis": "longitudinal",
+          "byInteractionId": "worker-clears",
+          "preemptedInteractionId": "worker-enters-shared-lane"
+        }
+      ]
+    },
+    {
+      "id": "worker-emerges",
+      "actorId": "worker",
+      "trigger": {
+        "kind": "at",
+        "t": 10
+      },
+      "verb": "route",
+      "target": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": -137.57964443179586,
+            "z": -41.222325859043906
+          },
+          {
+            "x": -137.95040435968858,
+            "z": -40.65136376155387
+          },
+          {
+            "x": -138.50654425152763,
+            "z": -39.794920615318816
+          },
+          {
+            "x": -141.28724371072295,
+            "z": -35.51270488414356
+          }
+        ]
+      },
+      "events": [
+        {
+          "t": 10,
+          "kind": "trigger_fired",
+          "interactionId": "worker-emerges",
+          "actorId": "worker",
+          "verb": "route",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "worker-enters-shared-lane",
+      "actorId": "worker",
+      "trigger": {
+        "kind": "at",
+        "t": 12.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 1.4444444444444446
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.25
+      },
+      "events": [
+        {
+          "t": 12.5,
+          "kind": "trigger_fired",
+          "interactionId": "worker-enters-shared-lane",
+          "actorId": "worker",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 16.8,
+          "kind": "preemption",
+          "actorId": "worker",
+          "axis": "longitudinal",
+          "byInteractionId": "worker-clears",
+          "preemptedInteractionId": "worker-enters-shared-lane"
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [],
+    "collisions": [],
+    "roadDepartures": [
+      {
+        "t": -1,
+        "kind": "road_departure_prevented",
+        "actorId": "worker",
+        "laneRsl": "402:0:1",
+        "lateralErrorM": 3.398939184065963,
+        "allowedCenterOffsetM": 1.875556783315106
+      }
+    ],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [
+      {
+        "t": 10.200000000000001,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-stops-for-worker",
+        "preemptedInteractionId": "focus-vehicle-enters-cautiously"
+      },
+      {
+        "t": 16.8,
+        "kind": "preemption",
+        "actorId": "worker",
+        "axis": "longitudinal",
+        "byInteractionId": "worker-clears",
+        "preemptedInteractionId": "worker-enters-shared-lane"
+      },
+      {
+        "t": 19.3,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-resumes-after-both-clear",
+        "preemptedInteractionId": "focus-vehicle-stops-for-worker"
+      }
+    ],
+    "fallbacks": [],
+    "routes": {
+      "focus-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "93:0:-1",
+            "1307:0:-1",
+            "76:0:1",
+            "476:0:1",
+            "75:0:1",
+            "1245:0:1",
+            "119:0:1",
+            "402:0:1",
+            "124:0:-1",
+            "1315:0:-1",
+            "34:0:1",
+            "816:0:1",
+            "67:0:1",
+            "909:0:1",
+            "92:0:1"
+          ]
+        },
+        "initialLane": "119:0:1",
+        "observedLanes": [
+          "119:0:1",
+          "402:0:1"
+        ],
+        "routeDistanceM": 47.447025,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "reversing-truck": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": -124.7972032366159,
+              "z": -37.50216071128074
+            },
+            {
+              "x": -112.7972032366159,
+              "z": -37.50216071128074
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 10.500035,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "truck"
+        }
+      },
+      "worker": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "93:0:-1",
+            "1307:0:-1",
+            "76:0:1",
+            "476:0:1",
+            "75:0:1",
+            "1245:0:1",
+            "119:0:1",
+            "402:0:1",
+            "124:0:-1",
+            "1315:0:-1",
+            "34:0:1",
+            "816:0:1",
+            "67:0:1",
+            "909:0:1"
+          ]
+        },
+        "initialLane": "402:0:1",
+        "observedLanes": [
+          "402:0:1"
+        ],
+        "routeDistanceM": -253.668342,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "pedestrian"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": {
+      "value": 3.482,
+      "t": 20,
+      "pair": [
+        "focus-vehicle",
+        "worker"
+      ]
+    },
+    "minDistance": [
+      {
+        "pair": [
+          "focus-vehicle",
+          "reversing-truck"
+        ],
+        "minDistanceM": 35.107,
+        "t": 7.2
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "worker"
+        ],
+        "minDistanceM": 3.932,
+        "t": 13.82
+      }
+    ],
+    "requiredDecelMax": {
+      "focus-vehicle": 0.618,
+      "reversing-truck": 0,
+      "worker": 0
+    },
+    "revealToConflict": null,
+    "declaredOcclusion": [
+      {
+        "observer": "focus-vehicle",
+        "target": "worker",
+        "pair": [
+          "focus-vehicle",
+          "worker"
+        ],
+        "occluderId": "excavator",
+        "relevantOccluderIds": [
+          "excavator"
+        ],
+        "status": "revealed_before_conflict",
+        "firstBlockedT": 10,
+        "losOpenT": 10.98,
+        "conflictT": 23.482,
+        "revealToConflictS": 12.502
+      }
+    ],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": true,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

@@ -1,0 +1,92 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-06-06-wrong-way-vehicle-blind-approach-v2",
+  "ordinal": 6,
+  "title": "Wrong-Way Vehicle on a Blind Approach",
+  "durationSeconds": 20,
+  "mapId": "easterbrook-discovery-school",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle encounters a wrong-way sedan beyond limited sight distance while escape space is constrained.",
+  "tags": [
+    "wrong-way",
+    "limited-sight",
+    "avoidance"
+  ],
+  "interactionIds": [
+    "focus-vehicle-brakes",
+    "focus-vehicle-edges-right",
+    "hold-position",
+    "motorcycle-brakes",
+    "wrong-way-brakes",
+    "wrong-way-offsets",
+    "wrong-way-visible"
+  ],
+  "windows": [
+    {
+      "interactionId": "focus-vehicle-brakes",
+      "actorId": "focus-vehicle",
+      "startS": 9.1,
+      "endS": 11.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-edges-right",
+      "actorId": "focus-vehicle",
+      "startS": 12,
+      "endS": 14.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "hold-position",
+      "actorId": "focus-vehicle",
+      "startS": 18,
+      "endS": 18.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "motorcycle-brakes",
+      "actorId": "following-motorcycle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "wrong-way-brakes",
+      "actorId": "wrong-way-sedan",
+      "startS": 9.2,
+      "endS": 11.299999999999999,
+      "dependent": false
+    },
+    {
+      "interactionId": "wrong-way-offsets",
+      "actorId": "wrong-way-sedan",
+      "startS": 13,
+      "endS": 15,
+      "dependent": false
+    },
+    {
+      "interactionId": "wrong-way-visible",
+      "actorId": "wrong-way-sedan",
+      "startS": 7.6,
+      "endS": 8.1,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "A true terrain-derived blind crest is unavailable on every map; the matched sight-constrained corridor and occluders are used.",
+    "The authored wrong-way-visible marker requests the reveal transition, while the geometric evaluator conservatively reports blocked_at_conflict for the final occlusion sample.",
+    "No unsupported crash physics outcome is asserted."
+  ]
+}

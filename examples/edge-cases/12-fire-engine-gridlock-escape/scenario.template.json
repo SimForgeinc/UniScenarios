@@ -1,0 +1,724 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Fire Engine Gridlock Escape Corridor",
+    "description": "Gridlocked vehicles make coordinated space for a fire engine to cross the junction while ordinary traffic remains controlled. This curated 20-second scenario uses only currently supported behaviors; adaptations are declared in machine-readable metadata.",
+    "createdAt": "2026-08-02T07:00:00.000Z",
+    "modifiedAt": "2026-08-03T08:00:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "gallery.12-fire-engine-gridlock-escape",
+    "tags": [
+      "curated-gallery-v2",
+      "EC-12",
+      "fire-engine",
+      "gridlock",
+      "escape-corridor"
+    ],
+    "author": "Codex curated edge-case suite",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "clear",
+    "timeOfDay": "noon"
+  },
+  "anchor": {
+    "id": "fire-engine-gridlocked-signalized-intersection",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          2,
+          5
+        ],
+        "essentiality": "required"
+      },
+      "runwayUpstreamM": {
+        "value": [
+          150,
+          null
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          75,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "gridlock-junction",
+        "kind": "junction",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            0
+          ],
+          "essentiality": "required"
+        },
+        "arms": {
+          "value": [
+            4,
+            4
+          ],
+          "essentiality": "required"
+        },
+        "control": {
+          "value": [
+            "signalized"
+          ],
+          "essentiality": "required"
+        },
+        "egoTurn": {
+          "value": [
+            "straight"
+          ],
+          "essentiality": "required"
+        },
+        "conflictingApproach": {
+          "value": {
+            "from": "from_left",
+            "turn": "straight",
+            "crossingAngleDeg": [
+              60,
+              120
+            ]
+          },
+          "essentiality": "required"
+        }
+      },
+      {
+        "id": "near-crosswalk",
+        "kind": "crossing",
+        "label": "near-side marked pedestrian crossing",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            -8,
+            8
+          ],
+          "essentiality": "preferred"
+        },
+        "marked": {
+          "value": true,
+          "essentiality": "preferred"
+        },
+        "placement": {
+          "value": "either",
+          "essentiality": "preferred"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": true,
+      "maxSitesPerMap": 12,
+      "diversity": "strict",
+      "minScore": 0.45
+    }
+  },
+  "roles": [
+    {
+      "id": "focus-vehicle",
+      "kind": "on_reference",
+      "label": "first vehicle stopped at red",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -13,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "fire-engine",
+      "kind": "relative_to",
+      "ref": "focus-vehicle",
+      "dLane": 0,
+      "dsM": -118,
+      "tFrac": 0,
+      "headingOffsetRad": 0,
+      "label": "fire engine using the shipped emergency-vehicle model surrogate",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.ambulance",
+        "dims": {
+          "length": 6.1,
+          "width": 2.1,
+          "height": 2.65
+        }
+      },
+      "initialSpeedKph": 24,
+      "extensions": {
+        "emergencyVehicle": "fire-engine",
+        "modelSurrogate": "vehicle.ambulance"
+      }
+    },
+    {
+      "id": "cross-traffic",
+      "kind": "conflicting_gate",
+      "feature": "gridlock-junction",
+      "from": "from_left",
+      "turn": "straight",
+      "label": "initially live cross traffic that clears before focus-vehicle yields",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv"
+      },
+      "fallbackPose": {
+        "laneOffset": 0,
+        "s": -22,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "requiredUpstreamRunwayM": 25,
+      "initialSpeedKph": 34
+    },
+    {
+      "id": "pedestrian",
+      "kind": "on_crossing",
+      "feature": "near-crosswalk",
+      "startFrac": 0.04,
+      "direction": "near_to_far",
+      "lateralFrac": 0,
+      "label": "pedestrian who must clear before focus-vehicle repositions",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_walking"
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "downstream-queue",
+      "kind": "lane_offset",
+      "k": 1,
+      "onMissing": "fail",
+      "label": "stopped downstream queue constraining the available refuge",
+      "actor": {
+        "class": "truck",
+        "catalogId": "vehicle.box_truck",
+        "static": true
+      },
+      "pose": {
+        "laneOffset": 1,
+        "s": 18,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "focus-vehicle-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:gridlock-junction:focus-vehicle.phase",
+          "value": "red"
+        },
+        "label": "Focus vehicle approach remains red for the full clip"
+      },
+      {
+        "id": "cross-green",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:gridlock-junction:left.phase",
+          "value": "green"
+        },
+        "label": "Cross traffic begins with right of way"
+      },
+      {
+        "id": "focus-vehicle-holds",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "fire-engine-siren",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0.2
+        },
+        "target": {
+          "key": "lights.emergency",
+          "value": "flashing_siren"
+        },
+        "label": "Siren is audible before the fire-engine reaches the junction scene"
+      },
+      {
+        "id": "fire-engine-horn-1-on",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 2
+        },
+        "target": {
+          "key": "audio.horn",
+          "value": true
+        },
+        "label": "First 350 ms emergency horn burst begins"
+      },
+      {
+        "id": "fire-engine-horn-1-off",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 2.35
+        },
+        "target": {
+          "key": "audio.horn",
+          "value": false
+        },
+        "label": "First emergency horn burst ends"
+      },
+      {
+        "id": "fire-engine-horn-2-on",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 2.55
+        },
+        "target": {
+          "key": "audio.horn",
+          "value": true
+        },
+        "label": "Second 350 ms emergency horn burst begins"
+      },
+      {
+        "id": "fire-engine-horn-2-off",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 2.9
+        },
+        "target": {
+          "key": "audio.horn",
+          "value": false
+        },
+        "label": "Second emergency horn burst ends"
+      },
+      {
+        "id": "fire-engine-exempt",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "fire-engine-siren",
+          "event": "start",
+          "delayS": 0
+        },
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      },
+      {
+        "id": "pedestrian-enters",
+        "actor": "pedestrian",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 4
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        },
+        "label": "Pedestrian enters while focus-vehicle remains stopped"
+      },
+      {
+        "id": "cross-traffic-clears",
+        "actor": "cross-traffic",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 7.5
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2
+        },
+        "label": "Nearest cross stream has cleared and closes"
+      },
+      {
+        "id": "cross-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "cross-traffic-clears",
+          "event": "end",
+          "delayS": 0
+        },
+        "target": {
+          "key": "signal:feature:gridlock-junction:left.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "pedestrian-clears",
+        "actor": "pedestrian",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 12.2
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        },
+        "label": "Pedestrian reaches the far side"
+      },
+      {
+        "id": "focus-vehicle-nudges-right",
+        "actor": "focus-vehicle",
+        "verb": "laneOffset",
+        "trigger": {
+          "kind": "after",
+          "of": "pedestrian-clears",
+          "event": "end",
+          "delayS": 0.4
+        },
+        "target": {
+          "tFrac": -0.82,
+          "reference": "lane_center"
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 1.8
+        },
+        "label": "Focus vehicle moves right only after both protected conflicts clear"
+      },
+      {
+        "id": "focus-vehicle-creeps",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "pedestrian-clears",
+          "event": "end",
+          "delayS": 0.4
+        },
+        "until": {
+          "kind": "after",
+          "of": "focus-vehicle-creeps",
+          "event": "start",
+          "delayS": 2
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 6
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.6
+        },
+        "label": "Minimal forward encroachment at no more than 8 km/h"
+      },
+      {
+        "id": "focus-vehicle-stops-pocket",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "focus-vehicle-creeps",
+          "event": "start",
+          "delayS": 2
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        },
+        "label": "Focus vehicle stops and does not follow through red"
+      },
+      {
+        "id": "fire-engine-passes",
+        "actor": "fire-engine",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "focus-vehicle-stops-pocket",
+          "event": "end",
+          "delayS": 0.2
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 38
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        },
+        "label": "Ambulance passes through the created corridor without stopping"
+      },
+      {
+        "id": "fire-engine-commits",
+        "actor": "fire-engine",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "fire-engine-passes",
+          "event": "start",
+          "delayS": 0
+        },
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "protected-yield-order",
+      "kind": "event_order",
+      "events": [
+        "fire-engine-siren",
+        "fire-engine-horn-1-on",
+        "fire-engine-horn-1-off",
+        "fire-engine-horn-2-on",
+        "fire-engine-horn-2-off",
+        "pedestrian-enters",
+        "cross-traffic-clears",
+        "pedestrian-clears",
+        "focus-vehicle-creeps",
+        "focus-vehicle-stops-pocket",
+        "fire-engine-passes"
+      ],
+      "strict": true,
+      "minSeparationS": 0.1,
+      "essentiality": "required"
+    },
+    {
+      "id": "focus-vehicle-deceleration",
+      "kind": "decel_budget",
+      "of": "focus-vehicle",
+      "maxMps2": 8,
+      "essentiality": "required"
+    },
+    {
+      "id": "pedestrian-clearance",
+      "kind": "pet",
+      "of": "focus-vehicle",
+      "to": "pedestrian",
+      "range": [
+        0.2,
+        null
+      ],
+      "window": [
+        10,
+        18
+      ],
+      "essentiality": "required"
+    }
+  ],
+  "variants": [],
+  "metricSubject": "focus-vehicle",
+  "extensions": {
+    "x-uniscenarios.stableId": "edge-05-fire-engine-gridlock-v1",
+    "x-uniscenarios.acceptance": {
+      "egoStationaryUntilS": 12.7,
+      "egoMaxRelocationKph": 8,
+      "egoMustRemainBeforeFarCrosswalk": true,
+      "minimumCorridorWidthM": 3,
+      "ambulanceMustNotStop": true,
+      "mustNot": [
+        "enter live cross traffic",
+        "mount occupied sidewalk",
+        "follow fire-engine through red",
+        "remain immobile after safe pocket exists"
+      ]
+    },
+    "x-uniscenarios.specialActorSupport": "vehicle.fire-engine is a first-class movable catalog actor; flashing_siren and two explicit 350 ms audio.horn bursts are first-class timeline state.",
+    "studio.gallery.intent": {
+      "schema": "uniscenarios.gallery-intent.v1",
+      "stableId": "ec-12-12-fire-engine-gridlock-escape-v2",
+      "focusActorId": "focus-vehicle",
+      "statement": "Gridlocked vehicles make coordinated space for a fire engine to cross the junction while ordinary traffic remains controlled.",
+      "adaptations": [
+        "The fire-engine identity uses the shipped ambulance emergency-vehicle model because a dedicated fire-engine model is not shipped.",
+        "Siren and emergency strobe animation are represented by emergency role tags and timed indicators."
+      ]
+    },
+    "studio.ambientTraffic": {
+      "enabled": true,
+      "provider": "sumo",
+      "density": "moderate",
+      "authoredActorsExcludedFromTimeline": true
+    },
+    "studio.timeline.windows": [
+      {
+        "interactionId": "fire-engine-horn-1-off",
+        "actorId": "fire-engine",
+        "startS": 2.35,
+        "endS": 2.85,
+        "dependent": false
+      },
+      {
+        "interactionId": "fire-engine-horn-1-on",
+        "actorId": "fire-engine",
+        "startS": 2,
+        "endS": 2.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "fire-engine-horn-2-off",
+        "actorId": "fire-engine",
+        "startS": 2.9,
+        "endS": 3.4,
+        "dependent": false
+      },
+      {
+        "interactionId": "fire-engine-horn-2-on",
+        "actorId": "fire-engine",
+        "startS": 2.55,
+        "endS": 3.05,
+        "dependent": false
+      },
+      {
+        "interactionId": "fire-engine-passes",
+        "actorId": "fire-engine",
+        "startS": 15.7,
+        "endS": 16.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "fire-engine-siren",
+        "actorId": "fire-engine",
+        "startS": 0.2,
+        "endS": 0.7,
+        "dependent": false
+      },
+      {
+        "interactionId": "cross-green",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "cross-red",
+        "actorId": "focus-vehicle",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "cross-traffic-clears",
+        "actorId": "cross-traffic",
+        "startS": 7.5,
+        "endS": 9.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-creeps",
+        "actorId": "focus-vehicle",
+        "startS": 13.1,
+        "endS": 13.7,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-holds",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.1,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-nudges-right",
+        "actorId": "focus-vehicle",
+        "startS": 13.1,
+        "endS": 14.9,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-red",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-stops-pocket",
+        "actorId": "focus-vehicle",
+        "startS": 15.1,
+        "endS": 15.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "pedestrian-clears",
+        "actorId": "pedestrian",
+        "startS": 12.2,
+        "endS": 12.7,
+        "dependent": false
+      },
+      {
+        "interactionId": "pedestrian-enters",
+        "actorId": "pedestrian",
+        "startS": 4,
+        "endS": 4.4,
+        "dependent": false
+      }
+    ]
+  }
+}

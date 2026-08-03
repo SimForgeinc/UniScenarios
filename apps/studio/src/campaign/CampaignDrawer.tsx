@@ -65,7 +65,7 @@ export function CampaignDrawer({
   const [detailsLoading, setDetailsLoading] = useState(true);
   const searchRef = useRef<HTMLInputElement>(null);
   const importedByStableId = useMemo(() => new Map(imports.map((item) => [item.stableId, item])), [imports]);
-  const allReady = GENERATED_CAMPAIGN_ENTRIES.length === 10
+  const allReady = GENERATED_CAMPAIGN_ENTRIES.length === 12
     && GENERATED_CAMPAIGN_ENTRIES.every(isCampaignReady);
   const visibleEntries = useMemo(
     () => filterGalleryEntries(GENERATED_CAMPAIGN_ENTRIES, query, filter, mapFilter, imports),
@@ -283,7 +283,7 @@ export function CampaignDrawer({
       </div>
 
       <footer style={styles.footer}>
-        <div><strong>{GENERATED_CAMPAIGN_ENTRIES.length}/10</strong> canonical scenarios · <strong>{imports.length}</strong> saved locally</div>
+        <div><strong>{GENERATED_CAMPAIGN_ENTRIES.length}/12</strong> curated scenarios · <strong>{imports.length}</strong> saved locally</div>
         <details>
           <summary style={styles.importSummary}>Library setup</summary>
           <div style={styles.importPopover}>

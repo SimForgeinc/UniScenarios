@@ -27,12 +27,12 @@ describe('edge campaign catalog', () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it('aggregates deterministically and reports missing owners without guessing', () => {
-    expect(GENERATED_CAMPAIGN_ENTRIES.map((entry) => entry.ordinal)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(GENERATED_CAMPAIGN_ENTRIES.map((entry) => entry.ordinal)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(GENERATED_CAMPAIGN_DIAGNOSTICS).toEqual([]);
     expect(GENERATED_CAMPAIGN_ENTRIES.find((entry) => entry.ordinal === 5)?.binding)
       .toBe('pinned-behavioral-surrogate');
     expect(GENERATED_CAMPAIGN_ENTRIES.find((entry) => entry.ordinal === 9)?.binding)
-      .toBe('exact-matched-site');
+      .toBe('pinned-behavioral-surrogate');
   });
 
   it('fails closed when required evidence is incomplete', () => {
@@ -45,10 +45,10 @@ describe('edge campaign catalog', () => {
     const storage = new MemoryStorage();
     const store = new WebTemplateFileStore({ storage });
     const entry = GENERATED_CAMPAIGN_ENTRIES.find((item) => item.ordinal === 9)!;
-    const root = new URL('../../../../examples/edge-cases/double-turn-mobility-scooter/', import.meta.url);
+    const root = new URL('../../../../examples/edge-cases/09-stalled-vehicle-beyond-sight/', import.meta.url);
     const canonicalTemplate = readFileSync(new URL('scenario.template.json', root));
-    const instance = readFileSync(new URL('instance.json', root));
-    const trace = readFileSync(new URL('trace.json.gz', root));
+    const instance = readFileSync(new URL('scenario.instance.json', root));
+    const trace = readFileSync(new URL('scenario.trace.json.gz', root));
     const base = `campaign-09-${entry.stableId}`;
     await store.write(base, template as never);
     vi.stubGlobal('fetch', vi.fn(async (url: string) => {
@@ -133,13 +133,13 @@ describe('edge campaign catalog', () => {
     expect(campaignImports(storage as never)).toEqual([]);
   });
 
-  it.each([5, 6])('loads exact scenario %i evidence without weakening identity checks', async (ordinal) => {
+  it.each([3, 10])('loads exact scenario %i evidence without weakening identity checks', async (ordinal) => {
     const root = new URL('../../../../examples/edge-cases/', import.meta.url);
-    const folder = ordinal === 5
-      ? '05-ambulance-gridlocked-intersection'
-      : '06-dark-signal-conflicting-human-control';
-    const input = readFileSync(new URL(`${folder}/instance.baseline.json`, root));
-    const trace = readFileSync(new URL(`${folder}/trace.baseline.json.gz`, root));
+    const folder = ordinal === 3
+      ? '03-red-light-ambulance-preemption'
+      : '10-officer-flashing-red-junction';
+    const input = readFileSync(new URL(`${folder}/scenario.instance.json`, root));
+    const trace = readFileSync(new URL(`${folder}/scenario.trace.json.gz`, root));
     const pair = await readPlaybackFiles(
       { name: `${folder}.instance.json`, arrayBuffer: async () => input.buffer.slice(input.byteOffset, input.byteOffset + input.byteLength) },
       { name: `${folder}.trace.json.gz`, arrayBuffer: async () => trace.buffer.slice(trace.byteOffset, trace.byteOffset + trace.byteLength) },

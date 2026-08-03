@@ -1,0 +1,95 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-01-01-construction-chicane-reversing-truck-v2",
+  "intent": "The focus vehicle negotiates an alternating-flow construction chicane while a work vehicle reverses and a worker enters the constrained corridor.",
+  "requiredActorIds": [
+    "focus-vehicle",
+    "reversing-truck",
+    "worker"
+  ],
+  "requiredInteractionIds": [
+    "focus-vehicle-enters-cautiously",
+    "focus-vehicle-ignores-stale-red",
+    "focus-vehicle-keeps-right",
+    "focus-vehicle-resumes-after-both-clear",
+    "focus-vehicle-stops-for-worker",
+    "signal-behind-turns-red",
+    "van-clears",
+    "van-keeps-clear-of-work-zone",
+    "van-retains-exit",
+    "worker-clears",
+    "worker-emerges",
+    "worker-enters-shared-lane"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": -144.312255,
+          "z": -91.220283,
+          "laneRsl": "119:0:1"
+        },
+        "end": {
+          "x": -143.75258,
+          "z": -43.863161,
+          "laneRsl": "402:0:1"
+        },
+        "displacementM": 47.360429,
+        "maxSpeedMps": 7.171626,
+        "observedLanes": [
+          "119:0:1",
+          "402:0:1"
+        ]
+      },
+      "reversing-truck": {
+        "samples": 41,
+        "start": {
+          "x": -123.297203,
+          "z": -37.502161,
+          "laneRsl": null
+        },
+        "end": {
+          "x": -112.797203,
+          "z": -34.707731,
+          "laneRsl": null
+        },
+        "displacementM": 10.865488,
+        "maxSpeedMps": 1.525055,
+        "observedLanes": []
+      },
+      "worker": {
+        "samples": 41,
+        "start": {
+          "x": -137.579669,
+          "z": -41.222341,
+          "laneRsl": "402:0:1"
+        },
+        "end": {
+          "x": -140.925714,
+          "z": -36.069468,
+          "laneRsl": null
+        },
+        "displacementM": 6.14395,
+        "maxSpeedMps": 1.680642,
+        "observedLanes": [
+          "402:0:1"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The shipped truck has no reverse gear animation; the validated oncoming work-van motion is used as an explicit reversing-truck surrogate.",
+    "The carried pipe is an attached collidable construction prop."
+  ]
+}

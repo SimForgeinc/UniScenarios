@@ -1,0 +1,147 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-02-02-police-roadside-stop-v2",
+  "intent": "The focus vehicle passes a roadside police stop where a stopped vehicle, officer-side activity, and adjacent traffic constrain the available lane.",
+  "requiredActorIds": [
+    "focus-vehicle",
+    "lead-cyclist",
+    "police-cruiser",
+    "roadside-officer",
+    "trailing-cyclist",
+    "tram"
+  ],
+  "requiredInteractionIds": [
+    "cyclist-brakes",
+    "cyclist-swerves",
+    "focus-vehicle-brakes",
+    "police-emergency-lights-on",
+    "trailing-cyclist-stops"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 911.055962,
+          "z": -1590.19786,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 869.915581,
+          "z": -1617.289108,
+          "laneRsl": "757:0:-1"
+        },
+        "displacementM": 49.259179,
+        "maxSpeedMps": 6.944444,
+        "observedLanes": [
+          "83:0:-2",
+          "757:0:-1"
+        ]
+      },
+      "lead-cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 894.827872,
+          "z": -1598.286989,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 894.827872,
+          "z": -1598.286989,
+          "laneRsl": "83:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 6.388889,
+        "observedLanes": [
+          "83:0:-2"
+        ]
+      },
+      "police-cruiser": {
+        "samples": 41,
+        "start": {
+          "x": 855.888232,
+          "z": -1622.784602,
+          "laneRsl": "757:0:-1"
+        },
+        "end": {
+          "x": 855.888232,
+          "z": -1622.784602,
+          "laneRsl": "757:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "757:0:-1"
+        ]
+      },
+      "roadside-officer": {
+        "samples": 41,
+        "start": {
+          "x": 862.888232,
+          "z": -1617.784602,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 862.888232,
+          "z": -1617.784602,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "trailing-cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 925.082035,
+          "z": -1578.745555,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 925.082035,
+          "z": -1578.745555,
+          "laneRsl": "83:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 6.111111,
+        "observedLanes": [
+          "83:0:-2"
+        ]
+      },
+      "tram": {
+        "samples": 41,
+        "start": {
+          "x": 942.090821,
+          "z": -1573.670887,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 840.007623,
+          "z": -1640.880856,
+          "laneRsl": "19:0:-4"
+        },
+        "displacementM": 122.221763,
+        "maxSpeedMps": 6.111114,
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The police cruiser identity uses the shipped ambulance emergency-vehicle model because a dedicated police-cruiser model is unavailable.",
+    "The roadside officer and timed emergency indicators explicitly represent the active stop; no door-opening animation is claimed."
+  ]
+}

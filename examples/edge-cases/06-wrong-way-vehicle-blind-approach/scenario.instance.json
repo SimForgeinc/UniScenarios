@@ -1,0 +1,2106 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "ec-06-06-wrong-way-vehicle-blind-approach-v2",
+      "templateVersion": 2,
+      "templateDigest": "a809ec8b2cda4194",
+      "mapId": "easterbrook-discovery-school",
+      "matcherIndexDigest": "7006e23d34d3b5c23268f8c21e39fc2adaec303fd5d2e65cb618325fb869f32f",
+      "engineGraphDigest": "ae48d9dbee5577e7e8506f99ab7dc242f5bcbb13f55dc686344dcfc1068638e0",
+      "siteId": "e9743022beb54b5c",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.2.6",
+      "paramSeed": "ec-06-06-wrong-way-vehicle-blind-approach-v2",
+      "drawIndex": 0
+    },
+    "instanceId": "ec-06-06-wrong-way-vehicle-blind-approach-v2#0",
+    "archetype": "gallery.06-wrong-way-vehicle-blind-approach",
+    "negativeControl": false,
+    "metricSubject": "focus-vehicle",
+    "operationalVariant": null,
+    "site": {
+      "siteId": "e9743022beb54b5c",
+      "score": 0.7001839759059196,
+      "verdict": "degraded",
+      "originFeatureId": "seg_ca91adf3d7d304a3",
+      "entryLaneRsl": "20:0:-1",
+      "egoTurn": null,
+      "degradationSummary": "Degraded match (score 0.70). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.curvatureDegPer10m worst value 0.16 at s=30 m, wanted [1, 10]. corridor.speedLimitKph worst value 64 at s=0 m, wanted [30, 55]. Presentation was relaxed; the scenario still tests what it was written to test.",
+      "matchedReasons": [
+        "197.89 m of runway available, 110 m needed",
+        "0 m of runway available, 0 m needed",
+        "corridor.throughLanesOpposing holds over the whole interval (worst 1)",
+        "corridor.throughLanesSameDir holds over the whole interval (worst 1)"
+      ]
+    },
+    "params": {
+      "values": {
+        "egoSpeedKph": 40,
+        "detectionDistanceM": 45
+      },
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "focus-vehicle",
+        "actorKind": "car",
+        "roleKind": "focus",
+        "laneRsl": "20:0:-1",
+        "spawnS": 14.000026708669896,
+        "initialSpeedMps": 11.11111111111111,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "following-motorcycle",
+        "actorKind": "motorcycle",
+        "roleKind": "supporting",
+        "laneRsl": "20:0:-1",
+        "spawnS": 0,
+        "initialSpeedMps": 11.11111111111111,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "opposing-bus",
+        "actorKind": "bus",
+        "roleKind": "supporting",
+        "laneRsl": "11633:0:1",
+        "spawnS": 1.0262769772993394,
+        "initialSpeedMps": 1.1111111111111112,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "wrong-way-sedan",
+        "actorKind": "car",
+        "roleKind": "supporting",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 7.777777777777779,
+        "bindingStatus": "scene-absolute"
+      }
+    ],
+    "props": [
+      {
+        "id": "crest-occlusion",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.65709838543037,
+          "z": 223.761153020244,
+          "headingRad": 1.4774779796745707
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": false,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "wrong-way-sedan"
+        },
+        "targetRevealToConflictS": 1.4
+      },
+      {
+        "id": "right-parapet-0",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 227.41190232768804,
+          "z": 293.9061987255502,
+          "headingRad": 1.4859223126500367
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-1",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 227.7850916660557,
+          "z": 288.92844212333426,
+          "headingRad": 1.484114511347412
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-10",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 232.28161929989815,
+          "z": 244.09947389557232,
+          "headingRad": 1.4938528229774577
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-11",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 232.76288690364618,
+          "z": 239.11322862107806,
+          "headingRad": 1.4954359779007722
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-12",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 233.2314691470989,
+          "z": 234.1572092481561,
+          "headingRad": 1.4912590180390046
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-13",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 233.67398349358353,
+          "z": 229.20757792786586,
+          "headingRad": 1.4856342505698785
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-14",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 234.13315407221148,
+          "z": 224.27365803492128,
+          "headingRad": 1.4774779796745707
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-15",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 234.5836338238916,
+          "z": 219.34102455675477,
+          "headingRad": 1.4689215082452867
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-16",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 235.0692724807036,
+          "z": 214.37799292260655,
+          "headingRad": 1.4664756106872496
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-17",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 235.55752340059868,
+          "z": 209.39693087882986,
+          "headingRad": 1.4673680502017177
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-2",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.16937484689487,
+          "z": 283.95529251344254,
+          "headingRad": 1.4814862678808118
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-3",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.56898458266915,
+          "z": 278.98702712613124,
+          "headingRad": 1.4780375571657394
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-4",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 229.06549000432963,
+          "z": 274.0326955835144,
+          "headingRad": 1.4735093277835456
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-5",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 229.63498466323475,
+          "z": 269.0672152243878,
+          "headingRad": 1.47294061428038
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-6",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 230.18702445386387,
+          "z": 264.06259224588115,
+          "headingRad": 1.480186853933822
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-7",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 230.72307637145698,
+          "z": 259.05049155399087,
+          "headingRad": 1.488400722388907
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-8",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 231.2514712250874,
+          "z": 254.05747722363606,
+          "headingRad": 1.4923095513780422
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-9",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 231.77255580263687,
+          "z": 249.08173035788005,
+          "headingRad": 1.4925595863555425
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      }
+    ],
+    "arrival": [],
+    "inputHash": "9778e2561d48f6b383706e2ec8d38c0568f1bc34d223495d0060a3db5f70e968",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "choreography.interactions.wrong-way-route",
+        "reason": "route(polyline) at t=0 folded into wrong-way-sedan's spawn route (170.0 m), so the arrival solver can place the actor along it"
+      },
+      {
+        "path": "roles.opposing-bus.route",
+        "reason": "lane chain extended upstream by 3 lane(s) to reach the site-evaluated spawn at frame s=100.0 m"
+      },
+      {
+        "path": "props.crest-occlusion",
+        "reason": "occlusion declared between focus-vehicle and wrong-way-sedan; reveal-to-conflict is reported by the engine, not solved for"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "easterbrook-discovery-school",
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "dt": 0.02,
+    "seed": "ec-06-06-wrong-way-vehicle-blind-approach-v2",
+    "operationalConditions": {
+      "weather": "clear",
+      "timeOfDay": "day",
+      "traffic": "moderate",
+      "visibility": "unrestricted",
+      "effects": {
+        "visibilityRangeM": 1000,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 1
+      }
+    },
+    "metricSubject": "focus-vehicle",
+    "actors": [
+      {
+        "id": "focus-vehicle",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "20:0:-1",
+            "s": 14.000026708669896,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 221.2858761424577,
+            "z": 309.4426795317048,
+            "headingRad": 1.4755789770711092
+          },
+          "speedMps": 11.11111111111111
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "20:0:-1",
+              "11295:0:-1",
+              "21:0:-1",
+              "11662:0:-1",
+              "22:0:-1",
+              "11983:0:-1",
+              "28:0:-1",
+              "12090:0:1"
+            ]
+          },
+          "cruiseSpeedMps": 11.11111111111111
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:focus-vehicle",
+          "class:car",
+          "binding:on_reference",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "following-motorcycle",
+        "kind": "motorcycle",
+        "dims": {
+          "l": 2.2,
+          "w": 0.8,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "20:0:-1",
+            "s": 0,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 219.89162875031323,
+            "z": 323.3730762092448,
+            "headingRad": 1.4673056024409803
+          },
+          "speedMps": 11.11111111111111
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "20:0:-1",
+              "11295:0:-1",
+              "21:0:-1",
+              "11662:0:-1",
+              "22:0:-1",
+              "11983:0:-1",
+              "28:0:-1",
+              "12090:0:1"
+            ]
+          },
+          "cruiseSpeedMps": 11.11111111111111
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:following-motorcycle",
+          "class:motorcycle",
+          "binding:on_reference",
+          "catalog:vehicle.motorcycle"
+        ]
+      },
+      {
+        "id": "opposing-bus",
+        "kind": "bus",
+        "dims": {
+          "l": 12,
+          "w": 2.55,
+          "h": 3.2
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "11633:0:1",
+            "s": 1.0262769772993394,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 223.60905260889498,
+            "z": 223.2933048066911,
+            "headingRad": -1.663221694434383
+          },
+          "speedMps": 1.1111111111111112
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "11633:0:1",
+              "21:0:1",
+              "11296:0:1",
+              "20:0:1",
+              "11200:0:1",
+              "13:0:2",
+              "205:0:2",
+              "12:0:2"
+            ]
+          },
+          "cruiseSpeedMps": 1.1111111111111112
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:opposing-bus",
+          "class:bus",
+          "binding:opposing",
+          "catalog:vehicle.bus"
+        ]
+      },
+      {
+        "id": "wrong-way-sedan",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "pose": {
+            "x": 235.38540444712012,
+            "z": 154.08650267556894,
+            "headingRad": -1.662065998234907
+          },
+          "speedMps": 7.777777777777779
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 235.38540444712012,
+                "z": 154.08650267556894
+              },
+              {
+                "x": 235.29426459008008,
+                "z": 155.08230604929645
+              },
+              {
+                "x": 235.20312473304006,
+                "z": 156.07810942302396
+              },
+              {
+                "x": 235.111984876,
+                "z": 157.07391279675144
+              },
+              {
+                "x": 235.02084501895996,
+                "z": 158.06971617047896
+              },
+              {
+                "x": 234.9297051619199,
+                "z": 159.06551954420647
+              },
+              {
+                "x": 234.8385653048799,
+                "z": 160.06132291793398
+              },
+              {
+                "x": 234.74742544783984,
+                "z": 161.05712629166146
+              },
+              {
+                "x": 234.6562855907998,
+                "z": 162.05292966538897
+              },
+              {
+                "x": 234.56514573375975,
+                "z": 163.04873303911648
+              },
+              {
+                "x": 234.47400587671973,
+                "z": 164.044536412844
+              },
+              {
+                "x": 234.38286601967968,
+                "z": 165.0403397865715
+              },
+              {
+                "x": 234.29172616263963,
+                "z": 166.036143160299
+              },
+              {
+                "x": 234.2005863055996,
+                "z": 167.0319465340265
+              },
+              {
+                "x": 234.10944644855957,
+                "z": 168.027749907754
+              },
+              {
+                "x": 234.01830659151952,
+                "z": 169.0235532814815
+              },
+              {
+                "x": 233.92716673447947,
+                "z": 170.019356655209
+              },
+              {
+                "x": 233.83602687743942,
+                "z": 171.01516002893652
+              },
+              {
+                "x": 233.7448870203994,
+                "z": 172.01096340266403
+              },
+              {
+                "x": 233.65374716335936,
+                "z": 173.00676677639154
+              },
+              {
+                "x": 233.5626073063193,
+                "z": 174.00257015011903
+              },
+              {
+                "x": 233.47146744927926,
+                "z": 174.99837352384654
+              },
+              {
+                "x": 233.38032759223924,
+                "z": 175.99417689757405
+              },
+              {
+                "x": 233.2891877351992,
+                "z": 176.98998027130156
+              },
+              {
+                "x": 233.19804787815914,
+                "z": 177.98578364502907
+              },
+              {
+                "x": 233.1069080211191,
+                "z": 178.98158701875656
+              },
+              {
+                "x": 233.01576816407908,
+                "z": 179.97739039248407
+              },
+              {
+                "x": 232.92462830703903,
+                "z": 180.97319376621158
+              },
+              {
+                "x": 232.83348844999898,
+                "z": 181.9689971399391
+              },
+              {
+                "x": 232.74234859295896,
+                "z": 182.96480051366657
+              },
+              {
+                "x": 232.6512087359189,
+                "z": 183.9606038873941
+              },
+              {
+                "x": 232.56006887887887,
+                "z": 184.9564072611216
+              },
+              {
+                "x": 232.46892902183882,
+                "z": 185.9522106348491
+              },
+              {
+                "x": 232.3777891647988,
+                "z": 186.9480140085766
+              },
+              {
+                "x": 232.28664930775875,
+                "z": 187.9438173823041
+              },
+              {
+                "x": 232.1955094507187,
+                "z": 188.93962075603162
+              },
+              {
+                "x": 232.10436959367865,
+                "z": 189.93542412975913
+              },
+              {
+                "x": 232.01322973663864,
+                "z": 190.93122750348664
+              },
+              {
+                "x": 231.9220898795986,
+                "z": 191.92703087721412
+              },
+              {
+                "x": 231.83095002255854,
+                "z": 192.92283425094163
+              },
+              {
+                "x": 231.7398101655185,
+                "z": 193.91863762466915
+              },
+              {
+                "x": 231.64867030847847,
+                "z": 194.91444099839666
+              },
+              {
+                "x": 231.55753045143842,
+                "z": 195.91024437212417
+              },
+              {
+                "x": 231.46639059439838,
+                "z": 196.90604774585165
+              },
+              {
+                "x": 231.37525073735833,
+                "z": 197.90185111957916
+              },
+              {
+                "x": 231.2841108803183,
+                "z": 198.89765449330667
+              },
+              {
+                "x": 231.19297102327826,
+                "z": 199.8934578670342
+              },
+              {
+                "x": 231.1018311662382,
+                "z": 200.88926124076167
+              },
+              {
+                "x": 231.01069130919817,
+                "z": 201.88506461448918
+              },
+              {
+                "x": 230.91955145215815,
+                "z": 202.88086798821666
+              },
+              {
+                "x": 230.8284115951181,
+                "z": 203.87667136194418
+              },
+              {
+                "x": 230.73727173807805,
+                "z": 204.8724747356717
+              },
+              {
+                "x": 230.646131881038,
+                "z": 205.8682781093992
+              },
+              {
+                "x": 230.55499202399798,
+                "z": 206.8640814831267
+              },
+              {
+                "x": 230.46385216695793,
+                "z": 207.8598848568542
+              },
+              {
+                "x": 230.3727123099179,
+                "z": 208.8556882305817
+              },
+              {
+                "x": 230.28157245287787,
+                "z": 209.85149160430922
+              },
+              {
+                "x": 230.19043259583782,
+                "z": 210.84729497803673
+              },
+              {
+                "x": 230.09929273879777,
+                "z": 211.84309835176424
+              },
+              {
+                "x": 230.00815288175772,
+                "z": 212.83890172549172
+              },
+              {
+                "x": 229.9170130247177,
+                "z": 213.83470509921924
+              },
+              {
+                "x": 229.82587316767766,
+                "z": 214.83050847294675
+              },
+              {
+                "x": 229.7347333106376,
+                "z": 215.82631184667426
+              },
+              {
+                "x": 229.64359345359756,
+                "z": 216.82211522040177
+              },
+              {
+                "x": 229.55245359655754,
+                "z": 217.81791859412925
+              },
+              {
+                "x": 229.4613137395175,
+                "z": 218.81372196785676
+              },
+              {
+                "x": 229.37017388247745,
+                "z": 219.80952534158428
+              },
+              {
+                "x": 229.2790340254374,
+                "z": 220.80532871531176
+              },
+              {
+                "x": 229.18789416839738,
+                "z": 221.8011320890393
+              },
+              {
+                "x": 229.09675431135733,
+                "z": 222.79693546276678
+              },
+              {
+                "x": 229.00561445431728,
+                "z": 223.7927388364943
+              },
+              {
+                "x": 228.91447459727723,
+                "z": 224.7885422102218
+              },
+              {
+                "x": 228.82333474023721,
+                "z": 225.78434558394932
+              },
+              {
+                "x": 228.73219488319717,
+                "z": 226.78014895767683
+              },
+              {
+                "x": 228.64105502615712,
+                "z": 227.7759523314043
+              },
+              {
+                "x": 228.54991516911707,
+                "z": 228.7717557051318
+              },
+              {
+                "x": 228.45877531207705,
+                "z": 229.76755907885934
+              },
+              {
+                "x": 228.367635455037,
+                "z": 230.76336245258682
+              },
+              {
+                "x": 228.27649559799696,
+                "z": 231.75916582631436
+              },
+              {
+                "x": 228.1853557409569,
+                "z": 232.75496920004184
+              },
+              {
+                "x": 228.0942158839169,
+                "z": 233.75077257376932
+              },
+              {
+                "x": 228.00307602687684,
+                "z": 234.74657594749686
+              },
+              {
+                "x": 227.9119361698368,
+                "z": 235.74237932122435
+              },
+              {
+                "x": 227.82079631279674,
+                "z": 236.73818269495186
+              },
+              {
+                "x": 227.72965645575673,
+                "z": 237.73398606867937
+              },
+              {
+                "x": 227.63851659871668,
+                "z": 238.72978944240685
+              },
+              {
+                "x": 227.54737674167663,
+                "z": 239.72559281613437
+              },
+              {
+                "x": 227.45623688463658,
+                "z": 240.72139618986188
+              },
+              {
+                "x": 227.36509702759656,
+                "z": 241.7171995635894
+              },
+              {
+                "x": 227.2739571705565,
+                "z": 242.7130029373169
+              },
+              {
+                "x": 227.18281731351647,
+                "z": 243.70880631104438
+              },
+              {
+                "x": 227.09167745647645,
+                "z": 244.7046096847719
+              },
+              {
+                "x": 227.0005375994364,
+                "z": 245.7004130584994
+              },
+              {
+                "x": 226.90939774239635,
+                "z": 246.69621643222692
+              },
+              {
+                "x": 226.8182578853563,
+                "z": 247.69201980595443
+              },
+              {
+                "x": 226.72711802831628,
+                "z": 248.6878231796819
+              },
+              {
+                "x": 226.63597817127624,
+                "z": 249.68362655340943
+              },
+              {
+                "x": 226.5448383142362,
+                "z": 250.67942992713694
+              },
+              {
+                "x": 226.45369845719614,
+                "z": 251.67523330086442
+              },
+              {
+                "x": 226.36255860015612,
+                "z": 252.67103667459196
+              },
+              {
+                "x": 226.27141874311607,
+                "z": 253.66684004831944
+              },
+              {
+                "x": 226.18027888607602,
+                "z": 254.66264342204695
+              },
+              {
+                "x": 226.08913902903598,
+                "z": 255.65844679577447
+              },
+              {
+                "x": 225.99799917199596,
+                "z": 256.654250169502
+              },
+              {
+                "x": 225.9068593149559,
+                "z": 257.65005354322943
+              },
+              {
+                "x": 225.81571945791586,
+                "z": 258.645856916957
+              },
+              {
+                "x": 225.7245796008758,
+                "z": 259.64166029068446
+              },
+              {
+                "x": 225.6334397438358,
+                "z": 260.637463664412
+              },
+              {
+                "x": 225.54229988679575,
+                "z": 261.6332670381395
+              },
+              {
+                "x": 225.4511600297557,
+                "z": 262.629070411867
+              },
+              {
+                "x": 225.36002017271568,
+                "z": 263.6248737855945
+              },
+              {
+                "x": 225.26888031567563,
+                "z": 264.620677159322
+              },
+              {
+                "x": 225.17774045863558,
+                "z": 265.6164805330495
+              },
+              {
+                "x": 225.08660060159553,
+                "z": 266.612283906777
+              },
+              {
+                "x": 224.99546074455552,
+                "z": 267.6080872805045
+              },
+              {
+                "x": 224.90432088751547,
+                "z": 268.60389065423203
+              },
+              {
+                "x": 224.81318103047542,
+                "z": 269.5996940279595
+              },
+              {
+                "x": 224.72204117343537,
+                "z": 270.595497401687
+              },
+              {
+                "x": 224.63090131639535,
+                "z": 271.59130077541454
+              },
+              {
+                "x": 224.5397614593553,
+                "z": 272.5871041491421
+              },
+              {
+                "x": 224.44862160231526,
+                "z": 273.5829075228695
+              },
+              {
+                "x": 224.3574817452752,
+                "z": 274.57871089659704
+              },
+              {
+                "x": 224.2663418882352,
+                "z": 275.5745142703246
+              },
+              {
+                "x": 224.17520203119514,
+                "z": 276.57031764405207
+              },
+              {
+                "x": 224.0840621741551,
+                "z": 277.56612101777955
+              },
+              {
+                "x": 223.99292231711505,
+                "z": 278.5619243915071
+              },
+              {
+                "x": 223.90178246007503,
+                "z": 279.5577277652346
+              },
+              {
+                "x": 223.81064260303498,
+                "z": 280.55353113896206
+              },
+              {
+                "x": 223.71950274599493,
+                "z": 281.5493345126896
+              },
+              {
+                "x": 223.62836288895488,
+                "z": 282.5451378864171
+              },
+              {
+                "x": 223.53722303191486,
+                "z": 283.54094126014456
+              },
+              {
+                "x": 223.44608317487481,
+                "z": 284.5367446338721
+              },
+              {
+                "x": 223.35494331783477,
+                "z": 285.53254800759964
+              },
+              {
+                "x": 223.26380346079475,
+                "z": 286.52835138132707
+              },
+              {
+                "x": 223.1726636037547,
+                "z": 287.5241547550546
+              },
+              {
+                "x": 223.08152374671465,
+                "z": 288.51995812878215
+              },
+              {
+                "x": 222.9903838896746,
+                "z": 289.51576150250963
+              },
+              {
+                "x": 222.89924403263456,
+                "z": 290.5115648762371
+              },
+              {
+                "x": 222.80810417559454,
+                "z": 291.50736824996466
+              },
+              {
+                "x": 222.7169643185545,
+                "z": 292.50317162369214
+              },
+              {
+                "x": 222.62582446151444,
+                "z": 293.4989749974196
+              },
+              {
+                "x": 222.53468460447442,
+                "z": 294.49477837114716
+              },
+              {
+                "x": 222.44354474743437,
+                "z": 295.4905817448747
+              },
+              {
+                "x": 222.35240489039433,
+                "z": 296.48638511860213
+              },
+              {
+                "x": 222.26126503335428,
+                "z": 297.48218849232967
+              },
+              {
+                "x": 222.17012517631423,
+                "z": 298.4779918660572
+              },
+              {
+                "x": 222.0789853192742,
+                "z": 299.4737952397847
+              },
+              {
+                "x": 221.98784546223416,
+                "z": 300.4695986135122
+              },
+              {
+                "x": 221.89670560519411,
+                "z": 301.4654019872397
+              },
+              {
+                "x": 221.8055657481541,
+                "z": 302.4612053609672
+              },
+              {
+                "x": 221.71442589111405,
+                "z": 303.4570087346947
+              },
+              {
+                "x": 221.623286034074,
+                "z": 304.4528121084222
+              },
+              {
+                "x": 221.53214617703395,
+                "z": 305.4486154821497
+              },
+              {
+                "x": 221.44100631999393,
+                "z": 306.4444188558772
+              },
+              {
+                "x": 221.34986646295388,
+                "z": 307.44022222960473
+              },
+              {
+                "x": 221.25872660591384,
+                "z": 308.4360256033322
+              },
+              {
+                "x": 221.1675867488738,
+                "z": 309.43182897705975
+              },
+              {
+                "x": 221.07644689183377,
+                "z": 310.42763235078723
+              },
+              {
+                "x": 220.98530703479372,
+                "z": 311.4234357245148
+              },
+              {
+                "x": 220.89416717775367,
+                "z": 312.41923909824226
+              },
+              {
+                "x": 220.80302732071362,
+                "z": 313.41504247196974
+              },
+              {
+                "x": 220.7118874636736,
+                "z": 314.4108458456973
+              },
+              {
+                "x": 220.62074760663356,
+                "z": 315.40664921942476
+              },
+              {
+                "x": 220.5296077495935,
+                "z": 316.40245259315225
+              },
+              {
+                "x": 220.43846789255346,
+                "z": 317.3982559668798
+              },
+              {
+                "x": 220.34732803551344,
+                "z": 318.3940593406072
+              },
+              {
+                "x": 220.2561881784734,
+                "z": 319.38986271433475
+              },
+              {
+                "x": 220.16504832143335,
+                "z": 320.3856660880623
+              },
+              {
+                "x": 220.0739084643933,
+                "z": 321.38146946178983
+              },
+              {
+                "x": 219.98276860735328,
+                "z": 322.37727283551726
+              },
+              {
+                "x": 219.89162875031323,
+                "z": 323.3730762092448
+              }
+            ]
+          },
+          "cruiseSpeedMps": 7.777777777777779
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:wrong-way-sedan",
+          "class:car",
+          "binding:relative_to",
+          "catalog:vehicle.sedan"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "focus-vehicle-brakes",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 9.1
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.1
+        }
+      },
+      {
+        "id": "focus-vehicle-edges-right",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 12
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": -0.05
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 2.5
+        }
+      },
+      {
+        "id": "hold-position",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 18
+        },
+        "verb": "set",
+        "target": {
+          "key": "lights.brake",
+          "value": true
+        }
+      },
+      {
+        "id": "motorcycle-brakes",
+        "actorId": "following-motorcycle",
+        "trigger": {
+          "kind": "after",
+          "interactionId": "focus-vehicle-brakes",
+          "delayS": 0.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.4
+        }
+      },
+      {
+        "id": "wrong-way-brakes",
+        "actorId": "wrong-way-sedan",
+        "trigger": {
+          "kind": "at",
+          "t": 9.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.1
+        }
+      },
+      {
+        "id": "wrong-way-offsets",
+        "actorId": "wrong-way-sedan",
+        "trigger": {
+          "kind": "at",
+          "t": 13
+        },
+        "verb": "laneOffset",
+        "target": {
+          "mode": "fraction",
+          "value": 0.35
+        },
+        "dynamics": {
+          "shape": "sinusoidal",
+          "constraint": "time",
+          "value": 2
+        }
+      },
+      {
+        "id": "wrong-way-visible",
+        "actorId": "wrong-way-sedan",
+        "trigger": {
+          "kind": "at",
+          "t": 7.6
+        },
+        "verb": "set",
+        "target": {
+          "key": "lights.brake",
+          "value": true
+        }
+      }
+    ],
+    "signalPrograms": [],
+    "roadControls": [],
+    "props": [
+      {
+        "id": "crest-occlusion",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.65709838543037,
+          "z": 223.761153020244,
+          "headingRad": 1.4774779796745707
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": false,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "wrong-way-sedan"
+        },
+        "targetRevealToConflictS": 1.4
+      },
+      {
+        "id": "right-parapet-0",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 227.41190232768804,
+          "z": 293.9061987255502,
+          "headingRad": 1.4859223126500367
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-1",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 227.7850916660557,
+          "z": 288.92844212333426,
+          "headingRad": 1.484114511347412
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-10",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 232.28161929989815,
+          "z": 244.09947389557232,
+          "headingRad": 1.4938528229774577
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-11",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 232.76288690364618,
+          "z": 239.11322862107806,
+          "headingRad": 1.4954359779007722
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-12",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 233.2314691470989,
+          "z": 234.1572092481561,
+          "headingRad": 1.4912590180390046
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-13",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 233.67398349358353,
+          "z": 229.20757792786586,
+          "headingRad": 1.4856342505698785
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-14",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 234.13315407221148,
+          "z": 224.27365803492128,
+          "headingRad": 1.4774779796745707
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-15",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 234.5836338238916,
+          "z": 219.34102455675477,
+          "headingRad": 1.4689215082452867
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-16",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 235.0692724807036,
+          "z": 214.37799292260655,
+          "headingRad": 1.4664756106872496
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-17",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 235.55752340059868,
+          "z": 209.39693087882986,
+          "headingRad": 1.4673680502017177
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-2",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.16937484689487,
+          "z": 283.95529251344254,
+          "headingRad": 1.4814862678808118
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-3",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 228.56898458266915,
+          "z": 278.98702712613124,
+          "headingRad": 1.4780375571657394
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-4",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 229.06549000432963,
+          "z": 274.0326955835144,
+          "headingRad": 1.4735093277835456
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-5",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 229.63498466323475,
+          "z": 269.0672152243878,
+          "headingRad": 1.47294061428038
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-6",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 230.18702445386387,
+          "z": 264.06259224588115,
+          "headingRad": 1.480186853933822
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-7",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 230.72307637145698,
+          "z": 259.05049155399087,
+          "headingRad": 1.488400722388907
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-8",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 231.2514712250874,
+          "z": 254.05747722363606,
+          "headingRad": 1.4923095513780422
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      },
+      {
+        "id": "right-parapet-9",
+        "groupId": "right-parapet",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 231.77255580263687,
+          "z": 249.08173035788005,
+          "headingRad": 1.4925595863555425
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1,
+        "collidable": true,
+        "essentiality": "required"
+      }
+    ],
+    "occluders": [
+      {
+        "id": "crest-occlusion",
+        "obb": {
+          "center": {
+            "x": 228.65709838543037,
+            "z": 223.761153020244
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4774779796745707,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-0",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 227.41190232768804,
+            "z": 293.9061987255502
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4859223126500367,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-1",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 227.7850916660557,
+            "z": 288.92844212333426
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.484114511347412,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-10",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 232.28161929989815,
+            "z": 244.09947389557232
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4938528229774577,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-11",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 232.76288690364618,
+            "z": 239.11322862107806
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4954359779007722,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-12",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 233.2314691470989,
+            "z": 234.1572092481561
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4912590180390046,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-13",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 233.67398349358353,
+            "z": 229.20757792786586
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4856342505698785,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-14",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 234.13315407221148,
+            "z": 224.27365803492128
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4774779796745707,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-15",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 234.5836338238916,
+            "z": 219.34102455675477
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4689215082452867,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-16",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 235.0692724807036,
+            "z": 214.37799292260655
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4664756106872496,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-17",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 235.55752340059868,
+            "z": 209.39693087882986
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4673680502017177,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-2",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 228.16937484689487,
+            "z": 283.95529251344254
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4814862678808118,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-3",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 228.56898458266915,
+            "z": 278.98702712613124
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4780375571657394,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-4",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 229.06549000432963,
+            "z": 274.0326955835144
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4735093277835456,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-5",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 229.63498466323475,
+            "z": 269.0672152243878
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.47294061428038,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-6",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 230.18702445386387,
+            "z": 264.06259224588115
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.480186853933822,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-7",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 230.72307637145698,
+            "z": 259.05049155399087
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.488400722388907,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-8",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 231.2514712250874,
+            "z": 254.05747722363606
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4923095513780422,
+          "heightM": 0.81
+        }
+      },
+      {
+        "id": "right-parapet-9",
+        "groupId": "right-parapet",
+        "obb": {
+          "center": {
+            "x": 231.77255580263687,
+            "z": 249.08173035788005
+          },
+          "lengthM": 12.2,
+          "widthM": 0.61,
+          "headingRad": 1.4925595863555425,
+          "heightM": 0.81
+        }
+      }
+    ],
+    "occlusionPairs": [
+      {
+        "observer": "focus-vehicle",
+        "target": "wrong-way-sedan",
+        "occluderId": "crest-occlusion"
+      }
+    ]
+  }
+}

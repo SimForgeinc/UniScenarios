@@ -1,0 +1,99 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-11-11-double-threat-crosswalk-v2",
+  "ordinal": 11,
+  "title": "Two-Stage Vulnerable-Road-User Crossing",
+  "durationSeconds": 20,
+  "mapId": "el-camino-road",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle holds at the crossing while a cyclist and mobility-scooter rider enter in sequence and an opposing vehicle traverses the distant approach.",
+  "tags": [
+    "staged-crossing",
+    "crosswalk",
+    "vulnerable-road-user"
+  ],
+  "interactionIds": [
+    "cyclist-emerges",
+    "destination-conflict-enters",
+    "focus-vehicle-confirms-wait",
+    "focus-vehicle-holds",
+    "pickup-blocks-crosswalk",
+    "pickup-creeps",
+    "scooter-leaves-refuge",
+    "scooter-pauses-at-refuge"
+  ],
+  "windows": [
+    {
+      "interactionId": "cyclist-emerges",
+      "actorId": "cyclist",
+      "startS": 9,
+      "endS": 9.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "destination-conflict-enters",
+      "actorId": "opposing-left-turner",
+      "startS": 12,
+      "endS": 13,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-confirms-wait",
+      "actorId": "focus-vehicle",
+      "startS": 18,
+      "endS": 18.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-holds",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "pickup-blocks-crosswalk",
+      "actorId": "outer-pickup",
+      "startS": 8,
+      "endS": 8.8,
+      "dependent": false
+    },
+    {
+      "interactionId": "pickup-creeps",
+      "actorId": "outer-pickup",
+      "startS": 5,
+      "endS": 6,
+      "dependent": false
+    },
+    {
+      "interactionId": "scooter-leaves-refuge",
+      "actorId": "mobility-scooter",
+      "startS": 19.5,
+      "endS": 20,
+      "dependent": false
+    },
+    {
+      "interactionId": "scooter-pauses-at-refuge",
+      "actorId": "mobility-scooter",
+      "startS": 5,
+      "endS": 5.7,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The mobility-scooter rider uses the supported slow vulnerable-road-user surrogate.",
+    "Occlusion acceptance is based on declared actor/prop geometry."
+  ]
+}

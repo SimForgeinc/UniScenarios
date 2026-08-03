@@ -1,0 +1,75 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-02-02-police-roadside-stop-v2",
+  "ordinal": 2,
+  "title": "Police Roadside Stop with a Blocked Shoulder",
+  "durationSeconds": 20,
+  "mapId": "yale-street",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle passes a roadside police stop where a stopped vehicle, officer-side activity, and adjacent traffic constrain the available lane.",
+  "tags": [
+    "police",
+    "roadside-stop",
+    "blocked-shoulder"
+  ],
+  "interactionIds": [
+    "cyclist-brakes",
+    "cyclist-swerves",
+    "police-emergency-lights-on",
+    "focus-vehicle-brakes",
+    "trailing-cyclist-stops"
+  ],
+  "windows": [
+    {
+      "interactionId": "cyclist-brakes",
+      "actorId": "lead-cyclist",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "cyclist-swerves",
+      "actorId": "lead-cyclist",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "police-emergency-lights-on",
+      "actorId": "police-cruiser",
+      "startS": 5.5,
+      "endS": 6,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-brakes",
+      "actorId": "focus-vehicle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "trailing-cyclist-stops",
+      "actorId": "trailing-cyclist",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The police cruiser identity uses the shipped ambulance emergency-vehicle model because a dedicated police-cruiser model is unavailable.",
+    "The roadside officer and timed emergency indicators explicitly represent the active stop; no door-opening animation is claimed."
+  ]
+}

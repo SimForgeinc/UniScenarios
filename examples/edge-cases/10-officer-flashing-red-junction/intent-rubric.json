@@ -1,0 +1,137 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-10-10-officer-flashing-red-junction-v2",
+  "intent": "Every approach treats a flashing-red junction as a stop while an officer releases conflicting streams in a timed sequence.",
+  "requiredActorIds": [
+    "cross-suv",
+    "focus-vehicle",
+    "officer",
+    "pedestrian-group",
+    "turning-bus"
+  ],
+  "requiredInteractionIds": [
+    "bus-clears-officer",
+    "bus-turns",
+    "focus-vehicle-crosses",
+    "focus-vehicle-full-stop",
+    "focus-vehicle-holds-ambiguous",
+    "focus-vehicle-ignores-dark-heads",
+    "officer-ambiguous-point",
+    "officer-beckons-focus-vehicle",
+    "officer-stops-suv",
+    "officer-waves-cross",
+    "pedestrians-held",
+    "signal-focus-vehicle-flashing-red",
+    "signal-focus-vehicle-flashing-red-flash-off",
+    "signal-focus-vehicle-flashing-red-flash-red",
+    "signal-left-flashing-red",
+    "signal-left-flashing-red-flash-off",
+    "signal-left-flashing-red-flash-red",
+    "signal-opposing-flashing-red",
+    "signal-opposing-flashing-red-flash-off",
+    "signal-opposing-flashing-red-flash-red",
+    "signal-right-flashing-red",
+    "signal-right-flashing-red-flash-off",
+    "signal-right-flashing-red-flash-red",
+    "suv-false-start",
+    "suv-yields"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "cross-suv": {
+        "samples": 41,
+        "start": {
+          "x": 343,
+          "z": -1782,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 353.467378,
+          "z": -1786.378871,
+          "laneRsl": null
+        },
+        "displacementM": 11.346388,
+        "maxSpeedMps": 2.586574,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 385,
+          "z": -1808,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 377.795152,
+          "z": -1795.672126,
+          "laneRsl": null
+        },
+        "displacementM": 14.278876,
+        "maxSpeedMps": 3.611868,
+        "observedLanes": []
+      },
+      "officer": {
+        "samples": 41,
+        "start": {
+          "x": 369,
+          "z": -1784,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 369,
+          "z": -1784,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "pedestrian-group": {
+        "samples": 41,
+        "start": {
+          "x": 367,
+          "z": -1778,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 367,
+          "z": -1778,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "turning-bus": {
+        "samples": 41,
+        "start": {
+          "x": 364,
+          "z": -1804,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 419.428764,
+          "z": -1772.32989,
+          "laneRsl": null
+        },
+        "displacementM": 63.838419,
+        "maxSpeedMps": 5.263947,
+        "observedLanes": []
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "Officer hand gestures are represented by timed world-control and pedestrian actions.",
+    "Flashing-red is represented through authored signal phases because the baked signal mesh has no per-lens animation."
+  ]
+}

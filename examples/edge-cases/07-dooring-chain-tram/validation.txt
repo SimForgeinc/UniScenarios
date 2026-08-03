@@ -1,3 +1,0 @@
-examples/edge-cases/07-dooring-chain-tram/template.json: 0 error(s), 0 warning(s) — document-only checks
-
-adapter  note                      anchor.features.parking.orientation         the matcher has no parking-zone predicates; clause not evaluated

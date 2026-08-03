@@ -1,0 +1,91 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+  "ordinal": 9,
+  "title": "Stalled Vehicle Beyond a Sight Constraint",
+  "durationSeconds": 20,
+  "mapId": "el-camino-road",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle approaches a stopped roadway obstruction revealed late by rain, glare, and limited visibility.",
+  "tags": [
+    "stalled-vehicle",
+    "limited-sight",
+    "braking"
+  ],
+  "interactionIds": [
+    "focus-vehicle-progressive-brake",
+    "pedestrian-notices-cart",
+    "pedestrian-steps",
+    "shopper-chases",
+    "shopper-path",
+    "shopper-stops",
+    "stalled-vehicle-hazards-on"
+  ],
+  "windows": [
+    {
+      "interactionId": "focus-vehicle-progressive-brake",
+      "actorId": "focus-vehicle",
+        "startS": 3.5,
+        "endS": 6.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrian-notices-cart",
+      "actorId": "umbrella-pedestrian",
+      "startS": 14,
+      "endS": 14.3,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrian-steps",
+      "actorId": "umbrella-pedestrian",
+      "startS": 12.5,
+      "endS": 13,
+      "dependent": false
+    },
+    {
+      "interactionId": "shopper-chases",
+      "actorId": "shopper",
+      "startS": 0,
+      "endS": 0.3,
+      "dependent": false
+    },
+    {
+      "interactionId": "shopper-path",
+      "actorId": "shopper",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "shopper-stops",
+      "actorId": "shopper",
+      "startS": 6.8,
+      "endS": 7.2,
+      "dependent": false
+    },
+    {
+      "interactionId": "stalled-vehicle-hazards-on",
+      "actorId": "stalled-vehicle",
+      "startS": 0.5,
+      "endS": 1,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The shipped cart/obstruction prop stands in for loose debris beside the stalled vehicle.",
+    "Visibility effects are operational-condition metadata and geometric occlusion, not photorealistic sensor degradation."
+  ]
+}

@@ -1,0 +1,512 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Stalled Vehicle Beyond a Sight Constraint",
+    "description": "The focus vehicle approaches a stopped roadway obstruction revealed late by rain, glare, and limited visibility. This curated 20-second scenario uses only currently supported behaviors; adaptations are declared in machine-readable metadata.",
+    "createdAt": "2026-08-02T06:30:00.000Z",
+    "modifiedAt": "2026-08-03T08:00:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "gallery.09-stalled-vehicle-beyond-sight",
+    "tags": [
+      "curated-gallery-v2",
+      "EC-09",
+      "stalled-vehicle",
+      "limited-sight",
+      "braking"
+    ],
+    "author": "Codex curated edge-case suite",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "focusVehicleSpeedKph",
+        "type": "continuous",
+        "unit": "kph",
+        "tier": 1,
+        "range": [
+          32,
+          38
+        ],
+        "default": 35,
+        "distribution": "uniform"
+      },
+      {
+        "id": "cartSpeedKph",
+        "type": "continuous",
+        "unit": "kph",
+        "tier": 1,
+        "range": [
+          7,
+          12
+        ],
+        "default": 9,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "heavy_rain",
+    "timeOfDay": "dusk",
+    "frictionScale": 0.58,
+    "sunAzimuthDeg": 180,
+    "sunElevationDeg": 4,
+    "extensions": {
+      "visibility": "directional-glare",
+      "rainIntensity": 0.9,
+      "wetRoadReflections": true
+    }
+  },
+  "anchor": {
+    "id": "runaway-cart-rain-glare",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          2,
+          4
+        ],
+        "essentiality": "required"
+      },
+      "throughLanesOpposing": {
+        "value": [
+          1,
+          4
+        ],
+        "essentiality": "required"
+      },
+      "requiresAdjacent": {
+        "value": [
+          "median"
+        ],
+        "essentiality": "required"
+      },
+      "speedLimitKph": {
+        "value": [
+          30,
+          55
+        ],
+        "essentiality": "preferred",
+        "weight": 2
+      },
+      "curvatureDegPer10m": {
+        "value": [
+          0,
+          5
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          130,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "access",
+        "kind": "parking_zone",
+        "label": "sloped commercial-lot access",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            40,
+            100
+          ],
+          "essentiality": "required"
+        },
+        "side": {
+          "value": "right",
+          "essentiality": "required"
+        }
+      },
+      {
+        "id": "crossing",
+        "kind": "crossing",
+        "label": "midblock crossing immediately downstream of access",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            45,
+            115
+          ],
+          "essentiality": "required"
+        },
+        "marked": {
+          "value": true,
+          "essentiality": "required"
+        },
+        "placement": {
+          "value": "midblock",
+          "essentiality": "required"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": true,
+      "maxSitesPerMap": 8,
+      "diversity": "moderate",
+      "minScore": 0.65
+    }
+  },
+  "roles": [
+    {
+      "id": "focus-vehicle",
+      "kind": "on_reference",
+      "label": "focus-vehicle approaching driveway hazard",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -48,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": "param.focusVehicleSpeedKph",
+      "extensions": {
+        "placementFeature": "access"
+      }
+    },
+    {
+      "id": "stalled-vehicle",
+      "kind": "on_reference",
+      "label": "disabled vehicle stopped beyond the sight constraint",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv",
+        "static": true
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": 0,
+        "tFrac": -1,
+        "headingOffsetRad": 1.5707963267948966
+      },
+      "initialSpeedKph": 0,
+      "extensions": {
+        "semanticClass": "shopping_cart",
+        "uncontrolled": true,
+        "nonAgentHazard": true,
+        "placementFeature": "access"
+      }
+    },
+    {
+      "id": "shopper",
+      "kind": "on_reference",
+      "label": "shopper chasing but stopping at driveway edge",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_walking"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -1.5,
+        "tFrac": -1,
+        "headingOffsetRad": 1.5707963267948966
+      },
+      "initialSpeedKph": 4,
+      "extensions": {
+        "placementFeature": "access",
+        "mustRemainOutsideRoad": true
+      }
+    },
+    {
+      "id": "oncoming-glare",
+      "kind": "opposing",
+      "label": "oncoming vehicle producing headlight glare",
+      "k": 0,
+      "pose": {
+        "laneOffset": 0,
+        "s": 18,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv"
+      },
+      "initialSpeedKph": 32,
+      "extensions": {
+        "headlights": "high-glare",
+        "glareSource": true
+      }
+    },
+    {
+      "id": "umbrella-pedestrian",
+      "kind": "on_crossing",
+      "label": "umbrella pedestrian who notices cart and waits",
+      "feature": "crossing",
+      "startFrac": 0,
+      "direction": "near_to_far",
+      "lateralFrac": 0,
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_walking"
+      },
+      "initialSpeedKph": 0,
+      "extensions": {
+        "umbrella": true
+      }
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "interactions": [
+      {
+        "id": "shopper-path",
+        "actor": "shopper",
+        "verb": "route",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "polyline",
+          "points": [
+            {
+              "laneOffset": 0,
+              "s": -4,
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            },
+            {
+              "laneOffset": 0,
+              "s": 0,
+              "tFrac": -1,
+              "headingOffsetRad": 0
+            }
+          ]
+        }
+      },
+      {
+        "id": "shopper-chases",
+        "actor": "shopper",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 4
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "shopper-stops",
+        "actor": "shopper",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 6.8
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        }
+      },
+      {
+        "id": "focus-vehicle-progressive-brake",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+        "t": 3.5
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "cubic",
+          "constraint": "time",
+          "value": 2.7
+        }
+      },
+      {
+        "id": "pedestrian-steps",
+        "actor": "umbrella-pedestrian",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 3
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        }
+      },
+      {
+        "id": "pedestrian-notices-cart",
+        "actor": "umbrella-pedestrian",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 14
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "stalled-vehicle-hazards-on",
+        "actor": "stalled-vehicle",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "target": {
+          "key": "lights.hazard",
+          "value": true
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "wet-braking-budget",
+      "kind": "decel_budget",
+      "of": "focus-vehicle",
+      "maxMps2": 5.7,
+      "essentiality": "required"
+    },
+    {
+      "id": "focus-vehicle-cart-criticality",
+      "kind": "ttc",
+      "of": "focus-vehicle",
+      "to": "cart",
+      "range": [
+        0.8,
+        4
+      ],
+      "mode": "min",
+      "essentiality": "required"
+    },
+    {
+      "id": "cart-event-order",
+      "kind": "event_order",
+      "events": [
+        "cart-rolls",
+        "cart-hits-median",
+        "cart-rolls-back",
+        "cart-secured"
+      ],
+      "strict": true,
+      "essentiality": "required"
+    },
+    {
+      "id": "pedestrian-response-order",
+      "kind": "event_order",
+      "events": [
+        "pedestrian-steps",
+        "pedestrian-notices-cart"
+      ],
+      "strict": true,
+      "essentiality": "required"
+    }
+  ],
+  "variants": [],
+  "metricSubject": "focus-vehicle",
+  "extensions": {
+    "intentId": "edge-case-08-runaway-cart-rain-glare",
+    "requiredBehavior": "cart must cross once, stop at median, then visibly roll back before being secured",
+    "forbidLateralEscape": true,
+    "requiredSiteEvidence": {
+      "commercialLot": true,
+      "slopedAccess": true,
+      "accessImmediatelyBeforeCrossing": true,
+      "medianCurbForRollback": true
+    },
+    "studio.gallery.intent": {
+      "schema": "uniscenarios.gallery-intent.v1",
+      "stableId": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+      "focusActorId": "focus-vehicle",
+      "statement": "The focus vehicle approaches a stopped roadway obstruction revealed late by rain, glare, and limited visibility.",
+      "adaptations": [
+        "The shipped cart/obstruction prop stands in for loose debris beside the stalled vehicle.",
+        "Visibility effects are operational-condition metadata and geometric occlusion, not photorealistic sensor degradation."
+      ]
+    },
+    "studio.ambientTraffic": {
+      "enabled": true,
+      "provider": "sumo",
+      "density": "moderate",
+      "authoredActorsExcludedFromTimeline": true
+    },
+    "studio.timeline.windows": [
+      {
+        "interactionId": "focus-vehicle-progressive-brake",
+        "actorId": "focus-vehicle",
+        "startS": 6.5,
+        "endS": 9.2,
+        "dependent": false
+      },
+      {
+        "interactionId": "pedestrian-notices-cart",
+        "actorId": "umbrella-pedestrian",
+        "startS": 14,
+        "endS": 14.3,
+        "dependent": false
+      },
+      {
+        "interactionId": "pedestrian-steps",
+        "actorId": "umbrella-pedestrian",
+        "startS": 12.5,
+        "endS": 13,
+        "dependent": false
+      },
+      {
+        "interactionId": "shopper-chases",
+        "actorId": "shopper",
+        "startS": 0,
+        "endS": 0.3,
+        "dependent": false
+      },
+      {
+        "interactionId": "shopper-path",
+        "actorId": "shopper",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "shopper-stops",
+        "actorId": "shopper",
+        "startS": 6.8,
+        "endS": 7.2,
+        "dependent": false
+      },
+      {
+        "interactionId": "stalled-vehicle-hazards-on",
+        "actorId": "stalled-vehicle",
+        "startS": 0.5,
+        "endS": 1,
+        "dependent": false
+      }
+    ]
+  }
+}

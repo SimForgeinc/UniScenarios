@@ -1,0 +1,1124 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "provider": "native",
+  "command": "uniscenarios debug 10-officer-flashing-red-junction/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/10-officer-flashing-red-junction/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "yale-street",
+    "provider": "native",
+    "inputHash": "9d73ca49b7c69c3e3f43d06bac070442dd763501124f48bc56e196243a7dbaff",
+    "traceDigest": "89c8384dc5981f53f3fcc3e5fc2b80285beb69ee629d0dde23181157243dbe1c",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 259.174958,
+    "feasible": true,
+    "manifest": {
+      "instanceId": "ec-10-10-officer-flashing-red-junction-v2#0",
+      "inputHash": "9d73ca49b7c69c3e3f43d06bac070442dd763501124f48bc56e196243a7dbaff",
+      "replayKey": {
+        "mapId": "yale-street",
+        "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+        "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+        "templateId": "ec-10-10-officer-flashing-red-junction-v2",
+        "paramSeed": "ec-10-10-officer-flashing-red-junction-v2",
+        "drawIndex": 0
+      },
+      "actors": [
+        {
+          "id": "cross-suv",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "officer",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "pedestrian-group",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "turning-bus",
+          "actorKind": "bus",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        }
+      ],
+      "archetype": "gallery.10-officer-flashing-red-junction",
+      "metricSubject": "focus-vehicle"
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 124.59225,
+    "nativeTicksPerSecond": 8034.207585,
+    "simulatedSecondsPerWallSecond": 160.523628,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 5,
+    "ambientActorCount": 0,
+    "signalCount": 0,
+    "interactionCount": 25,
+    "collisionCount": 0,
+    "roadDepartureCount": 0,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "cross-suv": {
+        "samples": 41,
+        "start": {
+          "x": 343,
+          "z": -1782,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 353.467378,
+          "z": -1786.378871,
+          "laneRsl": null
+        },
+        "displacementM": 11.346388,
+        "maxSpeedMps": 2.586574,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 385,
+          "z": -1808,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 377.795152,
+          "z": -1795.672126,
+          "laneRsl": null
+        },
+        "displacementM": 14.278876,
+        "maxSpeedMps": 3.611868,
+        "observedLanes": []
+      },
+      "officer": {
+        "samples": 41,
+        "start": {
+          "x": 369,
+          "z": -1784,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 369,
+          "z": -1784,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "pedestrian-group": {
+        "samples": 41,
+        "start": {
+          "x": 367,
+          "z": -1778,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 367,
+          "z": -1778,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "turning-bus": {
+        "samples": 41,
+        "start": {
+          "x": 364,
+          "z": -1804,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 419.428764,
+          "z": -1772.32989,
+          "laneRsl": null
+        },
+        "displacementM": 63.838419,
+        "maxSpeedMps": 5.263947,
+        "observedLanes": []
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "bus-clears-officer",
+      "actorId": "turning-bus",
+      "trigger": {
+        "kind": "at",
+        "t": 12.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 5
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.5
+      },
+      "events": [
+        {
+          "t": 12.5,
+          "kind": "trigger_fired",
+          "interactionId": "bus-clears-officer",
+          "actorId": "turning-bus",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 12.5,
+          "kind": "preemption",
+          "actorId": "turning-bus",
+          "axis": "longitudinal",
+          "byInteractionId": "bus-clears-officer",
+          "preemptedInteractionId": "bus-turns"
+        }
+      ]
+    },
+    {
+      "id": "bus-turns",
+      "actorId": "turning-bus",
+      "trigger": {
+        "kind": "at",
+        "t": 5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 5
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 5,
+          "kind": "trigger_fired",
+          "interactionId": "bus-turns",
+          "actorId": "turning-bus",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 12.5,
+          "kind": "preemption",
+          "actorId": "turning-bus",
+          "axis": "longitudinal",
+          "byInteractionId": "bus-clears-officer",
+          "preemptedInteractionId": "bus-turns"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-crosses",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 15.65
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 3.333333
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 15.66,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-crosses",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 15.66,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-crosses",
+          "preemptedInteractionId": "focus-vehicle-holds-ambiguous"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-full-stop",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-full-stop",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 9,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-holds-ambiguous",
+          "preemptedInteractionId": "focus-vehicle-full-stop"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-holds-ambiguous",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 9
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 9,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-holds-ambiguous",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 9,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-holds-ambiguous",
+          "preemptedInteractionId": "focus-vehicle-full-stop"
+        },
+        {
+          "t": 15.66,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-crosses",
+          "preemptedInteractionId": "focus-vehicle-holds-ambiguous"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-ignores-dark-heads",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 15.65
+      },
+      "verb": "set",
+      "target": {
+        "key": "rules.obeySignals",
+        "value": false
+      },
+      "events": [
+        {
+          "t": 15.66,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-ignores-dark-heads",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "officer-ambiguous-point",
+      "actorId": "officer",
+      "trigger": {
+        "kind": "at",
+        "t": 9
+      },
+      "verb": "set",
+      "target": {
+        "key": "pose.gesture",
+        "value": "point"
+      },
+      "events": [
+        {
+          "t": 9,
+          "kind": "trigger_fired",
+          "interactionId": "officer-ambiguous-point",
+          "actorId": "officer",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "officer-beckons-focus-vehicle",
+      "actorId": "officer",
+      "trigger": {
+        "kind": "at",
+        "t": 14.55
+      },
+      "verb": "set",
+      "target": {
+        "key": "pose.gesture",
+        "value": "wave_through"
+      },
+      "events": [
+        {
+          "t": 14.56,
+          "kind": "trigger_fired",
+          "interactionId": "officer-beckons-focus-vehicle",
+          "actorId": "officer",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "officer-stops-suv",
+      "actorId": "officer",
+      "trigger": {
+        "kind": "at",
+        "t": 14
+      },
+      "verb": "set",
+      "target": {
+        "key": "pose.gesture",
+        "value": "halt"
+      },
+      "events": [
+        {
+          "t": 14,
+          "kind": "trigger_fired",
+          "interactionId": "officer-stops-suv",
+          "actorId": "officer",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "officer-waves-cross",
+      "actorId": "officer",
+      "trigger": {
+        "kind": "at",
+        "t": 1
+      },
+      "verb": "set",
+      "target": {
+        "key": "pose.gesture",
+        "value": "wave_through"
+      },
+      "events": [
+        {
+          "t": 1,
+          "kind": "trigger_fired",
+          "interactionId": "officer-waves-cross",
+          "actorId": "officer",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "pedestrians-held",
+      "actorId": "pedestrian-group",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "pedestrians-held",
+          "actorId": "pedestrian-group",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-focus-vehicle-flashing-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:focus-vehicle.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "signal-focus-vehicle-flashing-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-left-flashing-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:left.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "signal-left-flashing-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-opposing-flashing-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:opposing.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "signal-opposing-flashing-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-right-flashing-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:right.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "signal-right-flashing-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "suv-false-start",
+      "actorId": "cross-suv",
+      "trigger": {
+        "kind": "at",
+        "t": 9.4
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 2.222222
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 9.4,
+          "kind": "trigger_fired",
+          "interactionId": "suv-false-start",
+          "actorId": "cross-suv",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 14.16,
+          "kind": "preemption",
+          "actorId": "cross-suv",
+          "axis": "longitudinal",
+          "byInteractionId": "suv-yields",
+          "preemptedInteractionId": "suv-false-start"
+        }
+      ]
+    },
+    {
+      "id": "suv-yields",
+      "actorId": "cross-suv",
+      "trigger": {
+        "kind": "at",
+        "t": 14.15
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 14.16,
+          "kind": "trigger_fired",
+          "interactionId": "suv-yields",
+          "actorId": "cross-suv",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 14.16,
+          "kind": "preemption",
+          "actorId": "cross-suv",
+          "axis": "longitudinal",
+          "byInteractionId": "suv-yields",
+          "preemptedInteractionId": "suv-false-start"
+        }
+      ]
+    },
+    {
+      "id": "signal-focus-vehicle-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:focus-vehicle.phase",
+        "value": "off"
+      },
+      "events": [
+        {
+          "t": 0.5,
+          "kind": "trigger_fired",
+          "interactionId": "signal-focus-vehicle-flashing-red-flash-off",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-focus-vehicle-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 1
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:focus-vehicle.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 1,
+          "kind": "trigger_fired",
+          "interactionId": "signal-focus-vehicle-flashing-red-flash-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-left-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:left.phase",
+        "value": "off"
+      },
+      "events": [
+        {
+          "t": 0.5,
+          "kind": "trigger_fired",
+          "interactionId": "signal-left-flashing-red-flash-off",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-left-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 1
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:left.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 1,
+          "kind": "trigger_fired",
+          "interactionId": "signal-left-flashing-red-flash-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-opposing-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:opposing.phase",
+        "value": "off"
+      },
+      "events": [
+        {
+          "t": 0.5,
+          "kind": "trigger_fired",
+          "interactionId": "signal-opposing-flashing-red-flash-off",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-opposing-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 1
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:opposing.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 1,
+          "kind": "trigger_fired",
+          "interactionId": "signal-opposing-flashing-red-flash-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-right-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:right.phase",
+        "value": "off"
+      },
+      "events": [
+        {
+          "t": 0.5,
+          "kind": "trigger_fired",
+          "interactionId": "signal-right-flashing-red-flash-off",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "signal-right-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 1
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:dark-junction:right.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 1,
+          "kind": "trigger_fired",
+          "interactionId": "signal-right-flashing-red-flash-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [],
+    "collisions": [],
+    "roadDepartures": [],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [
+      {
+        "t": 9,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-holds-ambiguous",
+        "preemptedInteractionId": "focus-vehicle-full-stop"
+      },
+      {
+        "t": 12.5,
+        "kind": "preemption",
+        "actorId": "turning-bus",
+        "axis": "longitudinal",
+        "byInteractionId": "bus-clears-officer",
+        "preemptedInteractionId": "bus-turns"
+      },
+      {
+        "t": 14.16,
+        "kind": "preemption",
+        "actorId": "cross-suv",
+        "axis": "longitudinal",
+        "byInteractionId": "suv-yields",
+        "preemptedInteractionId": "suv-false-start"
+      },
+      {
+        "t": 15.66,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-crosses",
+        "preemptedInteractionId": "focus-vehicle-holds-ambiguous"
+      }
+    ],
+    "fallbacks": [],
+    "routes": {
+      "cross-suv": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 343,
+              "z": -1782
+            },
+            {
+              "x": 375,
+              "z": -1793
+            },
+            {
+              "x": 420,
+              "z": -1809
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 11.322256,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "focus-vehicle": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 385,
+              "z": -1808
+            },
+            {
+              "x": 375,
+              "z": -1793
+            },
+            {
+              "x": 360,
+              "z": -1769
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 14.253904,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "officer": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 369,
+              "z": -1784
+            },
+            {
+              "x": 369.1,
+              "z": -1784
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      },
+      "pedestrian-group": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 367,
+              "z": -1778
+            },
+            {
+              "x": 388,
+              "z": -1810
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "pedestrian"
+        }
+      },
+      "turning-bus": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 364,
+              "z": -1804
+            },
+            {
+              "x": 382,
+              "z": -1794
+            },
+            {
+              "x": 420,
+              "z": -1772
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 63.840528,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bus"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": {
+      "value": 3.607,
+      "t": 20,
+      "pair": [
+        "focus-vehicle",
+        "officer"
+      ]
+    },
+    "minDistance": [
+      {
+        "pair": [
+          "cross-suv",
+          "focus-vehicle"
+        ],
+        "minDistanceM": 20.909,
+        "t": 20
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "officer"
+        ],
+        "minDistanceM": 11.635,
+        "t": 20
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "pedestrian-group"
+        ],
+        "minDistanceM": 17.382,
+        "t": 20
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "turning-bus"
+        ],
+        "minDistanceM": 2.811,
+        "t": 10.84
+      }
+    ],
+    "requiredDecelMax": {
+      "cross-suv": 0.003,
+      "focus-vehicle": 0.025,
+      "officer": 0,
+      "pedestrian-group": 0,
+      "turning-bus": 0
+    },
+    "revealToConflict": {
+      "observer": "focus-vehicle",
+      "target": "officer",
+      "value": 11.927,
+      "firstBlockedT": 9.16,
+      "losOpenT": 11.68,
+      "conflictT": 23.607,
+      "pair": [
+        "focus-vehicle",
+        "officer"
+      ],
+      "occluderId": "actor:turning-bus",
+      "relevantOccluderIds": [
+        "actor:turning-bus"
+      ]
+    },
+    "declaredOcclusion": [
+      {
+        "observer": "focus-vehicle",
+        "target": "officer",
+        "pair": [
+          "focus-vehicle",
+          "officer"
+        ],
+        "occluderId": "actor:turning-bus",
+        "relevantOccluderIds": [
+          "actor:turning-bus"
+        ],
+        "status": "revealed_before_conflict",
+        "firstBlockedT": 9.16,
+        "losOpenT": 11.68,
+        "conflictT": 23.607,
+        "revealToConflictS": 11.927
+      }
+    ],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": false,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

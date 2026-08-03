@@ -1,0 +1,718 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T07:57:25.164Z",
+  "provider": "native",
+  "command": "uniscenarios debug scenario.instance.json --sample 0.5 --out .debug --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/09-stalled-vehicle-beyond-sight/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "el-camino-road",
+    "provider": "native",
+    "inputHash": "f38564b35983fb73ba48b5aae8bb87d53950087dcd696cd3d8d537a0dcfa933c",
+    "traceDigest": "f59da229d9055e61e0cd8992fa171b33ecc709fb84462136ce0186beb97435e2",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 263.285208,
+    "feasible": true,
+    "manifest": {
+      "kind": "scenario-instance-manifest",
+      "manifestVersion": 1,
+      "replayKey": {
+        "templateId": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+        "templateVersion": 2,
+        "templateDigest": "a071b7d58f5cab1b",
+        "mapId": "el-camino-road",
+        "matcherIndexDigest": "986a9135415f3b045a7fb5d8f552bea3a1e7bdc9f35aba33e70092ee1dbd91d0",
+        "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
+        "siteId": "studio:el-camino-road",
+        "matcherVersion": "1.0.0",
+        "solverVersion": "0.2.6",
+        "paramSeed": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+        "drawIndex": 0
+      },
+      "instanceId": "ec-09-09-stalled-vehicle-beyond-sight-v2#0",
+      "archetype": "gallery.09-stalled-vehicle-beyond-sight",
+      "negativeControl": false,
+      "metricSubject": "focus-vehicle",
+      "operationalVariant": null,
+      "site": {
+        "siteId": "studio:el-camino-road",
+        "score": 1,
+        "verdict": "exact",
+        "originFeatureId": "map:el-camino-road",
+        "entryLaneRsl": "71:0:3",
+        "egoTurn": null,
+        "degradationSummary": "exact map-bound Studio placement",
+        "matchedReasons": [
+          "anchor.pin.mapId",
+          "scene_absolute"
+        ]
+      },
+      "params": {
+        "values": {
+          "egoSpeedKph": 35,
+          "cartSpeedKph": 9
+        },
+        "categorical": {},
+        "rejectedConstraints": []
+      },
+      "actors": [
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": "71:0:3",
+          "spawnS": 9.920763285649912,
+          "initialSpeedMps": 9.722222222222223,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "oncoming-glare",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": "685:0:-1",
+          "spawnS": 40.769997743948764,
+          "initialSpeedMps": 8.88888888888889,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "shopper",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": "7:0:-2",
+          "spawnS": 8.247138914322363,
+          "initialSpeedMps": 1.1111111111111112,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "stalled-vehicle",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": "7:0:-2",
+          "spawnS": 13.247138914322363,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "umbrella-pedestrian",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": "7:0:-2",
+          "spawnS": 27.247138914322363,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        }
+      ],
+      "props": [],
+      "arrival": [],
+      "inputHash": "8d198348f2fc007c39663ad91e9199edf1864cbba2dd0c6a1375d0c921b3b54f",
+      "feasible": true,
+      "issues": [],
+      "notes": [
+        {
+          "path": "roles.shopper.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.shopper.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.shopper.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.focus-vehicle.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        },
+        {
+          "path": "roles.cart.extensions.placementFeature",
+          "reason": "placementFeature \"access\" is not bound at this site; using frame origin"
+        }
+      ]
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 122.474292,
+    "nativeTicksPerSecond": 8173.143797,
+    "simulatedSecondsPerWallSecond": 163.299576,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 5,
+    "ambientActorCount": 0,
+    "signalCount": 0,
+    "interactionCount": 7,
+    "collisionCount": 0,
+    "roadDepartureCount": 1,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1318.215224,
+          "z": -1322.21305,
+          "laneRsl": "71:0:3"
+        },
+        "end": {
+          "x": 1279.13791,
+          "z": -1349.161136,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 47.468261,
+        "maxSpeedMps": 9.722222,
+        "observedLanes": [
+          "71:0:3",
+          "815:0:1",
+          "7:0:-2"
+        ]
+      },
+      "oncoming-glare": {
+        "samples": 41,
+        "start": {
+          "x": 1134.905037,
+          "z": -1432.499903,
+          "laneRsl": "685:0:-1"
+        },
+        "end": {
+          "x": 1284.010288,
+          "z": -1339.156599,
+          "laneRsl": "820:0:-1"
+        },
+        "displacementM": 175.9129,
+        "maxSpeedMps": 8.888889,
+        "observedLanes": [
+          "685:0:-1",
+          "69:0:-2",
+          "2030:0:-1",
+          "46:0:-2",
+          "820:0:-1"
+        ]
+      },
+      "shopper": {
+        "samples": 41,
+        "start": {
+          "x": 1274.9765,
+          "z": -1356.324185,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1274.98164,
+          "z": -1356.323751,
+          "laneRsl": null
+        },
+        "displacementM": 0.005158,
+        "maxSpeedMps": 1.111111,
+        "observedLanes": []
+      },
+      "stalled-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1270.65633,
+          "z": -1358.855236,
+          "laneRsl": "7:0:-2"
+        },
+        "end": {
+          "x": 1270.65633,
+          "z": -1358.855236,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "7:0:-2"
+        ]
+      },
+      "umbrella-pedestrian": {
+        "samples": 41,
+        "start": {
+          "x": 1258.827179,
+          "z": -1366.535713,
+          "laneRsl": "7:0:-2"
+        },
+        "end": {
+          "x": 1258.827179,
+          "z": -1366.535713,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "7:0:-2"
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "focus-vehicle-progressive-brake",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 3.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "cubic",
+        "constraint": "time",
+        "value": 2.7
+      },
+      "events": [
+        {
+          "t": 3.5,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-progressive-brake",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "pedestrian-notices-cart",
+      "actorId": "umbrella-pedestrian",
+      "trigger": {
+        "kind": "at",
+        "t": 14
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.3
+      },
+      "events": [
+        {
+          "t": 14,
+          "kind": "trigger_fired",
+          "interactionId": "pedestrian-notices-cart",
+          "actorId": "umbrella-pedestrian",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 14,
+          "kind": "preemption",
+          "actorId": "umbrella-pedestrian",
+          "axis": "longitudinal",
+          "byInteractionId": "pedestrian-notices-cart",
+          "preemptedInteractionId": "pedestrian-steps"
+        }
+      ]
+    },
+    {
+      "id": "pedestrian-steps",
+      "actorId": "umbrella-pedestrian",
+      "trigger": {
+        "kind": "at",
+        "t": 12.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 0.8333333333333334
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.5
+      },
+      "events": [
+        {
+          "t": 12.5,
+          "kind": "trigger_fired",
+          "interactionId": "pedestrian-steps",
+          "actorId": "umbrella-pedestrian",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 14,
+          "kind": "preemption",
+          "actorId": "umbrella-pedestrian",
+          "axis": "longitudinal",
+          "byInteractionId": "pedestrian-notices-cart",
+          "preemptedInteractionId": "pedestrian-steps"
+        }
+      ]
+    },
+    {
+      "id": "shopper-chases",
+      "actorId": "shopper",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 1.1111111111111112
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.3
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "shopper-chases",
+          "actorId": "shopper",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 6.8,
+          "kind": "preemption",
+          "actorId": "shopper",
+          "axis": "longitudinal",
+          "byInteractionId": "shopper-stops",
+          "preemptedInteractionId": "shopper-chases"
+        }
+      ]
+    },
+    {
+      "id": "shopper-path",
+      "actorId": "shopper",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "route",
+      "target": {
+        "kind": "polyline",
+        "points": [
+          {
+            "x": 1278.4917605528792,
+            "z": -1354.26875329166
+          },
+          {
+            "x": 1275.0166353780426,
+            "z": -1356.381317509884
+          }
+        ]
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "shopper-path",
+          "actorId": "shopper",
+          "verb": "route",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "shopper-stops",
+      "actorId": "shopper",
+      "trigger": {
+        "kind": "at",
+        "t": 6.8
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.4
+      },
+      "events": [
+        {
+          "t": 6.8,
+          "kind": "trigger_fired",
+          "interactionId": "shopper-stops",
+          "actorId": "shopper",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 6.8,
+          "kind": "preemption",
+          "actorId": "shopper",
+          "axis": "longitudinal",
+          "byInteractionId": "shopper-stops",
+          "preemptedInteractionId": "shopper-chases"
+        }
+      ]
+    },
+    {
+      "id": "stalled-vehicle-hazards-on",
+      "actorId": "stalled-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "lights.hazard",
+        "value": true
+      },
+      "events": [
+        {
+          "t": 0.5,
+          "kind": "trigger_fired",
+          "interactionId": "stalled-vehicle-hazards-on",
+          "actorId": "stalled-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [
+      {
+        "code": "spawn_lane_pose_mismatch",
+        "severity": "warning",
+        "path": "actors.umbrella-pedestrian.initial",
+        "reason": "authored pose and lane station differ by 0.36 m; the authored pose is preserved and lane progress is reprojected",
+        "detail": {
+          "rsl": "7:0:-2",
+          "authoredS": 27.247138914322363,
+          "projectedS": 27.24717116382927,
+          "mismatchM": 0.3606537209916261
+        }
+      }
+    ],
+    "collisions": [],
+    "roadDepartures": [
+      {
+        "t": 0,
+        "kind": "road_departure_prevented",
+        "actorId": "umbrella-pedestrian",
+        "laneRsl": "7:0:-2",
+        "lateralErrorM": 2.774328512722013,
+        "allowedCenterOffsetM": 1.6601727259848333
+      }
+    ],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [
+      {
+        "t": 6.8,
+        "kind": "preemption",
+        "actorId": "shopper",
+        "axis": "longitudinal",
+        "byInteractionId": "shopper-stops",
+        "preemptedInteractionId": "shopper-chases"
+      },
+      {
+        "t": 14,
+        "kind": "preemption",
+        "actorId": "umbrella-pedestrian",
+        "axis": "longitudinal",
+        "byInteractionId": "pedestrian-notices-cart",
+        "preemptedInteractionId": "pedestrian-steps"
+      }
+    ],
+    "fallbacks": [],
+    "routes": {
+      "focus-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "71:0:3",
+            "815:0:1",
+            "7:0:-2",
+            "735:0:-1",
+            "73:0:-4",
+            "365:0:-4",
+            "74:0:-4",
+            "595:0:-1",
+            "79:0:-2"
+          ]
+        },
+        "initialLane": "71:0:3",
+        "observedLanes": [
+          "71:0:3",
+          "815:0:1",
+          "7:0:-2"
+        ],
+        "routeDistanceM": 47.477036,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "oncoming-glare": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "685:0:-1",
+            "69:0:-2",
+            "2030:0:-1",
+            "46:0:-2",
+            "820:0:-1",
+            "92:0:-1",
+            "92:1:-1"
+          ]
+        },
+        "initialLane": "685:0:-1",
+        "observedLanes": [
+          "685:0:-1",
+          "69:0:-2",
+          "2030:0:-1",
+          "46:0:-2",
+          "820:0:-1"
+        ],
+        "routeDistanceM": 176.259627,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "shopper": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "7:0:-2",
+            "735:0:-1",
+            "73:0:-4",
+            "365:0:-4"
+          ]
+        },
+        "initialLane": "7:0:-2",
+        "observedLanes": [],
+        "routeDistanceM": 0.000059,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "pedestrian"
+        }
+      },
+      "stalled-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "7:0:-2",
+            "735:0:-1",
+            "73:0:-4",
+            "365:0:-4"
+          ]
+        },
+        "initialLane": "7:0:-2",
+        "observedLanes": [
+          "7:0:-2"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      },
+      "umbrella-pedestrian": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "7:0:-2",
+            "735:0:-1",
+            "73:0:-4",
+            "365:0:-4"
+          ]
+        },
+        "initialLane": "7:0:-2",
+        "observedLanes": [
+          "7:0:-2"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "pedestrian"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": {
+      "value": 3.802,
+      "t": 14.52,
+      "pair": [
+        "focus-vehicle",
+        "oncoming-glare"
+      ]
+    },
+    "minDistance": [
+      {
+        "pair": [
+          "focus-vehicle",
+          "oncoming-glare"
+        ],
+        "minDistanceM": 0.676,
+        "t": 18.92
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "shopper"
+        ],
+        "minDistanceM": 52.069,
+        "t": 0
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "umbrella-pedestrian"
+        ],
+        "minDistanceM": 71.099,
+        "t": 0
+      }
+    ],
+    "requiredDecelMax": {
+      "focus-vehicle": 0,
+      "oncoming-glare": 0,
+      "shopper": 0,
+      "stalled-vehicle": 0,
+      "umbrella-pedestrian": 0
+    },
+    "revealToConflict": null,
+    "declaredOcclusion": [],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": false,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

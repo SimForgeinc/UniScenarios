@@ -1,0 +1,131 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-07-07-protected-left-red-runner-v2",
+  "intent": "The focus vehicle remains stopped while a red-light runner traverses a protected intersection and nearby vulnerable road users clear the crossing.",
+  "requiredActorIds": [
+    "cyclist",
+    "focus-vehicle",
+    "mobility-scooter",
+    "outer-pickup",
+    "red-runner"
+  ],
+  "requiredInteractionIds": [
+    "cyclist-emerges",
+    "destination-conflict-enters",
+    "focus-vehicle-confirms-wait",
+    "focus-vehicle-holds",
+    "pickup-blocks-crosswalk",
+    "pickup-creeps",
+    "protected-left-turns-red",
+    "red-runner-ignores-red",
+    "scooter-leaves-refuge",
+    "scooter-pauses-at-refuge"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 1125.512472,
+          "z": -1446.473366,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1110.6512,
+          "z": -1450.941347,
+          "laneRsl": null
+        },
+        "displacementM": 15.518385,
+        "maxSpeedMps": 1.564604,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1089.863076,
+          "z": -1467.233648,
+          "laneRsl": "128:0:-3"
+        },
+        "end": {
+          "x": 1089.905343,
+          "z": -1467.206051,
+          "laneRsl": "128:0:-3"
+        },
+        "displacementM": 0.050479,
+        "maxSpeedMps": 0.072068,
+        "observedLanes": [
+          "128:0:-3"
+        ]
+      },
+      "mobility-scooter": {
+        "samples": 41,
+        "start": {
+          "x": 1094.567297,
+          "z": -1455.776908,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1101.262526,
+          "z": -1453.764014,
+          "laneRsl": null
+        },
+        "displacementM": 6.991268,
+        "maxSpeedMps": 1.25,
+        "observedLanes": []
+      },
+      "outer-pickup": {
+        "samples": 41,
+        "start": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "end": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "627:0:-1"
+        ]
+      },
+      "red-runner": {
+        "samples": 41,
+        "start": {
+          "x": 1213.500251,
+          "z": -1401.358383,
+          "laneRsl": "73:0:-6"
+        },
+        "end": {
+          "x": 1147.382987,
+          "z": -1449.652306,
+          "laneRsl": "616:0:-1"
+        },
+        "displacementM": 81.87671,
+        "maxSpeedMps": 5.056175,
+        "observedLanes": [
+          "73:0:-6",
+          "365:0:-6",
+          "74:0:-6",
+          "616:0:-1"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The red runner is represented by the opposing turning actor with an authored rule override.",
+    "Signal compliance is evaluated from authored signal events; lamp mesh replacement is outside this scenario artifact."
+  ]
+}

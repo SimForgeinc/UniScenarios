@@ -1,0 +1,133 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-09-09-stalled-vehicle-beyond-sight-v2",
+  "intent": "The focus vehicle approaches a stopped roadway obstruction revealed late by rain, glare, and limited visibility.",
+  "requiredActorIds": [
+    "focus-vehicle",
+    "oncoming-glare",
+    "shopper",
+    "stalled-vehicle",
+    "umbrella-pedestrian"
+  ],
+  "requiredInteractionIds": [
+    "focus-vehicle-progressive-brake",
+    "pedestrian-notices-cart",
+    "pedestrian-steps",
+    "shopper-chases",
+    "shopper-path",
+    "shopper-stops",
+    "stalled-vehicle-hazards-on"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1318.215224,
+          "z": -1322.21305,
+          "laneRsl": "71:0:3"
+        },
+        "end": {
+          "x": 1279.13791,
+          "z": -1349.161136,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 47.468261,
+        "maxSpeedMps": 9.722222,
+        "observedLanes": [
+          "71:0:3",
+          "815:0:1",
+          "7:0:-2"
+        ]
+      },
+      "oncoming-glare": {
+        "samples": 41,
+        "start": {
+          "x": 1134.905037,
+          "z": -1432.499903,
+          "laneRsl": "685:0:-1"
+        },
+        "end": {
+          "x": 1284.010288,
+          "z": -1339.156599,
+          "laneRsl": "820:0:-1"
+        },
+        "displacementM": 175.9129,
+        "maxSpeedMps": 8.888889,
+        "observedLanes": [
+          "685:0:-1",
+          "69:0:-2",
+          "2030:0:-1",
+          "46:0:-2",
+          "820:0:-1"
+        ]
+      },
+      "shopper": {
+        "samples": 41,
+        "start": {
+          "x": 1274.9765,
+          "z": -1356.324185,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1274.98164,
+          "z": -1356.323751,
+          "laneRsl": null
+        },
+        "displacementM": 0.005158,
+        "maxSpeedMps": 1.111111,
+        "observedLanes": []
+      },
+      "stalled-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1270.65633,
+          "z": -1358.855236,
+          "laneRsl": "7:0:-2"
+        },
+        "end": {
+          "x": 1270.65633,
+          "z": -1358.855236,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "7:0:-2"
+        ]
+      },
+      "umbrella-pedestrian": {
+        "samples": 41,
+        "start": {
+          "x": 1258.827179,
+          "z": -1366.535713,
+          "laneRsl": "7:0:-2"
+        },
+        "end": {
+          "x": 1258.827179,
+          "z": -1366.535713,
+          "laneRsl": "7:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "7:0:-2"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The shipped cart/obstruction prop stands in for loose debris beside the stalled vehicle.",
+    "Visibility effects are operational-condition metadata and geometric occlusion, not photorealistic sensor degradation."
+  ]
+}

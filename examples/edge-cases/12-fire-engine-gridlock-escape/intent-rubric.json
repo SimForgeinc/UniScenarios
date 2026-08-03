@@ -1,0 +1,128 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-12-12-fire-engine-gridlock-escape-v2",
+  "intent": "Gridlocked vehicles make coordinated space for a fire engine to cross the junction while ordinary traffic remains controlled.",
+  "requiredActorIds": [
+    "cross-traffic",
+    "downstream-queue",
+    "fire-engine",
+    "focus-vehicle",
+    "pedestrian"
+  ],
+  "requiredInteractionIds": [
+    "cross-green",
+    "cross-red",
+    "cross-traffic-clears",
+    "fire-engine-horn-1-off",
+    "fire-engine-horn-1-on",
+    "fire-engine-horn-2-off",
+    "fire-engine-horn-2-on",
+    "fire-engine-passes",
+    "fire-engine-siren",
+    "focus-vehicle-creeps",
+    "focus-vehicle-holds",
+    "focus-vehicle-nudges-right",
+    "focus-vehicle-red",
+    "focus-vehicle-stops-pocket",
+    "pedestrian-clears",
+    "pedestrian-enters"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "cross-traffic": {
+        "samples": 41,
+        "start": {
+          "x": 340,
+          "z": -1780,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 341.961658,
+          "z": -1779.398667,
+          "laneRsl": null
+        },
+        "displacementM": 2.051756,
+        "maxSpeedMps": 9.444444,
+        "observedLanes": []
+      },
+      "downstream-queue": {
+        "samples": 41,
+        "start": {
+          "x": 360,
+          "z": -1760,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 360,
+          "z": -1760,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "fire-engine": {
+        "samples": 41,
+        "start": {
+          "x": 465,
+          "z": -1935,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 410.475576,
+          "z": -1818.456273,
+          "laneRsl": null
+        },
+        "displacementM": 128.667607,
+        "maxSpeedMps": 10.309153,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 397,
+          "z": -1828,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 393.768395,
+          "z": -1823.569753,
+          "laneRsl": null
+        },
+        "displacementM": 5.483645,
+        "maxSpeedMps": 1.945105,
+        "observedLanes": []
+      },
+      "pedestrian": {
+        "samples": 41,
+        "start": {
+          "x": 365,
+          "z": -1809,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 370.829937,
+          "z": -1799.283439,
+          "laneRsl": null
+        },
+        "displacementM": 11.33136,
+        "maxSpeedMps": 1.612095,
+        "observedLanes": []
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The fire-engine identity uses the shipped ambulance emergency-vehicle model because a dedicated fire-engine model is not shipped.",
+    "Siren and emergency strobe animation are represented by emergency role tags and timed indicators."
+  ]
+}

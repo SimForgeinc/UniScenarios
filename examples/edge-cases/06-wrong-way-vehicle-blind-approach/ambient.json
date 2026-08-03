@@ -1,0 +1,16 @@
+{
+  "schema": "uniscenarios.gallery-ambient.v1",
+  "enabledByDefault": true,
+  "provider": "sumo",
+  "density": "moderate",
+  "count": 32,
+  "status": "configured-not-part-of-native-authored-trace",
+  "note": "The checked-in authored trace is deterministic native evidence. SUMO ambient traffic is generated at replay and intentionally excluded from the authored timeline.",
+  "sumoSmoke": {
+    "durationSeconds": 5,
+    "requestedActors": 12,
+    "observedActors": 11,
+    "acceptanceOk": true,
+    "validatedAt": "2026-08-03T08:00:00.000Z"
+  }
+}

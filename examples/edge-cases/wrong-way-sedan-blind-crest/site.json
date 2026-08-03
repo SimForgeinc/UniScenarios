@@ -1,9 +1,0 @@
-{
-  "mapId": "easterbrook-discovery-school",
-  "siteId": "e9743022beb54b5c",
-  "matchScore": 0.7001839759059196,
-  "verdict": "degraded",
-  "matchedSiteCount": 124,
-  "corridor": { "sameDirectionLanes": 1, "opposingLanes": 1, "continuousOpposingBusRoute": true },
-  "transferNotes": "Selected after replay-screening 12 representative matched sites across all five maps and tuning the native opposing-role station. This site preserves the blind-crest line-of-sight block, same-lane wrong-way trajectory, moving native opposing-lane bus during the conflict, measured parapet margin, follower pressure, and relative timing. Conservative static validation assumes uninterrupted 40 kph travel for the full clip and reports runway shortfall, but the authored stop occurs by 11.2 seconds and the materialized replay completes cleanly."
-}

@@ -1,0 +1,83 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-05-05-cyclist-occlusion-conflict-v2",
+  "ordinal": 5,
+  "title": "Occluded Cyclist at a Garage Exit",
+  "durationSeconds": 20,
+  "mapId": "yale-street",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle creeps from a garage exit and stops for a hidden contraflow cyclist revealed from behind a delivery vehicle.",
+  "tags": [
+    "cyclist",
+    "occlusion",
+    "garage-exit"
+  ],
+  "interactionIds": [
+    "contraflow-rider-passes",
+    "focus-vehicle-first-creep",
+    "focus-vehicle-second-creep",
+    "focus-vehicle-stops-for-contraflow",
+    "pedestrian-clears",
+    "wrong-way-rider-emerges"
+  ],
+  "windows": [
+    {
+      "interactionId": "contraflow-rider-passes",
+      "actorId": "wrong-way-rider",
+      "startS": 17.5,
+      "endS": 17.6,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-first-creep",
+      "actorId": "focus-vehicle",
+      "startS": 4.2,
+      "endS": 5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-second-creep",
+      "actorId": "focus-vehicle",
+      "startS": 11.2,
+      "endS": 11.799999999999999,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-stops-for-contraflow",
+      "actorId": "focus-vehicle",
+      "startS": 13.6,
+      "endS": 14.4,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrian-clears",
+      "actorId": "pedestrian",
+      "startS": 4,
+      "endS": 4.4,
+      "dependent": false
+    },
+    {
+      "interactionId": "wrong-way-rider-emerges",
+      "actorId": "wrong-way-rider",
+      "startS": 11.4,
+      "endS": 11.700000000000001,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The garage mouth is represented by the matched roadside geometry and occluding delivery vehicle.",
+    "Cyclist intent is expressed with timed speed and route actions, not hand gestures."
+  ]
+}

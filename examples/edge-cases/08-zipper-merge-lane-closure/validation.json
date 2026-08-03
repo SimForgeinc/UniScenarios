@@ -1,0 +1,1833 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "provider": "native",
+  "command": "uniscenarios debug 08-zipper-merge-lane-closure/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/08-zipper-merge-lane-closure/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "yale-street",
+    "provider": "native",
+    "inputHash": "b47e2d89d582235f54ae9c6dbb38785041cef8497176e0df9713c866f88c443b",
+    "traceDigest": "174379ef50274ec036b072dc99d685fe918607e745cd8bd5c74c1daa00452ac3",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 236.171916,
+    "feasible": true,
+    "manifest": {
+      "kind": "scenario-instance-manifest",
+      "manifestVersion": 1,
+      "replayKey": {
+        "templateId": "ec-08-08-zipper-merge-lane-closure-v2",
+        "templateVersion": 2,
+        "templateDigest": "5cf4f05dad13f761",
+        "mapId": "yale-street",
+        "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+        "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+        "siteId": "24a30f9561137117",
+        "matcherVersion": "1.0.0",
+        "solverVersion": "0.2.6",
+        "paramSeed": "ec-08-08-zipper-merge-lane-closure-v2",
+        "drawIndex": 0
+      },
+      "instanceId": "ec-08-08-zipper-merge-lane-closure-v2#0",
+      "archetype": "gallery.08-zipper-merge-lane-closure",
+      "negativeControl": false,
+      "metricSubject": "focus-vehicle",
+      "operationalVariant": null,
+      "site": {
+        "siteId": "24a30f9561137117",
+        "score": 0.776,
+        "verdict": "degraded",
+        "originFeatureId": "seg_36cc4bd2a9bd8117",
+        "entryLaneRsl": "83:0:-3",
+        "egoTurn": null,
+        "degradationSummary": "Degraded match (score 0.78). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=0 m, wanted [25, 60]. Presentation was relaxed; the scenario still tests what it was written to test.",
+        "matchedReasons": [
+          "corridor.curvatureDegPer10m holds over the whole interval (worst 0.07)",
+          "lane-change legality worst case \"allowed\" at s=50 m",
+          "648.95 m of runway available, 190 m needed",
+          "corridor.throughLanesSameDir holds over the whole interval (worst 3)"
+        ]
+      },
+      "params": {
+        "values": {
+          "transitionSpeedKph": 8,
+          "mergeRateMps": 1.4
+        },
+        "categorical": {},
+        "rejectedConstraints": []
+      },
+      "actors": [
+        {
+          "id": "crowd",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": "19:0:-5",
+          "spawnS": 15.068838684368657,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": "83:0:-3",
+          "spawnS": 30.000006854514453,
+          "initialSpeedMps": 7.777777777777779,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "following-car",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": "83:0:-3",
+          "spawnS": 2.0000474227220892,
+          "initialSpeedMps": 2.7777777777777777,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "marshal",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": "756:0:-1",
+          "spawnS": 35.245589847228004,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "rideshare",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 1.3888888888888888,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "shuttle",
+          "actorKind": "bus",
+          "roleKind": "supporting",
+          "laneRsl": "756:0:-1",
+          "spawnS": 30.245548584360975,
+          "initialSpeedMps": 4.444444444444445,
+          "bindingStatus": "bound"
+        }
+      ],
+      "props": [
+        {
+          "id": "cone-taper-0",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 887.435703026156,
+            "z": -1612.4880779038517,
+            "headingRad": 2.5575357944333432
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-1",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 881.3726955879005,
+            "z": -1616.0071513966097,
+            "headingRad": 2.5567724852200167
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-2",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 875.3135390830338,
+            "z": -1619.5345114880595,
+            "headingRad": 2.556454440359871
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-3",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 869.2569451709517,
+            "z": -1623.0672217359793,
+            "headingRad": 2.5565816582509497
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-4",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 863.2016124274273,
+            "z": -1626.6023529301606,
+            "headingRad": 2.557154139587829
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-5",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 857.1461924751578,
+            "z": -1630.1370020805616,
+            "headingRad": 2.558261621086202
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-6",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 851.0943422926251,
+            "z": -1633.6752589824598,
+            "headingRad": 2.5579620621710677
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-7",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 845.0446787594327,
+            "z": -1637.2170662279657,
+            "headingRad": 2.5580121270049725
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "cone-taper-8",
+          "groupId": "cone-taper",
+          "catalogId": "construction.traffic_cone",
+          "pose": {
+            "x": 838.9982051444624,
+            "z": -1640.763574930843,
+            "headingRad": 2.5581138807946524
+          },
+          "dims": {
+            "l": 0.36,
+            "w": 0.36,
+            "h": 0.7
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "required"
+        },
+        {
+          "id": "crowd-fence-0",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 870.5288900260897,
+            "z": -1628.6358566054173,
+            "headingRad": 2.5587956739114004
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-1",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 867.189168419435,
+            "z": -1630.8373121496045,
+            "headingRad": 2.5587956739115265
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-2",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 863.8494571488345,
+            "z": -1633.0387608805404,
+            "headingRad": 2.5587956739115265
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-3",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 860.5097825010646,
+            "z": -1635.2401854706814,
+            "headingRad": 2.5587956739115265
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-4",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 857.1700872412245,
+            "z": -1637.4416236477516,
+            "headingRad": 2.5587956739112947
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-5",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 853.8229771834593,
+            "z": -1639.6452563093176,
+            "headingRad": 2.5599173634952423
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        },
+        {
+          "id": "crowd-fence-6",
+          "groupId": "crowd-fence",
+          "catalogId": "occluder.fence_run",
+          "pose": {
+            "x": 850.480791788035,
+            "z": -1641.8429620636027,
+            "headingRad": 2.5599173634952423
+          },
+          "dims": {
+            "l": 6,
+            "w": 0.065,
+            "h": 1.8
+          },
+          "scale": 1,
+          "collidable": false,
+          "essentiality": "preferred"
+        }
+      ],
+      "arrival": [],
+      "inputHash": "b47e2d89d582235f54ae9c6dbb38785041cef8497176e0df9713c866f88c443b",
+      "feasible": true,
+      "issues": [],
+      "notes": [
+        {
+          "path": "choreography.interactions.rideshare-old-direction-route",
+          "reason": "route(polyline) at t=0 folded into rideshare's spawn route (170.0 m), so the arrival solver can place the actor along it",
+          "impact": "informational"
+        }
+      ]
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 248.632208,
+    "nativeTicksPerSecond": 4026.02707,
+    "simulatedSecondsPerWallSecond": 80.440101,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 6,
+    "ambientActorCount": 0,
+    "signalCount": 1,
+    "interactionCount": 10,
+    "collisionCount": 0,
+    "roadDepartureCount": 1,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "crowd": {
+        "samples": 41,
+        "start": {
+          "x": 845.467547,
+          "z": -1645.139499,
+          "laneRsl": "19:0:-5"
+        },
+        "end": {
+          "x": 845.467547,
+          "z": -1645.139499,
+          "laneRsl": "19:0:-5"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "19:0:-5"
+        ]
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 914.657595,
+          "z": -1591.609566,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 851.092929,
+          "z": -1637.108115,
+          "laneRsl": "19:0:-4"
+        },
+        "displacementM": 78.170229,
+        "maxSpeedMps": 7.777778,
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ]
+      },
+      "following-car": {
+        "samples": 41,
+        "start": {
+          "x": 942.276738,
+          "z": -1573.549245,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 904.309048,
+          "z": -1597.792155,
+          "laneRsl": "83:0:-3"
+        },
+        "displacementM": 45.047355,
+        "maxSpeedMps": 2.777778,
+        "observedLanes": [
+          "83:0:-3"
+        ]
+      },
+      "marshal": {
+        "samples": 41,
+        "start": {
+          "x": 866.298506,
+          "z": -1631.303091,
+          "laneRsl": "756:0:-1"
+        },
+        "end": {
+          "x": 866.298506,
+          "z": -1631.303091,
+          "laneRsl": "756:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "756:0:-1"
+        ]
+      },
+      "rideshare": {
+        "samples": 41,
+        "start": {
+          "x": 771.747616,
+          "z": -1685.206231,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 782.899849,
+          "z": -1677.870458,
+          "laneRsl": null
+        },
+        "displacementM": 13.348628,
+        "maxSpeedMps": 1.388889,
+        "observedLanes": []
+      },
+      "shuttle": {
+        "samples": 41,
+        "start": {
+          "x": 867.221151,
+          "z": -1623.617775,
+          "laneRsl": "756:0:-1"
+        },
+        "end": {
+          "x": 867.221151,
+          "z": -1623.617775,
+          "laneRsl": "756:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "756:0:-1"
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "downstream-red-x",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 4
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:control:downstream-lane-control.phase",
+        "value": "red_x"
+      },
+      "events": [
+        {
+          "t": 4,
+          "kind": "trigger_fired",
+          "interactionId": "downstream-red-x",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-enters-under-green",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 7.777777777777779
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-enters-under-green",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 5.5,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-responds-to-red-x",
+          "preemptedInteractionId": "focus-vehicle-enters-under-green"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-merges-right",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 13
+      },
+      "verb": "changeLane",
+      "target": {
+        "mode": "actorLane",
+        "actorId": "shuttle"
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "rate",
+        "value": 1.4
+      },
+      "events": [
+        {
+          "t": 13,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-merges-right",
+          "actorId": "focus-vehicle",
+          "verb": "changeLane",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-proceeds-outbound",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 18
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 2.2222222222222223
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.5
+      },
+      "events": [
+        {
+          "t": 18,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-proceeds-outbound",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-proceeds-outbound",
+          "preemptedInteractionId": "focus-vehicle-responds-to-red-x"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-responds-to-red-x",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "downstream-red-x",
+        "delayS": 1.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 2.2222222222222223
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.5
+      },
+      "events": [
+        {
+          "t": 5.5,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-responds-to-red-x",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 5.5,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-responds-to-red-x",
+          "preemptedInteractionId": "focus-vehicle-enters-under-green"
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-proceeds-outbound",
+          "preemptedInteractionId": "focus-vehicle-responds-to-red-x"
+        }
+      ]
+    },
+    {
+      "id": "follower-aborts-pass",
+      "actorId": "following-car",
+      "trigger": {
+        "kind": "at",
+        "t": 18
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": 0
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "rate",
+        "value": 0.9
+      },
+      "events": [
+        {
+          "t": 18,
+          "kind": "trigger_fired",
+          "interactionId": "follower-aborts-pass",
+          "actorId": "following-car",
+          "verb": "laneOffset",
+          "forced": false
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "following-car",
+          "axis": "lateral",
+          "byInteractionId": "follower-aborts-pass",
+          "preemptedInteractionId": "follower-attempts-pass"
+        }
+      ]
+    },
+    {
+      "id": "follower-attempts-pass",
+      "actorId": "following-car",
+      "trigger": {
+        "kind": "at",
+        "t": 16
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": 0.75
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "rate",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 16,
+          "kind": "trigger_fired",
+          "interactionId": "follower-attempts-pass",
+          "actorId": "following-car",
+          "verb": "laneOffset",
+          "forced": false
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "following-car",
+          "axis": "lateral",
+          "byInteractionId": "follower-aborts-pass",
+          "preemptedInteractionId": "follower-attempts-pass"
+        }
+      ]
+    },
+    {
+      "id": "follower-brakes-for-transition",
+      "actorId": "following-car",
+      "trigger": {
+        "kind": "at",
+        "t": 4
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 2.7777777777777777
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 3.5
+      },
+      "events": [
+        {
+          "t": 4,
+          "kind": "trigger_fired",
+          "interactionId": "follower-brakes-for-transition",
+          "actorId": "following-car",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "marshal-closes-lane",
+      "actorId": "marshal",
+      "trigger": {
+        "kind": "at",
+        "t": 7
+      },
+      "verb": "set",
+      "target": {
+        "key": "pose.gesture",
+        "value": "halt"
+      },
+      "events": [
+        {
+          "t": 7,
+          "kind": "trigger_fired",
+          "interactionId": "marshal-closes-lane",
+          "actorId": "marshal",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "rideshare-brakes",
+      "actorId": "rideshare",
+      "trigger": {
+        "kind": "at",
+        "t": 8.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 2.2
+      },
+      "events": [
+        {
+          "t": 8.5,
+          "kind": "trigger_fired",
+          "interactionId": "rideshare-brakes",
+          "actorId": "rideshare",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [],
+    "collisions": [],
+    "roadDepartures": [
+      {
+        "t": -1,
+        "kind": "road_departure_prevented",
+        "actorId": "shuttle",
+        "laneRsl": "756:0:-1",
+        "lateralErrorM": 2.7011818399180303,
+        "allowedCenterOffsetM": 0.91325320594176
+      }
+    ],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [
+      {
+        "t": 5.5,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-responds-to-red-x",
+        "preemptedInteractionId": "focus-vehicle-enters-under-green"
+      },
+      {
+        "t": 18,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-proceeds-outbound",
+        "preemptedInteractionId": "focus-vehicle-responds-to-red-x"
+      },
+      {
+        "t": 18,
+        "kind": "preemption",
+        "actorId": "following-car",
+        "axis": "lateral",
+        "byInteractionId": "follower-aborts-pass",
+        "preemptedInteractionId": "follower-attempts-pass"
+      }
+    ],
+    "fallbacks": [],
+    "routes": {
+      "crowd": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-4",
+            "756:0:-1",
+            "19:0:-5",
+            "830:0:-5",
+            "20:0:-5",
+            "304:0:-1",
+            "25:0:-4"
+          ]
+        },
+        "initialLane": "19:0:-5",
+        "observedLanes": [
+          "19:0:-5"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      },
+      "focus-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-3",
+            "755:0:-1",
+            "19:0:-4",
+            "830:0:-4",
+            "20:0:-4",
+            "305:0:-1",
+            "25:0:-3",
+            "1289:0:-1",
+            "18:0:-6",
+            "377:0:-1",
+            "114:0:-3",
+            "549:0:-1",
+            "105:0:-4",
+            "461:0:-1",
+            "22:0:-3",
+            "1003:0:-3",
+            "23:0:-3",
+            "877:0:-1",
+            "47:0:-4",
+            "1327:0:-1",
+            "32:0:-4",
+            "192:0:-1",
+            "15:0:-3"
+          ]
+        },
+        "initialLane": "83:0:-3",
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ],
+        "routeDistanceM": 78.115132,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "following-car": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-3",
+            "755:0:-1",
+            "19:0:-4",
+            "830:0:-4",
+            "20:0:-4",
+            "305:0:-1",
+            "25:0:-3",
+            "1289:0:-1",
+            "18:0:-6",
+            "377:0:-1",
+            "114:0:-3",
+            "549:0:-1",
+            "105:0:-4",
+            "461:0:-1",
+            "22:0:-3",
+            "1003:0:-3",
+            "23:0:-3",
+            "877:0:-1",
+            "47:0:-4",
+            "1327:0:-1",
+            "32:0:-4",
+            "192:0:-1",
+            "15:0:-3"
+          ]
+        },
+        "initialLane": "83:0:-3",
+        "observedLanes": [
+          "83:0:-3"
+        ],
+        "routeDistanceM": 45.042949,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "marshal": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-4",
+            "756:0:-1",
+            "19:0:-5",
+            "830:0:-5",
+            "20:0:-5",
+            "304:0:-1",
+            "25:0:-4"
+          ]
+        },
+        "initialLane": "756:0:-1",
+        "observedLanes": [
+          "756:0:-1"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      },
+      "rideshare": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 770.5872565600143,
+              "z": -1685.969498847318
+            },
+            {
+              "x": 771.4227134760387,
+              "z": -1685.4199476180563
+            },
+            {
+              "x": 772.258170392063,
+              "z": -1684.8703963887947
+            },
+            {
+              "x": 773.0936273080873,
+              "z": -1684.3208451595333
+            },
+            {
+              "x": 773.9290842241116,
+              "z": -1683.7712939302717
+            },
+            {
+              "x": 774.7645411401361,
+              "z": -1683.22174270101
+            },
+            {
+              "x": 775.5999980561604,
+              "z": -1682.6721914717484
+            },
+            {
+              "x": 776.4354549721847,
+              "z": -1682.122640242487
+            },
+            {
+              "x": 777.2709118882091,
+              "z": -1681.5730890132254
+            },
+            {
+              "x": 778.1063688042334,
+              "z": -1681.0235377839638
+            },
+            {
+              "x": 778.9418257202577,
+              "z": -1680.4739865547022
+            },
+            {
+              "x": 779.777282636282,
+              "z": -1679.9244353254408
+            },
+            {
+              "x": 780.6127395523064,
+              "z": -1679.3748840961791
+            },
+            {
+              "x": 781.4481964683307,
+              "z": -1678.8253328669175
+            },
+            {
+              "x": 782.2836533843551,
+              "z": -1678.2757816376559
+            },
+            {
+              "x": 783.1191103003795,
+              "z": -1677.7262304083945
+            },
+            {
+              "x": 783.9545672164038,
+              "z": -1677.1766791791329
+            },
+            {
+              "x": 784.7900241324281,
+              "z": -1676.6271279498712
+            },
+            {
+              "x": 785.6254810484525,
+              "z": -1676.0775767206096
+            },
+            {
+              "x": 786.4609379644768,
+              "z": -1675.528025491348
+            },
+            {
+              "x": 787.2963948805011,
+              "z": -1674.9784742620866
+            },
+            {
+              "x": 788.1318517965254,
+              "z": -1674.428923032825
+            },
+            {
+              "x": 788.9673087125498,
+              "z": -1673.8793718035633
+            },
+            {
+              "x": 789.8027656285742,
+              "z": -1673.3298205743017
+            },
+            {
+              "x": 790.6382225445985,
+              "z": -1672.7802693450403
+            },
+            {
+              "x": 791.4736794606229,
+              "z": -1672.2307181157787
+            },
+            {
+              "x": 792.3091363766472,
+              "z": -1671.681166886517
+            },
+            {
+              "x": 793.1445932926715,
+              "z": -1671.1316156572555
+            },
+            {
+              "x": 793.9800502086958,
+              "z": -1670.582064427994
+            },
+            {
+              "x": 794.8155071247202,
+              "z": -1670.0325131987324
+            },
+            {
+              "x": 795.6509640407445,
+              "z": -1669.4829619694708
+            },
+            {
+              "x": 796.4864209567688,
+              "z": -1668.9334107402092
+            },
+            {
+              "x": 797.3218778727933,
+              "z": -1668.3838595109478
+            },
+            {
+              "x": 798.1573347888176,
+              "z": -1667.8343082816862
+            },
+            {
+              "x": 798.9927917048419,
+              "z": -1667.2847570524245
+            },
+            {
+              "x": 799.8282486208662,
+              "z": -1666.735205823163
+            },
+            {
+              "x": 800.6637055368906,
+              "z": -1666.1856545939013
+            },
+            {
+              "x": 801.4991624529149,
+              "z": -1665.63610336464
+            },
+            {
+              "x": 802.3346193689392,
+              "z": -1665.0865521353783
+            },
+            {
+              "x": 803.1700762849636,
+              "z": -1664.5370009061166
+            },
+            {
+              "x": 804.0055332009879,
+              "z": -1663.987449676855
+            },
+            {
+              "x": 804.8409901170123,
+              "z": -1663.4378984475936
+            },
+            {
+              "x": 805.6764470330367,
+              "z": -1662.888347218332
+            },
+            {
+              "x": 806.511903949061,
+              "z": -1662.3387959890704
+            },
+            {
+              "x": 807.3473608650853,
+              "z": -1661.7892447598088
+            },
+            {
+              "x": 808.1828177811096,
+              "z": -1661.2396935305474
+            },
+            {
+              "x": 809.018274697134,
+              "z": -1660.6901423012857
+            },
+            {
+              "x": 809.8537316131583,
+              "z": -1660.140591072024
+            },
+            {
+              "x": 810.6891885291826,
+              "z": -1659.5910398427625
+            },
+            {
+              "x": 811.5246454452069,
+              "z": -1659.041488613501
+            },
+            {
+              "x": 812.3601023612314,
+              "z": -1658.4919373842395
+            },
+            {
+              "x": 813.1955592772557,
+              "z": -1657.9423861549778
+            },
+            {
+              "x": 814.03101619328,
+              "z": -1657.3928349257162
+            },
+            {
+              "x": 814.8664731093044,
+              "z": -1656.8432836964546
+            },
+            {
+              "x": 815.7019300253287,
+              "z": -1656.2937324671932
+            },
+            {
+              "x": 816.537386941353,
+              "z": -1655.7441812379316
+            },
+            {
+              "x": 817.3728438573773,
+              "z": -1655.19463000867
+            },
+            {
+              "x": 818.2083007734017,
+              "z": -1654.6450787794083
+            },
+            {
+              "x": 819.043757689426,
+              "z": -1654.095527550147
+            },
+            {
+              "x": 819.8792146054504,
+              "z": -1653.5459763208853
+            },
+            {
+              "x": 820.7146715214748,
+              "z": -1652.9964250916237
+            },
+            {
+              "x": 821.5501284374991,
+              "z": -1652.446873862362
+            },
+            {
+              "x": 822.3855853535234,
+              "z": -1651.8973226331007
+            },
+            {
+              "x": 823.2210422695478,
+              "z": -1651.347771403839
+            },
+            {
+              "x": 824.0564991855721,
+              "z": -1650.7982201745774
+            },
+            {
+              "x": 824.8919561015964,
+              "z": -1650.2486689453158
+            },
+            {
+              "x": 825.7274130176207,
+              "z": -1649.6991177160544
+            },
+            {
+              "x": 826.5628699336452,
+              "z": -1649.1495664867928
+            },
+            {
+              "x": 827.3983268496695,
+              "z": -1648.6000152575311
+            },
+            {
+              "x": 828.2337837656938,
+              "z": -1648.0504640282695
+            },
+            {
+              "x": 829.0692406817182,
+              "z": -1647.500912799008
+            },
+            {
+              "x": 829.9046975977425,
+              "z": -1646.9513615697465
+            },
+            {
+              "x": 830.7401545137668,
+              "z": -1646.4018103404849
+            },
+            {
+              "x": 831.5756114297911,
+              "z": -1645.8522591112232
+            },
+            {
+              "x": 832.4110683458155,
+              "z": -1645.3027078819616
+            },
+            {
+              "x": 833.2465252618398,
+              "z": -1644.7531566527002
+            },
+            {
+              "x": 834.0819821778641,
+              "z": -1644.2036054234386
+            },
+            {
+              "x": 834.9174390938886,
+              "z": -1643.654054194177
+            },
+            {
+              "x": 835.7528960099129,
+              "z": -1643.1045029649154
+            },
+            {
+              "x": 836.5883529259372,
+              "z": -1642.554951735654
+            },
+            {
+              "x": 837.4238098419615,
+              "z": -1642.0054005063923
+            },
+            {
+              "x": 838.2592667579859,
+              "z": -1641.4558492771307
+            },
+            {
+              "x": 839.0947236740102,
+              "z": -1640.906298047869
+            },
+            {
+              "x": 839.9301805900345,
+              "z": -1640.3567468186077
+            },
+            {
+              "x": 840.7656375060589,
+              "z": -1639.807195589346
+            },
+            {
+              "x": 841.6010944220832,
+              "z": -1639.2576443600844
+            },
+            {
+              "x": 842.4365513381076,
+              "z": -1638.7080931308228
+            },
+            {
+              "x": 843.272008254132,
+              "z": -1638.1585419015612
+            },
+            {
+              "x": 844.1074651701563,
+              "z": -1637.6089906722998
+            },
+            {
+              "x": 844.9429220861806,
+              "z": -1637.0594394430382
+            },
+            {
+              "x": 845.7783790022049,
+              "z": -1636.5098882137765
+            },
+            {
+              "x": 846.6138359182293,
+              "z": -1635.960336984515
+            },
+            {
+              "x": 847.4492928342536,
+              "z": -1635.4107857552535
+            },
+            {
+              "x": 848.284749750278,
+              "z": -1634.861234525992
+            },
+            {
+              "x": 849.1202066663022,
+              "z": -1634.3116832967303
+            },
+            {
+              "x": 849.9556635823267,
+              "z": -1633.7621320674687
+            },
+            {
+              "x": 850.791120498351,
+              "z": -1633.2125808382073
+            },
+            {
+              "x": 851.6265774143753,
+              "z": -1632.6630296089456
+            },
+            {
+              "x": 852.4620343303997,
+              "z": -1632.113478379684
+            },
+            {
+              "x": 853.297491246424,
+              "z": -1631.5639271504224
+            },
+            {
+              "x": 854.1329481624483,
+              "z": -1631.014375921161
+            },
+            {
+              "x": 854.9684050784726,
+              "z": -1630.4648246918994
+            },
+            {
+              "x": 855.803861994497,
+              "z": -1629.9152734626377
+            },
+            {
+              "x": 856.6393189105213,
+              "z": -1629.3657222333761
+            },
+            {
+              "x": 857.4747758265457,
+              "z": -1628.8161710041145
+            },
+            {
+              "x": 858.3102327425701,
+              "z": -1628.266619774853
+            },
+            {
+              "x": 859.1456896585944,
+              "z": -1627.7170685455915
+            },
+            {
+              "x": 859.9811465746187,
+              "z": -1627.1675173163298
+            },
+            {
+              "x": 860.816603490643,
+              "z": -1626.6179660870682
+            },
+            {
+              "x": 861.6520604066674,
+              "z": -1626.0684148578068
+            },
+            {
+              "x": 862.4875173226917,
+              "z": -1625.5188636285452
+            },
+            {
+              "x": 863.322974238716,
+              "z": -1624.9693123992836
+            },
+            {
+              "x": 864.1584311547404,
+              "z": -1624.419761170022
+            },
+            {
+              "x": 864.9938880707648,
+              "z": -1623.8702099407606
+            },
+            {
+              "x": 865.8293449867891,
+              "z": -1623.320658711499
+            },
+            {
+              "x": 866.6648019028135,
+              "z": -1622.7711074822373
+            },
+            {
+              "x": 867.5002588188378,
+              "z": -1622.2215562529757
+            },
+            {
+              "x": 868.3357157348621,
+              "z": -1621.672005023714
+            },
+            {
+              "x": 869.1711726508864,
+              "z": -1621.1224537944527
+            },
+            {
+              "x": 870.0066295669108,
+              "z": -1620.572902565191
+            },
+            {
+              "x": 870.8420864829352,
+              "z": -1620.0233513359294
+            },
+            {
+              "x": 871.6775433989594,
+              "z": -1619.4738001066678
+            },
+            {
+              "x": 872.5130003149839,
+              "z": -1618.9242488774064
+            },
+            {
+              "x": 873.3484572310082,
+              "z": -1618.3746976481448
+            },
+            {
+              "x": 874.1839141470325,
+              "z": -1617.8251464188832
+            },
+            {
+              "x": 875.0193710630568,
+              "z": -1617.2755951896215
+            },
+            {
+              "x": 875.8548279790812,
+              "z": -1616.7260439603601
+            },
+            {
+              "x": 876.6902848951055,
+              "z": -1616.1764927310985
+            },
+            {
+              "x": 877.5257418111298,
+              "z": -1615.6269415018369
+            },
+            {
+              "x": 878.3611987271541,
+              "z": -1615.0773902725753
+            },
+            {
+              "x": 879.1966556431786,
+              "z": -1614.5278390433139
+            },
+            {
+              "x": 880.0321125592029,
+              "z": -1613.9782878140522
+            },
+            {
+              "x": 880.8675694752272,
+              "z": -1613.4287365847906
+            },
+            {
+              "x": 881.7030263912516,
+              "z": -1612.879185355529
+            },
+            {
+              "x": 882.5384833072759,
+              "z": -1612.3296341262676
+            },
+            {
+              "x": 883.3739402233002,
+              "z": -1611.780082897006
+            },
+            {
+              "x": 884.2093971393246,
+              "z": -1611.2305316677443
+            },
+            {
+              "x": 885.0448540553489,
+              "z": -1610.6809804384827
+            },
+            {
+              "x": 885.8803109713732,
+              "z": -1610.131429209221
+            },
+            {
+              "x": 886.7157678873975,
+              "z": -1609.5818779799597
+            },
+            {
+              "x": 887.551224803422,
+              "z": -1609.032326750698
+            },
+            {
+              "x": 888.3866817194463,
+              "z": -1608.4827755214365
+            },
+            {
+              "x": 889.2221386354706,
+              "z": -1607.9332242921748
+            },
+            {
+              "x": 890.057595551495,
+              "z": -1607.3836730629134
+            },
+            {
+              "x": 890.8930524675193,
+              "z": -1606.8341218336518
+            },
+            {
+              "x": 891.7285093835436,
+              "z": -1606.2845706043902
+            },
+            {
+              "x": 892.5639662995679,
+              "z": -1605.7350193751286
+            },
+            {
+              "x": 893.3994232155923,
+              "z": -1605.1854681458672
+            },
+            {
+              "x": 894.2348801316166,
+              "z": -1604.6359169166055
+            },
+            {
+              "x": 895.070337047641,
+              "z": -1604.086365687344
+            },
+            {
+              "x": 895.9057939636654,
+              "z": -1603.5368144580823
+            },
+            {
+              "x": 896.7412508796897,
+              "z": -1602.987263228821
+            },
+            {
+              "x": 897.576707795714,
+              "z": -1602.4377119995593
+            },
+            {
+              "x": 898.4121647117383,
+              "z": -1601.8881607702976
+            },
+            {
+              "x": 899.2476216277627,
+              "z": -1601.338609541036
+            },
+            {
+              "x": 900.083078543787,
+              "z": -1600.7890583117744
+            },
+            {
+              "x": 900.9185354598114,
+              "z": -1600.239507082513
+            },
+            {
+              "x": 901.7539923758357,
+              "z": -1599.6899558532514
+            },
+            {
+              "x": 902.5894492918601,
+              "z": -1599.1404046239898
+            },
+            {
+              "x": 903.4249062078844,
+              "z": -1598.5908533947281
+            },
+            {
+              "x": 904.2603631239087,
+              "z": -1598.0413021654667
+            },
+            {
+              "x": 905.0958200399331,
+              "z": -1597.491750936205
+            },
+            {
+              "x": 905.9312769559574,
+              "z": -1596.9421997069435
+            },
+            {
+              "x": 906.7667338719817,
+              "z": -1596.3926484776819
+            },
+            {
+              "x": 907.602190788006,
+              "z": -1595.8430972484205
+            },
+            {
+              "x": 908.4376477040305,
+              "z": -1595.2935460191588
+            },
+            {
+              "x": 909.2731046200547,
+              "z": -1594.7439947898972
+            },
+            {
+              "x": 910.1085615360792,
+              "z": -1594.1944435606356
+            },
+            {
+              "x": 910.9440184521035,
+              "z": -1593.6448923313742
+            },
+            {
+              "x": 911.7794753681278,
+              "z": -1593.0953411021126
+            },
+            {
+              "x": 912.6149322841521,
+              "z": -1592.545789872851
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 13.348626,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "shuttle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-4",
+            "756:0:-1",
+            "19:0:-5",
+            "830:0:-5",
+            "20:0:-5",
+            "304:0:-1",
+            "25:0:-4",
+            "1288:0:-1",
+            "14:0:-1"
+          ]
+        },
+        "initialLane": "756:0:-1",
+        "observedLanes": [
+          "756:0:-1"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bus"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": {
+      "value": 12.586,
+      "t": 5.56,
+      "pair": [
+        "focus-vehicle",
+        "rideshare"
+      ]
+    },
+    "minDistance": [
+      {
+        "pair": [
+          "focus-vehicle",
+          "following-car"
+        ],
+        "minDistanceM": 27.838,
+        "t": 0
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "rideshare"
+        ],
+        "minDistanceM": 74.285,
+        "t": 20
+      }
+    ],
+    "requiredDecelMax": {
+      "crowd": 0,
+      "focus-vehicle": 0.036,
+      "following-car": 0.08,
+      "marshal": 0,
+      "rideshare": 0.022,
+      "shuttle": 0
+    },
+    "revealToConflict": null,
+    "declaredOcclusion": [
+      {
+        "observer": "focus-vehicle",
+        "target": "rideshare",
+        "pair": [
+          "focus-vehicle",
+          "rideshare"
+        ],
+        "occluderId": "actor:shuttle",
+        "relevantOccluderIds": [],
+        "status": "occluder_unobserved",
+        "firstBlockedT": null,
+        "losOpenT": null,
+        "conflictT": 18.146,
+        "revealToConflictS": null
+      }
+    ],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": false,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

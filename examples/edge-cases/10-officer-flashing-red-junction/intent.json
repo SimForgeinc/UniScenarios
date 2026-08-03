@@ -1,0 +1,235 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-10-10-officer-flashing-red-junction-v2",
+  "ordinal": 10,
+  "title": "Officer-Controlled Flashing-Red Junction",
+  "durationSeconds": 20,
+  "mapId": "yale-street",
+  "focusActorId": "focus-vehicle",
+  "statement": "Every approach treats a flashing-red junction as a stop while an officer releases conflicting streams in a timed sequence.",
+  "tags": [
+    "traffic-officer",
+    "flashing-red",
+    "junction"
+  ],
+  "interactionIds": [
+    "bus-clears-officer",
+    "bus-turns",
+    "focus-vehicle-crosses",
+    "focus-vehicle-full-stop",
+    "focus-vehicle-holds-ambiguous",
+    "focus-vehicle-ignores-dark-heads",
+    "officer-ambiguous-point",
+    "officer-beckons-focus-vehicle",
+    "officer-stops-suv",
+    "officer-waves-cross",
+    "pedestrians-held",
+    "signal-focus-vehicle-flashing-red",
+    "signal-left-flashing-red",
+    "signal-opposing-flashing-red",
+    "signal-right-flashing-red",
+    "suv-false-start",
+    "suv-yields",
+    "signal-focus-vehicle-flashing-red-flash-off",
+    "signal-focus-vehicle-flashing-red-flash-red",
+    "signal-left-flashing-red-flash-off",
+    "signal-left-flashing-red-flash-red",
+    "signal-opposing-flashing-red-flash-off",
+    "signal-opposing-flashing-red-flash-red",
+    "signal-right-flashing-red-flash-off",
+    "signal-right-flashing-red-flash-red"
+  ],
+  "windows": [
+    {
+      "interactionId": "bus-clears-officer",
+      "actorId": "turning-bus",
+      "startS": 12.5,
+      "endS": 13,
+      "dependent": false
+    },
+    {
+      "interactionId": "bus-turns",
+      "actorId": "turning-bus",
+      "startS": 5,
+      "endS": 5.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-crosses",
+      "actorId": "focus-vehicle",
+      "startS": 15.65,
+      "endS": 16.15,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-full-stop",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-holds-ambiguous",
+      "actorId": "focus-vehicle",
+      "startS": 9,
+      "endS": 9.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-ignores-dark-heads",
+      "actorId": "focus-vehicle",
+      "startS": 15.65,
+      "endS": 16.15,
+      "dependent": false
+    },
+    {
+      "interactionId": "officer-ambiguous-point",
+      "actorId": "officer",
+      "startS": 9,
+      "endS": 9.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "officer-beckons-focus-vehicle",
+      "actorId": "officer",
+      "startS": 14.55,
+      "endS": 15.05,
+      "dependent": false
+    },
+    {
+      "interactionId": "officer-stops-suv",
+      "actorId": "officer",
+      "startS": 14,
+      "endS": 14.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "officer-waves-cross",
+      "actorId": "officer",
+      "startS": 1,
+      "endS": 1.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrians-held",
+      "actorId": "pedestrian-group",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-focus-vehicle-flashing-red",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-left-flashing-red",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-opposing-flashing-red",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-right-flashing-red",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "suv-false-start",
+      "actorId": "cross-suv",
+      "startS": 9.4,
+      "endS": 9.9,
+      "dependent": false
+    },
+    {
+      "interactionId": "suv-yields",
+      "actorId": "cross-suv",
+      "startS": 14.15,
+      "endS": 14.65,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-focus-vehicle-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "startS": 0.5,
+      "endS": 1,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-focus-vehicle-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "startS": 1,
+      "endS": 1.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-left-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "startS": 0.5,
+      "endS": 1,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-left-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "startS": 1,
+      "endS": 1.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-opposing-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "startS": 0.5,
+      "endS": 1,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-opposing-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "startS": 1,
+      "endS": 1.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-right-flashing-red-flash-off",
+      "actorId": "focus-vehicle",
+      "startS": 0.5,
+      "endS": 1,
+      "dependent": false
+    },
+    {
+      "interactionId": "signal-right-flashing-red-flash-red",
+      "actorId": "focus-vehicle",
+      "startS": 1,
+      "endS": 1.5,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "Officer hand gestures are represented by timed world-control and pedestrian actions.",
+    "Flashing-red is represented through authored signal phases because the baked signal mesh has no per-lens animation."
+  ]
+}

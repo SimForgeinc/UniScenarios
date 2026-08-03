@@ -1,0 +1,948 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "ec-05-05-cyclist-occlusion-conflict-v2",
+      "templateVersion": 2,
+      "templateDigest": "fc6cca16e511e5f6",
+      "mapId": "yale-street",
+      "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+      "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+      "siteId": "22f66ed9554e1403",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.2.6",
+      "paramSeed": "ec-05-05-cyclist-occlusion-conflict-v2",
+      "drawIndex": 0
+    },
+    "instanceId": "ec-05-05-cyclist-occlusion-conflict-v2#0",
+    "archetype": "gallery.05-cyclist-occlusion-conflict",
+    "negativeControl": false,
+    "metricSubject": "focus-vehicle",
+    "operationalVariant": null,
+    "site": {
+      "siteId": "22f66ed9554e1403",
+      "score": 0.7275,
+      "verdict": "degraded",
+      "originFeatureId": "seg_9904846a45722993",
+      "entryLaneRsl": "95:3:1",
+      "egoTurn": null,
+      "degradationSummary": "Degraded match (score 0.73). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=0 m, wanted [20, 50]. corridor.throughLanesOpposing worst value 2 at s=20 m, wanted [0, 1]. Presentation was relaxed; the scenario still tests what it was written to test.",
+      "matchedReasons": [
+        "corridor.curvatureDegPer10m holds over the whole interval (worst 0)",
+        "every required adjacency present along the corridor",
+        "144.21 m of runway available, 100 m needed",
+        "0 m of runway available, 0 m needed",
+        "corridor.throughLanesSameDir holds over the whole interval (worst 1)",
+        "parking_zone loc_9d1bf6b49c53986f6e265315 at s=80.86 m (same-road station, 5.52 m lateral)",
+        "parking_zone loc_9d1bf6b49c53986f6e265315 is on the left side of travel",
+        "pedestrian: pose s=-4 m is outside the reference path",
+        "legal-cyclist: pose s=-42 m is outside the reference path",
+        "matched in mirror (policy.allowMirror)"
+      ]
+    },
+    "params": {
+      "values": {
+        "creepSpeedKph": 4,
+        "wrongWaySpeedKph": 25
+      },
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "delivery-truck",
+        "actorKind": "truck",
+        "roleKind": "supporting",
+        "laneRsl": "92:0:1",
+        "spawnS": 1.0552738595725177,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "focus-vehicle",
+        "actorKind": "car",
+        "roleKind": "focus",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 0,
+        "bindingStatus": "scene-absolute"
+      },
+      {
+        "id": "pedestrian",
+        "actorKind": "pedestrian",
+        "roleKind": "supporting",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 1.1111111111111112,
+        "bindingStatus": "scene-absolute"
+      },
+      {
+        "id": "wrong-way-rider",
+        "actorKind": "bicycle",
+        "roleKind": "supporting",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 0,
+        "bindingStatus": "scene-absolute"
+      }
+    ],
+    "props": [
+      {
+        "id": "garage-wall",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 387.41772868128226,
+          "z": -1821.1402807150862,
+          "headingRad": -2.154996495799935
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1.5,
+        "collidable": false,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "wrong-way-rider"
+        },
+        "targetRevealToConflictS": 1.2
+      }
+    ],
+    "arrival": [],
+    "inputHash": "1a9ed1eb72741f1866ceb58b5ad2f48f51a91cff73f25da60adeedf3b6e76a9a",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "choreography.interactions.focus-vehicle-garage-route",
+        "reason": "route(polyline) at t=0 folded into focus-vehicle's spawn route (2.9 m), so the arrival solver can place the actor along it"
+      },
+      {
+        "path": "choreography.interactions.pedestrian-crosses",
+        "reason": "route(polyline) at t=0 folded into pedestrian's spawn route (5.1 m), so the arrival solver can place the actor along it"
+      },
+      {
+        "path": "choreography.interactions.contraflow-route",
+        "reason": "route(polyline) at t=0 folded into wrong-way-rider's spawn route (100.0 m), so the arrival solver can place the actor along it"
+      },
+      {
+        "path": "props.garage-wall",
+        "reason": "occlusion declared between focus-vehicle and wrong-way-rider; reveal-to-conflict is reported by the engine, not solved for"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "yale-street",
+    "clipSeconds": 20,
+    "warmupSeconds": 0,
+    "dt": 0.02,
+    "seed": "ec-05-05-cyclist-occlusion-conflict-v2",
+    "operationalConditions": {
+      "weather": "clear",
+      "timeOfDay": "day",
+      "traffic": "moderate",
+      "visibility": "unrestricted",
+      "effects": {
+        "visibilityRangeM": 1000,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 1
+      }
+    },
+    "metricSubject": "focus-vehicle",
+    "actors": [
+      {
+        "id": "delivery-truck",
+        "kind": "truck",
+        "dims": {
+          "l": 9.5,
+          "w": 2.5,
+          "h": 3.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "92:0:1",
+            "s": 1.0552738595725177,
+            "tFrac": 1
+          },
+          "pose": {
+            "x": 383.3437376240234,
+            "z": -1804.6514990996404,
+            "headingRad": -2.1554004039585486
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "95:3:1",
+              "95:2:1",
+              "95:1:1",
+              "95:0:1",
+              "994:0:1",
+              "94:0:1",
+              "1145:0:1",
+              "93:0:1",
+              "1207:0:1",
+              "92:0:1",
+              "1181:0:1",
+              "65:0:1"
+            ]
+          }
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:delivery-truck",
+          "class:truck",
+          "binding:relative_to",
+          "catalog:vehicle.box_truck"
+        ]
+      },
+      {
+        "id": "focus-vehicle",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "pose": {
+            "x": 391.8262168889501,
+            "z": -1827.8153792611497,
+            "headingRad": -0.5840180993779185
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 391.8262168889501,
+                "z": -1827.8153792611497
+              },
+              {
+                "x": 392.61930406593353,
+                "z": -1827.2912069376223
+              },
+              {
+                "x": 393.412391242917,
+                "z": -1826.7670346140947
+              },
+              {
+                "x": 394.20547841990043,
+                "z": -1826.2428622905672
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:focus-vehicle",
+          "class:car",
+          "binding:on_reference",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "pedestrian",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "pose": {
+            "x": 436.6462580713396,
+            "z": -1895.1130192743465,
+            "headingRad": -0.58411801048508
+          },
+          "speedMps": 1.1111111111111112
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 436.6462580713396,
+                "z": -1895.1130192743465
+              },
+              {
+                "x": 437.3519372923398,
+                "z": -1894.6465158740664
+              },
+              {
+                "x": 438.05761651334007,
+                "z": -1894.1800124737865
+              },
+              {
+                "x": 438.76329573434026,
+                "z": -1893.7135090735064
+              },
+              {
+                "x": 439.46897495534046,
+                "z": -1893.2470056732263
+              },
+              {
+                "x": 440.1746541763407,
+                "z": -1892.7805022729465
+              },
+              {
+                "x": 440.8803333973409,
+                "z": -1892.3139988726664
+              }
+            ]
+          },
+          "cruiseSpeedMps": 1.1111111111111112
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:pedestrian",
+          "class:pedestrian",
+          "binding:relative_to",
+          "catalog:pedestrian.adult_walking"
+        ]
+      },
+      {
+        "id": "wrong-way-rider",
+        "kind": "bicycle",
+        "dims": {
+          "l": 1.8,
+          "w": 0.6,
+          "h": 1.7
+        },
+        "initial": {
+          "pose": {
+            "x": 381.69828823657645,
+            "z": -1811.5629895581328,
+            "headingRad": 0.9881555318288269
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": false,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 381.69828823657645,
+                "z": -1811.5629895581328
+              },
+              {
+                "x": 382.2485151246875,
+                "z": -1812.3979959105181
+              },
+              {
+                "x": 382.7987420127985,
+                "z": -1813.2330022629035
+              },
+              {
+                "x": 383.3489689009096,
+                "z": -1814.0680086152888
+              },
+              {
+                "x": 383.8991957890206,
+                "z": -1814.9030149676744
+              },
+              {
+                "x": 384.4494226771317,
+                "z": -1815.7380213200597
+              },
+              {
+                "x": 384.9996495652427,
+                "z": -1816.573027672445
+              },
+              {
+                "x": 385.54987645335376,
+                "z": -1817.4080340248304
+              },
+              {
+                "x": 386.1001033414648,
+                "z": -1818.2430403772157
+              },
+              {
+                "x": 386.65033022957584,
+                "z": -1819.078046729601
+              },
+              {
+                "x": 387.2005571176869,
+                "z": -1819.9130530819866
+              },
+              {
+                "x": 387.7507840057979,
+                "z": -1820.748059434372
+              },
+              {
+                "x": 388.301010893909,
+                "z": -1821.5830657867573
+              },
+              {
+                "x": 388.85123778202,
+                "z": -1822.4180721391426
+              },
+              {
+                "x": 389.4014646701311,
+                "z": -1823.253078491528
+              },
+              {
+                "x": 389.9516915582421,
+                "z": -1824.0880848439133
+              },
+              {
+                "x": 390.50191844635316,
+                "z": -1824.9230911962986
+              },
+              {
+                "x": 391.05214533446417,
+                "z": -1825.7580975486842
+              },
+              {
+                "x": 391.60237222257524,
+                "z": -1826.5931039010695
+              },
+              {
+                "x": 392.15259911068625,
+                "z": -1827.4281102534549
+              },
+              {
+                "x": 392.7028259987973,
+                "z": -1828.2631166058402
+              },
+              {
+                "x": 393.2530528869084,
+                "z": -1829.0981229582255
+              },
+              {
+                "x": 393.8032797750194,
+                "z": -1829.9331293106109
+              },
+              {
+                "x": 394.3535066631305,
+                "z": -1830.7681356629962
+              },
+              {
+                "x": 394.9037335512415,
+                "z": -1831.6031420153818
+              },
+              {
+                "x": 395.45396043935256,
+                "z": -1832.438148367767
+              },
+              {
+                "x": 396.00418732746357,
+                "z": -1833.2731547201524
+              },
+              {
+                "x": 396.55441421557464,
+                "z": -1834.1081610725378
+              },
+              {
+                "x": 397.10464110368565,
+                "z": -1834.943167424923
+              },
+              {
+                "x": 397.6548679917967,
+                "z": -1835.7781737773084
+              },
+              {
+                "x": 398.2050948799078,
+                "z": -1836.613180129694
+              },
+              {
+                "x": 398.7553217680188,
+                "z": -1837.4481864820793
+              },
+              {
+                "x": 399.3055486561299,
+                "z": -1838.2831928344647
+              },
+              {
+                "x": 399.8557755442409,
+                "z": -1839.11819918685
+              },
+              {
+                "x": 400.40600243235195,
+                "z": -1839.9532055392353
+              },
+              {
+                "x": 400.95622932046297,
+                "z": -1840.7882118916207
+              },
+              {
+                "x": 401.50645620857404,
+                "z": -1841.623218244006
+              },
+              {
+                "x": 402.05668309668505,
+                "z": -1842.4582245963916
+              },
+              {
+                "x": 402.6069099847961,
+                "z": -1843.293230948777
+              },
+              {
+                "x": 403.15713687290713,
+                "z": -1844.1282373011622
+              },
+              {
+                "x": 403.7073637610182,
+                "z": -1844.9632436535476
+              },
+              {
+                "x": 404.25759064912927,
+                "z": -1845.798250005933
+              },
+              {
+                "x": 404.8078175372403,
+                "z": -1846.6332563583182
+              },
+              {
+                "x": 405.35804442535135,
+                "z": -1847.4682627107036
+              },
+              {
+                "x": 405.90827131346236,
+                "z": -1848.3032690630891
+              },
+              {
+                "x": 406.45849820157343,
+                "z": -1849.1382754154745
+              },
+              {
+                "x": 407.00872508968445,
+                "z": -1849.9732817678598
+              },
+              {
+                "x": 407.5589519777955,
+                "z": -1850.8082881202452
+              },
+              {
+                "x": 408.10917886590653,
+                "z": -1851.6432944726305
+              },
+              {
+                "x": 408.6594057540176,
+                "z": -1852.4783008250158
+              },
+              {
+                "x": 409.20963264212867,
+                "z": -1853.3133071774014
+              },
+              {
+                "x": 409.7598595302397,
+                "z": -1854.1483135297867
+              },
+              {
+                "x": 410.31008641835075,
+                "z": -1854.983319882172
+              },
+              {
+                "x": 410.86031330646176,
+                "z": -1855.8183262345574
+              },
+              {
+                "x": 411.41054019457283,
+                "z": -1856.6533325869427
+              },
+              {
+                "x": 411.96076708268384,
+                "z": -1857.488338939328
+              },
+              {
+                "x": 412.5109939707949,
+                "z": -1858.3233452917134
+              },
+              {
+                "x": 413.0612208589059,
+                "z": -1859.158351644099
+              },
+              {
+                "x": 413.611447747017,
+                "z": -1859.9933579964843
+              },
+              {
+                "x": 414.161674635128,
+                "z": -1860.8283643488696
+              },
+              {
+                "x": 414.7119015232391,
+                "z": -1861.663370701255
+              },
+              {
+                "x": 415.2621284113501,
+                "z": -1862.4983770536403
+              },
+              {
+                "x": 415.81235529946116,
+                "z": -1863.3333834060256
+              },
+              {
+                "x": 416.36258218757223,
+                "z": -1864.168389758411
+              },
+              {
+                "x": 416.91280907568324,
+                "z": -1865.0033961107965
+              },
+              {
+                "x": 417.4630359637943,
+                "z": -1865.8384024631819
+              },
+              {
+                "x": 418.0132628519053,
+                "z": -1866.6734088155672
+              },
+              {
+                "x": 418.5634897400164,
+                "z": -1867.5084151679525
+              },
+              {
+                "x": 419.1137166281274,
+                "z": -1868.3434215203379
+              },
+              {
+                "x": 419.6639435162385,
+                "z": -1869.1784278727232
+              },
+              {
+                "x": 420.21417040434955,
+                "z": -1870.0134342251088
+              },
+              {
+                "x": 420.76439729246056,
+                "z": -1870.848440577494
+              },
+              {
+                "x": 421.3146241805716,
+                "z": -1871.6834469298794
+              },
+              {
+                "x": 421.86485106868264,
+                "z": -1872.5184532822648
+              },
+              {
+                "x": 422.4150779567937,
+                "z": -1873.35345963465
+              },
+              {
+                "x": 422.9653048449047,
+                "z": -1874.1884659870354
+              },
+              {
+                "x": 423.5155317330158,
+                "z": -1875.0234723394208
+              },
+              {
+                "x": 424.0657586211268,
+                "z": -1875.8584786918063
+              },
+              {
+                "x": 424.6159855092379,
+                "z": -1876.6934850441917
+              },
+              {
+                "x": 425.1662123973489,
+                "z": -1877.528491396577
+              },
+              {
+                "x": 425.71643928545996,
+                "z": -1878.3634977489623
+              },
+              {
+                "x": 426.266666173571,
+                "z": -1879.1985041013477
+              },
+              {
+                "x": 426.81689306168204,
+                "z": -1880.033510453733
+              },
+              {
+                "x": 427.3671199497931,
+                "z": -1880.8685168061184
+              },
+              {
+                "x": 427.9173468379041,
+                "z": -1881.703523158504
+              },
+              {
+                "x": 428.4675737260152,
+                "z": -1882.5385295108892
+              },
+              {
+                "x": 429.0178006141262,
+                "z": -1883.3735358632746
+              },
+              {
+                "x": 429.56802750223727,
+                "z": -1884.20854221566
+              },
+              {
+                "x": 430.1182543903483,
+                "z": -1885.0435485680453
+              },
+              {
+                "x": 430.66848127845935,
+                "z": -1885.8785549204306
+              },
+              {
+                "x": 431.2187081665704,
+                "z": -1886.7135612728162
+              },
+              {
+                "x": 431.76893505468144,
+                "z": -1887.5485676252015
+              },
+              {
+                "x": 432.3191619427925,
+                "z": -1888.3835739775868
+              },
+              {
+                "x": 432.8693888309035,
+                "z": -1889.2185803299722
+              },
+              {
+                "x": 433.4196157190146,
+                "z": -1890.0535866823575
+              },
+              {
+                "x": 433.9698426071256,
+                "z": -1890.8885930347428
+              },
+              {
+                "x": 434.52006949523667,
+                "z": -1891.7235993871282
+              },
+              {
+                "x": 435.0702963833477,
+                "z": -1892.5586057395137
+              },
+              {
+                "x": 435.62052327145875,
+                "z": -1893.393612091899
+              },
+              {
+                "x": 436.1707501595698,
+                "z": -1894.2286184442844
+              },
+              {
+                "x": 436.72097704768083,
+                "z": -1895.0636247966697
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:wrong-way-rider",
+          "class:bicycle",
+          "binding:relative_to"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "contraflow-rider-passes",
+        "actorId": "wrong-way-rider",
+        "trigger": {
+          "kind": "at",
+          "t": 17.5
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 6.944444444444445
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "focus-vehicle-first-creep",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 4.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 1.1111111111111112
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "focus-vehicle-second-creep",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 11.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 1.1111111111111112
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.6
+        }
+      },
+      {
+        "id": "focus-vehicle-stops-for-contraflow",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 13.6
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "pedestrian-clears",
+        "actorId": "pedestrian",
+        "trigger": {
+          "kind": "at",
+          "t": 4
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.4
+        }
+      },
+      {
+        "id": "wrong-way-rider-emerges",
+        "actorId": "wrong-way-rider",
+        "trigger": {
+          "kind": "at",
+          "t": 11.4
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 6.944444444444445
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      }
+    ],
+    "signalPrograms": [],
+    "roadControls": [],
+    "props": [
+      {
+        "id": "garage-wall",
+        "catalogId": "construction.jersey_barrier_run",
+        "pose": {
+          "x": 387.41772868128226,
+          "z": -1821.1402807150862,
+          "headingRad": -2.154996495799935
+        },
+        "dims": {
+          "l": 12.2,
+          "w": 0.61,
+          "h": 0.81
+        },
+        "scale": 1.5,
+        "collidable": false,
+        "essentiality": "required",
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "wrong-way-rider"
+        },
+        "targetRevealToConflictS": 1.2
+      }
+    ],
+    "occluders": [
+      {
+        "id": "garage-wall",
+        "obb": {
+          "center": {
+            "x": 387.41772868128226,
+            "z": -1821.1402807150862
+          },
+          "lengthM": 18.299999999999997,
+          "widthM": 0.915,
+          "headingRad": -2.154996495799935,
+          "heightM": 1.215
+        }
+      }
+    ],
+    "occlusionPairs": [
+      {
+        "observer": "focus-vehicle",
+        "target": "wrong-way-rider",
+        "occluderId": "garage-wall"
+      }
+    ]
+  }
+}

@@ -1,8 +1,0 @@
-{
-  "mapId": "yale-street",
-  "siteId": "22f66ed9554e1403",
-  "matchScore": 0.7275,
-  "verdict": "degraded",
-  "matchedSiteCount": 2,
-  "transferNotes": "The behavioral signature is portable; this saved Yale placement relaxes presentation constraints because the current map index does not explicitly model a protected bike-lane and garage-ramp combination. The template supplies the garage crossing, occluder, bike trajectories, and pedestrian ordering."
-}

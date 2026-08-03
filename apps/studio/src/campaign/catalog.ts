@@ -234,8 +234,8 @@ export async function importAllCampaignEntries(options: {
   store?: TemplateFileStore;
   storage?: Storage;
 } = {}): Promise<CampaignImportRecord[]> {
-  if (GENERATED_CAMPAIGN_ENTRIES.length !== 10 || GENERATED_CAMPAIGN_ENTRIES.some((entry) => !isCampaignReady(entry))) {
-    throw new Error('Import all is locked until all ten manifest fragments and verified artifacts are complete');
+  if (GENERATED_CAMPAIGN_ENTRIES.length !== 12 || GENERATED_CAMPAIGN_ENTRIES.some((entry) => !isCampaignReady(entry))) {
+    throw new Error('Import all is locked until all twelve curated scenarios and verified artifacts are complete');
   }
   // Validate every artifact before the first write, then roll back browser
   // files if persistence fails partway through. Metadata is committed last.

@@ -1,0 +1,619 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "provider": "native",
+  "command": "uniscenarios debug 02-police-roadside-stop/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/02-police-roadside-stop/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "yale-street",
+    "provider": "native",
+    "inputHash": "89bd7162ba4e92a44951b4e49d466e3ebbee8b7d90f93844fee0126dabbdd4e0",
+    "traceDigest": "1279e0e0ea80d51643b64279ccaa1cc6ddb3f37d56dae994c707180ebbc04ed0",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 228.11375,
+    "feasible": true,
+    "manifest": {
+      "kind": "scenario-instance-manifest",
+      "manifestVersion": 1,
+      "replayKey": {
+        "templateId": "ec-02-02-police-roadside-stop-v2",
+        "templateVersion": 2,
+        "templateDigest": "c1ec2518e53d731a",
+        "mapId": "yale-street",
+        "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+        "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+        "siteId": "studio:yale-street",
+        "matcherVersion": "1.0.0",
+        "solverVersion": "0.2.6",
+        "paramSeed": "ec-02-02-police-roadside-stop-v2",
+        "drawIndex": 0
+      },
+      "instanceId": "ec-02-02-police-roadside-stop-v2#0",
+      "archetype": "gallery.02-police-roadside-stop",
+      "negativeControl": false,
+      "metricSubject": "focus-vehicle",
+      "operationalVariant": null,
+      "site": {
+        "siteId": "studio:yale-street",
+        "score": 1,
+        "verdict": "exact",
+        "originFeatureId": "map:yale-street",
+        "entryLaneRsl": "83:0:-2",
+        "egoTurn": null,
+        "degradationSummary": "exact map-bound Studio placement",
+        "matchedReasons": [
+          "anchor.pin.mapId",
+          "scene_absolute"
+        ]
+      },
+      "params": {
+        "values": {
+          "trafficSpeedKph": 25,
+          "cyclistSpeedKph": 23,
+          "tramSpeedKph": 22
+        },
+        "categorical": {},
+        "rejectedConstraints": []
+      },
+      "actors": [
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": "83:0:-2",
+          "spawnS": 40,
+          "initialSpeedMps": 6.944444444444445,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "lead-cyclist",
+          "actorKind": "bicycle",
+          "roleKind": "supporting",
+          "laneRsl": "83:0:-2",
+          "spawnS": 58,
+          "initialSpeedMps": 6.388888888888889,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "police-cruiser",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": "757:0:-1",
+          "spawnS": 39.25359056236893,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "trailing-cyclist",
+          "actorKind": "bicycle",
+          "roleKind": "supporting",
+          "laneRsl": "83:0:-2",
+          "spawnS": 22,
+          "initialSpeedMps": 6.111111111111112,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "tram",
+          "actorKind": "bus",
+          "roleKind": "supporting",
+          "laneRsl": "83:0:-3",
+          "spawnS": 5,
+          "initialSpeedMps": 6.111111111111112,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "roadside-officer",
+          "actorKind": "pedestrian",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        }
+      ],
+      "props": [],
+      "arrival": [],
+      "inputHash": "89bd7162ba4e92a44951b4e49d466e3ebbee8b7d90f93844fee0126dabbdd4e0",
+      "feasible": true,
+      "issues": [],
+      "notes": []
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 124.876792,
+    "nativeTicksPerSecond": 8015.900985,
+    "simulatedSecondsPerWallSecond": 160.157862,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 6,
+    "ambientActorCount": 0,
+    "signalCount": 0,
+    "interactionCount": 5,
+    "collisionCount": 0,
+    "roadDepartureCount": 2,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 911.055962,
+          "z": -1590.19786,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 869.915581,
+          "z": -1617.289108,
+          "laneRsl": "757:0:-1"
+        },
+        "displacementM": 49.259179,
+        "maxSpeedMps": 6.944444,
+        "observedLanes": [
+          "83:0:-2",
+          "757:0:-1"
+        ]
+      },
+      "lead-cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 894.827872,
+          "z": -1598.286989,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 894.827872,
+          "z": -1598.286989,
+          "laneRsl": "83:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 6.388889,
+        "observedLanes": [
+          "83:0:-2"
+        ]
+      },
+      "police-cruiser": {
+        "samples": 41,
+        "start": {
+          "x": 855.888232,
+          "z": -1622.784602,
+          "laneRsl": "757:0:-1"
+        },
+        "end": {
+          "x": 855.888232,
+          "z": -1622.784602,
+          "laneRsl": "757:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "757:0:-1"
+        ]
+      },
+      "roadside-officer": {
+        "samples": 41,
+        "start": {
+          "x": 862.888232,
+          "z": -1617.784602,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 862.888232,
+          "z": -1617.784602,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "trailing-cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 925.082035,
+          "z": -1578.745555,
+          "laneRsl": "83:0:-2"
+        },
+        "end": {
+          "x": 925.082035,
+          "z": -1578.745555,
+          "laneRsl": "83:0:-2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 6.111111,
+        "observedLanes": [
+          "83:0:-2"
+        ]
+      },
+      "tram": {
+        "samples": 41,
+        "start": {
+          "x": 942.090821,
+          "z": -1573.670887,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 840.007623,
+          "z": -1640.880856,
+          "laneRsl": "19:0:-4"
+        },
+        "displacementM": 122.221763,
+        "maxSpeedMps": 6.111114,
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "cyclist-brakes",
+      "actorId": "lead-cyclist",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "cyclist-swerves",
+        "delayS": 0.15
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 1.1111111111111112
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.4
+      },
+      "events": [
+        {
+          "t": 6.0200000000000005,
+          "kind": "trigger_fired",
+          "interactionId": "cyclist-brakes",
+          "actorId": "lead-cyclist",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "cyclist-swerves",
+      "actorId": "lead-cyclist",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "police-emergency-lights-on",
+        "delayS": 0.35
+      },
+      "verb": "laneOffset",
+      "target": {
+        "mode": "fraction",
+        "value": 0.2
+      },
+      "dynamics": {
+        "shape": "sinusoidal",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 5.86,
+          "kind": "trigger_fired",
+          "interactionId": "cyclist-swerves",
+          "actorId": "lead-cyclist",
+          "verb": "laneOffset",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "police-emergency-lights-on",
+      "actorId": "police-cruiser",
+      "trigger": {
+        "kind": "at",
+        "t": 5.5
+      },
+      "verb": "set",
+      "target": {
+        "key": "lights.emergency",
+        "value": "flashing"
+      },
+      "events": [
+        {
+          "t": 5.5,
+          "kind": "trigger_fired",
+          "interactionId": "police-emergency-lights-on",
+          "actorId": "police-cruiser",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-brakes",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "cyclist-brakes",
+        "delayS": 0.2
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.3
+      },
+      "events": [
+        {
+          "t": 6.22,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-brakes",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "trailing-cyclist-stops",
+      "actorId": "trailing-cyclist",
+      "trigger": {
+        "kind": "after",
+        "interactionId": "focus-vehicle-brakes",
+        "delayS": 0.55
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1.8
+      },
+      "events": [
+        {
+          "t": 6.78,
+          "kind": "trigger_fired",
+          "interactionId": "trailing-cyclist-stops",
+          "actorId": "trailing-cyclist",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [],
+    "collisions": [],
+    "roadDepartures": [
+      {
+        "t": 0,
+        "kind": "road_departure_prevented",
+        "actorId": "lead-cyclist",
+        "laneRsl": "83:0:-2",
+        "lateralErrorM": 2.1469065926588544,
+        "allowedCenterOffsetM": 1.6909609253256779
+      },
+      {
+        "t": 0,
+        "kind": "road_departure_prevented",
+        "actorId": "trailing-cyclist",
+        "laneRsl": "83:0:-2",
+        "lateralErrorM": 1.9507219388043446,
+        "allowedCenterOffsetM": 1.700430968666183
+      }
+    ],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [],
+    "fallbacks": [],
+    "routes": {
+      "focus-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-2",
+            "757:0:-1",
+            "19:0:-3",
+            "830:0:-3",
+            "20:0:-3",
+            "308:0:-1",
+            "25:0:-2",
+            "1291:0:-1"
+          ]
+        },
+        "initialLane": "83:0:-2",
+        "observedLanes": [
+          "83:0:-2",
+          "757:0:-1"
+        ],
+        "routeDistanceM": 49.259389,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "lead-cyclist": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-2",
+            "757:0:-1",
+            "19:0:-3",
+            "830:0:-3",
+            "20:0:-3",
+            "308:0:-1",
+            "25:0:-2"
+          ]
+        },
+        "initialLane": "83:0:-2",
+        "observedLanes": [
+          "83:0:-2"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bicycle"
+        }
+      },
+      "police-cruiser": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "757:0:-1",
+            "19:0:-3",
+            "830:0:-3",
+            "20:0:-3"
+          ]
+        },
+        "initialLane": "757:0:-1",
+        "observedLanes": [
+          "757:0:-1"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      },
+      "trailing-cyclist": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-2",
+            "757:0:-1",
+            "19:0:-3",
+            "830:0:-3",
+            "20:0:-3",
+            "308:0:-1"
+          ]
+        },
+        "initialLane": "83:0:-2",
+        "observedLanes": [
+          "83:0:-2"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bicycle"
+        }
+      },
+      "tram": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "83:0:-3",
+            "755:0:-1",
+            "19:0:-4",
+            "830:0:-4",
+            "20:0:-4",
+            "305:0:-1"
+          ]
+        },
+        "initialLane": "83:0:-3",
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ],
+        "routeDistanceM": 122.222248,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bus"
+        }
+      },
+      "roadside-officer": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 862.8882320509312,
+              "z": -1617.7846023236766
+            },
+            {
+              "x": 862.8982320509311,
+              "z": -1617.7846023236766
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "fixed-static-v1",
+          "reason": "static-actor",
+          "profile": "fixed-static"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": {
+      "value": 23.249,
+      "t": 6.88,
+      "pair": [
+        "focus-vehicle",
+        "tram"
+      ]
+    },
+    "minDistance": [
+      {
+        "pair": [
+          "focus-vehicle",
+          "lead-cyclist"
+        ],
+        "minDistanceM": 14.603,
+        "t": 0
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "trailing-cyclist"
+        ],
+        "minDistanceM": 14.578,
+        "t": 0
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "tram"
+        ],
+        "minDistanceM": 0,
+        "t": 10.96
+      }
+    ],
+    "requiredDecelMax": {
+      "focus-vehicle": 0,
+      "lead-cyclist": 0.478,
+      "police-cruiser": 0,
+      "roadside-officer": 0,
+      "trailing-cyclist": 0,
+      "tram": 0
+    },
+    "revealToConflict": null,
+    "declaredOcclusion": [],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": false,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

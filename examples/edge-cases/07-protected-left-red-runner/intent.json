@@ -1,0 +1,115 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-07-07-protected-left-red-runner-v2",
+  "ordinal": 7,
+  "title": "Red-Light Runner Through a Protected Intersection",
+  "durationSeconds": 20,
+  "mapId": "el-camino-road",
+  "focusActorId": "focus-vehicle",
+  "statement": "The focus vehicle remains stopped while a red-light runner traverses a protected intersection and nearby vulnerable road users clear the crossing.",
+  "tags": [
+    "signalized-intersection",
+    "red-runner",
+    "intersection"
+  ],
+  "interactionIds": [
+    "cyclist-emerges",
+    "destination-conflict-enters",
+    "focus-vehicle-confirms-wait",
+    "focus-vehicle-holds",
+    "pickup-blocks-crosswalk",
+    "pickup-creeps",
+    "scooter-leaves-refuge",
+    "scooter-pauses-at-refuge",
+    "protected-left-turns-red",
+    "red-runner-ignores-red"
+  ],
+  "windows": [
+    {
+      "interactionId": "cyclist-emerges",
+      "actorId": "cyclist",
+      "startS": 9,
+      "endS": 9.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "destination-conflict-enters",
+      "actorId": "red-runner",
+      "startS": 12,
+      "endS": 13,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-confirms-wait",
+      "actorId": "focus-vehicle",
+      "startS": 18,
+      "endS": 18.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-holds",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "pickup-blocks-crosswalk",
+      "actorId": "outer-pickup",
+      "startS": 8,
+      "endS": 8.8,
+      "dependent": false
+    },
+    {
+      "interactionId": "pickup-creeps",
+      "actorId": "outer-pickup",
+      "startS": 5,
+      "endS": 6,
+      "dependent": false
+    },
+    {
+      "interactionId": "scooter-leaves-refuge",
+      "actorId": "mobility-scooter",
+      "startS": 19.5,
+      "endS": 20,
+      "dependent": false
+    },
+    {
+      "interactionId": "scooter-pauses-at-refuge",
+      "actorId": "mobility-scooter",
+      "startS": 5,
+      "endS": 5.7,
+      "dependent": false
+    },
+    {
+      "interactionId": "protected-left-turns-red",
+      "actorId": "focus-vehicle",
+      "startS": 11,
+      "endS": 11.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "red-runner-ignores-red",
+      "actorId": "red-runner",
+      "startS": 11.2,
+      "endS": 11.7,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The red runner is represented by the opposing turning actor with an authored rule override.",
+    "Signal compliance is evaluated from authored signal events; lamp mesh replacement is outside this scenario artifact."
+  ]
+}

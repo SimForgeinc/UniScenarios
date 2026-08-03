@@ -11,7 +11,7 @@ import { MAPS } from '../../maps';
 import { EditorDocument, autosaveName } from '../document';
 
 const ambulanceTemplate = (): ScenarioTemplateV2 => JSON.parse(readFileSync(
-  new URL('../../../../../examples/edge-cases/05-ambulance-gridlocked-intersection/template.json', import.meta.url),
+  new URL('../../../../../examples/edge-cases/03-red-light-ambulance-preemption/scenario.template.json', import.meta.url),
   'utf8',
 )) as ScenarioTemplateV2;
 

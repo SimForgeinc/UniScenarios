@@ -1,0 +1,136 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-04-04-child-emerging-behind-bus-v2",
+  "intent": "The focus vehicle must stop when a child emerges from the bus blind side into a signalized crossing while rear traffic closes.",
+  "requiredActorIds": [
+    "adult",
+    "bus",
+    "child",
+    "focus-vehicle",
+    "trailing-taxi"
+  ],
+  "requiredInteractionIds": [
+    "adult-waits-at-curb",
+    "bus-doors-open",
+    "child-commits",
+    "child-continues",
+    "child-hesitates-at-lane-line",
+    "child-ignores-pedestrian-phase",
+    "child-runs-from-bus",
+    "focus-vehicle-controls-approach",
+    "focus-vehicle-holds-for-full-clearance",
+    "focus-vehicle-signal-green",
+    "focus-vehicle-stops-before-crossing",
+    "taxi-brakes-behind"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "adult": {
+        "samples": 41,
+        "start": {
+          "x": 708.034251,
+          "z": -1745.894961,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 708.034251,
+          "z": -1745.894961,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "bus": {
+        "samples": 41,
+        "start": {
+          "x": 716.36609,
+          "z": -1751.209315,
+          "laneRsl": "102:0:2"
+        },
+        "end": {
+          "x": 716.36609,
+          "z": -1751.209315,
+          "laneRsl": "102:0:2"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "102:0:2"
+        ]
+      },
+      "child": {
+        "samples": 41,
+        "start": {
+          "x": 709.050917,
+          "z": -1745.186988,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 720.74251,
+          "z": -1737.045205,
+          "laneRsl": null
+        },
+        "displacementM": 14.247174,
+        "maxSpeedMps": 2.390391,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 746.983847,
+          "z": -1791.0043,
+          "laneRsl": "104:0:1"
+        },
+        "end": {
+          "x": 718.337498,
+          "z": -1747.32089,
+          "laneRsl": "102:0:1"
+        },
+        "displacementM": 52.23843,
+        "maxSpeedMps": 8.888889,
+        "observedLanes": [
+          "104:0:1",
+          "1367:0:1",
+          "1395:0:1",
+          "102:0:1"
+        ]
+      },
+      "trailing-taxi": {
+        "samples": 41,
+        "start": {
+          "x": 758.983486,
+          "z": -1809.443554,
+          "laneRsl": "104:0:1"
+        },
+        "end": {
+          "x": 722.094559,
+          "z": -1752.91187,
+          "laneRsl": "102:0:1"
+        },
+        "displacementM": 67.502772,
+        "maxSpeedMps": 8.888889,
+        "observedLanes": [
+          "104:0:1",
+          "1367:0:1",
+          "1395:0:1",
+          "102:0:1"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The child uses the shipped pedestrian model and adult-sized collision envelope; no child-specific mesh or skeletal animation is claimed.",
+    "Visibility is validated geometrically rather than by an eye-tracking model."
+  ]
+}

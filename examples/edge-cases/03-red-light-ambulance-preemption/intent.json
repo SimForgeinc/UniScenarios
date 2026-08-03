@@ -1,0 +1,163 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-03-03-red-light-ambulance-preemption-v2",
+  "ordinal": 3,
+  "title": "Red-Light Ambulance Preemption",
+  "durationSeconds": 20,
+  "mapId": "yale-street",
+  "focusActorId": "focus-vehicle",
+  "statement": "Queued traffic creates a refuge path while an ambulance approaches a red-light intersection and preemption changes right-of-way.",
+  "tags": [
+    "ambulance",
+    "preemption",
+    "red-light"
+  ],
+  "interactionIds": [
+    "ambulance-horn-1-off",
+    "ambulance-horn-1-on",
+    "ambulance-horn-2-off",
+    "ambulance-horn-2-on",
+    "ambulance-passes",
+    "ambulance-siren",
+    "cross-green",
+    "cross-red",
+    "cross-traffic-clears",
+    "focus-vehicle-creeps",
+    "focus-vehicle-holds",
+    "focus-vehicle-nudges-right",
+    "focus-vehicle-red",
+    "focus-vehicle-stops-pocket",
+    "pedestrian-clears",
+    "pedestrian-enters"
+  ],
+  "windows": [
+    {
+      "interactionId": "ambulance-horn-1-off",
+      "actorId": "ambulance",
+      "startS": 2.35,
+      "endS": 2.85,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-horn-1-on",
+      "actorId": "ambulance",
+      "startS": 2,
+      "endS": 2.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-horn-2-off",
+      "actorId": "ambulance",
+      "startS": 2.9,
+      "endS": 3.4,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-horn-2-on",
+      "actorId": "ambulance",
+      "startS": 2.55,
+      "endS": 3.05,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-passes",
+      "actorId": "ambulance",
+      "startS": 15.7,
+      "endS": 16.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "ambulance-siren",
+      "actorId": "ambulance",
+      "startS": 0.2,
+      "endS": 0.7,
+      "dependent": false
+    },
+    {
+      "interactionId": "cross-green",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "cross-red",
+      "actorId": "focus-vehicle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "cross-traffic-clears",
+      "actorId": "cross-traffic",
+      "startS": 7.5,
+      "endS": 9.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-creeps",
+      "actorId": "focus-vehicle",
+      "startS": 13.1,
+      "endS": 13.7,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-holds",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-nudges-right",
+      "actorId": "focus-vehicle",
+      "startS": 13.1,
+      "endS": 14.9,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-red",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-stops-pocket",
+      "actorId": "focus-vehicle",
+      "startS": 15.1,
+      "endS": 15.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrian-clears",
+      "actorId": "pedestrian",
+      "startS": 12.2,
+      "endS": 12.7,
+      "dependent": false
+    },
+    {
+      "interactionId": "pedestrian-enters",
+      "actorId": "pedestrian",
+      "startS": 4,
+      "endS": 4.4,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "Siren audio is unavailable; emergency priority is encoded through actor class, route, indicator, and traffic-control actions.",
+    "Physical signal lamps are driven by authored signal state rather than mesh animation."
+  ]
+}

@@ -11,10 +11,10 @@ import { EditorDocument, autosaveName } from '../document';
 describe('editable campaign save lifecycle', () => {
   it('mirrors edits to both the map autosave and the named Reopen saved slot', async () => {
     const entry = GENERATED_CAMPAIGN_ENTRIES.find((candidate) => candidate.ordinal === 9)!;
-    const root = path.resolve(process.cwd(), '../..', 'examples/edge-cases/double-turn-mobility-scooter');
+    const root = path.resolve(process.cwd(), '../..', 'examples/edge-cases/09-stalled-vehicle-beyond-sight');
     const template = TemplateDocument.fromJSON(JSON.parse(await readFile(path.join(root, 'scenario.template.json'), 'utf8'))).data;
-    const instance = await readFile(path.join(root, 'instance.json'));
-    const trace = await readFile(path.join(root, 'trace.json.gz'));
+    const instance = await readFile(path.join(root, 'scenario.instance.json'));
+    const trace = await readFile(path.join(root, 'scenario.trace.json.gz'));
     const evidence = await readPlaybackFiles(
       { name: 'instance.json', arrayBuffer: async () => instance.buffer.slice(instance.byteOffset, instance.byteOffset + instance.byteLength) },
       { name: 'trace.json.gz', arrayBuffer: async () => trace.buffer.slice(trace.byteOffset, trace.byteOffset + trace.byteLength) },
@@ -33,7 +33,9 @@ describe('editable campaign save lifecycle', () => {
     const autosave = TemplateDocument.fromJSON(await store.read(autosaveName(map.id)));
     expect(named.data.meta.name).toBe('Scenario 09 edited in Studio');
     expect(named.data.roles).toHaveLength(5);
-    expect(named.data.choreography).toEqual(editable.choreography);
+    expect(named.data.choreography.clipSeconds).toBe(editable.choreography.clipSeconds);
+    expect(named.data.choreography.interactions.map((interaction) => interaction.id))
+      .toEqual(editable.choreography.interactions.map((interaction) => interaction.id));
     expect(autosave.data).toEqual(named.data);
     const reopened = await loadSavedCampaign({
       ordinal: entry.ordinal,

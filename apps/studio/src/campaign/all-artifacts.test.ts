@@ -57,8 +57,8 @@ describe('all checked-in campaign artifacts', () => {
             failures.push(`scenario ${ordinal}: expected exact 0–20 second evidence`);
           }
           const galleryCamera = galleryCameraChoice(bundle);
-          if (galleryCamera.policy !== 'ego-chase' || galleryCamera.egoActorId !== 'ego') {
-            failures.push(`scenario ${ordinal}: expected one explicit ego designation for Gallery trailing replay`);
+          if (galleryCamera.policy !== 'all-actors' || galleryCamera.egoActorId !== null) {
+            failures.push(`scenario ${ordinal}: expected neutral all-actors Gallery replay`);
           }
           const catalogEntry = GENERATED_CAMPAIGN_ENTRIES.find((candidate) => candidate.ordinal === ordinal);
           if (!catalogEntry) throw new Error('generated catalog card is missing');
@@ -74,7 +74,7 @@ describe('all checked-in campaign artifacts', () => {
         }
       }
     }
-    expect(found.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
+    expect(found.sort((a, b) => a - b)).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
     expect(failures).toEqual([]);
   }, 60_000);
 });

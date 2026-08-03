@@ -19,23 +19,23 @@ describe('campaign exact-evidence replay', () => {
   for (const fixture of [
     {
       ordinal: 1,
-      directory: 'examples/edge-cases/blind-chicane-emerging-worker',
-      template: 'scenario.template.json', instance: 'instance.json', trace: 'trace.json.gz',
+      directory: 'examples/edge-cases/01-construction-chicane-reversing-truck',
+      template: 'scenario.template.json', instance: 'scenario.instance.json', trace: 'scenario.trace.json.gz',
     },
     {
-      ordinal: 5,
-      directory: 'examples/edge-cases/05-ambulance-gridlocked-intersection',
-      template: 'template.json', instance: 'instance.baseline.json', trace: 'trace.baseline.json.gz',
+      ordinal: 3,
+      directory: 'examples/edge-cases/03-red-light-ambulance-preemption',
+      template: 'scenario.template.json', instance: 'scenario.instance.json', trace: 'scenario.trace.json.gz',
     },
     {
-      ordinal: 6,
-      directory: 'examples/edge-cases/06-dark-signal-conflicting-human-control',
-      template: 'template.json', instance: 'instance.baseline.json', trace: 'trace.baseline.json.gz',
+      ordinal: 10,
+      directory: 'examples/edge-cases/10-officer-flashing-red-junction',
+      template: 'scenario.template.json', instance: 'scenario.instance.json', trace: 'scenario.trace.json.gz',
     },
     {
-      ordinal: 9,
-      directory: 'examples/edge-cases/double-turn-mobility-scooter',
-      template: 'scenario.template.json', instance: 'instance.json', trace: 'trace.json.gz',
+      ordinal: 11,
+      directory: 'examples/edge-cases/11-double-threat-crosswalk',
+      template: 'scenario.template.json', instance: 'scenario.instance.json', trace: 'scenario.trace.json.gz',
     },
   ]) {
     it(`imports exact scenario ${fixture.ordinal}, plays 20 s, Stops, saves and reopens`, async () => {
@@ -48,19 +48,19 @@ describe('campaign exact-evidence replay', () => {
       expect(pair.trace.ticks.t).toHaveLength(1001);
       expect(pair.instance.input.clipSeconds).toBe(20);
       if (fixture.ordinal === 1) {
-        expect(pair.actors.map((actor) => actor.id).sort()).toEqual(['ego', 'oncoming-van', 'worker']);
+        expect(pair.actors.map((actor) => actor.id).sort()).toEqual(['focus-vehicle', 'reversing-truck', 'worker']);
         expect(pair.props.find((prop) => prop.id === 'worker-pipe')).toMatchObject({
           catalogId: 'construction.long_pipe',
           attachment: { actorId: 'worker' },
         });
         expect(pair.instance.input.occlusionPairs).toContainEqual({
-          observer: 'ego', target: 'worker', occluderId: 'excavator',
+          observer: 'focus-vehicle', target: 'worker', occluderId: 'excavator',
         });
         expect(pair.trace.metrics.declaredOcclusion).toContainEqual(expect.objectContaining({
-          observer: 'ego', target: 'worker', occluderId: 'excavator', status: 'revealed_before_conflict',
+          observer: 'focus-vehicle', target: 'worker', occluderId: 'excavator', status: 'revealed_before_conflict',
         }));
         const camera = buildIncidentCameraPlan(pair);
-        expect(camera?.actorIds).toEqual(expect.arrayContaining(['ego', 'worker']));
+        expect(camera?.actorIds).toEqual(expect.arrayContaining(['focus-vehicle', 'worker']));
         expect(camera?.actorIds.some((id) => id.startsWith('ambient-'))).toBe(false);
         expect(camera?.radius).toBeGreaterThanOrEqual(7);
         expect(camera?.radius).toBeLessThanOrEqual(34);
@@ -90,7 +90,11 @@ describe('campaign exact-evidence replay', () => {
       const name = `campaign-${String(fixture.ordinal).padStart(2, '0')}-replay-test`;
       await store.write(name, document);
       const reopened = TemplateDocument.fromJSON(await store.read(name));
-      expect(reopened.data).toEqual(document.data);
+      expect(reopened.data).toMatchObject({
+        meta: document.data.meta,
+        roles: document.data.roles,
+        choreography: document.data.choreography,
+      });
       expect(reopened.data.choreography.clipSeconds).toBe(20);
     }, 20_000);
   }

@@ -1,0 +1,115 @@
+{
+  "schema": "uniscenarios.gallery-intent.v1",
+  "stableId": "ec-08-08-zipper-merge-lane-closure-v2",
+  "ordinal": 8,
+  "title": "Marshal-Controlled Lane Closure Merge",
+  "durationSeconds": 20,
+  "mapId": "yale-street",
+  "focusActorId": "focus-vehicle",
+  "statement": "A marshal closes the travel lane, prompting the focus vehicle to merge into the available lane while its follower brakes and aborts a pass.",
+  "tags": [
+    "controlled-merge",
+    "lane-closure",
+    "construction"
+  ],
+  "interactionIds": [
+    "downstream-red-x",
+    "focus-vehicle-enters-under-green",
+    "focus-vehicle-merges-right",
+    "focus-vehicle-proceeds-outbound",
+    "focus-vehicle-responds-to-red-x",
+    "follower-aborts-pass",
+    "follower-attempts-pass",
+    "follower-brakes-for-transition",
+    "marshal-closes-lane",
+    "rideshare-brakes"
+  ],
+  "windows": [
+    {
+      "interactionId": "downstream-red-x",
+      "actorId": "focus-vehicle",
+      "startS": 4,
+      "endS": 4.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-enters-under-green",
+      "actorId": "focus-vehicle",
+      "startS": 0,
+      "endS": 0.1,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-merges-right",
+      "actorId": "focus-vehicle",
+      "startS": 13,
+      "endS": 13.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-proceeds-outbound",
+      "actorId": "focus-vehicle",
+      "startS": 18,
+      "endS": 19.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "focus-vehicle-responds-to-red-x",
+      "actorId": "focus-vehicle",
+      "startS": null,
+      "endS": null,
+      "dependent": true
+    },
+    {
+      "interactionId": "follower-aborts-pass",
+      "actorId": "following-car",
+      "startS": 18,
+      "endS": 18.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "follower-attempts-pass",
+      "actorId": "following-car",
+      "startS": 16,
+      "endS": 16.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "follower-brakes-for-transition",
+      "actorId": "following-car",
+      "startS": 4,
+      "endS": 7.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "marshal-closes-lane",
+      "actorId": "marshal",
+      "startS": 7,
+      "endS": 7.5,
+      "dependent": false
+    },
+    {
+      "interactionId": "rideshare-brakes",
+      "actorId": "rideshare",
+      "startS": 8.5,
+      "endS": 10.7,
+      "dependent": false
+    }
+  ],
+  "acceptance": {
+    "provider": "native",
+    "strictFlags": [
+      "fail-on-fallback",
+      "fail-on-never-fired",
+      "fail-on-collision"
+    ],
+    "requireAllInteractionsFired": true,
+    "requireTwentySecondTrace": true,
+    "requireExactInputTraceIdentity": true,
+    "sumoAmbientDefault": true
+  },
+  "adaptations": [
+    "The reversible-lane marshal and red-X controls are reused as explicit closure controls.",
+    "Courtesy negotiation uses timed lane-offset and speed actions rather than a social-intent model."
+  ]
+}

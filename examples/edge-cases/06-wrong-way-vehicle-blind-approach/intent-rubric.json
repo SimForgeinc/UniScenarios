@@ -1,0 +1,116 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-06-06-wrong-way-vehicle-blind-approach-v2",
+  "intent": "The focus vehicle encounters a wrong-way sedan beyond limited sight distance while escape space is constrained.",
+  "requiredActorIds": [
+    "focus-vehicle",
+    "following-motorcycle",
+    "opposing-bus",
+    "wrong-way-sedan"
+  ],
+  "requiredInteractionIds": [
+    "focus-vehicle-brakes",
+    "focus-vehicle-edges-right",
+    "hold-position",
+    "motorcycle-brakes",
+    "wrong-way-brakes",
+    "wrong-way-offsets",
+    "wrong-way-visible"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 221.285876,
+          "z": 309.44268,
+          "laneRsl": "20:0:-1"
+        },
+        "end": {
+          "x": 228.815163,
+          "z": 223.228941,
+          "laneRsl": "11662:0:-1"
+        },
+        "displacementM": 86.541891,
+        "maxSpeedMps": 11.111111,
+        "observedLanes": [
+          "20:0:-1",
+          "11295:0:-1",
+          "21:0:-1",
+          "11662:0:-1"
+        ]
+      },
+      "following-motorcycle": {
+        "samples": 41,
+        "start": {
+          "x": 219.891629,
+          "z": 323.373076,
+          "laneRsl": "20:0:-1"
+        },
+        "end": {
+          "x": 228.124708,
+          "z": 229.820423,
+          "laneRsl": "21:0:-1"
+        },
+        "displacementM": 93.914229,
+        "maxSpeedMps": 11.111111,
+        "observedLanes": [
+          "20:0:-1",
+          "11295:0:-1",
+          "21:0:-1"
+        ]
+      },
+      "opposing-bus": {
+        "samples": 41,
+        "start": {
+          "x": 223.609053,
+          "z": 223.293305,
+          "laneRsl": "11633:0:1"
+        },
+        "end": {
+          "x": 222.000386,
+          "z": 245.457055,
+          "laneRsl": "11296:0:1"
+        },
+        "displacementM": 22.222053,
+        "maxSpeedMps": 1.111118,
+        "observedLanes": [
+          "11633:0:1",
+          "21:0:1",
+          "11296:0:1"
+        ]
+      },
+      "wrong-way-sedan": {
+        "samples": 41,
+        "start": {
+          "x": 235.385404,
+          "z": 154.086503,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 230.433465,
+          "z": 211.03349,
+          "laneRsl": null
+        },
+        "displacementM": 57.161884,
+        "maxSpeedMps": 7.777778,
+        "observedLanes": []
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "A true terrain-derived blind crest is unavailable on every map; the matched sight-constrained corridor and occluders are used.",
+    "The authored wrong-way-visible marker requests the reveal transition, while the geometric evaluator conservatively reports blocked_at_conflict for the final occlusion sample.",
+    "No unsupported crash physics outcome is asserted."
+  ]
+}

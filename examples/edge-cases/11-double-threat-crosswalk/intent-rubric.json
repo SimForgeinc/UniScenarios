@@ -1,0 +1,128 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-11-11-double-threat-crosswalk-v2",
+  "intent": "The focus vehicle holds at the crossing while a cyclist and mobility-scooter rider enter in sequence and an opposing vehicle traverses the distant approach.",
+  "requiredActorIds": [
+    "cyclist",
+    "focus-vehicle",
+    "mobility-scooter",
+    "opposing-left-turner",
+    "outer-pickup"
+  ],
+  "requiredInteractionIds": [
+    "cyclist-emerges",
+    "destination-conflict-enters",
+    "focus-vehicle-confirms-wait",
+    "focus-vehicle-holds",
+    "pickup-blocks-crosswalk",
+    "pickup-creeps",
+    "scooter-leaves-refuge",
+    "scooter-pauses-at-refuge"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 1125.512472,
+          "z": -1446.473366,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1110.6512,
+          "z": -1450.941347,
+          "laneRsl": null
+        },
+        "displacementM": 15.518385,
+        "maxSpeedMps": 1.564604,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1089.863076,
+          "z": -1467.233648,
+          "laneRsl": "128:0:-3"
+        },
+        "end": {
+          "x": 1089.905343,
+          "z": -1467.206051,
+          "laneRsl": "128:0:-3"
+        },
+        "displacementM": 0.050479,
+        "maxSpeedMps": 0.072068,
+        "observedLanes": [
+          "128:0:-3"
+        ]
+      },
+      "mobility-scooter": {
+        "samples": 41,
+        "start": {
+          "x": 1094.567297,
+          "z": -1455.776908,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1101.262526,
+          "z": -1453.764014,
+          "laneRsl": null
+        },
+        "displacementM": 6.991268,
+        "maxSpeedMps": 1.25,
+        "observedLanes": []
+      },
+      "opposing-left-turner": {
+        "samples": 41,
+        "start": {
+          "x": 1213.500251,
+          "z": -1401.358383,
+          "laneRsl": "73:0:-6"
+        },
+        "end": {
+          "x": 1161.598955,
+          "z": -1436.369259,
+          "laneRsl": "74:0:-6"
+        },
+        "displacementM": 62.605958,
+        "maxSpeedMps": 4.829794,
+        "observedLanes": [
+          "73:0:-6",
+          "365:0:-6",
+          "74:0:-6"
+        ]
+      },
+      "outer-pickup": {
+        "samples": 41,
+        "start": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "end": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "627:0:-1"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The mobility-scooter rider uses the supported slow vulnerable-road-user surrogate.",
+    "Occlusion acceptance is based on declared actor/prop geometry."
+  ]
+}

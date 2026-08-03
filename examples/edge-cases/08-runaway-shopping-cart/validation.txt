@@ -1,4 +1,0 @@
-examples/edge-cases/08-runaway-shopping-cart/template.json: 0 error(s), 0 warning(s) — document-only checks
-
-adapter  note                      anchor.features.crossing.marked             the matcher has no crossing predicates; clause not evaluated
-adapter  note                      anchor.features.crossing.placement          the matcher has no crossing predicates; clause not evaluated

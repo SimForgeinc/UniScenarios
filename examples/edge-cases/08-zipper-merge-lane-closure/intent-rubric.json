@@ -1,0 +1,151 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-08-08-zipper-merge-lane-closure-v2",
+  "intent": "A marshal closes the travel lane, prompting the focus vehicle to merge into the available lane while its follower brakes and aborts a pass.",
+  "requiredActorIds": [
+    "crowd",
+    "focus-vehicle",
+    "following-car",
+    "marshal",
+    "rideshare",
+    "shuttle"
+  ],
+  "requiredInteractionIds": [
+    "downstream-red-x",
+    "focus-vehicle-enters-under-green",
+    "focus-vehicle-merges-right",
+    "focus-vehicle-proceeds-outbound",
+    "focus-vehicle-responds-to-red-x",
+    "follower-aborts-pass",
+    "follower-attempts-pass",
+    "follower-brakes-for-transition",
+    "marshal-closes-lane",
+    "rideshare-brakes"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "crowd": {
+        "samples": 41,
+        "start": {
+          "x": 845.467547,
+          "z": -1645.139499,
+          "laneRsl": "19:0:-5"
+        },
+        "end": {
+          "x": 845.467547,
+          "z": -1645.139499,
+          "laneRsl": "19:0:-5"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "19:0:-5"
+        ]
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 914.657595,
+          "z": -1591.609566,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 851.092929,
+          "z": -1637.108115,
+          "laneRsl": "19:0:-4"
+        },
+        "displacementM": 78.170229,
+        "maxSpeedMps": 7.777778,
+        "observedLanes": [
+          "83:0:-3",
+          "755:0:-1",
+          "19:0:-4"
+        ]
+      },
+      "following-car": {
+        "samples": 41,
+        "start": {
+          "x": 942.276738,
+          "z": -1573.549245,
+          "laneRsl": "83:0:-3"
+        },
+        "end": {
+          "x": 904.309048,
+          "z": -1597.792155,
+          "laneRsl": "83:0:-3"
+        },
+        "displacementM": 45.047355,
+        "maxSpeedMps": 2.777778,
+        "observedLanes": [
+          "83:0:-3"
+        ]
+      },
+      "marshal": {
+        "samples": 41,
+        "start": {
+          "x": 866.298506,
+          "z": -1631.303091,
+          "laneRsl": "756:0:-1"
+        },
+        "end": {
+          "x": 866.298506,
+          "z": -1631.303091,
+          "laneRsl": "756:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "756:0:-1"
+        ]
+      },
+      "rideshare": {
+        "samples": 41,
+        "start": {
+          "x": 771.747616,
+          "z": -1685.206231,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 782.899849,
+          "z": -1677.870458,
+          "laneRsl": null
+        },
+        "displacementM": 13.348628,
+        "maxSpeedMps": 1.388889,
+        "observedLanes": []
+      },
+      "shuttle": {
+        "samples": 41,
+        "start": {
+          "x": 867.221151,
+          "z": -1623.617775,
+          "laneRsl": "756:0:-1"
+        },
+        "end": {
+          "x": 867.221151,
+          "z": -1623.617775,
+          "laneRsl": "756:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "756:0:-1"
+        ]
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "The reversible-lane marshal and red-X controls are reused as explicit closure controls.",
+    "Courtesy negotiation uses timed lane-offset and speed actions rather than a social-intent model."
+  ]
+}

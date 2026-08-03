@@ -1,0 +1,128 @@
+{
+  "schema": "uniscenarios.intent-rubric.v2",
+  "stableId": "ec-03-03-red-light-ambulance-preemption-v2",
+  "intent": "Queued traffic creates a refuge path while an ambulance approaches a red-light intersection and preemption changes right-of-way.",
+  "requiredActorIds": [
+    "ambulance",
+    "cross-traffic",
+    "downstream-queue",
+    "focus-vehicle",
+    "pedestrian"
+  ],
+  "requiredInteractionIds": [
+    "ambulance-horn-1-off",
+    "ambulance-horn-1-on",
+    "ambulance-horn-2-off",
+    "ambulance-horn-2-on",
+    "ambulance-passes",
+    "ambulance-siren",
+    "cross-green",
+    "cross-red",
+    "cross-traffic-clears",
+    "focus-vehicle-creeps",
+    "focus-vehicle-holds",
+    "focus-vehicle-nudges-right",
+    "focus-vehicle-red",
+    "focus-vehicle-stops-pocket",
+    "pedestrian-clears",
+    "pedestrian-enters"
+  ],
+  "gates": {
+    "exactDurationSeconds": 20,
+    "exactInputTraceIdentity": true,
+    "collisionCountMax": 0,
+    "fallbackCountMax": 0,
+    "neverFiredCountMax": 0,
+    "focusVehicleRoadDepartureCountMax": 0,
+    "observedActorMotion": {
+      "ambulance": {
+        "samples": 41,
+        "start": {
+          "x": 465,
+          "z": -1935,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 410.475576,
+          "z": -1818.456273,
+          "laneRsl": null
+        },
+        "displacementM": 128.667607,
+        "maxSpeedMps": 10.309153,
+        "observedLanes": []
+      },
+      "cross-traffic": {
+        "samples": 41,
+        "start": {
+          "x": 340,
+          "z": -1780,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 341.961658,
+          "z": -1779.398667,
+          "laneRsl": null
+        },
+        "displacementM": 2.051756,
+        "maxSpeedMps": 9.444444,
+        "observedLanes": []
+      },
+      "downstream-queue": {
+        "samples": 41,
+        "start": {
+          "x": 360,
+          "z": -1760,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 360,
+          "z": -1760,
+          "laneRsl": null
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 397,
+          "z": -1828,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 393.768395,
+          "z": -1823.569753,
+          "laneRsl": null
+        },
+        "displacementM": 5.483645,
+        "maxSpeedMps": 1.945105,
+        "observedLanes": []
+      },
+      "pedestrian": {
+        "samples": 41,
+        "start": {
+          "x": 365,
+          "z": -1809,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 370.829937,
+          "z": -1799.283439,
+          "laneRsl": null
+        },
+        "displacementM": 11.33136,
+        "maxSpeedMps": 1.612095,
+        "observedLanes": []
+      }
+    }
+  },
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "adaptations": [
+    "Siren audio is unavailable; emergency priority is encoded through actor class, route, indicator, and traffic-control actions.",
+    "Physical signal lamps are driven by authored signal state rather than mesh animation."
+  ]
+}

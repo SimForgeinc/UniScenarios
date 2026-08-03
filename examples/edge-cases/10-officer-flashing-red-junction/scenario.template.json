@@ -1,0 +1,1001 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Officer-Controlled Flashing-Red Junction",
+    "description": "Every approach treats a flashing-red junction as a stop while an officer releases conflicting streams in a timed sequence. This curated 20-second scenario uses only currently supported behaviors; adaptations are declared in machine-readable metadata.",
+    "createdAt": "2026-08-02T07:00:00.000Z",
+    "modifiedAt": "2026-08-03T08:00:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "gallery.10-officer-flashing-red-junction",
+    "tags": [
+      "curated-gallery-v2",
+      "EC-10",
+      "traffic-officer",
+      "flashing-red",
+      "junction"
+    ],
+    "author": "Codex curated edge-case suite",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "overcast",
+    "timeOfDay": "dusk"
+  },
+  "anchor": {
+    "id": "dark-signal-human-control-junction",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          1,
+          4
+        ],
+        "essentiality": "required"
+      },
+      "runwayUpstreamM": {
+        "value": [
+          50,
+          null
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          75,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "dark-junction",
+        "kind": "junction",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            0
+          ],
+          "essentiality": "required"
+        },
+        "arms": {
+          "value": [
+            4,
+            4
+          ],
+          "essentiality": "required"
+        },
+        "control": {
+          "value": [
+            "signalized"
+          ],
+          "essentiality": "required"
+        },
+        "egoTurn": {
+          "value": [
+            "straight"
+          ],
+          "essentiality": "required"
+        },
+        "conflictingApproach": {
+          "value": {
+            "from": "from_left",
+            "turn": "straight",
+            "crossingAngleDeg": [
+              65,
+              115
+            ]
+          },
+          "essentiality": "required"
+        }
+      },
+      {
+        "id": "controlled-crosswalk",
+        "kind": "crossing",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            -8,
+            8
+          ],
+          "essentiality": "preferred"
+        },
+        "marked": {
+          "value": true,
+          "essentiality": "preferred"
+        },
+        "placement": {
+          "value": "either",
+          "essentiality": "preferred"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": true,
+      "maxSitesPerMap": 12,
+      "diversity": "strict",
+      "minScore": 0.45
+    }
+  },
+  "trafficControls": [
+    {
+      "id": "failed-focus-vehicle-signal",
+      "kind": "normal_signal",
+      "label": "inoperative normal signal on focus-vehicle approach",
+      "feature": "dark-junction",
+      "pose": {
+        "laneOffset": 0,
+        "s": -8,
+        "tFrac": 0.9,
+        "headingOffsetRad": 0
+      },
+      "stopLines": [
+        {
+          "pose": {
+            "laneOffset": 0,
+            "s": -10,
+            "tFrac": 0,
+            "headingOffsetRad": 0
+          },
+          "feature": "dark-junction"
+        }
+      ],
+      "phases": [
+        {
+          "indication": "off",
+          "durationS": 20
+        }
+      ],
+      "offsetS": 0,
+      "loop": false
+    },
+    {
+      "id": "officer-focus-vehicle-control",
+      "kind": "human_director",
+      "label": "authorized officer control of focus-vehicle approach",
+      "feature": "dark-junction",
+      "pose": {
+        "laneOffset": 0,
+        "s": -5,
+        "tFrac": 0.88,
+        "headingOffsetRad": -3.14
+      },
+      "stopLines": [
+        {
+          "pose": {
+            "laneOffset": 0,
+            "s": -10,
+            "tFrac": 0,
+            "headingOffsetRad": 0
+          },
+          "feature": "dark-junction"
+        }
+      ],
+      "phases": [
+        {
+          "indication": "stop",
+          "durationS": 20
+        }
+      ],
+      "offsetS": 0,
+      "loop": false
+    }
+  ],
+  "roles": [
+    {
+      "id": "focus-vehicle",
+      "kind": "on_reference",
+      "label": "focus-vehicle stopped at the failed signal",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -30,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "officer",
+      "kind": "on_reference",
+      "label": "authorized police traffic director",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "construction.flagger",
+        "static": true
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -5,
+        "tFrac": 0.88,
+        "headingOffsetRad": -3.14
+      },
+      "initialSpeedKph": 0,
+      "extensions": {
+        "authorizedTrafficDirector": true,
+        "uniform": "police"
+      }
+    },
+    {
+      "id": "cross-suv",
+      "kind": "conflicting_gate",
+      "feature": "dark-junction",
+      "from": "from_left",
+      "turn": "straight",
+      "label": "cross-street SUV that mistakes the ambiguous gesture as priority",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv"
+      },
+      "fallbackPose": {
+        "laneOffset": 0,
+        "s": -16,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "requiredUpstreamRunwayM": 25,
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "turning-bus",
+      "kind": "conflicting_gate",
+      "feature": "dark-junction",
+      "from": "from_right",
+      "turn": "left",
+      "label": "turning bus that transiently occludes the officer",
+      "actor": {
+        "class": "bus",
+        "catalogId": "vehicle.bus"
+      },
+      "fallbackPose": {
+        "laneOffset": 0,
+        "s": -22,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "requiredUpstreamRunwayM": 30,
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "pedestrian-group",
+      "kind": "on_crossing",
+      "feature": "controlled-crosswalk",
+      "startFrac": 0.08,
+      "direction": "near_to_far",
+      "lateralFrac": 0,
+      "label": "pedestrian group held throughout focus-vehicle's movement",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_standing",
+        "dims": {
+          "length": 0.8,
+          "width": 1.4,
+          "height": 1.75
+        }
+      },
+      "initialSpeedKph": 0
+    }
+  ],
+  "props": [
+    {
+      "id": "temporary-control-line",
+      "catalogId": "construction.temporary_stop_sign",
+      "label": "three temporary stop-sign stations; one station is turned away and intentionally non-authoritative",
+      "pose": {
+        "laneOffset": 0,
+        "s": -10,
+        "tFrac": 0.9,
+        "headingOffsetRad": 0
+      },
+      "repeat": {
+        "count": 3,
+        "spacingM": 3,
+        "tFracStep": 0
+      },
+      "essentiality": "preferred",
+      "extensions": {
+        "oneTurnedAway": true,
+        "notUsedAsBehavioralAuthority": true
+      }
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "signal-focus-vehicle-flashing-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:dark-junction:focus-vehicle.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-opposing-flashing-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:dark-junction:opposing.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-left-flashing-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:dark-junction:left.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-right-flashing-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:dark-junction:right.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "officer-control-holds-focus-vehicle",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "control:officer-focus-vehicle-control.indication",
+          "value": "stop"
+        },
+        "label": "Native human-director control holds focus-vehicle"
+      },
+      {
+        "id": "focus-vehicle-full-stop",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        },
+        "label": "Focus vehicle remains at a full stop for well over two seconds"
+      },
+      {
+        "id": "pedestrians-held",
+        "actor": "pedestrian-group",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "officer-waves-cross",
+        "actor": "officer",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "target": {
+          "key": "pose.gesture",
+          "value": "wave_through"
+        },
+        "label": "Officer waves established cross traffic through"
+      },
+      {
+        "id": "bus-turns",
+        "actor": "turning-bus",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 18
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        },
+        "label": "Bus turns across the sightline and blocks the officer"
+      },
+      {
+        "id": "officer-ambiguous-point",
+        "actor": "officer",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 9
+        },
+        "target": {
+          "key": "pose.gesture",
+          "value": "point"
+        },
+        "label": "Partly occluded gesture toward focus-vehicle is not treated as permission"
+      },
+      {
+        "id": "suv-false-start",
+        "actor": "cross-suv",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 9.4
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 8
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        },
+        "label": "SUV begins rolling on a mistaken interpretation"
+      },
+      {
+        "id": "focus-vehicle-holds-ambiguous",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "officer-ambiguous-point",
+          "event": "start",
+          "delayS": 0
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        },
+        "label": "Focus vehicle explicitly refuses the ambiguous cue"
+      },
+      {
+        "id": "bus-clears-officer",
+        "actor": "turning-bus",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 12.5
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 18
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.5
+        },
+        "label": "Bus accelerates clear of the officer sightline"
+      },
+      {
+        "id": "officer-stops-suv",
+        "actor": "officer",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 14
+        },
+        "target": {
+          "key": "pose.gesture",
+          "value": "halt"
+        },
+        "label": "Clear palm orders the false-starting SUV to stop"
+      },
+      {
+        "id": "suv-yields",
+        "actor": "cross-suv",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "officer-stops-suv",
+          "event": "start",
+          "delayS": 0.15
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        },
+        "label": "SUV yields to the unambiguous halt"
+      },
+      {
+        "id": "officer-beckons-focus-vehicle",
+        "actor": "officer",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "suv-yields",
+          "event": "end",
+          "delayS": 0.15
+        },
+        "target": {
+          "key": "pose.gesture",
+          "value": "wave_through"
+        },
+        "label": "Officer explicitly beckons focus-vehicle after SUV yields"
+      },
+      {
+        "id": "officer-control-releases-focus-vehicle",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "officer-beckons-focus-vehicle",
+          "event": "start",
+          "delayS": 0
+        },
+        "target": {
+          "key": "control:officer-focus-vehicle-control.indication",
+          "value": "proceed"
+        },
+        "label": "Native human-director indication changes to proceed"
+      },
+      {
+        "id": "focus-vehicle-ignores-dark-heads",
+        "actor": "focus-vehicle",
+        "verb": "set",
+        "trigger": {
+          "kind": "after",
+          "of": "officer-beckons-focus-vehicle",
+          "event": "start",
+          "delayS": 1.1
+        },
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        },
+        "label": "Permission derives from persistent human control, not dark heads"
+      },
+      {
+        "id": "focus-vehicle-crosses",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "officer-beckons-focus-vehicle",
+          "event": "start",
+          "delayS": 1.1
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 12
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        },
+        "label": "Focus vehicle responds promptly after an unambiguous cue persists for at least one second"
+      },
+      {
+        "id": "signal-focus-vehicle-flashing-red-flash-off",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:focus-vehicle.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-focus-vehicle-flashing-red-flash-red",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:focus-vehicle.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-opposing-flashing-red-flash-off",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:opposing.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-opposing-flashing-red-flash-red",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:opposing.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-left-flashing-red-flash-off",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:left.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-left-flashing-red-flash-red",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:left.phase",
+          "value": "red"
+        }
+      },
+      {
+        "id": "signal-right-flashing-red-flash-off",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 0.5
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:right.phase",
+          "value": "off"
+        }
+      },
+      {
+        "id": "signal-right-flashing-red-flash-red",
+        "actor": "@world",
+        "trigger": {
+          "kind": "at",
+          "t": 1
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:feature:dark-junction:right.phase",
+          "value": "red"
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "control-sequence",
+      "kind": "event_order",
+      "events": [
+        "officer-waves-cross",
+        "bus-turns",
+        "officer-ambiguous-point",
+        "focus-vehicle-holds-ambiguous",
+        "suv-false-start",
+        "bus-clears-officer",
+        "officer-stops-suv",
+        "suv-yields",
+        "officer-beckons-focus-vehicle",
+        "officer-control-releases-focus-vehicle",
+        "focus-vehicle-crosses"
+      ],
+      "strict": false,
+      "essentiality": "required"
+    },
+    {
+      "id": "pedestrian-clearance",
+      "kind": "pet",
+      "of": "focus-vehicle",
+      "to": "pedestrian-group",
+      "range": [
+        2,
+        null
+      ],
+      "window": [
+        15,
+        20
+      ],
+      "essentiality": "required"
+    },
+    {
+      "id": "focus-vehicle-deceleration",
+      "kind": "decel_budget",
+      "of": "focus-vehicle",
+      "maxMps2": 8,
+      "essentiality": "required"
+    }
+  ],
+  "variants": [],
+  "metricSubject": "focus-vehicle",
+  "extensions": {
+    "x-uniscenarios.stableId": "edge-06-dark-signal-human-control-v1",
+    "x-uniscenarios.acceptance": {
+      "initialFullStopMinS": 2,
+      "ambiguousGestureMustNotReleaseEgo": true,
+      "clearBeckonPersistenceMinS": 1,
+      "egoIntersectionMaxKph": 15,
+      "pedestrianClearanceMinM": 2,
+      "mustNot": [
+        "treat dark heads as green",
+        "compete with SUV",
+        "treat body orientation alone as permission",
+        "wait indefinitely after unambiguous control"
+      ]
+    },
+    "x-uniscenarios.requiredManualEvidence": [
+      "bus physically occludes officer during the ambiguous gesture",
+      "officer becomes visible before the final halt and beckon"
+    ],
+    "x-uniscenarios.temporaryControlSupport": "Three construction.temporary_stop_sign props are rendered; one is turned away through authored heading. The failed focus-vehicle signal is a native normal_signal with off indication, and the officer is a native human_director whose indication changes from stop to proceed only after the clear final beckon.",
+    "studio.gallery.intent": {
+      "schema": "uniscenarios.gallery-intent.v1",
+      "stableId": "ec-10-10-officer-flashing-red-junction-v2",
+      "focusActorId": "focus-vehicle",
+      "statement": "Every approach treats a flashing-red junction as a stop while an officer releases conflicting streams in a timed sequence.",
+      "adaptations": [
+        "Officer hand gestures are represented by timed world-control and pedestrian actions.",
+        "Flashing-red is represented through authored signal phases because the baked signal mesh has no per-lens animation."
+      ]
+    },
+    "studio.ambientTraffic": {
+      "enabled": true,
+      "provider": "sumo",
+      "density": "moderate",
+      "authoredActorsExcludedFromTimeline": true
+    },
+    "studio.timeline.windows": [
+      {
+        "interactionId": "signal-focus-vehicle-flashing-red",
+        "actorId": "@world",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-opposing-flashing-red",
+        "actorId": "@world",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-left-flashing-red",
+        "actorId": "@world",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-right-flashing-red",
+        "actorId": "@world",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "officer-control-holds-focus-vehicle",
+        "actorId": "@world",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-full-stop",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "pedestrians-held",
+        "actorId": "pedestrian-group",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "officer-waves-cross",
+        "actorId": "officer",
+        "startS": 1,
+        "endS": 1.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "bus-turns",
+        "actorId": "turning-bus",
+        "startS": 5,
+        "endS": 5.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "officer-ambiguous-point",
+        "actorId": "officer",
+        "startS": 9,
+        "endS": 9.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "suv-false-start",
+        "actorId": "cross-suv",
+        "startS": 9.4,
+        "endS": 9.9,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-holds-ambiguous",
+        "actorId": "focus-vehicle",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "bus-clears-officer",
+        "actorId": "turning-bus",
+        "startS": 12.5,
+        "endS": 13,
+        "dependent": false
+      },
+      {
+        "interactionId": "officer-stops-suv",
+        "actorId": "officer",
+        "startS": 14,
+        "endS": 14.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "suv-yields",
+        "actorId": "cross-suv",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "officer-beckons-focus-vehicle",
+        "actorId": "officer",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "officer-control-releases-focus-vehicle",
+        "actorId": "@world",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "focus-vehicle-ignores-dark-heads",
+        "actorId": "focus-vehicle",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "focus-vehicle-crosses",
+        "actorId": "focus-vehicle",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      },
+      {
+        "interactionId": "signal-focus-vehicle-flashing-red-flash-off",
+        "actorId": "@world",
+        "startS": 0.5,
+        "endS": 1,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-focus-vehicle-flashing-red-flash-red",
+        "actorId": "@world",
+        "startS": 1,
+        "endS": 1.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-opposing-flashing-red-flash-off",
+        "actorId": "@world",
+        "startS": 0.5,
+        "endS": 1,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-opposing-flashing-red-flash-red",
+        "actorId": "@world",
+        "startS": 1,
+        "endS": 1.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-left-flashing-red-flash-off",
+        "actorId": "@world",
+        "startS": 0.5,
+        "endS": 1,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-left-flashing-red-flash-red",
+        "actorId": "@world",
+        "startS": 1,
+        "endS": 1.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-right-flashing-red-flash-off",
+        "actorId": "@world",
+        "startS": 0.5,
+        "endS": 1,
+        "dependent": false
+      },
+      {
+        "interactionId": "signal-right-flashing-red-flash-red",
+        "actorId": "@world",
+        "startS": 1,
+        "endS": 1.5,
+        "dependent": false
+      }
+    ]
+  }
+}

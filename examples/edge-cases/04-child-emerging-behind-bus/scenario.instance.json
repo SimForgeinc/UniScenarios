@@ -1,0 +1,980 @@
+{
+  "kind": "scenario-instance",
+  "version": 1,
+  "manifest": {
+    "kind": "scenario-instance-manifest",
+    "manifestVersion": 1,
+    "replayKey": {
+      "templateId": "ec-04-04-child-emerging-behind-bus-v2",
+      "templateVersion": 2,
+      "templateDigest": "3ec4b837e6e2dc78",
+      "mapId": "yale-street",
+      "matcherIndexDigest": "33eb942298b3492266d0582782f020ef121cc1d8da08bcb3080c9b71ea01f95e",
+      "engineGraphDigest": "fbebbdccd6a6b5dfa18a321d74009dede3851f18b673a9b807e6f1b5ea3b17d5",
+      "siteId": "91291881afa2f862",
+      "matcherVersion": "1.0.0",
+      "solverVersion": "0.2.5",
+      "paramSeed": "ec-04-04-child-emerging-behind-bus-v2",
+      "drawIndex": 0
+    },
+    "instanceId": "ec-04-04-child-emerging-behind-bus-v2#0",
+    "archetype": "gallery.04-child-emerging-behind-bus",
+    "negativeControl": false,
+    "metricSubject": "focus-vehicle",
+    "operationalVariant": null,
+    "site": {
+      "siteId": "91291881afa2f862",
+      "score": 0.582,
+      "verdict": "degraded",
+      "originFeatureId": "junction:345",
+      "entryLaneRsl": "102:0:1",
+      "egoTurn": "straight",
+      "degradationSummary": "Degraded match (score 0.58). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=-65 m, wanted [25, 60]. Presentation was relaxed; the scenario still tests what it was written to test.",
+      "matchedReasons": [
+        "49 m of runway available, 45 m needed",
+        "111.02 m of runway available, 65 m needed",
+        "corridor.throughLanesSameDir holds over the whole interval (worst 2)",
+        "origin feature sits at s = 0 by construction",
+        "4-arm junction",
+        "signalized junction as requested",
+        "reference path turns straight",
+        "junction has a marked crossing",
+        "crossing loc_3daebce96284ea275ecf169e at s=6.19 m (projected 1.84 m from feature point)",
+        "child: walks the crossing loc_3daebce96284ea275ecf169e right_to_left",
+        "adult: walks the crossing loc_3daebce96284ea275ecf169e right_to_left"
+      ]
+    },
+    "params": {
+      "values": {},
+      "categorical": {},
+      "rejectedConstraints": []
+    },
+    "actors": [
+      {
+        "id": "adult",
+        "actorKind": "pedestrian",
+        "roleKind": "supporting",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 0,
+        "bindingStatus": "scene-absolute"
+      },
+      {
+        "id": "bus",
+        "actorKind": "bus",
+        "roleKind": "supporting",
+        "laneRsl": "102:0:2",
+        "spawnS": 2.995433357382268,
+        "initialSpeedMps": 0,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "child",
+        "actorKind": "pedestrian",
+        "roleKind": "supporting",
+        "laneRsl": null,
+        "spawnS": 0,
+        "initialSpeedMps": 0,
+        "bindingStatus": "scene-absolute"
+      },
+      {
+        "id": "focus-vehicle",
+        "actorKind": "car",
+        "roleKind": "focus",
+        "laneRsl": "104:0:1",
+        "spawnS": 10.095219434121681,
+        "initialSpeedMps": 8.88888888888889,
+        "bindingStatus": "bound"
+      },
+      {
+        "id": "trailing-taxi",
+        "actorKind": "car",
+        "roleKind": "supporting",
+        "laneRsl": "104:0:1",
+        "spawnS": 32.09522780772518,
+        "initialSpeedMps": 8.88888888888889,
+        "bindingStatus": "bound"
+      }
+    ],
+    "props": [],
+    "arrival": [],
+    "inputHash": "bf1cf85f116f8c16ba3bb9734fe5a60c1116699e0f5fa291ff69e88f33081032",
+    "feasible": true,
+    "issues": [],
+    "notes": [
+      {
+        "path": "signalPrograms",
+        "reason": "18 physical map signal head(s) bound as 3 logical program(s) to junction 345 with authoritative OpenDRIVE controller-stage provenance; phase durations and t=0 state use the explicit synthetic-default cycle because authoritative timing/state data is absent"
+      }
+    ]
+  },
+  "input": {
+    "schemaVersion": 1,
+    "mapId": "yale-street",
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "dt": 0.02,
+    "seed": "ec-04-04-child-emerging-behind-bus-v2",
+    "operationalConditions": {
+      "weather": "clear",
+      "timeOfDay": "day",
+      "traffic": "moderate",
+      "visibility": "unrestricted",
+      "effects": {
+        "visibilityRangeM": 1000,
+        "frictionScale": 1,
+        "trafficSpeedFactor": 1
+      }
+    },
+    "metricSubject": "focus-vehicle",
+    "actors": [
+      {
+        "id": "adult",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "pose": {
+            "x": 708.034251486867,
+            "z": -1745.8949612050078,
+            "headingRad": -0.6082844799726284
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 708.034251486867,
+                "z": -1745.8949612050078
+              },
+              {
+                "x": 708.8285213502761,
+                "z": -1745.3418567809294
+              },
+              {
+                "x": 709.6227912136851,
+                "z": -1744.7887523568509
+              },
+              {
+                "x": 710.4170610770942,
+                "z": -1744.2356479327723
+              },
+              {
+                "x": 711.2113309405033,
+                "z": -1743.682543508694
+              },
+              {
+                "x": 712.0056008039123,
+                "z": -1743.1294390846156
+              },
+              {
+                "x": 712.7998706673214,
+                "z": -1742.576334660537
+              },
+              {
+                "x": 713.5941405307304,
+                "z": -1742.0232302364584
+              },
+              {
+                "x": 714.3884103941396,
+                "z": -1741.47012581238
+              },
+              {
+                "x": 715.1826802575487,
+                "z": -1740.9170213883017
+              },
+              {
+                "x": 715.9769501209577,
+                "z": -1740.363916964223
+              },
+              {
+                "x": 716.7712199843668,
+                "z": -1739.8108125401445
+              },
+              {
+                "x": 717.5654898477759,
+                "z": -1739.2577081160662
+              },
+              {
+                "x": 718.3597597111849,
+                "z": -1738.7046036919878
+              },
+              {
+                "x": 719.154029574594,
+                "z": -1738.1514992679092
+              },
+              {
+                "x": 719.948299438003,
+                "z": -1737.5983948438306
+              },
+              {
+                "x": 720.7425693014121,
+                "z": -1737.0452904197523
+              }
+            ]
+          }
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:adult",
+          "class:pedestrian",
+          "binding:on_crossing",
+          "catalog:pedestrian.adult_standing"
+        ]
+      },
+      {
+        "id": "bus",
+        "kind": "bus",
+        "dims": {
+          "l": 12,
+          "w": 2.55,
+          "h": 3.2
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "102:0:2",
+            "s": 2.995433357382268,
+            "tFrac": -0.25
+          },
+          "pose": {
+            "x": 716.3660899900432,
+            "z": -1751.2093150835042,
+            "headingRad": -2.162119551143359
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "102:0:2",
+              "370:0:1",
+              "114:0:-4",
+              "555:0:-1",
+              "105:0:-5",
+              "463:0:-1",
+              "22:0:-4"
+            ]
+          }
+        },
+        "presentAtStart": true,
+        "static": true,
+        "tags": [
+          "role:bus",
+          "class:bus",
+          "binding:lane_offset",
+          "catalog:vehicle.bus"
+        ]
+      },
+      {
+        "id": "child",
+        "kind": "pedestrian",
+        "dims": {
+          "l": 0.6,
+          "w": 0.6,
+          "h": 1.75
+        },
+        "initial": {
+          "pose": {
+            "x": 709.0509169120306,
+            "z": -1745.1869875421874,
+            "headingRad": -0.6082844799726284
+          },
+          "speedMps": 0
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "polyline",
+            "points": [
+              {
+                "x": 708.034251486867,
+                "z": -1745.8949612050078
+              },
+              {
+                "x": 708.8285213502761,
+                "z": -1745.3418567809294
+              },
+              {
+                "x": 709.6227912136851,
+                "z": -1744.7887523568509
+              },
+              {
+                "x": 710.4170610770942,
+                "z": -1744.2356479327723
+              },
+              {
+                "x": 711.2113309405033,
+                "z": -1743.682543508694
+              },
+              {
+                "x": 712.0056008039123,
+                "z": -1743.1294390846156
+              },
+              {
+                "x": 712.7998706673214,
+                "z": -1742.576334660537
+              },
+              {
+                "x": 713.5941405307304,
+                "z": -1742.0232302364584
+              },
+              {
+                "x": 714.3884103941396,
+                "z": -1741.47012581238
+              },
+              {
+                "x": 715.1826802575487,
+                "z": -1740.9170213883017
+              },
+              {
+                "x": 715.9769501209577,
+                "z": -1740.363916964223
+              },
+              {
+                "x": 716.7712199843668,
+                "z": -1739.8108125401445
+              },
+              {
+                "x": 717.5654898477759,
+                "z": -1739.2577081160662
+              },
+              {
+                "x": 718.3597597111849,
+                "z": -1738.7046036919878
+              },
+              {
+                "x": 719.154029574594,
+                "z": -1738.1514992679092
+              },
+              {
+                "x": 719.948299438003,
+                "z": -1737.5983948438306
+              },
+              {
+                "x": 720.7425693014121,
+                "z": -1737.0452904197523
+              }
+            ]
+          },
+          "cruiseSpeedMps": 0
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:child",
+          "class:pedestrian",
+          "binding:on_crossing",
+          "catalog:pedestrian.child_walking"
+        ]
+      },
+      {
+        "id": "focus-vehicle",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "104:0:1",
+            "s": 10.095219434121681,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 751.845661059546,
+            "z": -1798.4457459030036,
+            "headingRad": -2.1496113771875445
+          },
+          "speedMps": 8.88888888888889
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "104:0:1",
+              "1367:0:1",
+              "103:0:1",
+              "1395:0:1",
+              "102:0:1",
+              "347:0:1",
+              "67:0:-1",
+              "403:0:-1",
+              "68:0:-1",
+              "1110:0:-1",
+              "42:0:-1"
+            ]
+          },
+          "cruiseSpeedMps": 8.88888888888889
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:focus-vehicle",
+          "class:car",
+          "binding:on_reference",
+          "catalog:vehicle.sedan"
+        ]
+      },
+      {
+        "id": "trailing-taxi",
+        "kind": "car",
+        "dims": {
+          "l": 4.8,
+          "w": 1.9,
+          "h": 1.5
+        },
+        "initial": {
+          "laneRef": {
+            "rsl": "104:0:1",
+            "s": 32.09522780772518,
+            "tFrac": 0
+          },
+          "pose": {
+            "x": 763.8041560360823,
+            "z": -1816.9117184541237,
+            "headingRad": -2.1439696443493874
+          },
+          "speedMps": 8.88888888888889
+        },
+        "behavior": {
+          "rules": {
+            "obeySignals": true,
+            "yield": true,
+            "yieldToVehicles": true,
+            "yieldToPedestrians": true,
+            "collisionAvoidance": true,
+            "aggression": 0.5,
+            "speedFactor": 1
+          },
+          "route": {
+            "kind": "lanePath",
+            "lanes": [
+              "104:0:1",
+              "1367:0:1",
+              "103:0:1",
+              "1395:0:1",
+              "102:0:1",
+              "347:0:1",
+              "67:0:-1",
+              "403:0:-1",
+              "68:0:-1",
+              "1110:0:-1",
+              "42:0:-1"
+            ]
+          },
+          "cruiseSpeedMps": 8.88888888888889
+        },
+        "presentAtStart": true,
+        "static": false,
+        "tags": [
+          "role:trailing-taxi",
+          "class:car",
+          "binding:relative_to",
+          "catalog:vehicle.sedan"
+        ]
+      }
+    ],
+    "interactions": [
+      {
+        "id": "adult-waits-at-curb",
+        "actorId": "adult",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "verb": "set",
+        "target": {
+          "key": "pose.gesture",
+          "value": "halt"
+        }
+      },
+      {
+        "id": "bus-doors-open",
+        "actorId": "bus",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "doors.right",
+          "value": "open"
+        }
+      },
+      {
+        "id": "child-commits",
+        "actorId": "child",
+        "trigger": {
+          "kind": "at",
+          "t": 8
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      },
+      {
+        "id": "child-continues",
+        "actorId": "child",
+        "trigger": {
+          "kind": "at",
+          "t": 15.3
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 1.527777777777778
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "child-hesitates-at-lane-line",
+        "actorId": "child",
+        "trigger": {
+          "kind": "at",
+          "t": 13.8
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.25
+        }
+      },
+      {
+        "id": "child-ignores-pedestrian-phase",
+        "actorId": "child",
+        "trigger": {
+          "kind": "at",
+          "t": 8
+        },
+        "verb": "set",
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      },
+      {
+        "id": "child-runs-from-bus",
+        "actorId": "child",
+        "trigger": {
+          "kind": "at",
+          "t": 8.2
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 2.2222222222222223
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "focus-vehicle-controls-approach",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "absolute",
+          "value": 5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.5
+        }
+      },
+      {
+        "id": "focus-vehicle-holds-for-full-clearance",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 17
+        },
+        "verb": "set",
+        "target": {
+          "key": "lights.brake",
+          "value": true
+        }
+      },
+      {
+        "id": "focus-vehicle-signal-green",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "verb": "set",
+        "target": {
+          "key": "signal:signal:1477.phase",
+          "value": "green"
+        }
+      },
+      {
+        "id": "focus-vehicle-stops-before-crossing",
+        "actorId": "focus-vehicle",
+        "trigger": {
+          "kind": "at",
+          "t": 8.35
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.2
+        }
+      },
+      {
+        "id": "taxi-brakes-behind",
+        "actorId": "trailing-taxi",
+        "trigger": {
+          "kind": "after",
+          "interactionId": "focus-vehicle-stops-before-crossing",
+          "delayS": 0.65
+        },
+        "verb": "speed",
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.6
+        }
+      }
+    ],
+    "signalPrograms": [
+      {
+        "id": "signal:1426",
+        "phases": [
+          {
+            "phase": "red",
+            "durationS": 30
+          },
+          {
+            "phase": "green",
+            "durationS": 12
+          },
+          {
+            "phase": "yellow",
+            "durationS": 3
+          },
+          {
+            "phase": "red",
+            "durationS": 15
+          }
+        ],
+        "offsetS": 23,
+        "loop": true,
+        "stopLines": [
+          {
+            "rsl": "18:0:-2",
+            "s": 7.406970529479786,
+            "connectingLaneRsls": [
+              "356:0:-1"
+            ]
+          },
+          {
+            "rsl": "71:0:-2",
+            "s": 7.511175490921346,
+            "connectingLaneRsls": [
+              "359:0:-1"
+            ]
+          }
+        ],
+        "mapBinding": {
+          "junctionId": "345",
+          "controllerIds": [
+            "1571"
+          ],
+          "headIds": [
+            "1426",
+            "1429",
+            "1480",
+            "1518"
+          ],
+          "controllerHeadGroups": [
+            {
+              "controllerId": "1571",
+              "headIds": [
+                "1426",
+                "1429",
+                "1480",
+                "1518"
+              ]
+            }
+          ],
+          "timingSource": "synthetic-default"
+        }
+      },
+      {
+        "id": "signal:1427",
+        "phases": [
+          {
+            "phase": "red",
+            "durationS": 45
+          },
+          {
+            "phase": "green",
+            "durationS": 12
+          },
+          {
+            "phase": "yellow",
+            "durationS": 3
+          }
+        ],
+        "offsetS": 23,
+        "loop": true,
+        "stopLines": [
+          {
+            "rsl": "18:0:-3",
+            "s": 7.4024394915455005,
+            "connectingLaneRsls": [
+              "384:0:-1"
+            ]
+          },
+          {
+            "rsl": "18:0:-6",
+            "s": 7.399269934892359,
+            "connectingLaneRsls": [
+              "377:0:-1"
+            ]
+          },
+          {
+            "rsl": "18:0:-8",
+            "s": 7.396308348577504,
+            "connectingLaneRsls": [
+              "380:0:-1"
+            ]
+          },
+          {
+            "rsl": "71:0:-3",
+            "s": 7.510994857830839,
+            "connectingLaneRsls": [
+              "376:0:-1"
+            ]
+          },
+          {
+            "rsl": "71:0:-4",
+            "s": 7.510990143171178,
+            "connectingLaneRsls": [
+              "373:0:-1"
+            ]
+          },
+          {
+            "rsl": "71:0:-5",
+            "s": 7.510999917954207,
+            "connectingLaneRsls": [
+              "374:0:-1"
+            ]
+          }
+        ],
+        "mapBinding": {
+          "junctionId": "345",
+          "controllerIds": [
+            "1572"
+          ],
+          "headIds": [
+            "1427",
+            "1428",
+            "1430",
+            "1431",
+            "1475",
+            "1476",
+            "1479",
+            "1519"
+          ],
+          "controllerHeadGroups": [
+            {
+              "controllerId": "1572",
+              "headIds": [
+                "1427",
+                "1428",
+                "1430",
+                "1431",
+                "1475",
+                "1476",
+                "1479",
+                "1519"
+              ]
+            }
+          ],
+          "timingSource": "synthetic-default"
+        }
+      },
+      {
+        "id": "signal:1477",
+        "phases": [
+          {
+            "phase": "green",
+            "durationS": 27
+          },
+          {
+            "phase": "yellow",
+            "durationS": 3
+          },
+          {
+            "phase": "red",
+            "durationS": 30
+          }
+        ],
+        "offsetS": 23,
+        "loop": true,
+        "stopLines": [
+          {
+            "rsl": "102:0:1",
+            "s": 1,
+            "connectingLaneRsls": [
+              "347:0:1"
+            ]
+          },
+          {
+            "rsl": "102:0:1",
+            "s": 1,
+            "connectingLaneRsls": [
+              "360:0:1"
+            ]
+          },
+          {
+            "rsl": "102:0:2",
+            "s": 1,
+            "connectingLaneRsls": [
+              "370:0:1"
+            ]
+          },
+          {
+            "rsl": "67:0:1",
+            "s": 1,
+            "connectingLaneRsls": [
+              "346:0:1"
+            ]
+          },
+          {
+            "rsl": "67:0:1",
+            "s": 1,
+            "connectingLaneRsls": [
+              "352:0:1"
+            ]
+          },
+          {
+            "rsl": "67:0:1",
+            "s": 1,
+            "connectingLaneRsls": [
+              "357:0:1"
+            ]
+          }
+        ],
+        "mapBinding": {
+          "junctionId": "345",
+          "controllerIds": [
+            "1569",
+            "1570"
+          ],
+          "headIds": [
+            "1477",
+            "1478",
+            "1525",
+            "1526",
+            "1527",
+            "1528"
+          ],
+          "controllerHeadGroups": [
+            {
+              "controllerId": "1569",
+              "headIds": [
+                "1477",
+                "1478",
+                "1525",
+                "1526",
+                "1527",
+                "1528"
+              ]
+            },
+            {
+              "controllerId": "1570",
+              "headIds": [
+                "1477",
+                "1478",
+                "1525",
+                "1526",
+                "1527",
+                "1528"
+              ]
+            }
+          ],
+          "timingSource": "synthetic-default"
+        }
+      }
+    ],
+    "roadControls": [],
+    "props": [],
+    "occluders": [],
+    "occlusionPairs": [
+      {
+        "observer": "focus-vehicle",
+        "target": "child",
+        "occluderId": "actor:bus"
+      }
+    ]
+  }
+}

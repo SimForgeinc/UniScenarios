@@ -1,0 +1,594 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Child Emerging from Behind a Bus",
+    "description": "The focus vehicle must stop when a child emerges from the bus blind side into a signalized crossing while rear traffic closes. This curated 20-second scenario uses only currently supported behaviors; adaptations are declared in machine-readable metadata.",
+    "createdAt": "2026-08-02T07:00:00.000Z",
+    "modifiedAt": "2026-08-03T08:00:00.000Z",
+    "appVersion": "uniscenarios/0.1.0-editor",
+    "archetype": "gallery.04-child-emerging-behind-bus",
+    "tags": [
+      "curated-gallery-v2",
+      "EC-04",
+      "child",
+      "bus",
+      "occlusion"
+    ],
+    "author": "Codex curated edge-case suite",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "clear",
+    "timeOfDay": "afternoon"
+  },
+  "anchor": {
+    "id": "signalized-multilane-bus-crossing",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          2,
+          4
+        ],
+        "essentiality": "required"
+      },
+      "speedLimitKph": {
+        "value": [
+          25,
+          60
+        ],
+        "essentiality": "preferred",
+        "weight": 2
+      },
+      "runwayUpstreamM": {
+        "value": [
+          65,
+          null
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          45,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "jx",
+        "kind": "junction",
+        "label": "signalized junction immediately beside the bus stop",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            0
+          ],
+          "essentiality": "required"
+        },
+        "arms": {
+          "value": [
+            3,
+            4
+          ],
+          "essentiality": "required"
+        },
+        "control": {
+          "value": [
+            "signalized"
+          ],
+          "essentiality": "required"
+        },
+        "egoTurn": {
+          "value": [
+            "straight"
+          ],
+          "essentiality": "required"
+        },
+        "hasCrossingOnLeg": {
+          "value": true,
+          "essentiality": "required"
+        }
+      },
+      {
+        "id": "xw",
+        "kind": "crossing",
+        "label": "marked signalized crossing immediately downstream of bus nose",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            24
+          ],
+          "essentiality": "required"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": true,
+      "maxSitesPerMap": 16,
+      "diversity": "strict",
+      "minScore": 0.5
+    }
+  },
+  "roles": [
+    {
+      "id": "focus-vehicle",
+      "kind": "on_reference",
+      "label": "inside-lane vehicle under test",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -62,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 32
+    },
+    {
+      "id": "bus",
+      "kind": "lane_offset",
+      "k": -1,
+      "onMissing": "fail",
+      "label": "stopped curbside city bus immediately upstream of crossing",
+      "actor": {
+        "class": "bus",
+        "catalogId": "vehicle.bus",
+        "static": true
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -3,
+        "tFrac": -0.25,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0,
+      "extensions": {
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "child"
+        },
+        "placement": "curb-lane-before-crossing"
+      }
+    },
+    {
+      "id": "child",
+      "kind": "on_crossing",
+      "feature": "xw",
+      "startFrac": 0.08,
+      "direction": "far_to_near",
+      "lateralFrac": 0,
+      "label": "child hidden at the bus nose who runs against the pedestrian phase",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.child_walking"
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "adult",
+      "kind": "on_crossing",
+      "feature": "xw",
+      "startFrac": 0,
+      "direction": "far_to_near",
+      "lateralFrac": -0.7,
+      "label": "adult who reaches the curb but waits",
+      "actor": {
+        "class": "pedestrian",
+        "catalogId": "pedestrian.adult_standing",
+        "static": true
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "trailing-taxi",
+      "kind": "relative_to",
+      "ref": "focus-vehicle",
+      "dLane": 0,
+      "dsM": -22,
+      "tFrac": 0,
+      "headingOffsetRad": 0,
+      "label": "taxi closing behind focus-vehicle",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "initialSpeedKph": 32
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "focus-vehicle-signal-green",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "signal:feature:jx:focus-vehicle.phase",
+          "value": "green"
+        }
+      },
+      {
+        "id": "bus-doors-open",
+        "actor": "bus",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "key": "doors.right",
+          "value": "open"
+        }
+      },
+      {
+        "id": "focus-vehicle-controls-approach",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 18
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.5
+        }
+      },
+      {
+        "id": "adult-waits-at-curb",
+        "actor": "adult",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "target": {
+          "key": "pose.gesture",
+          "value": "halt"
+        }
+      },
+      {
+        "id": "child-ignores-pedestrian-phase",
+        "actor": "child",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 8
+        },
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      },
+      {
+        "id": "child-commits",
+        "actor": "child",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 8
+        },
+        "target": {
+          "key": "rules.collisionAvoidance",
+          "value": false
+        }
+      },
+      {
+        "id": "child-runs-from-bus",
+        "actor": "child",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 8.2
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 8
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "focus-vehicle-stops-before-crossing",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 8.35
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.2
+        }
+      },
+      {
+        "id": "taxi-brakes-behind",
+        "actor": "trailing-taxi",
+        "verb": "speed",
+        "trigger": {
+          "kind": "after",
+          "of": "focus-vehicle-stops-before-crossing",
+          "event": "start",
+          "delayS": 0.65
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 2.6
+        }
+      },
+      {
+        "id": "child-hesitates-at-lane-line",
+        "actor": "child",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 13.8
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.25
+        }
+      },
+      {
+        "id": "child-continues",
+        "actor": "child",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 15.3
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 5.5
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.3
+        }
+      },
+      {
+        "id": "focus-vehicle-holds-for-full-clearance",
+        "actor": "focus-vehicle",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 17
+        },
+        "target": {
+          "key": "lights.brake",
+          "value": true
+        },
+        "label": "Focus vehicle remains stopped while the child completes the far half of the crossing"
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "emergence-response-order",
+      "kind": "event_order",
+      "events": [
+        "focus-vehicle-controls-approach",
+        "adult-waits-at-curb",
+        "child-ignores-pedestrian-phase",
+        "child-runs-from-bus",
+        "focus-vehicle-stops-before-crossing",
+        "taxi-brakes-behind",
+        "child-hesitates-at-lane-line",
+        "child-continues",
+        "focus-vehicle-holds-for-full-clearance"
+      ],
+      "strict": true,
+      "essentiality": "required"
+    },
+    {
+      "id": "child-criticality",
+      "kind": "path_ttc",
+      "of": "focus-vehicle",
+      "to": "child",
+      "range": [
+        1,
+        6
+      ],
+      "window": [
+        7,
+        18
+      ],
+      "essentiality": "required"
+    },
+    {
+      "id": "taxi-positive-gap",
+      "kind": "gap",
+      "of": "trailing-taxi",
+      "to": "focus-vehicle",
+      "unit": "distance",
+      "range": [
+        0.1,
+        60
+      ],
+      "window": [
+        0,
+        20
+      ],
+      "essentiality": "required"
+    },
+    {
+      "id": "focus-vehicle-comfortable-stop",
+      "kind": "decel_budget",
+      "of": "focus-vehicle",
+      "maxMps2": 6,
+      "essentiality": "required"
+    }
+  ],
+  "variants": [],
+  "metricSubject": "focus-vehicle",
+  "extensions": {
+    "x-uniscenarios.stableId": "edge-02-bus-occluded-child-signalized-crossing-v1",
+    "x-uniscenarios.intent": {
+      "must": [
+        "focus-vehicle receives green but discounts it because of bus occlusion",
+        "focus-vehicle is at or below 20 km/h before bus nose",
+        "child is initially hidden and runs against pedestrian phase",
+        "focus-vehicle stops before crosswalk",
+        "taxi closes but does not collide",
+        "focus-vehicle remains stopped through partial clearance"
+      ],
+      "mustNot": [
+        "accelerate to beat child",
+        "swerve into bus",
+        "stop on crosswalk",
+        "resume when only focus-vehicle lane appears clear"
+      ]
+    },
+    "acceptanceContract": {
+      "maxApproachSpeedKph": 20,
+      "minChildDistanceM": 1.5,
+      "maxPeakDecelMps2": 6,
+      "collisionFree": true,
+      "egoStoppedThroughSeconds": 20
+    },
+    "transferInvariants": [
+      "at least two same-direction lanes",
+      "curbside full-size bus immediately upstream of marked signalized crossing",
+      "child hidden by bus nose",
+      "focus-vehicle green phase",
+      "rear follower pressure"
+    ],
+    "studio.gallery.intent": {
+      "schema": "uniscenarios.gallery-intent.v1",
+      "stableId": "ec-04-04-child-emerging-behind-bus-v2",
+      "focusActorId": "focus-vehicle",
+      "statement": "The focus vehicle must stop when a child emerges from the bus blind side into a signalized crossing while rear traffic closes.",
+      "adaptations": [
+        "The child uses the shipped pedestrian model and adult-sized collision envelope; no child-specific mesh or skeletal animation is claimed.",
+        "Visibility is validated geometrically rather than by an eye-tracking model."
+      ]
+    },
+    "studio.ambientTraffic": {
+      "enabled": true,
+      "provider": "sumo",
+      "density": "moderate",
+      "authoredActorsExcludedFromTimeline": true
+    },
+    "studio.timeline.windows": [
+      {
+        "interactionId": "adult-waits-at-curb",
+        "actorId": "adult",
+        "startS": 5,
+        "endS": 5.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "bus-doors-open",
+        "actorId": "bus",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "child-commits",
+        "actorId": "child",
+        "startS": 8,
+        "endS": 8.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "child-continues",
+        "actorId": "child",
+        "startS": 15.3,
+        "endS": 15.600000000000001,
+        "dependent": false
+      },
+      {
+        "interactionId": "child-hesitates-at-lane-line",
+        "actorId": "child",
+        "startS": 13.8,
+        "endS": 14.05,
+        "dependent": false
+      },
+      {
+        "interactionId": "child-ignores-pedestrian-phase",
+        "actorId": "child",
+        "startS": 8,
+        "endS": 8.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "child-runs-from-bus",
+        "actorId": "child",
+        "startS": 8.2,
+        "endS": 8.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-controls-approach",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 2.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-holds-for-full-clearance",
+        "actorId": "focus-vehicle",
+        "startS": 17,
+        "endS": 17.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-signal-green",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-stops-before-crossing",
+        "actorId": "focus-vehicle",
+        "startS": 8.35,
+        "endS": 10.55,
+        "dependent": false
+      },
+      {
+        "interactionId": "taxi-brakes-behind",
+        "actorId": "trailing-taxi",
+        "startS": null,
+        "endS": null,
+        "dependent": true
+      }
+    ]
+  }
+}

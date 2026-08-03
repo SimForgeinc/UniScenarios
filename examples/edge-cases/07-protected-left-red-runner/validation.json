@@ -1,0 +1,1176 @@
+{
+  "schema": "uniscenarios.gallery-validation.v1",
+  "validatedAt": "2026-08-03T08:00:00.000Z",
+  "provider": "native",
+  "command": "uniscenarios debug 07-protected-left-red-runner/scenario.instance.json --sample 0.5 --fail-on-fallback --fail-on-never-fired --fail-on-collision",
+  "acceptance": {
+    "ok": true,
+    "failures": []
+  },
+  "input": {
+    "source": "/private/tmp/uniscenarios-new-gallery/examples/edge-cases/07-protected-left-red-runner/scenario.instance.json",
+    "kind": "instance",
+    "mapId": "el-camino-road",
+    "provider": "native",
+    "inputHash": "d1950d17927500b4f977fc1542ce73da038d1af70bba1c1d9aefc26827bb8ccf",
+    "traceDigest": "8373f64c6a4177b87ca9cfb585c6ad53e27ef9037d202602b53d6444247373e1",
+    "durationSeconds": 20,
+    "sampleSeconds": 0.5
+  },
+  "compile": {
+    "milliseconds": 364.08075,
+    "feasible": true,
+    "manifest": {
+      "kind": "scenario-instance-manifest",
+      "manifestVersion": 1,
+      "replayKey": {
+        "templateId": "ec-07-07-protected-left-red-runner-v2",
+        "templateVersion": 2,
+        "templateDigest": "7b74b6fb75b9e608",
+        "mapId": "el-camino-road",
+        "matcherIndexDigest": "986a9135415f3b045a7fb5d8f552bea3a1e7bdc9f35aba33e70092ee1dbd91d0",
+        "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
+        "siteId": "1f964815a5bfd7cb",
+        "matcherVersion": "1.0.0",
+        "solverVersion": "0.2.5",
+        "paramSeed": "ec-07-07-protected-left-red-runner-v2",
+        "drawIndex": 0
+      },
+      "instanceId": "ec-07-07-protected-left-red-runner-v2#0",
+      "archetype": "gallery.07-protected-left-red-runner",
+      "negativeControl": false,
+      "metricSubject": "focus-vehicle",
+      "operationalVariant": null,
+      "site": {
+        "siteId": "1f964815a5bfd7cb",
+        "score": 0.5335,
+        "verdict": "degraded",
+        "originFeatureId": "junction:590",
+        "entryLaneRsl": "128:1:-3",
+        "egoTurn": "left",
+        "degradationSummary": "Degraded match (score 0.53). speeds clamped to the site limit 64 kph (arrival invariants re-solved over the speed parameter). corridor.speedLimitKph worst value 64 at s=-45 m, wanted [20, 55]. Presentation was relaxed; the scenario still tests what it was written to test.",
+        "matchedReasons": [
+          "59.46 m of runway available, 45 m needed",
+          "95.36 m of runway available, 45 m needed",
+          "corridor.throughLanesOpposing holds over the whole interval (worst 3)",
+          "corridor.throughLanesSameDir holds over the whole interval (worst 5)",
+          "origin feature sits at s = 0 by construction",
+          "4-arm junction",
+          "conflicting opposing right movement crosses the focus-vehicle path at 0°",
+          "signalized junction as requested",
+          "reference path turns left",
+          "junction has a marked crossing",
+          "crossing loc_db13e7605599f19b2d8f3c78 at s=18.86 m (projected 5.31 m from feature point)",
+          "mobility-scooter: walks the crossing loc_db13e7605599f19b2d8f3c78 left_to_right",
+          "cyclist: walks the crossing loc_db13e7605599f19b2d8f3c78 right_to_left",
+          "red-runner: bound to gate 590:11:-6--1 (opposing right), crossing at 0° (template 135°)",
+          "matched in mirror (policy.allowMirror)"
+        ]
+      },
+      "params": {
+        "values": {
+          "scooterSpeedKph": 4.5,
+          "cyclistSpeedKph": 19
+        },
+        "categorical": {},
+        "rejectedConstraints": []
+      },
+      "actors": [
+        {
+          "id": "cyclist",
+          "actorKind": "bicycle",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 0,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "focus-vehicle",
+          "actorKind": "car",
+          "roleKind": "focus",
+          "laneRsl": "128:0:-3",
+          "spawnS": 79.36108146758178,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "mobility-scooter",
+          "actorKind": "scooter",
+          "roleKind": "supporting",
+          "laneRsl": null,
+          "spawnS": 0,
+          "initialSpeedMps": 1.25,
+          "bindingStatus": "scene-absolute"
+        },
+        {
+          "id": "red-runner",
+          "actorKind": "car",
+          "roleKind": "supporting",
+          "laneRsl": "729:0:-1",
+          "spawnS": 51.201696198102994,
+          "initialSpeedMps": 5,
+          "bindingStatus": "bound"
+        },
+        {
+          "id": "outer-pickup",
+          "actorKind": "truck",
+          "roleKind": "supporting",
+          "laneRsl": "627:0:-1",
+          "spawnS": 1.997384110080148,
+          "initialSpeedMps": 0,
+          "bindingStatus": "bound"
+        }
+      ],
+      "props": [],
+      "arrival": [
+        {
+          "interactionId": "role:red-runner",
+          "actorId": "red-runner",
+          "referenceActorId": "focus-vehicle",
+          "spawnDeltaS": 116.31800661424279,
+          "spawnS": 116.31800661424279,
+          "targetDeltaT": 13.5,
+          "achievedDeltaT": 13.500037368944017,
+          "achievedTtc": -13.500037368944017,
+          "fireTime": 19.716833522165306,
+          "iterations": 18,
+          "converged": true
+        }
+      ],
+      "inputHash": "d1950d17927500b4f977fc1542ce73da038d1af70bba1c1d9aefc26827bb8ccf",
+      "feasible": true,
+      "issues": [],
+      "notes": [
+        {
+          "path": "signalPrograms",
+          "reason": "22 physical map signal head(s) bound as 4 logical program(s) to junction 590 with authoritative OpenDRIVE controller-stage provenance; phase durations and t=0 state use the explicit synthetic-default cycle because authoritative timing/state data is absent"
+        }
+      ]
+    }
+  },
+  "performance": {
+    "nativeMilliseconds": 182.376875,
+    "nativeTicksPerSecond": 5488.634455,
+    "simulatedSecondsPerWallSecond": 109.663026,
+    "sumo": null
+  },
+  "summary": {
+    "ok": true,
+    "actorCount": 5,
+    "ambientActorCount": 0,
+    "signalCount": 4,
+    "interactionCount": 10,
+    "collisionCount": 0,
+    "roadDepartureCount": 1,
+    "neverFiredCount": 0,
+    "actorMotion": {
+      "cyclist": {
+        "samples": 41,
+        "start": {
+          "x": 1125.512472,
+          "z": -1446.473366,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1110.6512,
+          "z": -1450.941347,
+          "laneRsl": null
+        },
+        "displacementM": 15.518385,
+        "maxSpeedMps": 1.564604,
+        "observedLanes": []
+      },
+      "focus-vehicle": {
+        "samples": 41,
+        "start": {
+          "x": 1089.863076,
+          "z": -1467.233648,
+          "laneRsl": "128:0:-3"
+        },
+        "end": {
+          "x": 1089.905343,
+          "z": -1467.206051,
+          "laneRsl": "128:0:-3"
+        },
+        "displacementM": 0.050479,
+        "maxSpeedMps": 0.072068,
+        "observedLanes": [
+          "128:0:-3"
+        ]
+      },
+      "mobility-scooter": {
+        "samples": 41,
+        "start": {
+          "x": 1094.567297,
+          "z": -1455.776908,
+          "laneRsl": null
+        },
+        "end": {
+          "x": 1101.262526,
+          "z": -1453.764014,
+          "laneRsl": null
+        },
+        "displacementM": 6.991268,
+        "maxSpeedMps": 1.25,
+        "observedLanes": []
+      },
+      "outer-pickup": {
+        "samples": 41,
+        "start": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "end": {
+          "x": 1105.389006,
+          "z": -1458.165903,
+          "laneRsl": "627:0:-1"
+        },
+        "displacementM": 0,
+        "maxSpeedMps": 0,
+        "observedLanes": [
+          "627:0:-1"
+        ]
+      },
+      "red-runner": {
+        "samples": 41,
+        "start": {
+          "x": 1213.500251,
+          "z": -1401.358383,
+          "laneRsl": "73:0:-6"
+        },
+        "end": {
+          "x": 1147.382987,
+          "z": -1449.652306,
+          "laneRsl": "616:0:-1"
+        },
+        "displacementM": 81.87671,
+        "maxSpeedMps": 5.056175,
+        "observedLanes": [
+          "73:0:-6",
+          "365:0:-6",
+          "74:0:-6",
+          "616:0:-1"
+        ]
+      }
+    }
+  },
+  "interactions": [
+    {
+      "id": "cyclist-emerges",
+      "actorId": "cyclist",
+      "trigger": {
+        "kind": "at",
+        "t": 9
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 1.5
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 9,
+          "kind": "trigger_fired",
+          "interactionId": "cyclist-emerges",
+          "actorId": "cyclist",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "destination-conflict-enters",
+      "actorId": "red-runner",
+      "trigger": {
+        "kind": "at",
+        "t": 12
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 5
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1
+      },
+      "events": [
+        {
+          "t": 12,
+          "kind": "trigger_fired",
+          "interactionId": "destination-conflict-enters",
+          "actorId": "red-runner",
+          "verb": "speed",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-confirms-wait",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 18
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 18,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-confirms-wait",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-confirms-wait",
+          "preemptedInteractionId": "focus-vehicle-holds"
+        }
+      ]
+    },
+    {
+      "id": "focus-vehicle-holds",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 0
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "step",
+        "constraint": "time",
+        "value": 0.1
+      },
+      "events": [
+        {
+          "t": 0,
+          "kind": "trigger_fired",
+          "interactionId": "focus-vehicle-holds",
+          "actorId": "focus-vehicle",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 18,
+          "kind": "preemption",
+          "actorId": "focus-vehicle",
+          "axis": "longitudinal",
+          "byInteractionId": "focus-vehicle-confirms-wait",
+          "preemptedInteractionId": "focus-vehicle-holds"
+        }
+      ]
+    },
+    {
+      "id": "pickup-blocks-crosswalk",
+      "actorId": "outer-pickup",
+      "trigger": {
+        "kind": "at",
+        "t": 8
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.8
+      },
+      "events": [
+        {
+          "t": 8,
+          "kind": "trigger_fired",
+          "interactionId": "pickup-blocks-crosswalk",
+          "actorId": "outer-pickup",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 8,
+          "kind": "preemption",
+          "actorId": "outer-pickup",
+          "axis": "longitudinal",
+          "byInteractionId": "pickup-blocks-crosswalk",
+          "preemptedInteractionId": "pickup-creeps"
+        }
+      ]
+    },
+    {
+      "id": "pickup-creeps",
+      "actorId": "outer-pickup",
+      "trigger": {
+        "kind": "at",
+        "t": 5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 0.8333333333333334
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 1
+      },
+      "events": [
+        {
+          "t": 5,
+          "kind": "trigger_fired",
+          "interactionId": "pickup-creeps",
+          "actorId": "outer-pickup",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 8,
+          "kind": "preemption",
+          "actorId": "outer-pickup",
+          "axis": "longitudinal",
+          "byInteractionId": "pickup-blocks-crosswalk",
+          "preemptedInteractionId": "pickup-creeps"
+        }
+      ]
+    },
+    {
+      "id": "scooter-leaves-refuge",
+      "actorId": "mobility-scooter",
+      "trigger": {
+        "kind": "at",
+        "t": 19.5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "absolute",
+        "value": 0.5555555555555556
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.6
+      },
+      "events": [
+        {
+          "t": 19.5,
+          "kind": "trigger_fired",
+          "interactionId": "scooter-leaves-refuge",
+          "actorId": "mobility-scooter",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 19.5,
+          "kind": "preemption",
+          "actorId": "mobility-scooter",
+          "axis": "longitudinal",
+          "byInteractionId": "scooter-leaves-refuge",
+          "preemptedInteractionId": "scooter-pauses-at-refuge"
+        }
+      ]
+    },
+    {
+      "id": "scooter-pauses-at-refuge",
+      "actorId": "mobility-scooter",
+      "trigger": {
+        "kind": "at",
+        "t": 5
+      },
+      "verb": "speed",
+      "target": {
+        "mode": "stop"
+      },
+      "dynamics": {
+        "shape": "linear",
+        "constraint": "time",
+        "value": 0.7
+      },
+      "events": [
+        {
+          "t": 5,
+          "kind": "trigger_fired",
+          "interactionId": "scooter-pauses-at-refuge",
+          "actorId": "mobility-scooter",
+          "verb": "speed",
+          "forced": false
+        },
+        {
+          "t": 19.5,
+          "kind": "preemption",
+          "actorId": "mobility-scooter",
+          "axis": "longitudinal",
+          "byInteractionId": "scooter-leaves-refuge",
+          "preemptedInteractionId": "scooter-pauses-at-refuge"
+        }
+      ]
+    },
+    {
+      "id": "protected-left-turns-red",
+      "actorId": "focus-vehicle",
+      "trigger": {
+        "kind": "at",
+        "t": 11
+      },
+      "verb": "set",
+      "target": {
+        "key": "signal:protected-left:cross.phase",
+        "value": "red"
+      },
+      "events": [
+        {
+          "t": 11,
+          "kind": "trigger_fired",
+          "interactionId": "protected-left-turns-red",
+          "actorId": "focus-vehicle",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    },
+    {
+      "id": "red-runner-ignores-red",
+      "actorId": "red-runner",
+      "trigger": {
+        "kind": "at",
+        "t": 11.2
+      },
+      "verb": "set",
+      "target": {
+        "key": "rules.obeySignals",
+        "value": false
+      },
+      "events": [
+        {
+          "t": 11.200000000000001,
+          "kind": "trigger_fired",
+          "interactionId": "red-runner-ignores-red",
+          "actorId": "red-runner",
+          "verb": "set",
+          "forced": false
+        }
+      ]
+    }
+  ],
+  "diagnostics": {
+    "issues": [],
+    "collisions": [],
+    "roadDepartures": [
+      {
+        "t": -1,
+        "kind": "road_departure_prevented",
+        "actorId": "outer-pickup",
+        "laneRsl": "627:0:-1",
+        "lateralErrorM": 2.2859464344433444,
+        "allowedCenterOffsetM": 0.9037314000337879
+      }
+    ],
+    "laneChangeRejections": [],
+    "crashes": [],
+    "neverFired": [],
+    "preemptions": [
+      {
+        "t": 8,
+        "kind": "preemption",
+        "actorId": "outer-pickup",
+        "axis": "longitudinal",
+        "byInteractionId": "pickup-blocks-crosswalk",
+        "preemptedInteractionId": "pickup-creeps"
+      },
+      {
+        "t": 18,
+        "kind": "preemption",
+        "actorId": "focus-vehicle",
+        "axis": "longitudinal",
+        "byInteractionId": "focus-vehicle-confirms-wait",
+        "preemptedInteractionId": "focus-vehicle-holds"
+      },
+      {
+        "t": 19.5,
+        "kind": "preemption",
+        "actorId": "mobility-scooter",
+        "axis": "longitudinal",
+        "byInteractionId": "scooter-leaves-refuge",
+        "preemptedInteractionId": "scooter-pauses-at-refuge"
+      }
+    ],
+    "fallbacks": [],
+    "routes": {
+      "cyclist": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 1137.010752321971,
+              "z": -1443.0164540612893
+            },
+            {
+              "x": 1136.0537232672855,
+              "z": -1443.3041809931508
+            },
+            {
+              "x": 1135.0966942125997,
+              "z": -1443.5919079250123
+            },
+            {
+              "x": 1134.1396651579141,
+              "z": -1443.879634856874
+            },
+            {
+              "x": 1133.1826361032283,
+              "z": -1444.1673617887354
+            },
+            {
+              "x": 1132.2256070485428,
+              "z": -1444.455088720597
+            },
+            {
+              "x": 1131.2685779938572,
+              "z": -1444.7428156524584
+            },
+            {
+              "x": 1130.3115489391714,
+              "z": -1445.0305425843198
+            },
+            {
+              "x": 1129.3545198844859,
+              "z": -1445.3182695161815
+            },
+            {
+              "x": 1128.3974908298,
+              "z": -1445.605996448043
+            },
+            {
+              "x": 1127.4404617751145,
+              "z": -1445.8937233799045
+            },
+            {
+              "x": 1126.483432720429,
+              "z": -1446.181450311766
+            },
+            {
+              "x": 1125.5264036657431,
+              "z": -1446.4691772436277
+            },
+            {
+              "x": 1124.5693746110576,
+              "z": -1446.7569041754891
+            },
+            {
+              "x": 1123.6123455563718,
+              "z": -1447.0446311073506
+            },
+            {
+              "x": 1122.6553165016862,
+              "z": -1447.332358039212
+            },
+            {
+              "x": 1121.6982874470007,
+              "z": -1447.6200849710735
+            },
+            {
+              "x": 1120.7412583923149,
+              "z": -1447.9078119029352
+            },
+            {
+              "x": 1119.7842293376293,
+              "z": -1448.1955388347967
+            },
+            {
+              "x": 1118.8272002829435,
+              "z": -1448.4832657666582
+            },
+            {
+              "x": 1117.870171228258,
+              "z": -1448.7709926985196
+            },
+            {
+              "x": 1116.9131421735724,
+              "z": -1449.0587196303811
+            },
+            {
+              "x": 1115.9561131188866,
+              "z": -1449.3464465622428
+            },
+            {
+              "x": 1114.999084064201,
+              "z": -1449.6341734941043
+            },
+            {
+              "x": 1114.0420550095155,
+              "z": -1449.9219004259658
+            },
+            {
+              "x": 1113.0850259548297,
+              "z": -1450.2096273578272
+            },
+            {
+              "x": 1112.1279969001441,
+              "z": -1450.4973542896887
+            },
+            {
+              "x": 1111.1709678454583,
+              "z": -1450.7850812215504
+            },
+            {
+              "x": 1110.2139387907728,
+              "z": -1451.0728081534119
+            },
+            {
+              "x": 1109.256909736087,
+              "z": -1451.3605350852733
+            },
+            {
+              "x": 1108.2998806814014,
+              "z": -1451.6482620171348
+            },
+            {
+              "x": 1107.3428516267159,
+              "z": -1451.9359889489963
+            },
+            {
+              "x": 1106.38582257203,
+              "z": -1452.223715880858
+            },
+            {
+              "x": 1105.4287935173445,
+              "z": -1452.5114428127195
+            },
+            {
+              "x": 1104.471764462659,
+              "z": -1452.799169744581
+            },
+            {
+              "x": 1103.5147354079731,
+              "z": -1453.0868966764424
+            },
+            {
+              "x": 1102.5577063532876,
+              "z": -1453.3746236083039
+            },
+            {
+              "x": 1101.6006772986018,
+              "z": -1453.6623505401656
+            },
+            {
+              "x": 1100.6436482439162,
+              "z": -1453.950077472027
+            },
+            {
+              "x": 1099.6866191892307,
+              "z": -1454.2378044038885
+            },
+            {
+              "x": 1098.7295901345449,
+              "z": -1454.52553133575
+            },
+            {
+              "x": 1097.7725610798593,
+              "z": -1454.8132582676117
+            },
+            {
+              "x": 1096.8155320251735,
+              "z": -1455.1009851994731
+            },
+            {
+              "x": 1095.858502970488,
+              "z": -1455.3887121313346
+            },
+            {
+              "x": 1094.9014739158024,
+              "z": -1455.676439063196
+            },
+            {
+              "x": 1093.9444448611166,
+              "z": -1455.9641659950576
+            },
+            {
+              "x": 1092.987415806431,
+              "z": -1456.2518929269193
+            },
+            {
+              "x": 1092.0303867517453,
+              "z": -1456.5396198587807
+            },
+            {
+              "x": 1091.0733576970597,
+              "z": -1456.8273467906422
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 15.518408,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "bicycle"
+        }
+      },
+      "focus-vehicle": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "128:0:-3",
+            "128:1:-3",
+            "624:0:-1"
+          ]
+        },
+        "initialLane": "128:0:-3",
+        "observedLanes": [
+          "128:0:-3"
+        ],
+        "routeDistanceM": 0.05054,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "mobility-scooter": {
+        "authored": {
+          "kind": "polyline",
+          "points": [
+            {
+              "x": 1091.0733576970597,
+              "z": -1456.8273467906422
+            },
+            {
+              "x": 1092.0303867517453,
+              "z": -1456.5396198587807
+            },
+            {
+              "x": 1092.987415806431,
+              "z": -1456.2518929269193
+            },
+            {
+              "x": 1093.9444448611166,
+              "z": -1455.9641659950576
+            },
+            {
+              "x": 1094.9014739158024,
+              "z": -1455.676439063196
+            },
+            {
+              "x": 1095.858502970488,
+              "z": -1455.3887121313346
+            },
+            {
+              "x": 1096.8155320251735,
+              "z": -1455.1009851994731
+            },
+            {
+              "x": 1097.7725610798593,
+              "z": -1454.8132582676117
+            },
+            {
+              "x": 1098.7295901345449,
+              "z": -1454.52553133575
+            },
+            {
+              "x": 1099.6866191892307,
+              "z": -1454.2378044038885
+            },
+            {
+              "x": 1100.6436482439162,
+              "z": -1453.950077472027
+            },
+            {
+              "x": 1101.6006772986018,
+              "z": -1453.6623505401656
+            },
+            {
+              "x": 1102.5577063532876,
+              "z": -1453.3746236083039
+            },
+            {
+              "x": 1103.5147354079731,
+              "z": -1453.0868966764424
+            },
+            {
+              "x": 1104.471764462659,
+              "z": -1452.799169744581
+            },
+            {
+              "x": 1105.4287935173445,
+              "z": -1452.5114428127195
+            },
+            {
+              "x": 1106.38582257203,
+              "z": -1452.223715880858
+            },
+            {
+              "x": 1107.3428516267159,
+              "z": -1451.9359889489963
+            },
+            {
+              "x": 1108.2998806814014,
+              "z": -1451.6482620171348
+            },
+            {
+              "x": 1109.2569097360872,
+              "z": -1451.3605350852733
+            },
+            {
+              "x": 1110.2139387907728,
+              "z": -1451.0728081534119
+            },
+            {
+              "x": 1111.1709678454583,
+              "z": -1450.7850812215504
+            },
+            {
+              "x": 1112.1279969001441,
+              "z": -1450.4973542896887
+            },
+            {
+              "x": 1113.0850259548297,
+              "z": -1450.2096273578272
+            },
+            {
+              "x": 1114.0420550095155,
+              "z": -1449.9219004259658
+            },
+            {
+              "x": 1114.999084064201,
+              "z": -1449.6341734941043
+            },
+            {
+              "x": 1115.9561131188866,
+              "z": -1449.3464465622428
+            },
+            {
+              "x": 1116.9131421735724,
+              "z": -1449.0587196303811
+            },
+            {
+              "x": 1117.870171228258,
+              "z": -1448.7709926985196
+            },
+            {
+              "x": 1118.8272002829435,
+              "z": -1448.4832657666582
+            },
+            {
+              "x": 1119.7842293376293,
+              "z": -1448.1955388347967
+            },
+            {
+              "x": 1120.7412583923149,
+              "z": -1447.9078119029352
+            },
+            {
+              "x": 1121.6982874470007,
+              "z": -1447.6200849710735
+            },
+            {
+              "x": 1122.6553165016862,
+              "z": -1447.332358039212
+            },
+            {
+              "x": 1123.6123455563718,
+              "z": -1447.0446311073506
+            },
+            {
+              "x": 1124.5693746110576,
+              "z": -1446.7569041754891
+            },
+            {
+              "x": 1125.5264036657431,
+              "z": -1446.4691772436277
+            },
+            {
+              "x": 1126.483432720429,
+              "z": -1446.181450311766
+            },
+            {
+              "x": 1127.4404617751145,
+              "z": -1445.8937233799045
+            },
+            {
+              "x": 1128.3974908298,
+              "z": -1445.605996448043
+            },
+            {
+              "x": 1129.3545198844859,
+              "z": -1445.3182695161815
+            },
+            {
+              "x": 1130.3115489391714,
+              "z": -1445.0305425843198
+            },
+            {
+              "x": 1131.2685779938572,
+              "z": -1444.7428156524584
+            },
+            {
+              "x": 1132.2256070485428,
+              "z": -1444.455088720597
+            },
+            {
+              "x": 1133.1826361032283,
+              "z": -1444.1673617887354
+            },
+            {
+              "x": 1134.1396651579141,
+              "z": -1443.879634856874
+            },
+            {
+              "x": 1135.0966942125997,
+              "z": -1443.5919079250123
+            },
+            {
+              "x": 1136.0537232672855,
+              "z": -1443.3041809931508
+            },
+            {
+              "x": 1137.010752321971,
+              "z": -1443.0164540612893
+            }
+          ]
+        },
+        "initialLane": null,
+        "observedLanes": [],
+        "routeDistanceM": 6.991319,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "scooter"
+        }
+      },
+      "red-runner": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "813:0:1",
+            "7:0:-4",
+            "729:0:-1",
+            "73:0:-6",
+            "365:0:-6",
+            "74:0:-6",
+            "616:0:-1",
+            "0:0:-3",
+            "775:0:-3",
+            "1:0:-3"
+          ]
+        },
+        "initialLane": "729:0:-1",
+        "observedLanes": [
+          "73:0:-6",
+          "365:0:-6",
+          "74:0:-6",
+          "616:0:-1"
+        ],
+        "routeDistanceM": 83.532596,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "car"
+        }
+      },
+      "outer-pickup": {
+        "authored": {
+          "kind": "lanePath",
+          "lanes": [
+            "128:0:-2",
+            "128:1:-2",
+            "627:0:-1",
+            "0:0:-2",
+            "775:0:-2",
+            "1:0:-2"
+          ]
+        },
+        "initialLane": "627:0:-1",
+        "observedLanes": [
+          "627:0:-1"
+        ],
+        "routeDistanceM": 0,
+        "backend": {
+          "mode": "dynamic-v1",
+          "reason": "selected",
+          "profile": "truck"
+        }
+      }
+    }
+  },
+  "metrics": {
+    "minTTC": null,
+    "minDistance": [
+      {
+        "pair": [
+          "cyclist",
+          "focus-vehicle"
+        ],
+        "minDistanceM": 22.832,
+        "t": 20
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "mobility-scooter"
+        ],
+        "minDistanceM": 9.039,
+        "t": 0
+      },
+      {
+        "pair": [
+          "focus-vehicle",
+          "red-runner"
+        ],
+        "minDistanceM": 54.936,
+        "t": 20
+      }
+    ],
+    "requiredDecelMax": {
+      "cyclist": 0.018,
+      "focus-vehicle": 0,
+      "mobility-scooter": 0.017,
+      "outer-pickup": 0,
+      "red-runner": 0.169
+    },
+    "revealToConflict": null,
+    "declaredOcclusion": [
+      {
+        "observer": "focus-vehicle",
+        "target": "cyclist",
+        "pair": [
+          "cyclist",
+          "focus-vehicle"
+        ],
+        "occluderId": "actor:outer-pickup",
+        "relevantOccluderIds": [],
+        "status": "occluder_unobserved",
+        "firstBlockedT": null,
+        "losOpenT": null,
+        "conflictT": 20,
+        "revealToConflictS": null
+      }
+    ],
+    "occluderIneffective": [],
+    "collisions": [],
+    "triggerNeverFired": [],
+    "clippedCriticality": false,
+    "ticksSimulated": 1001
+  },
+  "adaptationsDeclaredIn": "intent.json"
+}

@@ -1,0 +1,631 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "Red-Light Runner Through a Protected Intersection",
+    "description": "The focus vehicle remains stopped while a red-light runner traverses a protected intersection and nearby vulnerable road users clear the crossing. This curated 20-second scenario uses only currently supported behaviors; adaptations are declared in machine-readable metadata.",
+    "createdAt": "2026-08-02T00:00:00.000Z",
+    "modifiedAt": "2026-08-03T08:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "gallery.07-protected-left-red-runner",
+    "tags": [
+      "curated-gallery-v2",
+      "EC-07",
+      "protected-left",
+      "red-runner",
+      "intersection"
+    ],
+    "author": "Codex curated edge-case suite",
+    "negativeControl": false
+  },
+  "params": {
+    "declarations": [
+      {
+        "id": "scooterSpeedKph",
+        "type": "continuous",
+        "unit": "kph",
+        "tier": 1,
+        "range": [
+          3.5,
+          6
+        ],
+        "default": 4.5,
+        "distribution": "uniform"
+      },
+      {
+        "id": "cyclistSpeedKph",
+        "type": "continuous",
+        "unit": "kph",
+        "tier": 1,
+        "range": [
+          4,
+          8
+        ],
+        "default": 5.4,
+        "distribution": "uniform"
+      }
+    ],
+    "constraints": []
+  },
+  "environment": {
+    "weather": "clear",
+    "timeOfDay": "afternoon"
+  },
+  "anchor": {
+    "id": "double-turn-mobility-scooter",
+    "corridor": {
+      "throughLanesSameDir": {
+        "value": [
+          2,
+          5
+        ],
+        "essentiality": "required"
+      },
+      "throughLanesOpposing": {
+        "value": [
+          1,
+          5
+        ],
+        "essentiality": "required"
+      },
+      "speedLimitKph": {
+        "value": [
+          20,
+          55
+        ],
+        "essentiality": "preferred"
+      },
+      "runwayUpstreamM": {
+        "value": [
+          45,
+          null
+        ],
+        "essentiality": "required"
+      },
+      "runwayDownstreamM": {
+        "value": [
+          45,
+          null
+        ],
+        "essentiality": "required"
+      }
+    },
+    "features": [
+      {
+        "id": "jx",
+        "kind": "junction",
+        "label": "signalized junction with a multi-lane right-turn approach",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            0
+          ],
+          "essentiality": "required"
+        },
+        "arms": {
+          "value": [
+            4,
+            4
+          ],
+          "essentiality": "preferred"
+        },
+        "control": {
+          "value": [
+            "signalized"
+          ],
+          "essentiality": "required"
+        },
+        "egoTurn": {
+          "value": [
+            "right"
+          ],
+          "essentiality": "required"
+        },
+        "conflictingApproach": {
+          "value": {
+            "from": "opposing",
+            "turn": "left"
+          },
+          "essentiality": "required"
+        },
+        "hasCrossingOnLeg": {
+          "value": true,
+          "essentiality": "required"
+        }
+      },
+      {
+        "id": "xw",
+        "kind": "crossing",
+        "label": "broad controlled crossing on the destination leg",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            0,
+            32
+          ],
+          "essentiality": "required"
+        },
+        "marked": {
+          "value": true,
+          "essentiality": "required"
+        },
+        "controlled": {
+          "value": true,
+          "essentiality": "required"
+        },
+        "placement": {
+          "value": "junction_leg",
+          "essentiality": "required"
+        },
+        "lengthM": {
+          "value": [
+            12,
+            32
+          ],
+          "essentiality": "preferred"
+        }
+      },
+      {
+        "id": "turn-occlusion",
+        "kind": "occlusion_zone",
+        "label": "adjacent large vehicle blocks the inner turn lane's crosswalk view",
+        "essentiality": "required",
+        "atM": {
+          "value": [
+            -8,
+            10
+          ],
+          "essentiality": "preferred"
+        },
+        "lengthM": {
+          "value": [
+            8,
+            28
+          ],
+          "essentiality": "preferred"
+        }
+      }
+    ],
+    "policy": {
+      "allowMirror": true,
+      "maxSitesPerMap": 12,
+      "diversity": "strict",
+      "minScore": 0.5
+    }
+  },
+  "roles": [
+    {
+      "id": "focus-vehicle",
+      "kind": "on_reference",
+      "label": "inner-lane right-turning vehicle",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.sedan"
+      },
+      "pose": {
+        "laneOffset": 0,
+        "s": -16,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0
+    },
+    {
+      "id": "outer-pickup",
+      "kind": "lane_offset",
+      "k": -1,
+      "onMissing": "fail",
+      "label": "occluding pickup in the outer right-turn lane",
+      "actor": {
+        "class": "truck",
+        "catalogId": "vehicle.pickup",
+        "dims": {
+          "length": 5.9,
+          "width": 2.05,
+          "height": 1.95
+        }
+      },
+      "pose": {
+        "laneOffset": -1,
+        "s": 2,
+        "tFrac": -0.8,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 0,
+      "extensions": {
+        "occludes": {
+          "observer": "focus-vehicle",
+          "target": "cyclist"
+        },
+        "mustRemainAdjacentTo": "focus-vehicle"
+      }
+    },
+    {
+      "id": "mobility-scooter",
+      "kind": "on_crossing",
+      "feature": "xw",
+      "label": "mobility-scooter user crossing from the far curb via the refuge",
+      "actor": {
+        "class": "scooter",
+        "catalogId": "vehicle.mobility_scooter",
+        "dims": {
+          "length": 1.35,
+          "width": 0.72,
+          "height": 1.45
+        }
+      },
+      "startFrac": 0.05,
+      "direction": "far_to_near",
+      "lateralFrac": -0.8,
+      "initialSpeedKph": "param.scooterSpeedKph",
+      "extensions": {
+        "vulnerableRoadUser": true,
+        "mobilityAid": true,
+        "stagedCrossing": true,
+        "mustNotSubstituteClass": true
+      }
+    },
+    {
+      "id": "cyclist",
+      "kind": "on_crossing",
+      "feature": "xw",
+      "label": "fast cyclist initially hidden by the pickup",
+      "actor": {
+        "class": "bicycle"
+      },
+      "startFrac": 0.25,
+      "direction": "near_to_far",
+      "lateralFrac": 0.8,
+      "initialSpeedKph": 0,
+      "extensions": {
+        "vulnerableRoadUser": true,
+        "occludedBy": "outer-pickup",
+        "mustNotSubstituteClass": true
+      }
+    },
+    {
+      "id": "red-runner",
+      "kind": "conflicting_gate",
+      "feature": "jx",
+      "from": "opposing",
+      "turn": "left",
+      "label": "vehicle entering the destination lanes while focus-vehicle waits",
+      "actor": {
+        "class": "car",
+        "catalogId": "vehicle.suv"
+      },
+      "arriveAtConflict": {
+        "relativeTo": "focus-vehicle",
+        "deltaT": 13.5
+      },
+      "requiredUpstreamRunwayM": 35,
+      "fallbackPose": {
+        "laneOffset": 0,
+        "s": 52,
+        "tFrac": 0,
+        "headingOffsetRad": 0
+      },
+      "initialSpeedKph": 18
+    }
+  ],
+  "props": [],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 1,
+    "interactions": [
+      {
+        "id": "focus-vehicle-holds",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 0
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "pickup-creeps",
+        "actor": "outer-pickup",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 3
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1
+        }
+      },
+      {
+        "id": "pickup-blocks-crosswalk",
+        "actor": "outer-pickup",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 8
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.8
+        }
+      },
+      {
+        "id": "cyclist-emerges",
+        "actor": "cyclist",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 9
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": "param.cyclistSpeedKph"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "destination-conflict-enters",
+        "actor": "red-runner",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 12
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 18
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 1
+        }
+      },
+      {
+        "id": "scooter-pauses-at-refuge",
+        "actor": "mobility-scooter",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 5
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.7
+        }
+      },
+      {
+        "id": "scooter-leaves-refuge",
+        "actor": "mobility-scooter",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 19.5
+        },
+        "target": {
+          "mode": "absolute",
+          "valueKph": 2
+        },
+        "dynamics": {
+          "shape": "linear",
+          "constraint": "time",
+          "value": 0.6
+        }
+      },
+      {
+        "id": "focus-vehicle-confirms-wait",
+        "actor": "focus-vehicle",
+        "verb": "speed",
+        "trigger": {
+          "kind": "at",
+          "t": 18
+        },
+        "target": {
+          "mode": "stop"
+        },
+        "dynamics": {
+          "shape": "step",
+          "constraint": "time",
+          "value": 0.1
+        }
+      },
+      {
+        "id": "protected-left-turns-red",
+        "actor": "@world",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 11
+        },
+        "target": {
+          "key": "signal:protected-left:cross.indication",
+          "value": "red"
+        }
+      },
+      {
+        "id": "red-runner-ignores-red",
+        "actor": "red-runner",
+        "verb": "set",
+        "trigger": {
+          "kind": "at",
+          "t": 11.2
+        },
+        "target": {
+          "key": "rules.obeySignals",
+          "value": false
+        }
+      }
+    ]
+  },
+  "invariants": [
+    {
+      "id": "layered-conflict-order",
+      "kind": "event_order",
+      "events": [
+        "pickup-creeps",
+        "pickup-blocks-crosswalk",
+        "cyclist-emerges",
+        "destination-conflict-enters",
+        "scooter-leaves-refuge",
+        "focus-vehicle-confirms-wait"
+      ],
+      "strict": true,
+      "minSeparationS": 1,
+      "essentiality": "required"
+    },
+    {
+      "id": "cyclist-clearance-criticality",
+      "kind": "ttc",
+      "of": "focus-vehicle",
+      "to": "cyclist",
+      "range": [
+        0.5,
+        8
+      ],
+      "mode": "min",
+      "window": [
+        8,
+        15
+      ],
+      "essentiality": "preferred"
+    },
+    {
+      "id": "scooter-clearance-criticality",
+      "kind": "path_ttc",
+      "of": "focus-vehicle",
+      "to": "mobility-scooter",
+      "range": [
+        0.5,
+        10
+      ],
+      "window": [
+        14,
+        20
+      ],
+      "essentiality": "preferred"
+    },
+    {
+      "id": "focus-vehicle-comfort",
+      "kind": "decel_budget",
+      "of": "focus-vehicle",
+      "maxMps2": 5,
+      "essentiality": "required"
+    }
+  ],
+  "variants": [],
+  "metricSubject": "focus-vehicle",
+  "extensions": {
+    "studio.gallery.intent": {
+      "schema": "uniscenarios.gallery-intent.v1",
+      "stableId": "ec-07-07-protected-left-red-runner-v2",
+      "focusActorId": "focus-vehicle",
+      "statement": "The focus vehicle remains stopped while a red-light runner traverses a protected intersection and nearby vulnerable road users clear the crossing.",
+      "adaptations": [
+        "The red runner is represented by the opposing turning actor with an authored rule override.",
+        "Signal compliance is evaluated from authored signal events; lamp mesh replacement is outside this scenario artifact."
+      ]
+    },
+    "studio.ambientTraffic": {
+      "enabled": true,
+      "provider": "sumo",
+      "density": "moderate",
+      "authoredActorsExcludedFromTimeline": true
+    },
+    "studio.timeline.windows": [
+      {
+        "interactionId": "cyclist-emerges",
+        "actorId": "cyclist",
+        "startS": 9,
+        "endS": 9.1,
+        "dependent": false
+      },
+      {
+        "interactionId": "destination-conflict-enters",
+        "actorId": "red-runner",
+        "startS": 12,
+        "endS": 13,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-confirms-wait",
+        "actorId": "focus-vehicle",
+        "startS": 18,
+        "endS": 18.1,
+        "dependent": false
+      },
+      {
+        "interactionId": "focus-vehicle-holds",
+        "actorId": "focus-vehicle",
+        "startS": 0,
+        "endS": 0.1,
+        "dependent": false
+      },
+      {
+        "interactionId": "pickup-blocks-crosswalk",
+        "actorId": "outer-pickup",
+        "startS": 8,
+        "endS": 8.8,
+        "dependent": false
+      },
+      {
+        "interactionId": "pickup-creeps",
+        "actorId": "outer-pickup",
+        "startS": 5,
+        "endS": 6,
+        "dependent": false
+      },
+      {
+        "interactionId": "scooter-leaves-refuge",
+        "actorId": "mobility-scooter",
+        "startS": 19.5,
+        "endS": 20,
+        "dependent": false
+      },
+      {
+        "interactionId": "scooter-pauses-at-refuge",
+        "actorId": "mobility-scooter",
+        "startS": 5,
+        "endS": 5.7,
+        "dependent": false
+      },
+      {
+        "interactionId": "protected-left-turns-red",
+        "actorId": "focus-vehicle",
+        "startS": 11,
+        "endS": 11.5,
+        "dependent": false
+      },
+      {
+        "interactionId": "red-runner-ignores-red",
+        "actorId": "red-runner",
+        "startS": 11.2,
+        "endS": 11.7,
+        "dependent": false
+      }
+    ]
+  }
+}
