@@ -176,4 +176,70 @@ describe('default placed-vehicle route lifecycle', () => {
     expect(reopened.data.roles.some((role) => role.id === id)).toBe(false);
     reopened.dispose();
   });
+
+  it('atomically removes actor commands and transitive after() orphans, then persists the clean graph', async () => {
+    const map = MAPS[0]!;
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const document = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    document.add([
+      { id: 'ambulance', catalogId: 'vehicle.ambulance', x: 0, y: 0, z: 0, headingRad: 0 },
+      { id: 'cross-traffic', catalogId: 'vehicle.suv', x: 10, y: 0, z: 0, headingRad: 0 },
+      { id: 'ego', catalogId: 'vehicle.sedan', x: 20, y: 0, z: 0, headingRad: 0 },
+    ]);
+    document.addInteraction({ id: 'ambulance-siren', actor: 'ambulance', trigger: { kind: 'at', t: 0.2 }, verb: 'set', target: { key: 'lights.emergency', value: true } });
+    document.addInteraction({ id: 'ambulance-horn-1-on', actor: 'ambulance', trigger: { kind: 'at', t: 2 }, verb: 'set', target: { key: 'audio.horn', value: true } });
+    document.addInteraction({ id: 'cross-traffic-clears', actor: 'cross-traffic', trigger: { kind: 'at', t: 7.5 }, verb: 'speed', target: { mode: 'stop' }, dynamics: { shape: 'linear', constraint: 'time', value: 2 } });
+    document.addInteraction({ id: 'ambulance-exempt', actor: 'ego', trigger: { kind: 'after', of: 'ambulance-siren', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'rules.obeySignals', value: false } });
+    document.addInteraction({ id: 'horn-followup', actor: 'ego', trigger: { kind: 'after', of: 'ambulance-horn-1-on', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'audio.horn', value: false } });
+    document.addInteraction({ id: 'cross-red', actor: 'ego', trigger: { kind: 'after', of: 'cross-traffic-clears', event: 'end', delayS: 0 }, verb: 'set', target: { key: 'rules.obeySignals', value: true } });
+    document.addInteraction({ id: 'transitive', actor: 'ego', trigger: { kind: 'after', of: 'cross-red', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'rules.yield', value: true } });
+
+    document.remove(['ambulance', 'cross-traffic']);
+    expect(document.data.roles.map((role) => role.id)).toEqual(['ego']);
+    expect(document.data.choreography.interactions).toEqual([]);
+    expect(document.validation.ok).toBe(true);
+
+    expect(document.undo()).toBe(true);
+    expect(document.data.roles.map((role) => role.id)).toEqual(['ambulance', 'cross-traffic', 'ego']);
+    expect(document.data.choreography.interactions).toHaveLength(7);
+    expect(document.redo()).toBe(true);
+    expect(document.data.choreography.interactions).toEqual([]);
+
+    await document.flush();
+    document.dispose();
+    const reopened = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    expect(reopened.data.roles.map((role) => role.id)).toEqual(['ego']);
+    expect(reopened.data.choreography.interactions).toEqual([]);
+    expect(reopened.validation.ok).toBe(true);
+    reopened.dispose();
+  });
+
+  it('repairs an already-stale autosave on open and writes the canonical cleanup back', async () => {
+    const map = MAPS[0]!;
+    const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
+    const document = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    document.add([{ id: 'ego', catalogId: 'vehicle.sedan', x: 0, y: 0, z: 0, headingRad: 0 }]);
+    await document.flush();
+    const source = document.data;
+    document.dispose();
+    await store.write(autosaveName(map.id), {
+      ...source,
+      choreography: {
+        ...source.choreography,
+        interactions: [
+          { id: 'cross-red', actor: 'ego', trigger: { kind: 'after', of: 'cross-traffic-clears', event: 'end', delayS: 0 }, verb: 'set', target: { key: 'rules.obeySignals', value: true } },
+          { id: 'ambulance-exempt', actor: 'ego', trigger: { kind: 'after', of: 'ambulance-siren', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'rules.obeySignals', value: false } },
+          { id: 'horn-followup', actor: 'ego', trigger: { kind: 'after', of: 'ambulance-horn-1-on', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'audio.horn', value: false } },
+          { id: 'transitive', actor: 'ego', trigger: { kind: 'after', of: 'cross-red', event: 'start', delayS: 0 }, verb: 'set', target: { key: 'rules.yield', value: true } },
+        ],
+      },
+    });
+
+    const reopened = await EditorDocument.open(map, { store, autosaveMs: 1 });
+    expect(reopened.data.choreography.interactions).toEqual([]);
+    expect(reopened.validation.ok).toBe(true);
+    reopened.dispose();
+    const persisted = TemplateDocument.fromJSON(await store.read(autosaveName(map.id)));
+    expect(persisted.data.choreography.interactions).toEqual([]);
+  });
 });
