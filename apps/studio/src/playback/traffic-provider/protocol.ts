@@ -14,6 +14,8 @@ export interface NetworkWorldTransform {
   readonly translationY: number;
   readonly rotationDegrees: number;
   readonly scale: number;
+  /** OpenDRIVE's +y becomes the renderer's -z. */
+  readonly invertY: boolean;
 }
 
 /**
@@ -47,6 +49,11 @@ export interface TrafficStepResult {
   readonly stepMilliseconds: number;
 }
 
+export interface TrafficProviderInitialization {
+  readonly initMilliseconds: number;
+  readonly heapBytes: number;
+}
+
 export const SUMO_WASM_STATE_WORDS = 8;
 
 export type SumoWorkerRequest =
@@ -61,7 +68,7 @@ export type SumoWorkerResponse =
   | { readonly kind: 'error'; readonly id: number; readonly message: string };
 
 export interface TrafficProvider {
-  initialize(payload: TrafficNetworkPayload): Promise<void>;
+  initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization>;
   step(request: TrafficStepRequest): Promise<TrafficStepResult>;
   close(): Promise<void>;
 }

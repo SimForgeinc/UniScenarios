@@ -5,8 +5,8 @@ export function toWorld(x: number, y: number, transform: NetworkWorldTransform):
   const cosine = Math.cos(radians);
   const sine = Math.sin(radians);
   return {
-    x: (x * cosine - y * sine) * transform.scale + transform.translationX,
-    y: (x * sine + y * cosine) * transform.scale + transform.translationY,
+    x: (x * cosine - (transform.invertY ? -y : y) * sine) * transform.scale + transform.translationX,
+    y: (x * sine + (transform.invertY ? -y : y) * cosine) * transform.scale + transform.translationY,
   };
 }
 export function toNetwork(x: number, y: number, transform: NetworkWorldTransform): { x: number; y: number } {
@@ -17,7 +17,7 @@ export function toNetwork(x: number, y: number, transform: NetworkWorldTransform
   const translatedY = (y - transform.translationY) / transform.scale;
   return {
     x: translatedX * cosine - translatedY * sine,
-    y: translatedX * sine + translatedY * cosine,
+    y: (translatedX * sine + translatedY * cosine) * (transform.invertY ? -1 : 1),
   };
 }
 
@@ -35,6 +35,7 @@ export function transformPackedStatesToWorld(
     const position = toWorld(floats[offset + 1]!, floats[offset + 2]!, transform);
     floats[offset + 1] = position.x;
     floats[offset + 2] = position.y;
-    floats[offset + 3] = floats[offset + 3]! + transform.rotationDegrees;
+    const heading = floats[offset + 3]!;
+    floats[offset + 3] = (transform.invertY ? 180 - heading : heading) + transform.rotationDegrees;
   }
 }

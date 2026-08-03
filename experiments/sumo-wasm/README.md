@@ -83,7 +83,20 @@ experiments/sumo-wasm/build.sh
 ```
 
 Outputs are written under `experiments/sumo-wasm/dist/`. They are deliberately
-not copied into Studio's public assets until all gates pass.
+not copied into Studio's public assets until all gates pass. Packaging also
+requires the pinned native SUMO 1.27.1 `netconvert` and `duarouter` programs on
+`PATH`; these run only during asset preparation, never in the browser. Package
+the runtime and all five map sidecars with:
+
+```sh
+experiments/sumo-wasm/package-assets.sh /absolute/path/to/dev-assets
+```
+
+The package contains the WebAssembly runtime, exact third-party license texts,
+source-offer metadata, and a per-map network manifest. Studio does not include
+it in the initial bundle. Choosing **SUMO (Experimental)** in the Ambient
+Traffic tool lazy-loads it; a missing or invalid sidecar, oversized runtime,
+slow step tier, or initialization failure visibly falls back to Native.
 
 For the repeatable load test, generate a four-lane 5x5 network with the pinned
 native SUMO package and run the Node harness:
@@ -133,16 +146,30 @@ The browser harness deliberately isolates traffic computation from the 3D
 renderer. Its result demonstrates that the simulation and transport do not
 block the main thread; it is not a claim about whole-editor render FPS.
 
-The recommendation is to keep the existing controller as the default and add
-SUMO as a lazy, opt-in ambient provider. A deployment should retain the
-adaptive fallback and collect full-editor frame timing. The bridge can mirror
-authored cars and hazards as hidden occupancy proxies. In the stopped-obstacle
+The existing controller remains the default and SUMO is a lazy, opt-in ambient
+provider. The Studio integration retains adaptive fallback and reports loaded
+actors, initialization time, step p95, heap usage, and fallback reason in the
+Ambient Traffic panel. SUMO-owned actors remain visible while editing, step
+only while playback runs, and return to their deterministic initial state on
+Escape. The bridge mirrors authored cars and hazards as hidden occupancy
+proxies. In the stopped-obstacle
 acceptance test, all 10 baseline cars were moving and the leader reached
 x=859.6 m; with the proxy at x=400 m, nine cars stopped and the leader held at
-x=392.8 m. Scenario-specific reaction tests for moving cut-ins, crossing
-pedestrians/cyclists, construction geometry, stop/red queues, and highway
-merges remain production gates rather than something the kernel benchmark
-alone can establish.
+x=392.8 m. A real Yale Street editor run initialized in 314 ms, used a 64 MiB
+heap, reported a 0.8 ms first-step p95, moved an ambient actor 7.17 m during
+1.22 simulated seconds, and restored it to the exact initial coordinates after
+Escape.
+
+Current behavioral boundary: authored moving cars, stopped obstacles,
+pedestrians, cyclists, and construction props are represented to SUMO as
+conservative occupancy proxies, so they influence car following without
+ceding timeline ownership. Native SUMO signals imported from a map are obeyed,
+but authored traffic-light programs are not yet synchronized into the SUMO
+worker. Rich pedestrian crossing behavior, semantic construction-lane closure,
+cut-in negotiation, and highway-merge acceptance need dedicated scenario
+fixtures before this provider should be promoted from Experimental. The
+browser integration improves traffic behavior; it does not reproduce CARLA's
+rigid-body vehicle physics or sensor model.
 
 ## Licensing and distribution
 

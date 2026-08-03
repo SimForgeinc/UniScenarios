@@ -18,6 +18,7 @@ import {
 } from './model';
 import type { CameraPolicy } from '../cameras/model';
 import { StudioTransport } from '../session/StudioTransport';
+import { isInternalTrafficActor } from '../ambient/useAmbientTrafficPreview';
 
 export interface PlaybackState {
   readonly time: number;
@@ -529,7 +530,7 @@ export class PlaybackController {
   }
 
   private syncScene(): void {
-    this.sampled = samplePlaybackActors(this.bundle, this.time);
+    this.sampled = samplePlaybackActors(this.bundle, this.time).filter((actor) => !isInternalTrafficActor(actor));
     this.sampledSignals = samplePlaybackSignals(this.bundle, this.time);
     const doorsByActor = samplePlaybackDoors(this.bundle.trace, this.time);
     const cuesByActor = samplePlaybackVehicleCues(this.bundle.trace, this.time);

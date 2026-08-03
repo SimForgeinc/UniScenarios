@@ -237,9 +237,16 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
   // collision handling and trace format as every later authored scenario.
   if (request.template.roles.length === 0 && !request.baseInstance) {
     const base = withMapControls(withEditablePhysicsDefault(createEmptyAmbientInput(request.map.id)), mapControls);
-    const ambient = applyRequestedAmbientPopulation(base, graph, request, {
+    const populated = applyRequestedAmbientPopulation(base, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
+    // The core schema requires one actor. Keep a remote, non-render-authoritative
+    // clock only when an external provider (SUMO) owns the entire visible
+    // population; remove it as soon as native ambient actors exist.
+    const ambient = populated.provenance.actors.length === 0 ? populated : {
+      ...populated,
+      input: { ...populated.input, actors: populated.input.actors.filter((actor) => actor.id !== 'ambient-world-seed') },
+    };
     const result = simulateForRequest(ambient.input, graph, staticCollision.colliders, request.operation);
     const manifest = {
       instanceId: `ambient-world:${request.map.id}`,
@@ -400,10 +407,11 @@ function createEmptyAmbientInput(mapId: string): SimScenarioInput {
       static: true,
       initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
       behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
+      tags: ['ambient:internal-clock'],
     }],
     physics: { mode: 'dynamic-v1' },
   });
-  return { ...parsed, actors: [] };
+  return parsed;
 }
 
 async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {

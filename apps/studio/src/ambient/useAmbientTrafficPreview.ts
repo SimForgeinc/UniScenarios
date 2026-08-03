@@ -9,12 +9,16 @@ export function isAmbientPlaybackActor(actor: { readonly id: string; readonly ta
     || actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'));
 }
 
+export function isInternalTrafficActor(actor: { readonly id: string }): boolean {
+  return actor.id === 'ambient-world-seed';
+}
+
 export function authoringPreviewActors<T extends { readonly id: string }>(
   actors: readonly T[],
   editorActorIds: readonly string[],
 ): readonly T[] {
   const editorOwned = new Set(editorActorIds);
-  return actors.filter((actor) => !editorOwned.has(actor.id));
+  return actors.filter((actor) => !editorOwned.has(actor.id) && !isInternalTrafficActor(actor));
 }
 
 /**

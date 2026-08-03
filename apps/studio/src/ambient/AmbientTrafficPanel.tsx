@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import type { AmbientTrafficProvenance, ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import { ambientPromotionCapability, nextAmbientSeed, profileForPreset, type AmbientTrafficPreset } from './model';
 import type { AmbientRobustnessSummary } from '../playback/scenario-worker';
+import type { AmbientTrafficProviderId, SumoTrafficStatus } from './provider';
 
 export interface AmbientTrafficPanelProps {
   profile: ResolvedAmbientTrafficProfile;
@@ -9,6 +10,9 @@ export interface AmbientTrafficPanelProps {
   busy?: boolean;
   error?: string | null;
   onChange: (profile: ResolvedAmbientTrafficProfile) => void;
+  provider?: AmbientTrafficProviderId;
+  onProviderChange?: (provider: AmbientTrafficProviderId) => void;
+  sumoStatus?: SumoTrafficStatus | null;
   robustnessReport?: AmbientRobustnessSummary | null;
   robustnessBusy?: boolean;
   onRunRobustness?: () => void;
@@ -26,7 +30,7 @@ const PRESETS: readonly { id: AmbientTrafficPreset; label: string }[] = [
 ];
 
 /** Scenario-owned background traffic controls. Generated actors stay separate from authored actors. */
-export function AmbientTrafficPanel({ profile, provenance, busy = false, error = null, onChange, robustnessReport = null, robustnessBusy = false, onRunRobustness, defaultOpen = false, alwaysOpen = false }: AmbientTrafficPanelProps): JSX.Element {
+export function AmbientTrafficPanel({ profile, provenance, busy = false, error = null, onChange, provider = 'native', onProviderChange, sumoStatus = null, robustnessReport = null, robustnessBusy = false, onRunRobustness, defaultOpen = false, alwaysOpen = false }: AmbientTrafficPanelProps): JSX.Element {
   const [open, setOpen] = useState(defaultOpen);
   const [seedDraft, setSeedDraft] = useState(String(profile.seed));
   const [promotionActorId, setPromotionActorId] = useState('');
@@ -62,6 +66,26 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
         </span>
       </button> : null}
       {alwaysOpen || open ? <div style={alwaysOpen ? styles.popoverBody : styles.body}>
+        <label style={styles.label}>
+          Traffic engine
+          <select
+            value={provider}
+            onChange={(event) => onProviderChange?.(event.target.value as AmbientTrafficProviderId)}
+            style={styles.select}
+            data-testid="ambient-traffic-provider"
+          >
+            <option value="native">Native</option>
+            <option value="sumo">SUMO (Experimental)</option>
+          </select>
+        </label>
+        {provider === 'sumo' && sumoStatus ? <div style={sumoStatus.phase === 'fallback' ? styles.error : styles.status} data-testid="sumo-traffic-status">
+          <strong>{sumoStatus.phase === 'fallback' ? 'Native fallback' : `SUMO ${sumoStatus.phase}`}</strong>
+          {sumoStatus.reason ? ` · ${sumoStatus.reason}` : null}
+          {sumoStatus.phase !== 'fallback' ? <>
+            <div>{sumoStatus.actorCount} visible · {formatBytes(sumoStatus.heapBytes)} heap</div>
+            <div>{formatMs(sumoStatus.initMilliseconds)} init · {formatMs(sumoStatus.stepP95Milliseconds)} step p95</div>
+          </> : null}
+        </div> : null}
         <label style={styles.label}>
           Density preset
           <select
@@ -212,6 +236,14 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
       </div> : null}
     </section>
   );
+}
+
+function formatMs(value: number | undefined): string {
+  return value === undefined ? '—' : `${value.toFixed(1)} ms`;
+}
+
+function formatBytes(value: number | undefined): string {
+  return value === undefined ? '—' : `${(value / 1024 / 1024).toFixed(0)} MiB`;
 }
 
 export interface AmbientTrafficPopoverProps extends Omit<AmbientTrafficPanelProps, 'defaultOpen' | 'alwaysOpen'> {

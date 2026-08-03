@@ -3,6 +3,7 @@ import type {
   SumoWorkerResponse,
   TrafficNetworkPayload,
   TrafficProvider,
+  TrafficProviderInitialization,
   TrafficStepRequest,
   TrafficStepResult,
 } from './protocol';
@@ -19,7 +20,7 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
 
   constructor(private readonly moduleUrl = '/vendor/sumo/sumo.mjs') {}
 
-  async initialize(payload: TrafficNetworkPayload): Promise<void> {
+  async initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization> {
     const network = payload.network.slice(0);
     const routes = payload.routes.slice(0);
     const response = await this.send(
@@ -27,6 +28,7 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
       [network, routes],
     );
     if (response.kind !== 'ready') throw new Error(`Unexpected SUMO response: ${response.kind}`);
+    return { initMilliseconds: response.initMilliseconds, heapBytes: response.heapBytes };
   }
 
   async step(request: TrafficStepRequest): Promise<TrafficStepResult> {

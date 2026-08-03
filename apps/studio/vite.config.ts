@@ -20,9 +20,13 @@ function devAssets(): Plugin {
         const range = req.headers.range;
         const type =
           file.endsWith('.glb') ? 'model/gltf-binary'
+          : file.endsWith('.mjs') ? 'text/javascript; charset=utf-8'
+          : file.endsWith('.wasm') ? 'application/wasm'
           : file.endsWith('.png') ? 'image/png'
           : file.endsWith('.hdr') ? 'application/octet-stream'
           : file.endsWith('.json') ? 'application/json'
+          : file.endsWith('.xml') ? 'application/xml'
+          : file.endsWith('.md') || file.endsWith('.txt') ? 'text/plain; charset=utf-8'
           : file.endsWith('.gz') ? 'application/gzip'
           : 'application/octet-stream';
         res.setHeader('Content-Type', type);

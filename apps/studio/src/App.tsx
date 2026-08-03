@@ -40,10 +40,16 @@ import {
   defaultAmbientTrafficProfile,
 } from './ambient/model';
 import { AmbientTrafficPopover } from './ambient/AmbientTrafficPanel';
+import {
+  AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY,
+  ambientTrafficProviderFromExtensions,
+  type AmbientTrafficProviderId,
+} from './ambient/provider';
+import { useSumoTraffic, type SumoExternalActorView } from './ambient/useSumoTraffic';
 import { useAmbientTrafficPreview } from './ambient/useAmbientTrafficPreview';
 import { ambientCandidatePoolRequestKey, ambientPreviewKey, AmbientPreviewCache } from './ambient/candidatePool';
 import type { ResolvedAmbientTrafficProfile } from '@uniscenarios/sim-engine';
-import { contentHash } from '@uniscenarios/sim-engine';
+import { contentHash, resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
 import {
   dashCameras,
   defaultDashCamera,
@@ -167,6 +173,8 @@ export function App(): JSX.Element {
   const campaignRecovery = useRef('');
   const [pendingCampaignOpen, setPendingCampaignOpen] = useState<CampaignOpenRequest | null>(null);
   const [ambientTrafficProfile, setAmbientTrafficProfile] = useState<ResolvedAmbientTrafficProfile>(() => defaultAmbientTrafficProfile());
+  const [ambientTrafficProvider, setAmbientTrafficProvider] = useState<AmbientTrafficProviderId>('native');
+  const [sumoFallbackReason, setSumoFallbackReason] = useState<string | null>(null);
   const [ambientPreview, setAmbientPreview] = useState<PlaybackBundle | null>(null);
   const [actorDetailsId, setActorDetailsId] = useState<string | null>(null);
   const [selectedDashCameraId, setSelectedDashCameraId] = useState<string | null>(null);
@@ -349,10 +357,16 @@ export function App(): JSX.Element {
     }).catch((reason: unknown) => console.warn('[campaign] verified evidence recovery failed', reason));
     return () => { cancelled = true; };
   }, [campaignSource, editorController, map.id]);
+  const materializedAmbientProfile = useMemo(
+    () => ambientTrafficProvider === 'sumo' && !sumoFallbackReason
+      ? resolveAmbientTrafficProfile({ version: 1, preset: 'off', seed: ambientTrafficProfile.seed })
+      : ambientTrafficProfile,
+    [ambientTrafficProfile, ambientTrafficProvider, sumoFallbackReason],
+  );
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
     if (!editorController) throw new Error('The editor is not ready');
-    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, materializedAmbientProfile);
     const previewKey = ambientPreviewKey(candidatePoolRequestKey, simulationSourceHash(editorController.doc.data));
     const pending = ambientPreparation.current;
     if (pending?.previewKey === previewKey && pending.revision === editorController.doc.revision) await pending.promise;
@@ -383,7 +397,7 @@ export function App(): JSX.Element {
         setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
       }
     });
-  }, [ambientTrafficProfile, editorController, map]);
+  }, [editorController, map, materializedAmbientProfile]);
   const cancelAuthoredPlayback = useCallback(() => {
     runtimeWorker.current?.cancel();
     livePlayback.current = null;
@@ -436,13 +450,21 @@ export function App(): JSX.Element {
   const authoringEnabled = playbackBundle === null && studioSession.state.mode === 'authoring' && !mapWorkspaceOpen;
   const changeAmbientTraffic = useCallback((profile: ResolvedAmbientTrafficProfile) => {
     setAmbientTrafficProfile(profile);
+    setSumoFallbackReason(null);
     editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_EXTENSION_KEY, profile);
+  }, [editorController]);
+  const changeAmbientTrafficProvider = useCallback((provider: AmbientTrafficProviderId) => {
+    setAmbientTrafficProvider(provider);
+    setSumoFallbackReason(null);
+    editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY, provider);
   }, [editorController]);
 
   // Scenario navigation/import is authoritative. Never leak a traffic choice from
   // the previously open map or saved scenario into the next document.
   const authoredAmbientValue = editorController?.doc.data.extensions?.[AMBIENT_TRAFFIC_EXTENSION_KEY];
   const authoredAmbientHash = contentHash(authoredAmbientValue ?? null);
+  const authoredAmbientProviderValue = editorController?.doc.data.extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY];
+  const authoredAmbientProviderHash = contentHash(authoredAmbientProviderValue ?? null);
   // Camera/sensor/presentation edits do not change the physical traffic world.
   // Key expensive generation only to the simulation-bearing authored source;
   // the profile remains its own dependency below.
@@ -451,6 +473,11 @@ export function App(): JSX.Element {
     const next = ambientTrafficProfileFromExtensions(editorController?.doc.data.extensions);
     setAmbientTrafficProfile((current) => contentHash(current) === contentHash(next) ? current : next);
   }, [editorController, authoredAmbientHash]);
+  useEffect(() => {
+    const next = ambientTrafficProviderFromExtensions(editorController?.doc.data.extensions);
+    setAmbientTrafficProvider(next);
+    setSumoFallbackReason(null);
+  }, [editorController, authoredAmbientProviderHash]);
 
   // One persistent concrete world owns both the authoring preview and playback.
   // Authored edits rematerialize against the existing generated actors; only a
@@ -460,7 +487,7 @@ export function App(): JSX.Element {
       setAmbientPreviewBusy(false);
       return;
     }
-    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, ambientTrafficProfile);
+    const candidatePoolRequestKey = ambientCandidatePoolRequestKey(map.id, materializedAmbientProfile);
     const previewKey = ambientPreviewKey(candidatePoolRequestKey, ambientPreviewSourceHash ?? 'empty');
     const current = ambientPreviewCache.current.current;
     if (current?.previewKey === previewKey && current.revision === editorController.doc.revision) {
@@ -476,7 +503,7 @@ export function App(): JSX.Element {
       && simulationSourceHash(editorController.doc.data) === campaignSource.templateHash
       ? campaignSource.evidence
       : null;
-    if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(ambientTrafficProfile, verifiedFallback.ambientTraffic)) {
+    if (verifiedFallback && canReuseVerifiedEvidenceForAmbient(materializedAmbientProfile, verifiedFallback.ambientTraffic)) {
       if (compiledWorldMatchesRevision(editorController.doc, revision)) {
         ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: verifiedFallback });
       }
@@ -489,7 +516,7 @@ export function App(): JSX.Element {
     const promise = runtimeWorker.current!.prepare(
       editorController.doc.data,
       map,
-      ambientTrafficProfile,
+      materializedAmbientProfile,
       verifiedFallback?.instance,
       // Build only the warmed t=0 world in the background. Static map collider
       // extraction is intentionally not on this interactive path; dynamic
@@ -514,7 +541,7 @@ export function App(): JSX.Element {
     ).finally(() => {
       if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
     });
-  }, [ambientTrafficProfile, ambientPreviewSourceHash, campaignSource, editorController, map, playbackBundle, state?.revision]);
+  }, [ambientPreviewSourceHash, campaignSource, editorController, map, materializedAmbientProfile, playbackBundle, state?.revision]);
 
   useEffect(() => () => runtimeWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {
@@ -641,6 +668,47 @@ export function App(): JSX.Element {
     restoreCameraOnDispose: true,
     renderer: editorController?.renderer,
     externalClock: !playbackBundle,
+  });
+  const sumoExternalActors = useMemo<readonly SumoExternalActorView[]>(() => {
+    if (authoredPlayback && playbackController) {
+      const metadata = new Map(authoredPlayback.actors.map((actor) => [actor.id, actor] as const));
+      return playbackController.currentActors.flatMap((actor) => {
+        const detail = metadata.get(actor.id);
+        if (!detail || !actor.present || actor.id.startsWith('ambient')) return [];
+        return [{
+          id: actor.id,
+          kind: sumoExternalKind(detail.kind, actor.static),
+          x: actor.x,
+          z: actor.z,
+          headingRad: actor.headingRad,
+          speedMetersPerSecond: sampledTraceSpeed(authoredPlayback, actor.id, studioSession.state.time),
+          lengthMeters: actor.dims.l,
+          widthMeters: actor.dims.w,
+        } satisfies SumoExternalActorView];
+      });
+    }
+    return (state?.actors ?? []).map((actor) => ({
+      id: actor.id,
+      kind: sumoExternalKind(simulationClassFor(actor.catalogId), actor.source === 'prop'),
+      x: actor.x,
+      z: actor.z,
+      headingRad: actor.headingRad,
+      speedMetersPerSecond: actor.source === 'prop' ? 0 : (actor.initialSpeedKph ?? 0) / 3.6,
+      lengthMeters: actor.dims.l,
+      widthMeters: actor.dims.w,
+    }));
+  }, [authoredPlayback, playbackController, playbackState?.time, state?.actors, studioSession.state.time]);
+  const fallbackToNativeTraffic = useCallback((reason: string) => setSumoFallbackReason(reason), []);
+  const sumoStatus = useSumoTraffic({
+    enabled: ambientTrafficProvider === 'sumo' && !sumoFallbackReason && playbackBundle === null,
+    map,
+    profile: ambientTrafficProfile,
+    renderer: editorController?.renderer,
+    sampleHeight,
+    mode: studioSession.state.mode,
+    time: studioSession.state.time,
+    externalActors: sumoExternalActors,
+    onFallback: fallbackToNativeTraffic,
   });
   const editorActorIds = useMemo(() => state?.actors.map((actor) => actor.id) ?? [], [state?.actors]);
   // Keep t=0 visible through the preparing frame. The playback renderer takes
@@ -847,7 +915,7 @@ export function App(): JSX.Element {
     }
     const sourceHash = contentHash(editorController.doc.data);
     setOpenScenarioState({ status: 'loading', sourceHash });
-    void runtimeWorker.current!.prepare(editorController.doc.data, map, ambientTrafficProfile).then(
+    void runtimeWorker.current!.prepare(editorController.doc.data, map, materializedAmbientProfile).then(
       (bundle) => {
         if (!bundle.openScenario || bundle.openScenario.source.templateHash !== sourceHash) {
           setOpenScenarioState({ status: 'error', sourceHash, message: 'The export worker returned a snapshot for a different document revision.' });
@@ -857,7 +925,7 @@ export function App(): JSX.Element {
       },
       (reason: unknown) => setOpenScenarioState({ status: 'error', sourceHash, message: reason instanceof Error ? reason.message : String(reason) }),
     );
-  }, [ambientTrafficProfile, editorController, map]);
+  }, [editorController, map, materializedAmbientProfile]);
 
   useEffect(() => {
     if (!openScenarioOpen) return;
@@ -999,12 +1067,15 @@ export function App(): JSX.Element {
         <AmbientTrafficPopover
           profile={ambientTrafficProfile}
           provenance={ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic ?? null}
-          busy={ambientPreviewBusy}
+          provider={ambientTrafficProvider}
+          onProviderChange={changeAmbientTrafficProvider}
+          sumoStatus={sumoFallbackReason ? { phase: 'fallback', actorCount: 0, reason: sumoFallbackReason } : sumoStatus}
+          busy={ambientPreviewBusy || sumoStatus.phase === 'loading'}
           error={ambientTrafficError}
           onChange={changeAmbientTraffic}
           robustnessReport={ambientRobustnessReport}
           robustnessBusy={ambientRobustnessBusy}
-          onRunRobustness={runAmbientRobustness}
+          onRunRobustness={ambientTrafficProvider === 'native' ? runAmbientRobustness : undefined}
           onClose={closeAuxiliaryTool}
         />
       ) : null}
@@ -1315,6 +1386,27 @@ export function actorRecordForRole(role: RoleBinding, sampled?: SampledActor): A
     initialSpeedKph: typeof role.initialSpeedKph === 'number' ? role.initialSpeedKph : defaultSpeedKph(role.actor.class, catalogId),
     sensors: role.actor.sensors,
   };
+}
+
+function sumoExternalKind(kind: string, isStatic: boolean): SumoExternalActorView['kind'] {
+  if (isStatic || kind === 'static_object') return 'obstacle';
+  if (kind === 'pedestrian') return 'pedestrian';
+  if (kind === 'bicycle' || kind === 'scooter') return 'bicycle';
+  return 'vehicle';
+}
+
+function sampledTraceSpeed(bundle: PlaybackBundle, actorId: string, time: number): number {
+  const track = bundle.trace.ticks.actors[actorId];
+  const times = bundle.trace.ticks.t;
+  if (!track || times.length === 0) return 0;
+  let low = 0;
+  let high = times.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (times[middle]! <= time) low = middle;
+    else high = middle - 1;
+  }
+  return Math.max(0, track.speedMps[low] ?? 0);
 }
 
 function getEntrySafeLabel(id: CatalogId): string {

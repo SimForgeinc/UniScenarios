@@ -86,4 +86,6 @@ cmake --build "$CACHE_DIR/sumo-build" --target uniscenarios-sumo-wasm --parallel
 cp "$CACHE_DIR/sumo-build/wasm/sumo.mjs" "$OUTPUT_DIR/sumo.mjs"
 cp "$CACHE_DIR/sumo-build/wasm/sumo.wasm" "$OUTPUT_DIR/sumo.wasm"
 gzip -9 -kf "$OUTPUT_DIR/sumo.wasm"
+node "$SPIKE_DIR/write-runtime-manifest.mjs" \
+  "$OUTPUT_DIR" "$CACHE_DIR/sumo" "$CACHE_DIR/xerces-c"
 wc -c "$OUTPUT_DIR/sumo.mjs" "$OUTPUT_DIR/sumo.wasm" "$OUTPUT_DIR/sumo.wasm.gz"

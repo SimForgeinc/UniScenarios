@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { toNetwork, toWorld, transformPackedStatesToWorld } from './coordinateTransform';
 
-const transform = { translationX: 100, translationY: -40, rotationDegrees: 90, scale: 2 };
+const transform = { translationX: 100, translationY: -40, rotationDegrees: 90, scale: 2, invertY: false };
 
 describe('SUMO network/world coordinates', () => {
   it('round-trips points through map registration', () => {
@@ -9,6 +9,12 @@ describe('SUMO network/world coordinates', () => {
     const network = toNetwork(world.x, world.y, transform);
     expect(network.x).toBeCloseTo(4);
     expect(network.y).toBeCloseTo(-3);
+  });
+
+  it('reflects OpenDRIVE y into renderer z without reflecting x', () => {
+    const reflected = { translationX: 352, translationY: -1482, rotationDegrees: 0, scale: 1, invertY: true };
+    expect(toWorld(300, 200, reflected)).toEqual({ x: 652, y: -1682 });
+    expect(toNetwork(652, -1682, reflected)).toEqual({ x: 300, y: 200 });
   });
 
   it('transforms packed positions without changing hashes or signals', () => {

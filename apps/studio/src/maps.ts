@@ -28,6 +28,8 @@ export interface MapEntry {
   readonly topology: string;
   readonly derivedTopology: string;
   readonly locations: string;
+  /** Optional browser-SUMO sidecar. A missing/invalid asset fails closed to native traffic. */
+  readonly sumoManifest: string;
 }
 
 function entry(id: string, label: string, locality: string): MapEntry {
@@ -43,6 +45,7 @@ function entry(id: string, label: string, locality: string): MapEntry {
     topology: `${base}/topology-index.json.gz`,
     derivedTopology: `${base}/derived/topology-derived.json.gz`,
     locations: `${base}/derived/locations.json.gz`,
+    sumoManifest: `${base}/derived/sumo/sumo-network-manifest.json`,
   };
 }
 
