@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer, useRef } from 'react';
 import type { EditorController } from '../editor/controller';
 import { initialSession, reduceSession, canMutate, shouldPreparePlayback, type StudioSessionState } from './model';
 import { handleTransportKey } from './keyboard';
+import { PreparationGate } from './preparationGate';
 
 export interface StudioSessionApi {
   readonly state: StudioSessionState;
@@ -12,7 +13,7 @@ export interface StudioSessionApi {
 
 export interface StudioSessionOptions {
   /** Build the immutable concrete input + trace before entering playback. */
-  prepare?: () => Promise<void>;
+  prepare?: (signal: AbortSignal) => Promise<void>;
   /** Immediately cancel preparation and discard derived playback artifacts. */
   cancel?: () => void;
   /** Another transport (for example an imported verified trace) owns Space. */
@@ -26,7 +27,9 @@ export function useStudioSession(
 ): StudioSessionApi {
   const [state, dispatch] = useReducer(reduceSession, duration, initialSession);
   const frame = useRef(0);
-  const preparation = useRef(0);
+  const preparation = useRef(new PreparationGate());
+  const optionsRef = useRef(options);
+  optionsRef.current = options;
 
   useEffect(() => {
     controller?.setAuthoringEnabled(canMutate(state.mode));
@@ -59,33 +62,39 @@ export function useStudioSession(
     // otherwise mysterious Escape-reset first.
     if (shouldPreparePlayback(state.mode)) {
       dispatch({ type: 'prepare', duration });
-      const id = ++preparation.current;
+      const ticket = preparation.current.begin();
       void Promise.resolve().then(async () => {
+        if (!preparation.current.isCurrent(ticket)) return;
         const report = controller.doc.validation;
         if (!report.ok) {
           const errors = report.issues.filter((item) => item.severity === 'error').slice(0, 3);
           throw new Error(errors.map((item) => item.message).join(' · ') || 'Scenario is invalid');
         }
-        await options.prepare?.();
-        if (preparation.current !== id) return;
+        await optionsRef.current.prepare?.(ticket.signal);
+        if (!preparation.current.complete(ticket)) return;
         // One atomic transition latches the initiating Play intent across an
         // asynchronous cold prepare. Separate ready/play dispatches can be
         // observed as paused by playback mounting effects in the same commit.
         dispatch({ type: 'ready-and-play' });
       }).catch((reason: unknown) => {
-        if (preparation.current !== id) return;
+        if (!preparation.current.isCurrent(ticket)) return;
         dispatch({ type: 'fail', message: reason instanceof Error ? reason.message : String(reason) });
       });
       return;
     }
     dispatch({ type: state.mode === 'playing' ? 'pause' : 'play' });
-  }, [controller, duration, options, state.mode]);
+  }, [controller, duration, state.mode]);
 
   const stop = useCallback(() => {
-    preparation.current += 1;
-    options.cancel?.();
+    preparation.current.cancel();
+    optionsRef.current.cancel?.();
     dispatch({ type: 'stop' });
-  }, [options]);
+  }, []);
+
+  useEffect(() => () => {
+    preparation.current.cancel();
+    optionsRef.current.cancel?.();
+  }, [controller]);
 
   useEffect(() => {
     if (options.keyboardEnabled === false) return;

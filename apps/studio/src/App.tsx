@@ -19,6 +19,7 @@ import { galleryCameraChoice } from './playback/controller';
 import { activePhysicsModeForTrace } from './playback/physics';
 import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
+import { throwIfPreparationAborted } from './session/preparationGate';
 import { TimelineDock } from './timeline/TimelineDock';
 import { evaluateAuthoredAmbientRobustness, ScenarioWorkerClient } from './playback/scenarioWorkerClient';
 import type { AmbientRobustnessSummary } from './playback/scenario-worker';
@@ -317,16 +318,19 @@ export function App(): JSX.Element {
     }).catch((reason: unknown) => console.warn('[campaign] verified evidence recovery failed', reason));
     return () => { cancelled = true; };
   }, [campaignSource, editorController, map.id]);
-  const prepareAuthoredPlayback = useCallback(async () => {
+  const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
+    throwIfPreparationAborted(signal);
     if (!editorController) throw new Error('The editor is not ready');
     const populationKey = ambientPopulationKey(map.id, ambientTrafficProfile);
     const materializationKey = ambientMaterializationKey(populationKey, simulationSourceHash(editorController.doc.data));
     const pending = ambientPreparation.current;
     if (pending?.materializationKey === materializationKey) await pending.promise;
+    throwIfPreparationAborted(signal);
     const bundle = ambientWorld.current.playback();
     if (!bundle) throw new Error('Traffic is still preparing. Press Play again when the map population is ready.');
     // This is the exact immutable object rendered at t=0; Play never generates
     // or substitutes a second background population.
+    throwIfPreparationAborted(signal);
     setAuthoredPlayback(bundle);
   }, [ambientTrafficProfile, editorController, map.id]);
   const cancelAuthoredPlayback = useCallback(() => {
