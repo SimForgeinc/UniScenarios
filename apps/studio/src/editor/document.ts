@@ -585,7 +585,7 @@ export class EditorDocument {
 
   /** Delete actors and every now-orphaned authored reference as one gesture. */
   remove(ids: readonly string[]): void {
-    const deleting = ids.filter((id) => this.#doc.role(id) !== undefined);
+    const deleting = [...new Set(ids)].filter((id) => this.#doc.role(id) !== undefined);
     if (deleting.length === 0) return;
     this.#transaction(() => {
       const plan = authoringGraphPrunePlan(this.#doc.data, deleting);
