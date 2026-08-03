@@ -14,6 +14,7 @@ import {
   evaluateIntentRubric,
   runSimulation,
   materializeAmbientCandidatePool,
+  parseSimScenarioInput,
   resolveAmbientTrafficProfile,
   traceDigest,
   type AmbientTrafficProfile,
@@ -29,7 +30,6 @@ import {
 } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { ambientRobustnessGate } from '../ambient/robustnessGate';
-import { createAmbientWorldPreviewInput } from '../ambient/worldPreview';
 import type { OpenScenarioSnapshot, OpenScenarioSourceMapping } from '../openscenario/model';
 import { selectPlayableSite } from './site-selection';
 import { withEditablePhysicsDefault } from './physics';
@@ -212,7 +212,7 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
   // rows yet, but its ambient SimActors use the same routes, controls, physics,
   // collision handling and trace format as every later authored scenario.
   if (request.template.roles.length === 0 && !request.baseInstance) {
-    const base = withMapControls(withEditablePhysicsDefault(createAmbientWorldPreviewInput(request.map.id)), mapControls);
+    const base = withMapControls(withEditablePhysicsDefault(createEmptyAmbientInput(request.map.id)), mapControls);
     const ambient = applyRequestedAmbientPopulation(base, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
@@ -360,6 +360,26 @@ async function prepareUncached(request: ScenarioWorkerRequest): Promise<Scenario
     mapCollisions: staticCollision.diagnostics,
     ...(isInteractiveCompile ? {} : { openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr) }),
   };
+}
+
+/** Empty authored document base. Ambient actors are ordinary runtime actors added afterward. */
+function createEmptyAmbientInput(mapId: string): SimScenarioInput {
+  const parsed = parseSimScenarioInput({
+    mapId,
+    clipSeconds: 20,
+    warmupSeconds: 0,
+    dt: 0.05,
+    seed: `ambient-world:${mapId}`,
+    actors: [{
+      id: 'ambient-world-seed',
+      kind: 'static_object',
+      static: true,
+      initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+      behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
+    }],
+    physics: { mode: 'dynamic-v1' },
+  });
+  return { ...parsed, actors: [] };
 }
 
 async function getMapRuntime(map: ScenarioWorkerMap): Promise<MapRuntime> {
