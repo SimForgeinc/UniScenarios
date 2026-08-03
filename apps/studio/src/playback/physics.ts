@@ -81,7 +81,7 @@ export function physicsSummaryForTrace(trace: PhysicsTrace | null): PhysicsDispl
   return summarize(trace.header.physics.mode, false, ids.map((id) => {
     const backend = backends?.[id];
     return backend
-      ? { id, label: id, mode: backend.mode, reason: backend.reason }
+      ? { id, label: id, mode: backend.mode, reason: backend.reason, profile: backend.profile }
       : { id, label: id, mode: null, reason: 'provenance-unavailable' as const };
   }));
 }
