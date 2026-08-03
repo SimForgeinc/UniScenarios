@@ -20,8 +20,13 @@ import { readTraceFile, writeTraceFile } from '../template-io.js';
 const BIN = path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js');
 const LTAP = path.join(REPO_ROOT, 'examples', 'ltap-opposing.template.json');
 const MAP = 'yale-street';
+const SUMO_SCENARIO = path.join(REPO_ROOT, 'examples', 'edge-cases', '05-ambulance-gridlocked-intersection', 'instance.baseline.json');
 const haveArtifacts =
   existsSync(path.join(DEV_ASSETS, MAP, 'derived', 'topology-derived.json.gz')) && existsSync(LTAP);
+const haveSumo = haveArtifacts
+  && existsSync(path.join(DEV_ASSETS, 'sumo-runtime', 'sumo.mjs'))
+  && existsSync(path.join(DEV_ASSETS, MAP, 'derived', 'sumo', 'sumo-network-manifest.json'))
+  && existsSync(SUMO_SCENARIO);
 
 interface Run {
   code: number;
@@ -59,6 +64,7 @@ describe('uniscenarios — contract', () => {
     expect(payload.bin).toBe('uniscenarios');
     expect(payload.commands.map((c) => c.name)).toContain('sites match');
     expect(payload.commands.map((c) => c.name)).toContain('export');
+    expect(payload.commands.map((c) => c.name)).toContain('debug');
   });
 
   it('rejects unknown ASAM export formats before touching the input file', async () => {
@@ -114,6 +120,76 @@ describe('uniscenarios — contract', () => {
 });
 
 describe.skipIf(!haveArtifacts)('uniscenarios — the pipeline', () => {
+  it('compiles and runs a known scenario into complete agent-debug artifacts and compares deterministically', async () => {
+    const input = path.join(tmp, 'debug.input.json');
+    const project = path.join(tmp, 'debug.project.json');
+    const out = path.join(tmp, 'debug-run');
+    await writeFile(input, JSON.stringify({
+      mapId: MAP,
+      clipSeconds: 2,
+      warmupSeconds: 0,
+      dt: 0.02,
+      seed: 'cli-debug-known',
+      actors: [{
+        id: 'sedan',
+        kind: 'car',
+        initial: { pose: { x: 400, z: -1600, headingRad: 0 }, speedMps: 4 },
+        behavior: { cruiseSpeedMps: 4, route: { kind: 'polyline', points: [{ x: 400, z: -1600 }, { x: 450, z: -1600 }] } },
+      }],
+      interactions: [{
+        id: 'brake', actorId: 'sedan', trigger: { kind: 'at', t: 1 }, verb: 'speed',
+        target: { mode: 'absolute', value: 2 }, dynamics: { shape: 'linear', constraint: 'time', value: 0.5 },
+      }],
+    }), 'utf8');
+    await writeFile(project, JSON.stringify({ kind: 'uniscenarios-studio-record', version: 1, instance: path.basename(input) }), 'utf8');
+
+    const first = await uniscenarios('debug', project, '--sample', '0.1', '--out', out, '--fail-on-fallback');
+    expect(first.code).toBe(0);
+    const summary = json<{ schema: string; actorCount: number; acceptance: { ok: boolean }; files: string[] }>(first);
+    expect(summary).toMatchObject({ schema: 'uniscenarios.scenario-debug.v1', actorCount: 1, acceptance: { ok: true } });
+    expect(summary.files).toEqual(['report.json', 'summary.json', 'paths.json', 'input.json', 'compiled-instance.json', 'trace.json.gz']);
+    const report = JSON.parse(await readFile(path.join(out, 'report.json'), 'utf8')) as {
+      actors: { sedan: Array<{ t: number; x: number; accelerationMps2: number; roadId: string | null }> };
+      interactions: Array<{ id: string; events: Array<{ kind: string }> }>;
+      diagnostics: { routes: { sedan: { backend: { mode: string } } }; fallbacks: unknown[] };
+      performance: { nativeTicksPerSecond: number };
+    };
+    expect(report.actors.sedan.length).toBeGreaterThanOrEqual(20);
+    expect(report.actors.sedan[0]).toEqual(expect.objectContaining({ t: 0, roadId: null }));
+    expect(report.interactions.find((item) => item.id === 'brake')?.events.map((event) => event.kind)).toContain('trigger_fired');
+    expect(report.diagnostics.routes.sedan.backend.mode).toBe('dynamic-v1');
+    expect(report.diagnostics.fallbacks).toEqual([]);
+    expect(report.performance.nativeTicksPerSecond).toBeGreaterThan(0);
+
+    const compared = await uniscenarios('debug', input, '--sample', '0.1', '--compare', path.join(out, 'report.json'));
+    expect(compared.code).toBe(0);
+    expect(json<{ comparison: { ok: boolean } }>(compared).comparison.ok).toBe(true);
+
+    const changedInput = path.join(tmp, 'debug.changed.input.json');
+    const changed = JSON.parse(await readFile(input, 'utf8'));
+    changed.actors[0].initial.speedMps = 5;
+    await writeFile(changedInput, JSON.stringify(changed), 'utf8');
+    const mismatch = await uniscenarios('debug', changedInput, '--sample', '0.1', '--compare', path.join(out, 'report.json'));
+    expect(mismatch.code).toBe(2);
+    expect(json<{ acceptance: { failures: Array<{ code: string }> } }>(mismatch).acceptance.failures.map((failure) => failure.code)).toContain('comparison_mismatch');
+  }, 180_000);
+
+  it.runIf(haveSumo)('runs the packaged SUMO-Wasm provider headlessly and records ambient paths/performance', async () => {
+    const out = path.join(tmp, 'sumo-debug-run');
+    const run = await uniscenarios('debug', SUMO_SCENARIO, '--provider', 'sumo', '--ambient-count', '8', '--duration', '1', '--sample', '0.1', '--out', out);
+    expect(run.code).toBe(0);
+    const summary = json<{ ambientActorCount: number; performance: { sumo: { version: string; stepMilliseconds: { p95: number } } } }>(run);
+    expect(summary.ambientActorCount).toBeGreaterThan(0);
+    expect(summary.performance.sumo.version).toBe('1.27.1');
+    expect(summary.performance.sumo.stepMilliseconds.p95).toBeGreaterThanOrEqual(0);
+    const report = JSON.parse(await readFile(path.join(out, 'report.json'), 'utf8')) as {
+      ambientActors: Record<string, Array<{ t: number; x: number; speedMps: number; accelerationMps2: number; lanePositionM: number }>>;
+      performance: { sumo: { heapBytes: number } };
+    };
+    expect(Object.values(report.ambientActors)[0]?.[0]).toEqual(expect.objectContaining({ t: 0 }));
+    expect(report.performance.sumo.heapBytes).toBeGreaterThan(0);
+  }, 180_000);
+
   it('exports a concrete instance through the real CLI in native and esmini-compatible ASAM formats', async () => {
     const instance = path.join(tmp, 'asam.instance.json');
     const xosc = path.join(tmp, 'asam.xosc');

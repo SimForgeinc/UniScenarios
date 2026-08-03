@@ -297,6 +297,20 @@ export type {
   ResolvedAmbientTrafficProfile,
 } from './ambient/traffic.js';
 export {
+  buildSumoRouteDocument,
+  sumoActorIdHash,
+  sumoNumericSeed,
+  sumoVehicleId,
+  validateSumoNetworkManifest,
+  validateSumoRuntimeManifest,
+} from './ambient/sumo.js';
+export type {
+  SumoNetworkManifest,
+  SumoNetworkWorldTransform,
+  SumoRouteDocumentOptions,
+  SumoRuntimeManifest,
+} from './ambient/sumo.js';
+export {
   DEFAULT_AMBIENT_ROBUSTNESS_CASES,
   evaluateAmbientRobustness,
 } from './ambient/robustness.js';

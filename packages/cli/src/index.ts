@@ -150,6 +150,7 @@ export {
 
 export { evaluate, combinedEvaluationVerdict, criticalityBand, filtersFor, type EvaluateFilterMode, type EvaluateOptions } from './commands/evaluate.js';
 export { metricsSummary } from './commands/simulate.js';
+export { debugScenario, type DebugOptions, type DebugPathSample } from './commands/debug.js';
 export { SCHEMAS, type SchemaEntry } from './commands/schemas.js';
 
 export {

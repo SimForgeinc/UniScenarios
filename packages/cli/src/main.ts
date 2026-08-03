@@ -35,6 +35,7 @@ import { locationsFind, locationsGet, locationsResolve } from './commands/locati
 import { mapsList } from './commands/maps.js';
 import { schemas } from './commands/schemas.js';
 import { simulate } from './commands/simulate.js';
+import { debugScenario } from './commands/debug.js';
 import { sitesMatch } from './commands/sites.js';
 import { templateValidate } from './commands/template.js';
 import { validate } from './commands/validate.js';
@@ -48,6 +49,7 @@ const COMMANDS = [
   { name: 'sites match', summary: 'anchor → ranked concrete sites on one map or --all-maps' },
   { name: 'instantiate', summary: 'template × site × draw → a concrete SimScenarioInput' },
   { name: 'simulate', summary: 'one engine pass over an instance, with an optional trace' },
+  { name: 'debug', summary: 'compile a template/instance, run native or SUMO, and emit complete paths + diagnostics' },
   { name: 'validate', summary: 'tier-1, or tier-2 (one engine pass + invariant residuals)' },
   { name: 'evaluate', summary: 'reject filters over a trace' },
   { name: 'evidence verify', summary: 'prove one instance/trace pair shares the same input hash' },
@@ -249,6 +251,37 @@ async function dispatch(argv: readonly string[]): Promise<number> {
       return simulate({
         file: positional(args, 0, 'instance.json'),
         trace: optionalString(args, 'trace'),
+        pretty: boolFlag(args, 'pretty'),
+      });
+    }
+
+    case 'debug': {
+      const args = parseArgs(argv.slice(1), {
+        booleans: [...GLOBAL_BOOLEANS, 'fail-on-collision', 'fail-on-road-departure', 'fail-on-fallback', 'fail-on-never-fired'],
+        values: ['map', 'site', 'draw', 'seed', 'provider', 'duration', 'sample', 'ambient-count', 'out', 'compare', 'position-tolerance-m', 'speed-tolerance-mps'],
+      });
+      const provider = optionalString(args, 'provider') ?? 'native';
+      if (provider !== 'native' && provider !== 'sumo') {
+        throw new CliError('bad_value', '--provider must be native | sumo', { path: '--provider' });
+      }
+      return debugScenario({
+        file: positional(args, 0, 'scenario.json'),
+        mapId: optionalString(args, 'map'),
+        siteId: optionalString(args, 'site'),
+        draw: optionalInt(args, 'draw'),
+        seed: optionalString(args, 'seed'),
+        provider,
+        durationSeconds: optionalNumber(args, 'duration'),
+        sampleSeconds: optionalNumber(args, 'sample'),
+        ambientCount: optionalInt(args, 'ambient-count'),
+        out: optionalString(args, 'out'),
+        compare: optionalString(args, 'compare'),
+        positionToleranceM: optionalNumber(args, 'position-tolerance-m'),
+        speedToleranceMps: optionalNumber(args, 'speed-tolerance-mps'),
+        failOnCollision: boolFlag(args, 'fail-on-collision'),
+        failOnRoadDeparture: boolFlag(args, 'fail-on-road-departure'),
+        failOnFallback: boolFlag(args, 'fail-on-fallback'),
+        failOnNeverFired: boolFlag(args, 'fail-on-never-fired'),
         pretty: boolFlag(args, 'pretty'),
       });
     }

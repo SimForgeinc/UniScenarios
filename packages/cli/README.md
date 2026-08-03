@@ -41,6 +41,13 @@ uniscenarios sites match       <template.json> --map <id> | --maps a,b | --all-m
 uniscenarios instantiate       <template.json> --map <id> --site <siteId>
                        [--seed <hex> | --draw K] [--out file]
 uniscenarios simulate          <instance.json> [--trace out.trace.json.gz]
+uniscenarios debug             <template|instance.json>
+                       [--map ID --site ID --draw K --seed S]
+                       [--provider native|sumo --ambient-count N]
+                       [--duration S --sample S --out DIR]
+                       [--compare prior-report.json]
+                       [--fail-on-collision --fail-on-road-departure
+                        --fail-on-fallback --fail-on-never-fired]
 uniscenarios validate          <instance|template> [--tier 1|2 --map --site --draw]
 uniscenarios evaluate          <trace> [--filter critical|negative-control|all]
                        [--trivial-ttc S --reject-collisions]
@@ -56,6 +63,62 @@ uniscenarios batch             <template.json> --maps a,b,c --draws N --out dir/
                        [--concurrency N --min-score --max-sites --force --no-trace]
 uniscenarios schemas           [--name template|anchor|interactions] [--content]
 ```
+
+## Headless scenario debugging
+
+`debug` is the single command intended for an agent investigating an editor
+scenario. It accepts either a concrete instance or a v2 template. Map-bound
+Studio templates infer their pinned map and compile through
+`materializeMapBound`; portable templates use `--map` and optional `--site`
+(otherwise the highest-ranked executable site). Both paths then run the exact
+shared `@uniscenarios/sim-engine` used by Studio playback.
+
+```bash
+# Full JSON report on stdout (every native tick by default).
+node packages/cli/bin/uniscenarios.js debug \
+  examples/edge-cases/05-ambulance-gridlocked-intersection/instance.baseline.json
+
+# Agent-friendly artifact directory, sampled at 10 Hz, with strict gates.
+node packages/cli/bin/uniscenarios.js debug scenario.json \
+  --sample 0.1 --out /tmp/scenario-debug \
+  --fail-on-road-departure --fail-on-fallback --fail-on-never-fired
+
+# Run packaged SUMO-Wasm ambient traffic alongside the canonical authored run.
+SCEN_DEV_ASSETS=/absolute/path/to/dev-assets \
+node packages/cli/bin/uniscenarios.js debug scenario.json \
+  --provider sumo --ambient-count 32 --sample 0.05 --out /tmp/sumo-debug
+
+# Deterministic regression comparison. Exit 2 if path deltas exceed tolerance.
+node packages/cli/bin/uniscenarios.js debug scenario.json \
+  --sample 0.1 --compare /tmp/scenario-debug/report.json \
+  --position-tolerance-m 0.001 --speed-tolerance-mps 0.001
+```
+
+Without `--out`, stdout is the complete `uniscenarios.scenario-debug.v1`
+report. With `--out`, stdout is a concise JSON summary and the directory
+contains:
+
+- `report.json` — complete paths, actions, diagnostics, metrics and acceptance;
+- `summary.json` — compact repair-loop input;
+- `paths.json` — scene-frame native and SUMO time series plus signal phases;
+- `input.json` — the exact concrete input that ran (including CLI duration override);
+- `compiled-instance.json` — the materializer's provenance-bearing instance before runtime overrides;
+- `trace.json.gz` — the canonical engine trace.
+
+Native actor samples include position, heading, speed, derived acceleration,
+lane/road identity, route distance, presence and dynamic telemetry. Diagnostics
+include engine issues, route coverage, backend provenance/fallbacks, collisions,
+crashes, road departures, rejected lane changes, never-fired triggers and
+preemptions. Actions carry their firing/release events. Required template
+invariants and selected strict gates determine exit status.
+
+SUMO is intentionally fail-closed. `--provider sumo` requires the pinned
+`dev-assets/sumo-runtime/{sumo.mjs,sumo.wasm,runtime-manifest.json}` and the
+selected map's `derived/sumo/sumo-network-manifest.json`; missing assets produce
+an actionable `sumo_unavailable` error rather than silently changing providers.
+The current lean bridge reports SUMO positions, heading, speed, acceleration,
+lane position and indicators. It does not yet expose the SUMO lane/road ID or
+its internal traffic-light phase; those limitations are explicit in the report.
 
 ## ASAM interchange
 
