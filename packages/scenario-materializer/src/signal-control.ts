@@ -1,0 +1,334 @@
+import type { ControlIndication, SignalProgram } from '@uniscenarios/sim-engine';
+
+export type SignalControlDiagnosticCode =
+  | 'unresolved_head'
+  | 'unresolved_movement'
+  | 'shared_head'
+  | 'conflicting_controller_stage'
+  | 'missing_controller_stage';
+
+export interface SignalControlDiagnostic {
+  readonly code: SignalControlDiagnosticCode;
+  readonly message: string;
+  readonly headIds?: readonly string[];
+  readonly movementIds?: readonly string[];
+  readonly controllerIds?: readonly string[];
+}
+
+/** The executable movement grain currently authored by Studio. One program may
+ * govern several approach/connecting-lane pairs, but it has one phase at t. */
+export interface SignalMovementBinding {
+  readonly id: string;
+  readonly programId: string;
+  readonly junctionId: string;
+  readonly controllerIds: readonly string[];
+  readonly headIds: readonly string[];
+  readonly approachLaneRsls: readonly string[];
+  readonly connectingLaneRsls: readonly string[];
+}
+
+export interface SignalControllerBinding {
+  readonly id: string;
+  readonly junctionId: string;
+  readonly headIds: readonly string[];
+  readonly movementIds: readonly string[];
+}
+
+export interface SignalHeadControlBinding {
+  readonly id: string;
+  readonly junctionIds: readonly string[];
+  readonly controllerIds: readonly string[];
+  readonly movementIds: readonly string[];
+  /** False means the physical head exists but no exact program/controller owns it. */
+  readonly resolved: boolean;
+}
+
+export interface SignalJunctionControlBinding {
+  readonly id: string;
+  readonly controllerIds: readonly string[];
+  readonly movementIds: readonly string[];
+  readonly headIds: readonly string[];
+}
+
+export interface SignalControlIndex {
+  readonly heads: ReadonlyMap<string, SignalHeadControlBinding>;
+  readonly movements: ReadonlyMap<string, SignalMovementBinding>;
+  readonly controllers: ReadonlyMap<string, SignalControllerBinding>;
+  readonly junctions: ReadonlyMap<string, SignalJunctionControlBinding>;
+  readonly diagnostics: readonly SignalControlDiagnostic[];
+}
+
+export interface SignalReferenceSelection {
+  readonly selectedHeadId: string;
+  readonly referenceMovementId: string;
+  readonly junctionId: string;
+  readonly controllerIds: readonly string[];
+  readonly movementHeadIds: readonly string[];
+  readonly intersectionHeadIds: readonly string[];
+  readonly relatedMovementIds: readonly string[];
+  readonly diagnostics: readonly SignalControlDiagnostic[];
+}
+
+export interface SignalReferenceEvaluationInput {
+  readonly timeSeconds: number;
+  /** The selected reference movement's authored phase at `timeSeconds`. */
+  readonly referencePhase: ControlIndication;
+  /** Optional authored phases for sibling movements at the same instant. */
+  readonly movementPhases?: Readonly<Record<string, ControlIndication>>;
+}
+
+export interface SignalReferenceEvaluationResult {
+  readonly timeSeconds: number;
+  readonly headStates: Readonly<Record<string, ControlIndication>>;
+  readonly movementStates: Readonly<Record<string, ControlIndication>>;
+  readonly diagnostics: readonly SignalControlDiagnostic[];
+}
+
+function unique(values: Iterable<string>): string[] {
+  return [...new Set(values)].sort();
+}
+
+function add(map: Map<string, Set<string>>, key: string, values: Iterable<string>): void {
+  let set = map.get(key);
+  if (!set) {
+    set = new Set();
+    map.set(key, set);
+  }
+  for (const value of values) set.add(value);
+}
+
+/** Build exact reverse indices from executable programs and their preserved
+ * OpenDRIVE controller-stage metadata. No geometric/proximity inference occurs. */
+export function buildSignalControlIndex(
+  programs: readonly SignalProgram[],
+  physicalHeadIds: readonly string[] = [],
+): SignalControlIndex {
+  const diagnostics: SignalControlDiagnostic[] = [];
+  const movements = new Map<string, SignalMovementBinding>();
+  const headsToMovements = new Map<string, Set<string>>();
+  const headsToControllers = new Map<string, Set<string>>();
+  const headsToJunctions = new Map<string, Set<string>>();
+  const controllerHeads = new Map<string, Set<string>>();
+  const controllerMovements = new Map<string, Set<string>>();
+  const controllerJunction = new Map<string, string>();
+  const junctionHeads = new Map<string, Set<string>>();
+  const junctionControllers = new Map<string, Set<string>>();
+  const junctionMovements = new Map<string, Set<string>>();
+
+  for (const program of [...programs].sort((a, b) => a.id.localeCompare(b.id))) {
+    const binding = program.mapBinding;
+    if (!binding) {
+      diagnostics.push({
+        code: 'unresolved_movement',
+        message: `Signal movement ${program.id} has no physical map binding.`,
+        movementIds: [program.id],
+      });
+      continue;
+    }
+    const headIds = unique(binding.headIds);
+    const controllerIds = unique(binding.controllerIds);
+    if (!binding.controllerHeadGroups) {
+      diagnostics.push({
+        code: 'missing_controller_stage',
+        message: `Signal movement ${program.id} lacks exact controller-stage membership.`,
+        movementIds: [program.id],
+        controllerIds,
+      });
+    }
+    const movement: SignalMovementBinding = {
+      id: program.id,
+      programId: program.id,
+      junctionId: binding.junctionId,
+      controllerIds,
+      headIds,
+      approachLaneRsls: unique(program.stopLines.map((line) => line.rsl)),
+      connectingLaneRsls: unique(program.stopLines.flatMap((line) => line.connectingLaneRsls)),
+    };
+    movements.set(movement.id, movement);
+    add(junctionHeads, movement.junctionId, headIds);
+    add(junctionControllers, movement.junctionId, controllerIds);
+    add(junctionMovements, movement.junctionId, [movement.id]);
+    for (const headId of headIds) {
+      add(headsToMovements, headId, [movement.id]);
+      add(headsToControllers, headId, controllerIds);
+      add(headsToJunctions, headId, [movement.junctionId]);
+    }
+    const groups = binding.controllerHeadGroups ?? controllerIds.map((controllerId) => ({ controllerId, headIds }));
+    for (const group of groups) {
+      add(controllerHeads, group.controllerId, group.headIds);
+      add(controllerMovements, group.controllerId, [movement.id]);
+      controllerJunction.set(group.controllerId, movement.junctionId);
+      for (const headId of group.headIds) {
+        add(headsToControllers, headId, [group.controllerId]);
+        add(headsToJunctions, headId, [movement.junctionId]);
+      }
+    }
+  }
+
+  const allHeadIds = unique([
+    ...physicalHeadIds,
+    ...headsToMovements.keys(),
+    ...headsToControllers.keys(),
+  ]);
+  const heads = new Map<string, SignalHeadControlBinding>();
+  for (const id of allHeadIds) {
+    const movementIds = unique(headsToMovements.get(id) ?? []);
+    const resolved = movementIds.length > 0;
+    heads.set(id, {
+      id,
+      junctionIds: unique(headsToJunctions.get(id) ?? []),
+      controllerIds: unique(headsToControllers.get(id) ?? []),
+      movementIds,
+      resolved,
+    });
+    if (!resolved) diagnostics.push({
+      code: 'unresolved_head',
+      message: `Physical signal head ${id} has no exact movement/controller binding.`,
+      headIds: [id],
+    });
+    if (movementIds.length > 1) diagnostics.push({
+      code: 'shared_head',
+      message: `Physical signal head ${id} is shared by ${movementIds.length} movements.`,
+      headIds: [id],
+      movementIds,
+    });
+  }
+
+  const controllers = new Map<string, SignalControllerBinding>();
+  for (const id of unique(controllerHeads.keys())) {
+    controllers.set(id, {
+      id,
+      junctionId: controllerJunction.get(id) ?? '',
+      headIds: unique(controllerHeads.get(id) ?? []),
+      movementIds: unique(controllerMovements.get(id) ?? []),
+    });
+  }
+  const junctions = new Map<string, SignalJunctionControlBinding>();
+  for (const id of unique(junctionMovements.keys())) {
+    junctions.set(id, {
+      id,
+      controllerIds: unique(junctionControllers.get(id) ?? []),
+      movementIds: unique(junctionMovements.get(id) ?? []),
+      headIds: unique(junctionHeads.get(id) ?? []),
+    });
+  }
+  return { heads, movements, controllers, junctions, diagnostics };
+}
+
+/** Resolve a clicked physical head into a deterministic reference movement and
+ * all related highlighting scopes. */
+export function selectSignalReference(
+  index: SignalControlIndex,
+  headId: string,
+  preferredMovementId?: string,
+): SignalReferenceSelection | null {
+  const head = index.heads.get(headId);
+  if (!head?.resolved) return null;
+  const referenceMovementId = preferredMovementId && head.movementIds.includes(preferredMovementId)
+    ? preferredMovementId
+    : head.movementIds[0]!;
+  const movement = index.movements.get(referenceMovementId);
+  if (!movement) return null;
+  const junction = index.junctions.get(movement.junctionId);
+  const relevantCodes = new Set<SignalControlDiagnosticCode>([
+    'unresolved_head', 'unresolved_movement', 'shared_head', 'missing_controller_stage',
+  ]);
+  return {
+    selectedHeadId: headId,
+    referenceMovementId,
+    junctionId: movement.junctionId,
+    controllerIds: movement.controllerIds,
+    movementHeadIds: movement.headIds,
+    intersectionHeadIds: junction?.headIds ?? movement.headIds,
+    relatedMovementIds: junction?.movementIds ?? [movement.id],
+    diagnostics: index.diagnostics.filter((diagnostic) =>
+      relevantCodes.has(diagnostic.code) && (
+        diagnostic.headIds?.some((id) => (junction?.headIds ?? movement.headIds).includes(id)) ||
+        diagnostic.movementIds?.some((id) => (junction?.movementIds ?? [movement.id]).includes(id))
+      )),
+  };
+}
+
+function isPermissive(phase: ControlIndication): boolean {
+  return phase === 'green' || phase === 'green_arrow' || phase === 'proceed' || phase === 'flashing_yellow';
+}
+
+function restrictiveClaim(claims: readonly ControlIndication[]): ControlIndication {
+  if (claims.includes('stop')) return 'stop';
+  if (claims.includes('red_x')) return 'red_x';
+  if (claims.includes('red')) return 'red';
+  if (claims.includes('flashing_red')) return 'flashing_red';
+  if (claims.includes('yellow_arrow')) return 'yellow_arrow';
+  if (claims.includes('yellow')) return 'yellow';
+  if (claims.includes('off')) return 'off';
+  return claims[0] ?? 'red';
+}
+
+/** Project authored movement state onto every physical head at the selected
+ * intersection. Mutually exclusive controller stages cannot both proceed;
+ * shared-head disagreement resolves to the most restrictive claim. */
+export function evaluateSignalReferencePhase(
+  index: SignalControlIndex,
+  selection: SignalReferenceSelection,
+  input: SignalReferenceEvaluationInput,
+): SignalReferenceEvaluationResult {
+  const diagnostics: SignalControlDiagnostic[] = [...selection.diagnostics];
+  const movementStates: Record<string, ControlIndication> = {};
+  for (const movementId of selection.relatedMovementIds) {
+    const requested = input.movementPhases?.[movementId];
+    if (requested) movementStates[movementId] = requested;
+  }
+  movementStates[selection.referenceMovementId] = input.referencePhase;
+
+  const reference = index.movements.get(selection.referenceMovementId);
+  const referenceControllers = new Set(reference?.controllerIds ?? []);
+  if (isPermissive(input.referencePhase)) {
+    for (const [movementId, phase] of Object.entries(movementStates)) {
+      if (movementId === selection.referenceMovementId || !isPermissive(phase)) continue;
+      const movement = index.movements.get(movementId);
+      if (!movement) {
+        diagnostics.push({
+          code: 'unresolved_movement',
+          message: `Authored signal movement ${movementId} is not present in the exact map index.`,
+          movementIds: [movementId],
+        });
+        delete movementStates[movementId];
+        continue;
+      }
+      const sharesStage = movement.controllerIds.some((id) => referenceControllers.has(id));
+      if (!sharesStage) {
+        diagnostics.push({
+          code: 'conflicting_controller_stage',
+          message: `Movement ${movementId} conflicts with selected movement ${selection.referenceMovementId}; it was held red.`,
+          movementIds: [selection.referenceMovementId, movementId],
+          controllerIds: unique([...referenceControllers, ...movement.controllerIds]),
+        });
+        movementStates[movementId] = 'red';
+      }
+    }
+  }
+
+  const claims = new Map<string, ControlIndication[]>();
+  for (const [movementId, phase] of Object.entries(movementStates)) {
+    const movement = index.movements.get(movementId);
+    if (!movement) continue;
+    for (const headId of movement.headIds) {
+      const list = claims.get(headId) ?? [];
+      list.push(phase);
+      claims.set(headId, list);
+    }
+  }
+  const headStates: Record<string, ControlIndication> = {};
+  for (const headId of selection.intersectionHeadIds) {
+    const headClaims = claims.get(headId) ?? ['red'];
+    const distinct = [...new Set(headClaims)];
+    if (distinct.length > 1) diagnostics.push({
+      code: 'shared_head',
+      message: `Physical signal head ${headId} received incompatible movement claims and was made restrictive.`,
+      headIds: [headId],
+      movementIds: index.heads.get(headId)?.movementIds ?? [],
+    });
+    headStates[headId] = distinct.length === 1 ? distinct[0]! : restrictiveClaim(distinct);
+  }
+  return { timeSeconds: input.timeSeconds, headStates, movementStates, diagnostics };
+}

@@ -43,7 +43,7 @@
  * not touch the streamer's byte ledger or its eviction scoring.
  */
 
-import { Group } from 'three';
+import { Group, type Raycaster } from 'three';
 import type { CityViewer, GroundIndex } from '@uniscenarios/city-renderer';
 import {
   CoordinateFrame,
@@ -56,6 +56,8 @@ import {
   loadSignals,
   setTrafficLightOrbDepthMode,
   setTrafficLightOrbStates,
+  setTrafficLightOrbHighlights,
+  trafficLightOrbIdForHit,
   type CalibrationReport,
   type LaneOverlayUserData,
   type SceneManifestLike,
@@ -63,6 +65,7 @@ import {
   type TrafficLightVisualPhase,
   type TrafficLightOrbDepthMode,
   type TrafficLightOrbLayerUserData,
+  type TrafficLightOrbHighlightSelection,
 } from '@uniscenarios/xodr-tools';
 
 /** Where a map's overlay sidecars live. */
@@ -122,6 +125,10 @@ export interface MapOverlayHandle {
   clearSignalStates(): void;
   setSignalOrbsVisible(visible: boolean): void;
   setSignalOrbDepthMode(mode: TrafficLightOrbDepthMode): void;
+  /** Hit-test the single batched orb draw and return a stable OpenDRIVE id. */
+  pickSignalOrb(raycaster: Raycaster): string | null;
+  /** Apply selected/movement/intersection emphasis without rebuilding geometry. */
+  setSignalHighlight(selection: TrafficLightOrbHighlightSelection | null): number;
   /** Detach from the scene and release GPU resources. */
   dispose(): void;
 }
@@ -334,6 +341,16 @@ export async function loadMapOverlays(
     },
     setSignalOrbDepthMode(mode) {
       setTrafficLightOrbDepthMode(signalOrbGroup, mode);
+    },
+    pickSignalOrb(raycaster) {
+      for (const hit of raycaster.intersectObject(signalOrbGroup, true)) {
+        const id = trafficLightOrbIdForHit(hit);
+        if (id) return id;
+      }
+      return null;
+    },
+    setSignalHighlight(selection) {
+      return setTrafficLightOrbHighlights(signalOrbGroup, selection);
     },
     dispose() {
       viewer.scene.remove(group);

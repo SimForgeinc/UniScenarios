@@ -146,6 +146,19 @@ export interface TrafficLightStateUserData {
 
 export type TrafficLightOrbPhase = TrafficLightVisualPhase | 'unknown';
 export type TrafficLightOrbDepthMode = 'scene' | 'xray';
+export type TrafficLightOrbHighlight = 'none' | 'intersection' | 'movement' | 'selected';
+
+export interface TrafficLightOrbHighlightSelection {
+  readonly selectedHeadId?: string | null;
+  readonly movementHeadIds?: readonly string[];
+  readonly intersectionHeadIds?: readonly string[];
+}
+
+export interface TrafficLightOrbPointsUserData {
+  layer: 'traffic-light-orb-points';
+  /** Stable OpenDRIVE signal id per point/raycast index. */
+  signalIds: string[];
+}
 
 export interface TrafficLightOrbLayerOptions {
   /** Screen-space diameter in CSS-like pixels. Default `18`. */
@@ -164,6 +177,7 @@ export interface TrafficLightOrbLayerUserData {
   states: Record<string, TrafficLightOrbPhase>;
   count: number;
   depthMode: TrafficLightOrbDepthMode;
+  highlights: Record<string, TrafficLightOrbHighlight>;
 }
 
 function srgbBytes(hex: number): [number, number, number] {
@@ -540,15 +554,19 @@ const TRAFFIC_LIGHT_ORB_RGB = Object.fromEntries(
 const ORB_VERTEX_SHADER = /* glsl */ `
   uniform float pointSize;
   varying vec3 pointColor;
+  attribute float highlightLevel;
+  varying float pointHighlight;
   void main() {
     pointColor = color;
-    gl_PointSize = pointSize;
+    pointHighlight = highlightLevel;
+    gl_PointSize = pointSize * (1.0 + highlightLevel * 0.16);
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
 const ORB_FRAGMENT_SHADER = /* glsl */ `
   varying vec3 pointColor;
+  varying float pointHighlight;
   void main() {
     vec2 centered = gl_PointCoord - vec2(0.5);
     float radius = length(centered);
@@ -556,6 +574,9 @@ const ORB_FRAGMENT_SHADER = /* glsl */ `
     float edge = smoothstep(0.5, 0.42, radius);
     float highlight = smoothstep(0.3, 0.0, length(centered - vec2(-0.12, 0.12)));
     vec3 color = pointColor * (0.88 + 0.3 * highlight);
+    float ring = smoothstep(0.47, 0.42, radius) - smoothstep(0.38, 0.34, radius);
+    vec3 ringColor = mix(vec3(0.25, 0.72, 1.0), vec3(1.0), step(2.5, pointHighlight));
+    color = mix(color, ringColor, ring * step(0.5, pointHighlight));
     gl_FragColor = vec4(color, edge);
   }
 `;
@@ -583,6 +604,7 @@ export function buildTrafficLightOrbLayer(
   const states: Record<string, TrafficLightOrbPhase> = {};
   const positions = new Float32Array(placements.length * 3);
   const colors = new Float32Array(placements.length * 3);
+  const highlights = new Float32Array(placements.length);
   const unknown = TRAFFIC_LIGHT_ORB_RGB.unknown;
   for (let index = 0; index < placements.length; index++) {
     const placement = placements[index]!;
@@ -596,6 +618,7 @@ export function buildTrafficLightOrbLayer(
   const geometry = new BufferGeometry();
   geometry.setAttribute('position', new BufferAttribute(positions, 3));
   geometry.setAttribute('color', new BufferAttribute(colors, 3));
+  geometry.setAttribute('highlightLevel', new BufferAttribute(highlights, 1));
   geometry.computeBoundingSphere();
   const xray = depthMode === 'xray';
   const material = new ShaderMaterial({
@@ -610,6 +633,7 @@ export function buildTrafficLightOrbLayer(
   });
   const points = new Points(geometry, material);
   points.name = 'traffic-light-orb-points';
+  points.userData = { layer: 'traffic-light-orb-points', signalIds } satisfies TrafficLightOrbPointsUserData;
   points.frustumCulled = false;
   points.renderOrder = xray ? 100 : 14;
   group.add(points);
@@ -619,8 +643,51 @@ export function buildTrafficLightOrbLayer(
     states,
     count: placements.length,
     depthMode,
+    highlights: {},
   } satisfies TrafficLightOrbLayerUserData;
   return group;
+}
+
+/** Resolve a batched orb point hit to its stable OpenDRIVE signal id. */
+export function trafficLightOrbIdForHit(hit: Intersection): string | null {
+  const data = hit.object.userData as Partial<TrafficLightOrbPointsUserData>;
+  if (data.layer !== 'traffic-light-orb-points' || !data.signalIds) return null;
+  const index = hit.index;
+  if (index === undefined || index < 0) return null;
+  return data.signalIds[index] ?? null;
+}
+
+/** Highlight one selected head, its movement siblings, and the remaining
+ * controlled intersection in one existing point-cloud draw. */
+export function setTrafficLightOrbHighlights(
+  group: Object3D,
+  selection: TrafficLightOrbHighlightSelection | null,
+): number {
+  const data = group.userData as Partial<TrafficLightOrbLayerUserData>;
+  const points = group.getObjectByName('traffic-light-orb-points') as Points | undefined;
+  const attribute = points?.geometry.getAttribute('highlightLevel') as BufferAttribute | undefined;
+  if (data.layer !== 'traffic-light-orbs' || !data.signalIds || !attribute) return 0;
+  const intersection = new Set(selection?.intersectionHeadIds ?? []);
+  const movement = new Set(selection?.movementHeadIds ?? []);
+  const highlights: Record<string, TrafficLightOrbHighlight> = {};
+  let count = 0;
+  for (let index = 0; index < data.signalIds.length; index++) {
+    const id = data.signalIds[index]!;
+    const kind: TrafficLightOrbHighlight = id === selection?.selectedHeadId
+      ? 'selected'
+      : movement.has(id)
+        ? 'movement'
+        : intersection.has(id)
+          ? 'intersection'
+          : 'none';
+    const level = kind === 'selected' ? 3 : kind === 'movement' ? 2 : kind === 'intersection' ? 1 : 0;
+    attribute.setX(index, level);
+    highlights[id] = kind;
+    if (level > 0) count++;
+  }
+  attribute.needsUpdate = true;
+  data.highlights = highlights;
+  return count;
 }
 
 /** Update orb colours in place. Missing heads return to the neutral unknown state. */

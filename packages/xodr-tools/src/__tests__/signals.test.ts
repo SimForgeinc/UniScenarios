@@ -9,10 +9,12 @@ import {
   clearTrafficLightOrbStates,
   clearTrafficLightStates,
   setTrafficLightOrbDepthMode,
+  setTrafficLightOrbHighlights,
   setTrafficLightOrbStates,
   setTrafficLightStates,
   signalIdForHit,
   signalPlacement,
+  trafficLightOrbIdForHit,
   type SignalHeadUserData,
   type SignalOverlayUserData,
   type TrafficLightStateUserData,
@@ -204,6 +206,23 @@ describe('buildSignalOverlay', () => {
     expect((empty.userData as TrafficLightOrbLayerUserData).count).toBe(0);
     expect((empty.getObjectByName('traffic-light-orb-points') as Points).geometry
       .getAttribute('position').count).toBe(0);
+  });
+
+  it('resolves batched orb hits by stable id and highlights scopes in place', async () => {
+    const orbs = buildTrafficLightOrbLayer(buildSignalOverlay(await load()));
+    const points = orbs.getObjectByName('traffic-light-orb-points') as Points;
+    const ids = (orbs.userData as TrafficLightOrbLayerUserData).signalIds.slice(0, 4);
+    expect(trafficLightOrbIdForHit({ object: points, index: 2 } as never)).toBe(ids[2]);
+    expect(trafficLightOrbIdForHit({ object: points } as never)).toBeNull();
+    const geometry = points.geometry;
+    expect(setTrafficLightOrbHighlights(orbs, {
+      selectedHeadId: ids[0], movementHeadIds: [ids[0]!, ids[1]!], intersectionHeadIds: ids,
+    })).toBe(4);
+    const highlight = geometry.getAttribute('highlightLevel') as BufferAttribute;
+    expect([highlight.getX(0), highlight.getX(1), highlight.getX(2), highlight.getX(3)]).toEqual([3, 2, 1, 1]);
+    setTrafficLightOrbHighlights(orbs, null);
+    expect(points.geometry).toBe(geometry);
+    expect(highlight.getX(0)).toBe(0);
   });
 
   it('renders and clears one live active-lamp state per physical traffic-light head', async () => {

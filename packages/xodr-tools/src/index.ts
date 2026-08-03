@@ -105,7 +105,9 @@ export {
   setTrafficLightStates,
   setTrafficLightOrbDepthMode,
   setTrafficLightOrbStates,
+  setTrafficLightOrbHighlights,
   signalIdForHit,
+  trafficLightOrbIdForHit,
   signalPlacement,
   SIGNAL_CATEGORY_COLORS,
   type SignalHeadUserData,
@@ -118,4 +120,7 @@ export {
   type TrafficLightOrbLayerUserData,
   type TrafficLightOrbPhase,
   type TrafficLightVisualPhase,
+  type TrafficLightOrbHighlight,
+  type TrafficLightOrbHighlightSelection,
+  type TrafficLightOrbPointsUserData,
 } from './overlays/signals.js';
