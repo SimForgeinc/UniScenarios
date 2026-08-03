@@ -50,6 +50,24 @@ describe('simplified editor settings UI', () => {
     expect(markup).not.toContain('Playback');
   });
 
+  it('uses compatible longhand borders for the active settings control', () => {
+    const markup = renderToStaticMarkup(
+      <WorkspaceHeader
+        controller={null}
+        state={null}
+        map={{ id: 'test', label: 'Test map' } as never}
+        playback={false}
+        openScenario={false}
+        authoringEnabled
+        settingsOpen
+        onSettings={vi.fn()}
+        onOpenScenario={vi.fn()}
+      />,
+    );
+    expect(markup).toContain('border-style:solid');
+    expect(markup).toContain('border-color:#f07f2f');
+  });
+
   it('shows accessible class-native dynamic and fixed actor counts', () => {
     const markup = renderToStaticMarkup(<WorkspaceHeader
       controller={null} state={null} map={{ id: 'test', label: 'Test map' } as never}

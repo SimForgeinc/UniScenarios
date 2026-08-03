@@ -220,6 +220,7 @@ export function CampaignDrawer({
               const imported = importedByStableId.get(entry.stableId);
               const details = galleryDetails(entry);
               const runtime = runtimeDetails.get(entry.stableId);
+              const ambientStatus = campaignAmbientStatus(entry.ambient);
               const location = entry.mapId ? mapById(entry.mapId)?.label ?? entry.mapId : 'Location unavailable';
               return (
                 <article key={entry.stableId} style={styles.card} data-testid={`campaign-scenario-${entry.ordinal}`}>
@@ -241,7 +242,7 @@ export function CampaignDrawer({
                   </div>
                   <div style={styles.statuses}>
                     <Status label="Simulation" value={verified.has(entry.stableId) ? 'Runtime verified' : 'Verified evidence'} good={ready} />
-                    <Status label="Ambient traffic" value={entry.ambient === 'verified-evidence' ? 'Verified' : 'Not verified'} good={entry.ambient === 'verified-evidence'} />
+                    <Status label="Ambient traffic" value={ambientStatus.value} good={ambientStatus.good} />
                     <Status label="Variations" value={variationLabel(entry)} good={hasVerifiedVariation(entry)} />
                   </div>
                   {entry.diagnostics.length ? <div style={styles.entryDiagnostics}>{entry.diagnostics.join(' · ')}</div> : null}
@@ -311,6 +312,12 @@ function variationLabel(entry: GeneratedCampaignEntry): string {
   if (hasVerifiedVariation(entry)) return entry.matchCount ? `${entry.matchCount} verified site${entry.matchCount === 1 ? '' : 's'}` : 'Verified';
   if (entry.transfer === 'zero-transferable-sites') return 'No compatible sites';
   return 'Not verified';
+}
+
+export function campaignAmbientStatus(value: string): { value: string; good: boolean } {
+  if (value === 'sumo-smoke-verified') return { value: 'SUMO smoke verified', good: true };
+  if (value === 'verified-evidence') return { value: 'Verified evidence', good: true };
+  return { value: 'Not verified', good: false };
 }
 
 function Status({ label, value, good }: { label: string; value: string; good: boolean }): JSX.Element {

@@ -40,10 +40,14 @@ let worldFromNetwork: NetworkWorldTransform | undefined;
 let maxActorStates = Number.POSITIVE_INFINITY;
 const mirroredIds = new Set<string>();
 const scope = self as DedicatedWorkerGlobalScope;
+let commandChain = Promise.resolve();
 
 scope.onmessage = (event: MessageEvent<SumoWorkerRequest>): void => {
-  void handle(event.data).catch((error: unknown) => {
-    post({ kind: 'error', id: event.data.id, message: error instanceof Error ? error.message : String(error) });
+  const message = event.data;
+  // Imports and map startup are asynchronous. Serializing commands prevents a
+  // quick map switch from executing close/step against a not-yet-created module.
+  commandChain = commandChain.then(() => handle(message)).catch((error: unknown) => {
+    post({ kind: 'error', id: message.id, message: error instanceof Error ? error.message : String(error) });
   });
 };
 
@@ -74,9 +78,8 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     return;
   }
 
-  const sumo = requireModule();
   if (message.kind === 'close') {
-    sumo._us_sumo_close();
+    module?._us_sumo_close();
     module = undefined;
     worldFromNetwork = undefined;
     maxActorStates = Number.POSITIVE_INFINITY;
@@ -85,6 +88,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     return;
   }
 
+  const sumo = requireModule();
   const started = performance.now();
   mirrorExternalActors(sumo, message.request.externalActors);
   assertOk(sumo._us_sumo_step(message.request.deltaSeconds));
@@ -119,7 +123,7 @@ function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTraffic
   }
   mirroredIds.clear();
   for (const actor of actors) {
-    const network = externalActorToNetwork({ x: actor.x, z: actor.y, headingDegrees: actor.headingDegrees }, transform);
+    const network = externalActorToNetwork({ x: actor.x, z: actor.z, headingDegrees: actor.headingDegrees }, transform);
     withString(sumo, actor.id, (idPointer) => withString(sumo, actor.routeId, (routePointer) => {
       assertOk(sumo._us_sumo_upsert_external(
         idPointer,

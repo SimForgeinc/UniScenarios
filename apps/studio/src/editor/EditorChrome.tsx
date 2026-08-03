@@ -326,7 +326,7 @@ const styles: Record<string, CSSProperties> = {
   physicsPopover: { position: 'absolute', zIndex: 30, top: 30, right: 0, width: 300, display: 'flex', flexDirection: 'column', gap: 7, padding: 10, border: BORDER, borderRadius: 7, background: '#202226', boxShadow: '0 12px 30px rgba(0,0,0,.45)', color: '#dce2ea', fontSize: 10 },
   physicsNote: { color: '#8e98a6' },
   physicsRow: { display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 6, borderTop: BORDER },
-  settingsButton: { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 6, border: '1px solid #34373d', borderRadius: 5, background: '#202226', color: '#b7bdc7', padding: '5px 8px', font: 'inherit', fontSize: 11, cursor: 'pointer' },
+  settingsButton: { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 6, borderWidth: 1, borderStyle: 'solid', borderColor: '#34373d', borderRadius: 5, background: '#202226', color: '#b7bdc7', padding: '5px 8px', font: 'inherit', fontSize: 11, cursor: 'pointer' },
   settingsButtonActive: { color: '#fff', borderColor: '#f07f2f', background: '#34261d' },
   disabled: { opacity: 0.32, cursor: 'default' },
   outliner: {

@@ -29,7 +29,8 @@ export interface ExternalTrafficActor {
   readonly kind: TrafficActorKind;
   readonly routeId: string;
   readonly x: number;
-  readonly y: number;
+  /** Provider-neutral scene z. Conversion to SUMO y happens in the worker. */
+  readonly z: number;
   readonly headingDegrees: number;
   readonly speedMetersPerSecond: number;
   readonly lengthMeters: number;

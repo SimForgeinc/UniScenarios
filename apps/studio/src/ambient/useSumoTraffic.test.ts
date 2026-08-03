@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { trafficMetrics } from './useSumoTraffic';
+import { externalTrafficActors, trafficMetrics } from './useSumoTraffic';
 
 function packed(actors: readonly { id: number; x: number; z: number; speed: number; acceleration: number }[]): ArrayBuffer {
   const result = new ArrayBuffer(actors.length * 32);
@@ -16,6 +16,13 @@ function packed(actors: readonly { id: number; x: number; z: number; speed: numb
 }
 
 describe('SUMO live product metrics', () => {
+  it('keeps authored proxies in provider-neutral scene x/z coordinates', () => {
+    expect(externalTrafficActors([{
+      id: 'actor', kind: 'vehicle', x: 552.19, z: -1582.44, headingRad: 0,
+      speedMetersPerSecond: 5, lengthMeters: 4.5, widthMeters: 1.8,
+    }])[0]).toMatchObject({ id: 'external:actor', x: 552.19, z: -1582.44 });
+  });
+
   it('counts local queues, emergency braking, and completed flow vehicles deterministically', () => {
     const run = { seenActorIds: new Set<number>(), completedActorIds: new Set<number>() };
     const first = trafficMetrics({ actorCount: 3, states: packed([

@@ -17,8 +17,13 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
   private worker: Worker | undefined;
   private nextId = 1;
   private readonly pending = new Map<number, PendingRequest>();
+  private closed = false;
+  private closePromise: Promise<void> | undefined;
 
-  constructor(private readonly moduleUrl = '/vendor/sumo/sumo.mjs') {}
+  constructor(
+    private readonly moduleUrl = '/vendor/sumo/sumo.mjs',
+    private readonly workerFactory: () => Worker = () => new Worker(new URL('./sumoWasmWorker.ts', import.meta.url), { type: 'module' }),
+  ) {}
 
   async initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization> {
     const network = payload.network.slice(0);
@@ -37,20 +42,32 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
     return response;
   }
 
-  async close(): Promise<void> {
-    if (!this.worker) return;
-    try {
-      await this.send({ kind: 'close', id: this.nextId++ });
-    } finally {
-      this.worker.terminate();
-      this.worker = undefined;
-      for (const pending of this.pending.values()) pending.reject(new Error('SUMO worker closed'));
-      this.pending.clear();
-    }
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise;
+    this.closed = true;
+    const worker = this.worker;
+    if (!worker) return this.closePromise = Promise.resolve();
+    const id = this.nextId++;
+    this.closePromise = this.sendTo(worker, { kind: 'close', id })
+      // Worker termination is authoritative; shutdown errors must not leak from
+      // an obsolete map session into the newly opened scenario.
+      .then(() => undefined, () => undefined)
+      .finally(() => {
+        worker.terminate();
+        if (this.worker === worker) this.worker = undefined;
+        for (const pending of this.pending.values()) pending.reject(new Error('SUMO worker closed'));
+        this.pending.clear();
+      });
+    return this.closePromise;
   }
 
   private send(message: SumoWorkerRequest, transfer: Transferable[] = []): Promise<SumoWorkerResponse> {
+    if (this.closed) return Promise.reject(new Error('SUMO provider is closed'));
     const worker = this.ensureWorker();
+    return this.sendTo(worker, message, transfer);
+  }
+
+  private sendTo(worker: Worker, message: SumoWorkerRequest, transfer: Transferable[] = []): Promise<SumoWorkerResponse> {
     return new Promise((resolve, reject) => {
       this.pending.set(message.id, { resolve, reject });
       worker.postMessage(message, transfer);
@@ -59,7 +76,7 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
-    const worker = new Worker(new URL('./sumoWasmWorker.ts', import.meta.url), { type: 'module' });
+    const worker = this.workerFactory();
     worker.onmessage = (event: MessageEvent<SumoWorkerResponse>) => {
       const pending = this.pending.get(event.data.id);
       if (!pending) return;

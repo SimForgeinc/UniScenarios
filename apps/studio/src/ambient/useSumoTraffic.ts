@@ -225,13 +225,13 @@ export function trafficMetrics(result: { readonly states: ArrayBuffer; readonly 
   return { nearbyActorCount, queuedActorCount, completedActorCount: run.completedActorIds.size, emergencyStoppingActorCount };
 }
 
-function externalTrafficActors(actors: readonly SumoExternalActorView[]): readonly ExternalTrafficActor[] {
+export function externalTrafficActors(actors: readonly SumoExternalActorView[]): readonly ExternalTrafficActor[] {
   return actors.map((actor) => ({
     id: `external:${actor.id}`,
     kind: actor.kind,
     routeId: 'proxy-route',
     x: actor.x,
-    y: actor.z,
+    z: actor.z,
     headingDegrees: 90 + actor.headingRad * 180 / Math.PI,
     speedMetersPerSecond: actor.speedMetersPerSecond,
     lengthMeters: actor.lengthMeters,
