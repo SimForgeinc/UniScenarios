@@ -243,6 +243,32 @@ function addThresholdFindings(metrics: ActorComparisonMetrics, profile: Comparis
   });
 }
 
+function addRequiredOccupancyFinding(
+  actorId: string,
+  canonical: NormalizedActorTrack,
+  external: NormalizedActorTrack,
+  profile: ComparisonProfile,
+  findings: ComparisonFinding[],
+): void {
+  if (profile.id !== 'strict-trajectory-v1') return;
+  const dimensions = [
+    ['laneRsl', canonical.laneRsl, external.laneRsl],
+    ['laneId', canonical.laneId, external.laneId],
+    ['roadId', canonical.roadId, external.roadId],
+  ] as const;
+  for (const [dimension, expected, observed] of dimensions) {
+    const requiredIndices = expected.flatMap((value, index) => canonical.present[index] && value !== null ? [index] : []);
+    if (requiredIndices.length === 0) continue;
+    const available = requiredIndices.filter((index) => external.present[index] && observed[index] !== null).length;
+    const coverage = available / requiredIndices.length;
+    if (coverage < 1) findings.push({
+      code: 'actor-occupancy-missing', severity: 'error', classification: 'export-loss', actorId,
+      message: `${actorId} external trace supplies ${(coverage * 100).toFixed(2)}% of required ${dimension} occupancy samples`,
+      observed: coverage, limit: 1,
+    });
+  }
+}
+
 export function compareNormalizedTraces(
   canonical: NormalizedTrace,
   external: NormalizedTrace,
@@ -265,6 +291,10 @@ export function compareNormalizedTraces(
     code: 'ambiguous-actor-mapping', severity: 'error', classification: 'export-loss',
     message: `External actor ${id} cannot be mapped unambiguously`,
   });
+  for (const id of mapping.extraExternalIds) findings.push({
+    code: 'unexpected-external-actor', severity: 'error', classification: 'export-loss',
+    actorId: id, message: `External actor ${id} is not present in the canonical actor closure`,
+  });
   for (const semantic of [...(options.unsupportedSemantics ?? [])].sort()) findings.push({
     code: 'unsupported-semantic',
     severity: profile.id === 'strict-trajectory-v1' ? 'error' : 'warning',
@@ -272,7 +302,10 @@ export function compareNormalizedTraces(
   });
   const ids = Object.keys(canonical.actors).filter((id) => external.actors[id]).sort();
   const compared = ids.map((id) => actorMetrics(id, canonical.actors[id]!, external.actors[id]!));
-  for (const item of compared) addThresholdFindings(item.metrics, profile, findings);
+  for (const item of compared) {
+    addThresholdFindings(item.metrics, profile, findings);
+    addRequiredOccupancyFinding(item.metrics.actorId, canonical.actors[item.metrics.actorId]!, external.actors[item.metrics.actorId]!, profile, findings);
+  }
   const allErrors = (key: keyof ActorErrors) => compared.flatMap((item) => item.errors[key]);
   const aggregateAgreement = (key: 'roadAgreement' | 'laneAgreement' | 'laneRslAgreement') => {
     const values = compared.map((item) => item.metrics[key]).filter((value): value is number => value !== null);

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import {
   AuditAssetError,
+  auditExpectationMismatches,
   auditGatePassed,
   auditXml14Instance,
   loadProductionAuditMap,
@@ -79,14 +80,21 @@ describe('production OpenSCENARIO suite assets', () => {
       throw new AuditAssetError('asset-missing', 'production topology is unavailable');
     });
     expect(result).toMatchObject({ verdict: 'asset-blocked', assetCode: 'asset-missing' });
-    const counts = summarizeAuditResults([
+    const results = [
       { id: 'valid', verdict: 'xsd-validated' },
-      { id: 'unsupported', verdict: 'unsupported-fail-closed' },
+      { id: 'unsupported', verdict: 'unsupported-fail-closed', issueCodeCounts: { known: 1 } },
       result,
-    ]);
-    expect(counts).toEqual({ total: 3, xsdValidated: 1, unsupportedFailClosed: 1, assetBlocked: 1, unexpectedFailures: 0 });
+    ] as const;
+    const baseline = {
+      valid: { verdict: 'xsd-validated' as const },
+      unsupported: { verdict: 'unsupported-fail-closed' as const, issueCodeCounts: { known: 1 } },
+      'fixture#0': { verdict: 'xsd-validated' as const },
+    };
+    const counts = summarizeAuditResults(results, baseline);
+    expect(counts).toEqual({ total: 3, xsdValidated: 1, unsupportedFailClosed: 1, assetBlocked: 1, unexpectedFailures: 0, expectationMismatches: 1 });
     expect(auditGatePassed(counts)).toBe(false);
-    expect(auditGatePassed({ ...counts, assetBlocked: 0, total: 2 })).toBe(true);
+    const passing = summarizeAuditResults(results.slice(0, 2), { valid: baseline.valid, unsupported: baseline.unsupported });
+    expect(auditGatePassed(passing)).toBe(true);
   });
 
   it('blocks an instance whose replay key does not match production topology', async () => {
@@ -95,5 +103,22 @@ describe('production OpenSCENARIO suite assets', () => {
     expect(result).toMatchObject({
       id: 'fixture#0', mapId: 'fixture-map', verdict: 'asset-blocked', assetCode: 'instance-topology-stale',
     });
+  });
+
+  it('fails support loss, new scenarios, and changed unsupported issue counts', () => {
+    const expectations = {
+      supported: { verdict: 'xsd-validated' as const },
+      blocked: { verdict: 'unsupported-fail-closed' as const, issueCodeCounts: { known_issue: 1 } },
+    };
+    const mismatches = auditExpectationMismatches([
+      { id: 'supported', verdict: 'unsupported-fail-closed', issueCodeCounts: { regression: 1 } },
+      { id: 'blocked', verdict: 'unsupported-fail-closed', issueCodeCounts: { known_issue: 2 } },
+      { id: 'new-scenario', verdict: 'xsd-validated' },
+    ], expectations);
+    expect(mismatches).toEqual([
+      { id: 'blocked', message: 'expected issue counts {"known_issue":1}, received {"known_issue":2}' },
+      { id: 'new-scenario', message: 'scenario has no explicit support baseline; actual xsd-validated' },
+      { id: 'supported', message: 'expected xsd-validated, received unsupported-fail-closed' },
+    ]);
   });
 });

@@ -121,19 +121,26 @@ describe('quantitative comparison', () => {
     expect(report.actorMetrics[0]!.xyM.rmse).toBeCloseTo(0.8, 5);
   });
 
-  it('does not fabricate lane disagreement when one simulator lacks lane identity', () => {
+  it('requires declared lane occupancy in strict trajectory mode', () => {
     const result = normalized(raw());
-    const canonical = asCanonical(result.trace);
+    const canonical = {
+      ...asCanonical(result.trace),
+      actors: { ego: { ...result.trace.actors.ego!, roadId: result.trace.t.map(() => '1') } },
+    } satisfies NormalizedTrace;
     const noExternalLane = {
       ...result.trace,
       actors: {
         ego: { ...result.trace.actors.ego!, laneRsl: result.trace.t.map(() => null), laneId: result.trace.t.map(() => null) },
       },
     } satisfies NormalizedTrace;
-    const report = compareNormalizedTraces(canonical, noExternalLane, result.mapping);
-    expect(report.actorMetrics[0]!.laneRslAgreement).toBeNull();
-    expect(report.actorMetrics[0]!.laneAgreement).toBeNull();
-    expect(report.findings.some((finding) => finding.code === 'actor-lane-agreement')).toBe(false);
+    const strict = compareNormalizedTraces(canonical, noExternalLane, result.mapping);
+    expect(strict.verdict).toBe('fail');
+    expect(strict.findings).toContainEqual(expect.objectContaining({ code: 'actor-occupancy-missing', actorId: 'ego' }));
+    expect(strict.findings).toContainEqual(expect.objectContaining({
+      code: 'actor-occupancy-missing', message: expect.stringContaining('roadId'),
+    }));
+    const supportedActions = compareNormalizedTraces(canonical, noExternalLane, result.mapping, { profile: 'supported-actions-v1' });
+    expect(supportedActions.findings.some((finding) => finding.code === 'actor-occupancy-missing')).toBe(false);
   });
 
   it('classifies missing actors as export loss', () => {
@@ -143,6 +150,17 @@ describe('quantitative comparison', () => {
     expect(report.verdict).toBe('fail');
     expect(report.failureClasses).toContain('export-loss');
     expect(report.findings.some((finding) => finding.code === 'missing-external-actor')).toBe(true);
+  });
+
+  it('fails an unexpected external actor outside the canonical closure', () => {
+    const canonicalNormalized = normalized(raw());
+    const rogue = raw({ id: 'rogue' }).entities[0]!;
+    const externalNormalized = normalized({ ...raw(), entities: [...raw().entities, rogue] });
+    const report = compareNormalizedTraces(asCanonical(canonicalNormalized.trace), externalNormalized.trace, externalNormalized.mapping);
+    expect(report.verdict).toBe('fail');
+    expect(report.findings).toContainEqual(expect.objectContaining({
+      code: 'unexpected-external-actor', actorId: 'rogue', classification: 'export-loss',
+    }));
   });
 
   it('detects collision-pair and timing mismatches', () => {
