@@ -114,8 +114,10 @@ function validateControllerStage(
     );
   }
   const referenceProgram = programs.find((program) =>
-    program.mapBinding?.headIds.includes(clip.reference.headId)
-    && program.mapBinding.controllerHeadGroups?.some((group) => group.controllerId === clip.reference.controllerId),
+    program.mapBinding?.controllerHeadGroups?.some((group) =>
+      group.controllerId === clip.reference.controllerId
+      && group.headIds.includes(clip.reference.headId),
+    ),
   );
   if (!referenceProgram) {
     throw new MapSignalPlanCompileError(
@@ -192,7 +194,12 @@ function compileJunction(
     const referenceProgram = validateControllerStage(
       plan, clip, junctionPrograms, options, `${prefix}.clips.${clipIndex}`,
     );
-    const selection = selectSignalReference(controlIndex, clip.reference.headId, referenceProgram.id);
+    const selection = selectSignalReference(
+      controlIndex,
+      clip.reference.headId,
+      referenceProgram.id,
+      clip.reference.controllerId,
+    );
     if (!selection || selection.junctionId !== plan.binding.junctionId) {
       throw new MapSignalPlanCompileError(
         'map_signal_plan_reference_unbound',

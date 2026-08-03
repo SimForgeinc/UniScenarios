@@ -61,8 +61,11 @@ export interface SignalControlIndex {
 export interface SignalReferenceSelection {
   readonly selectedHeadId: string;
   readonly referenceMovementId: string;
+  /** Exact authoritative OpenDRIVE controller stage selected for authoring. */
+  readonly referenceControllerId: string;
   readonly junctionId: string;
   readonly controllerIds: readonly string[];
+  readonly stageMovementIds: readonly string[];
   readonly movementHeadIds: readonly string[];
   readonly intersectionHeadIds: readonly string[];
   readonly relatedMovementIds: readonly string[];
@@ -221,6 +224,7 @@ export function selectSignalReference(
   index: SignalControlIndex,
   headId: string,
   preferredMovementId?: string,
+  preferredControllerId?: string,
 ): SignalReferenceSelection | null {
   const head = index.heads.get(headId);
   if (!head?.resolved) return null;
@@ -229,6 +233,14 @@ export function selectSignalReference(
     : head.movementIds[0]!;
   const movement = index.movements.get(referenceMovementId);
   if (!movement) return null;
+  const eligibleControllerIds = movement.controllerIds.filter((controllerId) =>
+    index.controllers.get(controllerId)?.headIds.includes(headId),
+  );
+  if (preferredControllerId && !eligibleControllerIds.includes(preferredControllerId)) return null;
+  const referenceControllerId = preferredControllerId ?? eligibleControllerIds[0];
+  if (!referenceControllerId) return null;
+  const controller = index.controllers.get(referenceControllerId);
+  if (!controller || controller.junctionId !== movement.junctionId || !controller.headIds.includes(headId)) return null;
   const junction = index.junctions.get(movement.junctionId);
   const relevantCodes = new Set<SignalControlDiagnosticCode>([
     'unresolved_head', 'unresolved_movement', 'shared_head', 'missing_controller_stage',
@@ -236,9 +248,11 @@ export function selectSignalReference(
   return {
     selectedHeadId: headId,
     referenceMovementId,
+    referenceControllerId,
     junctionId: movement.junctionId,
     controllerIds: movement.controllerIds,
-    movementHeadIds: movement.headIds,
+    stageMovementIds: controller.movementIds,
+    movementHeadIds: controller.headIds,
     intersectionHeadIds: junction?.headIds ?? movement.headIds,
     relatedMovementIds: junction?.movementIds ?? [movement.id],
     diagnostics: index.diagnostics.filter((diagnostic) =>
@@ -249,20 +263,10 @@ export function selectSignalReference(
   };
 }
 
-function restrictiveClaim(claims: readonly ControlIndication[]): ControlIndication {
-  if (claims.includes('stop')) return 'stop';
-  if (claims.includes('red_x')) return 'red_x';
-  if (claims.includes('red')) return 'red';
-  if (claims.includes('flashing_red')) return 'flashing_red';
-  if (claims.includes('yellow_arrow')) return 'yellow_arrow';
-  if (claims.includes('yellow')) return 'yellow';
-  if (claims.includes('off')) return 'off';
-  return claims[0] ?? 'red';
-}
-
 /** Project authored movement state onto every physical head at the selected
- * intersection. Mutually exclusive controller stages cannot both proceed;
- * shared-head disagreement resolves to the most restrictive claim. */
+ * intersection. Exact controller-stage head membership is authoritative;
+ * programs that cannot express the resulting per-head state fail closed in
+ * the map signal plan compiler. */
 export function evaluateSignalReferencePhase(
   index: SignalControlIndex,
   selection: SignalReferenceSelection,
@@ -275,43 +279,33 @@ export function evaluateSignalReferencePhase(
     : input.referencePhase === 'flashing_yellow'
       ? 'flashing_red'
       : 'red';
+  const stageMovements = new Set(selection.stageMovementIds);
   for (const movementId of selection.relatedMovementIds) {
-    movementStates[movementId] = movementId === selection.referenceMovementId
-      ? input.referencePhase
-      : siblingPhase;
+    movementStates[movementId] = input.referencePhase === 'red' || input.referencePhase === 'flashing_red'
+      ? siblingPhase
+      : stageMovements.has(movementId)
+        ? input.referencePhase
+        : siblingPhase;
     const requested = input.movementPhases?.[movementId];
-    if (movementId !== selection.referenceMovementId && requested && requested !== siblingPhase) {
+    if (requested && requested !== movementStates[movementId]) {
       const movement = index.movements.get(movementId);
       diagnostics.push({
         code: 'conflicting_controller_stage',
-        message: `Movement ${movementId} requested ${requested} while reference movement ${selection.referenceMovementId} requires ${siblingPhase}; the safe derived state was used.`,
+        message: `Movement ${movementId} requested ${requested} while controller stage ${selection.referenceControllerId} requires ${movementStates[movementId]}; the safe derived state was used.`,
         movementIds: [selection.referenceMovementId, movementId],
         controllerIds: unique(movement?.controllerIds ?? []),
       });
     }
   }
 
-  const claims = new Map<string, ControlIndication[]>();
-  for (const [movementId, phase] of Object.entries(movementStates)) {
-    const movement = index.movements.get(movementId);
-    if (!movement) continue;
-    for (const headId of movement.headIds) {
-      const list = claims.get(headId) ?? [];
-      list.push(phase);
-      claims.set(headId, list);
-    }
-  }
   const headStates: Record<string, ControlIndication> = {};
+  const stageHeads = new Set(selection.movementHeadIds);
   for (const headId of selection.intersectionHeadIds) {
-    const headClaims = claims.get(headId) ?? ['red'];
-    const distinct = [...new Set(headClaims)];
-    if (distinct.length > 1) diagnostics.push({
-      code: 'shared_head',
-      message: `Physical signal head ${headId} received incompatible movement claims and was made restrictive.`,
-      headIds: [headId],
-      movementIds: index.heads.get(headId)?.movementIds ?? [],
-    });
-    headStates[headId] = distinct.length === 1 ? distinct[0]! : restrictiveClaim(distinct);
+    headStates[headId] = input.referencePhase === 'red' || input.referencePhase === 'flashing_red'
+      ? siblingPhase
+      : stageHeads.has(headId)
+        ? input.referencePhase
+        : siblingPhase;
   }
   return { timeSeconds: input.timeSeconds, headStates, movementStates, diagnostics };
 }

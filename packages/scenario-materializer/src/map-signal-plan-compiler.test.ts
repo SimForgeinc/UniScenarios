@@ -73,6 +73,60 @@ describe('map signal plan compiler', () => {
     },
   );
 
+  it.each([
+    ['green', 'green', 'red'],
+    ['yellow', 'yellow', 'red'],
+    ['red', 'red', 'red'],
+    ['off', 'off', 'red'],
+    ['flashing_yellow', 'flashing_yellow', 'flashing_red'],
+    ['flashing_red', 'flashing_red', 'flashing_red'],
+  ] as const)(
+    'closes exact multi-movement controller stages for %s',
+    (indication, expectedStage, expectedConflict) => {
+      const sameStage: SignalProgram = {
+        id: 'signal:h3', phases: [{ phase: 'red', durationS: 4 }], offsetS: 0, loop: true,
+        stopLines: [{ rsl: 'c', s: 9, connectingLaneRsls: ['jc'] }],
+        mapBinding: {
+          junctionId: 'j1', controllerIds: ['c1'], headIds: ['h3'],
+          controllerHeadGroups: [{ controllerId: 'c1', headIds: ['h3'] }],
+          timingSource: 'synthetic-default',
+        },
+      };
+      const stagePrograms = [...programs, sameStage];
+      const stageCatalog = {
+        ...catalog,
+        heads: [...catalog.heads, { id: 'h3', roadId: '3', s: 1, dynamic: true }],
+        controllers: [
+          { id: 'c1', sequence: 0, signalIds: ['h1', 'h3'] },
+          catalog.controllers[1]!,
+        ],
+      };
+      const stageTopology = {
+        ...topology,
+        gates: [
+          ...topology.gates,
+          { id: 'g3', junctionId: 'j1', turnRelation: 'Left', headingChangeRad: 1, connectingLaneRsl: 'jc', approachLaneRsl: 'c', exitLaneRsls: [] },
+        ],
+      };
+      const stageDigest = contentHash({ signalPrograms: stagePrograms, roadControls: [] });
+      const authored = {
+        ...plan,
+        binding: { ...plan.binding, controlDigest: stageDigest },
+        clips: [{ ...plan.clips[0]!, indication }],
+      };
+      const compiled = compileMapSignalPlans(stagePrograms, [authored], {
+        ...options,
+        controlDigest: stageDigest,
+        signalCatalog: stageCatalog,
+        topology: stageTopology,
+      });
+      const book = new SignalBook(compiled, 2);
+      expect(book.phaseAt('signal:h1', 4)).toBe(expectedStage);
+      expect(book.phaseAt('signal:h3', 4)).toBe(expectedStage);
+      expect(book.phaseAt('signal:h2', 4)).toBe(expectedConflict);
+    },
+  );
+
   it('switches adjacent clips exactly at their shared boundary and coalesces equal phases', () => {
     const adjacent: MapSignalPlan = {
       ...plan,
@@ -95,6 +149,31 @@ describe('map signal plan compiler', () => {
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_stale_binding' }));
     expect(() => compileMapSignalPlans(programs, [plan], { ...options, worldSignalSetIds: ['signal:h1'] }))
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_dual_ownership' }));
+  });
+
+  it('fails closed when the referenced head is not in the exact controller head group', () => {
+    const inconsistent = programs.map((program) => program.id === 'signal:h1' ? {
+      ...program,
+      mapBinding: {
+        ...program.mapBinding!,
+        controllerIds: ['c1', 'c2'],
+        headIds: ['h1', 'hx'],
+        controllerHeadGroups: [
+          { controllerId: 'c1', headIds: ['hx'] },
+          { controllerId: 'c2', headIds: ['h1'] },
+        ],
+      },
+    } : program);
+    const inconsistentDigest = contentHash({ signalPrograms: inconsistent, roadControls: [] });
+    expect(() => compileMapSignalPlans(inconsistent, [{
+      ...plan,
+      binding: { ...plan.binding, controlDigest: inconsistentDigest },
+    }], {
+      ...options,
+      controlDigest: inconsistentDigest,
+    })).toThrowError(expect.objectContaining({
+      code: 'map_signal_plan_reference_unbound',
+    } satisfies Partial<MapSignalPlanCompileError>));
   });
 
   it('rejects a controller stage whose simultaneously active heads conflict', () => {

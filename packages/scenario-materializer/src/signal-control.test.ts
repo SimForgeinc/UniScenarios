@@ -58,6 +58,35 @@ describe('signal control index and reference evaluation', () => {
     expect(result.diagnostics).toContainEqual(expect.objectContaining({ code: 'conflicting_controller_stage' }));
   });
 
+  it('applies the reference phase to every movement in the exact controller stage', () => {
+    const sameStage: SignalProgram = {
+      ...programs[1]!,
+      id: 'north-left',
+      stopLines: [{ rsl: '4:0:-1', s: 7, connectingLaneRsls: ['40:0:-1'] }],
+      mapBinding: {
+        junctionId: 'j1', controllerIds: ['stage-ns'], headIds: ['h4'], timingSource: 'authored',
+        controllerHeadGroups: [{ controllerId: 'stage-ns', headIds: ['h4'] }],
+      },
+    };
+    const index = buildSignalControlIndex([...programs, sameStage]);
+    const selected = selectSignalReference(index, 'h1', 'north-through', 'stage-ns')!;
+    expect(selected).toMatchObject({
+      referenceControllerId: 'stage-ns',
+      stageMovementIds: ['north-left', 'north-through'],
+      movementHeadIds: ['h1', 'h2', 'h4'],
+    });
+    const result = evaluateSignalReferencePhase(index, selected, {
+      timeSeconds: 1,
+      referencePhase: 'yellow',
+    });
+    expect(result.movementStates).toEqual({
+      'east-through': 'red',
+      'north-left': 'yellow',
+      'north-through': 'yellow',
+    });
+    expect(result.headStates).toEqual({ h1: 'yellow', h2: 'yellow', h3: 'red', h4: 'yellow' });
+  });
+
   it.each([
     ['green', { h1: 'green', h2: 'green', h3: 'red' }],
     ['yellow', { h1: 'yellow', h2: 'yellow', h3: 'red' }],
@@ -78,7 +107,7 @@ describe('signal control index and reference evaluation', () => {
     },
   );
 
-  it('resolves incompatible claims on a shared physical head restrictively', () => {
+  it('uses exact selected-stage membership for a head referenced by multiple stages', () => {
     const shared: SignalProgram = {
       ...programs[1]!, id: 'east-shared',
       mapBinding: {
@@ -91,7 +120,7 @@ describe('signal control index and reference evaluation', () => {
     const result = evaluateSignalReferencePhase(index, selected, {
       timeSeconds: 1, referencePhase: 'green', movementPhases: { 'east-shared': 'red' },
     });
-    expect(result.headStates.h1).toBe('red');
+    expect(result.headStates.h1).toBe('green');
     expect(result.diagnostics.filter((entry) => entry.code === 'shared_head').length).toBeGreaterThan(0);
   });
 });
