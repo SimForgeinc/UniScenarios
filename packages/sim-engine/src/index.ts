@@ -116,9 +116,9 @@ export {
 export type { RouteLeg, RoutePose, RouteBuildError, SeededPlacementRouteOptions, SeededPlacementRouteResult } from './map/route.js';
 
 /* ------------------------------------------------------------------ engine */
-export { runSimulation } from './sim/engine.js';
+export { createFixedStepSimulation, runSimulation } from './sim/engine.js';
 export type { StaticColliderClass, StaticMapCollider } from './sim/static-colliders.js';
-export type { RunOptions, SimResult } from './sim/engine.js';
+export type { FixedStepSimulationProgress, FixedStepSimulationSession, RunOptions, SimResult } from './sim/engine.js';
 export { evaluateCondition } from './sim/triggers.js';
 export type { ConditionContext } from './sim/triggers.js';
 export { buildOccluders, hasLineOfSight, blockingOccluder } from './sim/visibility.js';

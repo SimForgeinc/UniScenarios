@@ -112,6 +112,21 @@ export interface SimResult {
   readonly arrival: ArrivalSolution[];
 }
 
+export interface FixedStepSimulationProgress extends SimResult {
+  readonly done: boolean;
+  readonly recordedUntil: number | null;
+}
+
+/**
+ * A resumable view of the canonical fixed-step engine. Interactive consumers
+ * may yield between batches without changing tick order or numerical results.
+ * Calling `advance` after completion is safe and returns the completed trace.
+ */
+export interface FixedStepSimulationSession {
+  readonly done: boolean;
+  advance(maxTicks?: number): FixedStepSimulationProgress;
+}
+
 /** Moving actors this close to the end are clamped to the terminal pose. */
 const ROUTE_END_SLACK_M = 0.01;
 /** Lookahead used for the stop-line search and the crossing-conflict scan. */
@@ -181,6 +196,13 @@ export function runSimulation(input: SimScenarioInput, opts: RunOptions): SimRes
   return sim.run();
 }
 
+export function createFixedStepSimulation(
+  input: SimScenarioInput,
+  opts: RunOptions,
+): FixedStepSimulationSession {
+  return new Simulation(input, opts);
+}
+
 class Simulation {
   private readonly graph: LaneGraph;
   private readonly dt: number;
@@ -219,6 +241,8 @@ class Simulation {
   private collisionSnapshots = new Map<string, CollisionSnapshot>();
   private previousCollisionT: number | null = null;
   private readonly doors = new Map<string, DoorRuntime>();
+  private nextTick = 0;
+  private finished = false;
 
   constructor(rawInput: SimScenarioInput, private readonly opts: RunOptions) {
     this.graph = opts.graph;
@@ -479,8 +503,20 @@ class Simulation {
   /* -------------------------------------------------------------- main loop */
 
   run(): SimResult {
+    const result = this.advance(Number.POSITIVE_INFINITY);
+    return { trace: result.trace, issues: result.issues, arrival: result.arrival };
+  }
+
+  get done(): boolean {
+    return this.finished;
+  }
+
+  advance(maxTicks = 1): FixedStepSimulationProgress {
+    const budget = Number.isFinite(maxTicks) ? Math.max(0, Math.floor(maxTicks)) : Number.MAX_SAFE_INTEGER;
     const total = this.warmupTicks + this.clipTicks;
-    for (let i = 0; i <= total; i++) {
+    let advanced = 0;
+    while (!this.finished && this.nextTick <= total && advanced < budget) {
+      const i = this.nextTick++;
       const t = (i - this.warmupTicks) * this.dt;
       this.world = { ...this.world, t };
       this.updateDoorTransitions(t);
@@ -495,15 +531,21 @@ class Simulation {
         // samples are tracks only: they must not alter recorded-clip metrics.
         this.record(t, collisions, t >= 0);
       }
-      if (i === total) break;
-      const plans = this.planAll(t);
-      this.applyAll(plans, t);
+      if (i < total) {
+        const plans = this.planAll(t);
+        this.applyAll(plans, t);
+      } else {
+        this.finishNeverFired();
+        this.finished = true;
+      }
+      advanced += 1;
     }
-    this.finishNeverFired();
     return {
       trace: this.buildTrace(),
       issues: this.issues,
       arrival: this.arrivalSolutions,
+      done: this.finished,
+      recordedUntil: this.tArray.length > 0 ? this.tArray[this.tArray.length - 1]! : null,
     };
   }
 

@@ -8,6 +8,7 @@ import {
   applyAmbientTraffic,
   buildLaneGraph,
   contentHash,
+  createFixedStepSimulation,
   pruneDanglingAfterInteractions,
   evaluateAmbientRobustness,
   evaluateIntentRubric,
@@ -18,6 +19,7 @@ import {
   type EvaluateFilters,
   type IntentRubricInput,
   type SimScenarioInput,
+  type SimResult,
   type SimTrace,
   type TopologyIndex,
 } from '@uniscenarios/sim-engine';
@@ -54,7 +56,7 @@ export interface ScenarioWorkerRequest {
   /** Exact generated actors from the persistent authoring world. */
   ambientPopulation?: AmbientPopulationSnapshot;
   staticCollisionMode?: 'skip' | 'bounded';
-  operation?: 'prepare' | 'robustness';
+  operation?: 'prepare' | 'materialize' | 'robustness';
   evaluationFilters?: EvaluateFilters;
   /** Optional canonical intent rubric. Without it robustness is incomplete, never accepted. */
   intentRubric?: IntentRubricInput;
@@ -146,7 +148,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     const ambient = applyRequestedAmbientPopulation(base, graph, request, {
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
-    const result = runSimulation(ambient.input, { graph, guards: 'throw', staticColliders: staticCollision.colliders });
+    const result = simulateForRequest(ambient.input, graph, staticCollision.colliders, request.operation);
     const manifest = {
       instanceId: `ambient-world:${request.map.id}`,
       inputHash: contentHash(base),
@@ -191,7 +193,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
         ],
       },
     };
-    const result = runSimulation(ambient.input, { graph, guards: 'throw', staticColliders: staticCollision.colliders });
+    const result = simulateForRequest(ambient.input, graph, staticCollision.colliders, request.operation);
     const instance = ambientInstance(request.baseInstance.manifest, ambient.input, ambient.provenance);
     const replayKey = request.baseInstance.manifest['replayKey'] as Record<string, unknown> | undefined;
     return {
@@ -219,7 +221,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
       maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
     });
     if (request.operation === 'robustness') return robustnessResponse(request, controlledInput, graph);
-    const result = runSimulation(ambient.input, { graph, guards: 'throw', staticColliders: staticCollision.colliders });
+    const result = simulateForRequest(ambient.input, graph, staticCollision.colliders, request.operation);
     const instance = ambientInstance(product.manifest, ambient.input, ambient.provenance);
     return {
       id: request.id,
@@ -261,7 +263,7 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     maxAchievableDecelMps2: request.evaluationFilters?.maxAchievableDecelMps2,
   });
   if (request.operation === 'robustness') return robustnessResponse(request, controlledInput, graph);
-  const result = runSimulation(ambient.input, { graph, guards: 'throw', staticColliders: staticCollision.colliders });
+  const result = simulateForRequest(ambient.input, graph, staticCollision.colliders, request.operation);
   const instance = ambientInstance(product.manifest, ambient.input, ambient.provenance);
   return {
     id: request.id,
@@ -274,6 +276,22 @@ async function prepare(request: ScenarioWorkerRequest): Promise<ScenarioWorkerRe
     mapCollisions: staticCollision.diagnostics,
     openScenario: createOpenScenarioSnapshot(request.template, instance, ambient.input, result.trace, graph, xodr),
   };
+}
+
+function simulateForRequest(
+  input: SimScenarioInput,
+  graph: ReturnType<typeof buildLaneGraph>,
+  staticColliders: Parameters<typeof runSimulation>[1]['staticColliders'],
+  operation: ScenarioWorkerRequest['operation'],
+): SimResult {
+  if (operation !== 'materialize') {
+    return runSimulation(input, { graph, guards: 'throw', staticColliders });
+  }
+  const session = createFixedStepSimulation(input, { graph, guards: 'throw', staticColliders });
+  // Authoring needs the warmed t=0 world, not a speculative 20-second trace.
+  // The same concrete input is handed to the live worker when Play is pressed.
+  const progress = session.advance(Math.round(input.warmupSeconds / input.dt) + 1);
+  return { trace: progress.trace, issues: progress.issues, arrival: progress.arrival };
 }
 
 function applyRequestedAmbientPopulation(
