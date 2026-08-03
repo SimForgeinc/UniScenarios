@@ -31,7 +31,13 @@ const BELMONT = 'belmont-research-center';
 const BELMONT_DARTOUT_SITE = '13ada7e7a8cc469f';
 const BELMONT_DARTOUT_LOCATION = 'loc_d166639c05780edf1fc028f5';
 const BUS_STOP = path.join(REPO_ROOT, 'examples', 'bus-stop-emergence.template.json');
-const BLIND_CHICANE = path.join(REPO_ROOT, 'examples', 'edge-cases', 'blind-chicane-emerging-worker', 'scenario.template.json');
+const BLIND_CHICANE = path.join(
+  REPO_ROOT,
+  'examples',
+  'edge-cases',
+  '01-construction-chicane-reversing-truck',
+  'scenario.template.json',
+);
 const BLIND_CHICANE_SITE = '0a4650e5055bf351';
 
 const haveArtifacts =
@@ -298,7 +304,7 @@ describe.skipIf(!haveArtifacts)('materialize — blind chicane authored playback
     const product = materialize(template, bundle, site, { drawIndex: -1 });
 
     expect(product.input.actors.map((actor) => actor.id).sort()).toEqual([
-      'ego', 'oncoming-van', 'worker',
+      'focus-vehicle', 'reversing-truck', 'worker',
     ]);
     expect(product.input.props.find((prop) => prop.id === 'worker-pipe')).toMatchObject({
       catalogId: 'construction.long_pipe',
@@ -306,7 +312,7 @@ describe.skipIf(!haveArtifacts)('materialize — blind chicane authored playback
       collidable: true,
     });
     expect(product.input.occlusionPairs).toContainEqual({
-      observer: 'ego', target: 'worker', occluderId: 'excavator',
+      observer: 'focus-vehicle', target: 'worker', occluderId: 'excavator',
     });
     expect(product.input.occluders.some((occluder) => occluder.id === 'excavator')).toBe(true);
     expect(product.manifest.notes).toContainEqual(expect.objectContaining({
@@ -321,7 +327,7 @@ describe.skipIf(!haveArtifacts)('materialize — blind chicane authored playback
     expect(result.trace.ticks.t).toHaveLength(1001);
     expect(result.trace.metrics.collisions).toEqual([]);
     expect(result.trace.metrics.declaredOcclusion).toContainEqual(expect.objectContaining({
-      observer: 'ego',
+      observer: 'focus-vehicle',
       target: 'worker',
       occluderId: 'excavator',
       status: 'revealed_before_conflict',
@@ -329,7 +335,7 @@ describe.skipIf(!haveArtifacts)('materialize — blind chicane authored playback
     expect(result.trace.events
       .filter((event) => event.kind === 'trigger_fired')
       .map((event) => event.interactionId)).toEqual(expect.arrayContaining([
-      'worker-emerges', 'worker-clears', 'ego-resumes-after-both-clear',
+      'worker-emerges', 'worker-clears', 'focus-vehicle-resumes-after-both-clear',
     ]));
   }, 30_000);
 });

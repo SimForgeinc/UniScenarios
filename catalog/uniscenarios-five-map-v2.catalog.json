@@ -1905,7 +1905,7 @@
     },
     {
       "id": "lane-change.lane-drop-late-merge",
-      "runtimeTemplateId": "lane-drop-late-merge",
+      "runtimeTemplateId": "temporary-lane-drop-late-merge",
       "source": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
       "digest": "c6ae37160b14369b6a1dfdbb7968ae18be1022eed42bfc36abe27c0a3afcc938"
     },
@@ -5104,7 +5104,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "2282b44455e98df3",
         "matchedLocationId": "loc_091ab01978ac952582c35f03",
@@ -10527,7 +10527,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "2282b44455e98df3",
         "matchedLocationId": "loc_091ab01978ac952582c35f03",
@@ -15787,7 +15787,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "2282b44455e98df3",
         "matchedLocationId": "loc_091ab01978ac952582c35f03",
@@ -36674,7 +36674,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "d5f04baf39b0ac1f",
         "matchedLocationId": "loc_04dc122a22b2925386dbe69b",
@@ -41304,7 +41304,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "d5f04baf39b0ac1f",
         "matchedLocationId": "loc_04dc122a22b2925386dbe69b",
@@ -45934,7 +45934,7 @@
       },
       "implementation": {
         "state": "template-backed",
-        "templateId": "lane-drop-late-merge",
+        "templateId": "temporary-lane-drop-late-merge",
         "templateSource": "examples/mechanisms/remaining/lane-drop-late-merge.template.json",
         "matcherSiteId": "d5f04baf39b0ac1f",
         "matchedLocationId": "loc_04dc122a22b2925386dbe69b",

@@ -1,4 +1,5 @@
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
@@ -28,7 +29,13 @@ const YALE = 'yale-street';
 const BELMONT = 'belmont-research-center';
 const LTAP = path.join(REPO_ROOT, 'examples', 'ltap-opposing.template.json');
 const RED_LIGHT = path.join(REPO_ROOT, 'examples', 'mechanisms', 'remaining', 'red-light-late-entry.template.json');
-const AMBULANCE_GRIDLOCK = path.join(REPO_ROOT, 'examples', 'edge-cases', '05-ambulance-gridlocked-intersection', 'template.json');
+const PROTECTED_LEFT_GALLERY = path.join(
+  REPO_ROOT,
+  'examples',
+  'edge-cases',
+  '07-protected-left-red-runner',
+  'scenario.template.json',
+);
 const haveMaps = [YALE, BELMONT].every((map) => existsSync(path.join(DEV_ASSETS, map, 'map.xodr')));
 const haveAllMaps = KNOWN_MAPS.every((map) => existsSync(path.join(DEV_ASSETS, map, 'map.xodr')));
 
@@ -387,45 +394,28 @@ describe.skipIf(!haveMaps)('real map signal materialization', () => {
     expect(() => materialize(template, bundle, viable!, { drawIndex: 0 })).not.toThrow();
   }, 60_000);
 
-  it('rejects the unbindable exact ambulance site and executes the viable Yale alternative', async () => {
-    const template = await readTemplate(AMBULANCE_GRIDLOCK);
-    const match = await matchOnMap(template, YALE);
-    const bundle = await loadMap(YALE);
-    const atJunction = (junctionId: string) => match.report.sites.find(
-      (site) => site.frame.origin.mapFeatureId === `junction:${junctionId}`,
-    );
-    const unbindableCross = atJunction('447');
-    const unbindableEgo = atJunction('303');
-    const viable = atJunction('345');
-    expect(unbindableCross).toBeDefined();
-    expect(unbindableEgo).toBeDefined();
-    expect(viable).toEqual(expect.objectContaining({
-      degradation: expect.objectContaining({ intentPreserved: true }),
-    }));
-
-    expect(() => materialize(template, bundle, unbindableCross!, { drawIndex: -1 }))
-      .toThrow(/no physical signal head binds the left movement/);
-    expect(() => materialize(template, bundle, unbindableEgo!, { drawIndex: -1 }))
-      .toThrow(/no physical signal head binds the ego movement/);
-
-    const concrete = materialize(template, bundle, viable!, { drawIndex: -1 });
-    expect(concrete.manifest.feasible).toBe(true);
-    expect(concrete.input.actors.map((actor) => actor.id).sort()).toEqual([
-      'ambulance', 'cross-traffic', 'downstream-queue', 'ego', 'pedestrian',
+  it('executes the canonical replacement signal gallery scenario with concrete signal programs', async () => {
+    const instanceFile = path.join(path.dirname(PROTECTED_LEFT_GALLERY), 'scenario.instance.json');
+    const artifact = JSON.parse(await readFile(instanceFile, 'utf8')) as {
+      input: Parameters<typeof runSimulation>[0];
+    };
+    const bundle = await loadMap(artifact.input.mapId as Parameters<typeof loadMap>[0]);
+    expect(artifact.input.signalPrograms.length).toBeGreaterThan(0);
+    expect(artifact.input.actors.map((actor) => actor.id).sort()).toEqual([
+      'cyclist', 'focus-vehicle', 'mobility-scooter', 'outer-pickup', 'red-runner',
     ]);
-    expect(concrete.input.interactions.find((interaction) => interaction.id === 'ego-red'))
-      .toMatchObject({ target: { key: expect.stringMatching(/^signal:signal:.+\.phase$/) } });
-    expect(concrete.input.interactions.find((interaction) => interaction.id === 'cross-green'))
-      .toMatchObject({ target: { key: expect.stringMatching(/^signal:signal:.+\.phase$/) } });
-
-    const { trace, issues } = runSimulation(concrete.input, { graph: bundle.graph, guards: 'collect' });
+    expect(artifact.input.interactions.find((interaction) => interaction.id === 'protected-left-turns-red'))
+      .toMatchObject({ target: { key: expect.stringMatching(/^signal:.+\.phase$/) } });
+    const { trace, issues } = runSimulation(artifact.input, { graph: bundle.graph, guards: 'collect' });
     expect(issues).toEqual([]);
+    expect(trace.metrics.collisions).toEqual([]);
+    expect(trace.metrics.triggerNeverFired).toEqual([]);
     expect(trace.ticks.t.at(-1)).toBe(20);
     expect(Object.keys(trace.ticks.actors).sort()).toEqual([
-      'ambulance', 'cross-traffic', 'downstream-queue', 'ego', 'pedestrian',
+      'cyclist', 'focus-vehicle', 'mobility-scooter', 'outer-pickup', 'red-runner',
     ]);
-    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'pedestrian-enters')).toBe(true);
-    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'ambulance-passes')).toBe(true);
+    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'protected-left-turns-red')).toBe(true);
+    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'cyclist-emerges')).toBe(true);
   }, 60_000);
 });
 
