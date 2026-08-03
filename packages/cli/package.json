@@ -14,6 +14,7 @@
     "./asam": "./src/asam/index.ts",
     "./esmini-bundle": "./src/asam/esmini-bundle.ts",
     "./asam/xml-1.4": "./src/asam/xml-1.4.ts",
+    "./asam/xml-1.4-validation": "./src/asam/xml-1.4-validation.ts",
     "./asam/types": "./src/asam/types.ts"
   },
   "files": [
@@ -24,6 +25,7 @@
     "build": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "audit:xml14-suite": "tsx src/tools/audit-xml14-suite.ts",
     "scen": "tsx src/main.ts",
     "uniscenarios": "tsx src/main.ts"
   },

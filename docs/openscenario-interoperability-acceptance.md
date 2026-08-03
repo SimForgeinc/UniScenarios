@@ -47,6 +47,7 @@ Comparison is fail closed. It must report at least:
 - final pose and presence agreement;
 - collision pair/time agreement where both runtimes expose it;
 - trigger/action timing where an external observable exists;
+- traffic-signal state identity and edge timing (missing signal output fails);
 - configured thresholds and whether interpolation was required.
 
 Trajectory replay is accepted only when the external run reaches 20.000 s and
@@ -79,3 +80,24 @@ compatibility bundle, one real 20-second esmini trajectory job, quantitative
 comparison, Studio downloads/replay, provenance, cache invalidation and security
 negative tests are green. Optional rendered video cannot substitute for any of
 these gates.
+
+## Recorded local gate (2026-08-03)
+
+`audit-xml14-suite.ts` ran all 12 curated `examples/edge-cases` instances
+against the digest-pinned official ASAM 1.4.0 XSD: 3 exported and validated, 9
+were rejected with typed fail-closed issues, and 0 failed unexpectedly. The
+blocked count remains part of the report; it is not presented as semantic
+support. Six of those instances could not compile a trajectory against the
+topology-free audit graph in this isolated checkout, two lacked authoritative
+signal map bindings, and one used an unsupported set action. A deployment gate
+with full production map assets must rerun the same command and should reduce
+topology-related blocks; it may not convert them into silent approximations.
+
+A real independent smoke also ran the digest-verified official esmini 3.6.0
+macOS universal binary at source revision
+`131a5651737fd1e8bd5d800d8e77e89bb3178a1e`. It completed a generated
+20.000-second trajectory at 0.02-second steps and passed the strict comparator:
+position RMSE `0.0000002083 m`, p95 `0.0000004557 m`, max `0.0000004991 m`,
+heading p95 `0°`, speed p95 `0.03034 m/s`, and 100% presence agreement. That
+one-actor smoke had no signal or collision edges; signal/collision fixtures are
+still required before claiming those external dimensions.

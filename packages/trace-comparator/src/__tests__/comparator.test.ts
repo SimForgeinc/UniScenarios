@@ -11,6 +11,7 @@ import {
   type EntityMappingResult,
   type NormalizedTrace,
   type ObservableCollision,
+  type ObservableSignalState,
   type RawExternalTrace,
 } from '../index.js';
 
@@ -23,6 +24,7 @@ function raw(options: {
   collisions?: readonly ObservableCollision[];
   durationS?: number;
   completed?: boolean;
+  signals?: readonly ObservableSignalState[];
 } = {}): RawExternalTrace {
   const start = options.start ?? 0;
   return {
@@ -48,6 +50,7 @@ function raw(options: {
       })),
     }],
     collisions: options.collisions,
+    signals: options.signals,
   };
 }
 
@@ -149,6 +152,25 @@ describe('quantitative comparison', () => {
     expect(report.verdict).toBe('fail');
     expect(report.collisionComparison[0]!.onsetErrorS).toBeCloseTo(0.2);
     expect(report.findings.some((finding) => finding.code === 'collision-parity')).toBe(true);
+  });
+
+  it('compares traffic-signal state edges within one fixed step', () => {
+    const canonicalNormalized = normalized(raw({ signals: [
+      { t: 0, signalId: 'head-1', state: 'red' },
+      { t: 5, signalId: 'head-1', state: 'green' },
+    ] }));
+    const withinStep = normalized(raw({ signals: [
+      { t: 0, signalId: 'head-1', state: 'red' },
+      { t: 5.02, signalId: 'head-1', state: 'green' },
+    ] }));
+    const pass = compareNormalizedTraces(asCanonical(canonicalNormalized.trace), withinStep.trace, withinStep.mapping);
+    expect(pass.verdict).toBe('pass');
+    expect(pass.signalComparison.find((edge) => edge.key === 'head-1:green')!.onsetErrorS).toBeCloseTo(0.02);
+
+    const missing = normalized(raw({ signals: [{ t: 0, signalId: 'head-1', state: 'red' }] }));
+    const fail = compareNormalizedTraces(asCanonical(canonicalNormalized.trace), missing.trace, missing.mapping);
+    expect(fail.verdict).toBe('fail');
+    expect(fail.findings).toContainEqual(expect.objectContaining({ code: 'signal-parity', classification: 'export-loss' }));
   });
 
   it('compares event onset/order only for event kinds the runner exposes', () => {

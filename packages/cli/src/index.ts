@@ -160,6 +160,8 @@ export {
   exportOpenScenarioDsl22,
   exportOpenScenarioXml13Esmini,
   exportOpenScenarioXml14,
+  OFFICIAL_OPENSCENARIO_140_XSD,
+  validateOpenScenarioXml14,
   analyzeEsminiCompatibility,
   type EsminiCompatibilityEntry,
   type EsminiCompatibilityReport,
@@ -169,6 +171,7 @@ export {
   type AsamExportResult,
   type AsamExportWarning,
   type AsamFormat,
+  type OpenScenarioXml14Validation,
 } from './asam/index.js';
 
 export {

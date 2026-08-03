@@ -54,6 +54,13 @@ export interface ObservableCollision {
   readonly actorIds: readonly [string, string];
 }
 
+/** A signal state edge, including the initial state at t=0 when observable. */
+export interface ObservableSignalState {
+  readonly t: number;
+  readonly signalId: string;
+  readonly state: string;
+}
+
 export interface ObservableEpisodeMetrics {
   readonly minClearanceM?: number | null;
   readonly minTtcS?: number | null;
@@ -71,6 +78,7 @@ export interface RawExternalTrace {
   readonly entities: readonly RawTraceEntity[];
   readonly events?: readonly ObservableEvent[];
   readonly collisions?: readonly ObservableCollision[];
+  readonly signals?: readonly ObservableSignalState[];
   readonly metrics?: ObservableEpisodeMetrics;
 }
 
@@ -119,6 +127,7 @@ export interface NormalizedTrace {
   readonly actors: Readonly<Record<string, NormalizedActorTrack>>;
   readonly events: readonly ObservableEvent[];
   readonly collisions: readonly ObservableCollision[];
+  readonly signals: readonly ObservableSignalState[];
   readonly metrics: ObservableEpisodeMetrics;
   readonly completed: boolean;
   readonly sourceDurationS: number;
@@ -163,6 +172,7 @@ export interface ComparisonTolerances {
   readonly accelerationP95Mps2: number;
   readonly eventOnsetS: number;
   readonly collisionOnsetS: number;
+  readonly signalOnsetS: number;
   readonly laneAgreementMin: number;
   readonly presenceAgreementMin: number;
   readonly durationToleranceS: number;
@@ -203,6 +213,13 @@ export interface CollisionComparison {
   readonly onsetErrorS: number | null;
 }
 
+export interface SignalComparison {
+  readonly key: string;
+  readonly canonicalT: number | null;
+  readonly externalT: number | null;
+  readonly onsetErrorS: number | null;
+}
+
 export interface ScenarioRubricSnapshot {
   readonly id: string;
   readonly version: string | number;
@@ -225,6 +242,7 @@ export interface TraceComparisonReport {
   readonly globalMetrics: Omit<ActorComparisonMetrics, 'actorId' | 'endState'>;
   readonly eventComparison: readonly EventComparison[];
   readonly collisionComparison: readonly CollisionComparison[];
+  readonly signalComparison: readonly SignalComparison[];
   readonly metricDelta: {
     readonly minClearanceM: number | null;
     readonly minTtcS: number | null;

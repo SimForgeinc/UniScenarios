@@ -10,6 +10,7 @@ import {
   type ObservableCollision,
   type ObservableEpisodeMetrics,
   type ObservableEvent,
+  type ObservableSignalState,
   type RawExternalTrace,
   type RawTraceEntity,
   type RawTraceSample,
@@ -199,6 +200,12 @@ function normalizeCollisions(collisions: readonly ObservableCollision[], mapping
     .sort((a, b) => a.t - b.t || a.actorIds.join('|').localeCompare(b.actorIds.join('|')));
 }
 
+function normalizeSignals(signals: readonly ObservableSignalState[], offset: number): ObservableSignalState[] {
+  return signals.map((signal) => ({ ...signal, t: signal.t + offset }))
+    .filter((signal) => signal.t >= -EPS && signal.t <= COMMON_DURATION_S + EPS)
+    .sort((a, b) => a.t - b.t || a.signalId.localeCompare(b.signalId) || a.state.localeCompare(b.state));
+}
+
 function finishTrace(base: Omit<NormalizedTrace, 'contentHash'>): NormalizedTrace {
   return { ...base, contentHash: contentHash(base) };
 }
@@ -231,6 +238,7 @@ export function normalizeExternalTrace(
       actors,
       events: normalizeEvents(trace.events ?? [], idMap, offset),
       collisions: normalizeCollisions(trace.collisions ?? [], idMap, offset),
+      signals: normalizeSignals(trace.signals ?? [], offset),
       metrics: trace.metrics ?? {},
       completed: trace.completed && coverageComplete && Math.abs(trace.durationS - COMMON_DURATION_S) <= 1 / COMMON_SAMPLE_HZ + EPS,
       sourceDurationS: trace.durationS,
@@ -274,6 +282,16 @@ export function normalizeCanonicalTrace(trace: SimTrace): NormalizedTrace {
     return { t: event.t, kind: event.kind, actorIds: [event.a, event.b].sort() };
   });
   const collisions = trace.metrics.collisions.map((item) => ({ t: item.t, actorIds: [item.a, item.b].sort() as [string, string] }));
+  const signals: ObservableSignalState[] = Object.entries(trace.ticks.signals ?? {}).flatMap(([signalId, track]) => {
+    const edges: ObservableSignalState[] = [];
+    let previous: string | undefined;
+    for (let index = 0; index < trace.ticks.t.length; index++) {
+      const state = track.phase[index];
+      if (state !== undefined && state !== previous) edges.push({ t: trace.ticks.t[index]!, signalId, state });
+      previous = state;
+    }
+    return edges;
+  });
   return finishTrace({
     side: 'canonical',
     source: `uniscenarios@${trace.header.engineVersion}`,
@@ -283,6 +301,7 @@ export function normalizeCanonicalTrace(trace: SimTrace): NormalizedTrace {
     actors,
     events: normalizeEvents(events, new Map(), 0),
     collisions: normalizeCollisions(collisions, new Map(), 0),
+    signals: normalizeSignals(signals, 0),
     metrics: traceMetrics(trace),
     completed: Math.abs(trace.header.clipSeconds - COMMON_DURATION_S) <= EPS
       && Math.abs((trace.ticks.t.at(-1) ?? -Infinity) - COMMON_DURATION_S) <= EPS,

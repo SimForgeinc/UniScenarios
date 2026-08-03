@@ -16,6 +16,8 @@ import {
   type NormalizedTrace,
   type ObservableCollision,
   type ObservableEvent,
+  type ObservableSignalState,
+  type SignalComparison,
   type TraceComparisonOptions,
   type TraceComparisonReport,
 } from './types.js';
@@ -27,9 +29,9 @@ export const COMPARISON_PROFILES: Readonly<Record<ComparisonProfileId, Compariso
     version: 1,
     description: 'Trajectory-baked parity: tight 50 Hz motion, event, collision, lane, and completion agreement.',
     tolerances: {
-      xyRmseM: 0.1, xyP95M: 0.2, xyMaxM: 0.5, zMaxM: 0.25,
+      xyRmseM: 0.1, xyP95M: 0.2, xyMaxM: 0.25, zMaxM: 0.25,
       headingP95Rad: Math.PI / 180, speedP95Mps: 0.2, accelerationP95Mps2: 0.75,
-      eventOnsetS: 0.04, collisionOnsetS: 0.04, laneAgreementMin: 0.995,
+      eventOnsetS: 0.02, collisionOnsetS: 0.02, signalOnsetS: 0.02, laneAgreementMin: 0.995,
       presenceAgreementMin: 0.999, durationToleranceS: 0.02,
     },
     requireAllActors: true,
@@ -43,7 +45,7 @@ export const COMPARISON_PROFILES: Readonly<Record<ComparisonProfileId, Compariso
     tolerances: {
       xyRmseM: 0.75, xyP95M: 1.5, xyMaxM: 3, zMaxM: 1,
       headingP95Rad: 5 * Math.PI / 180, speedP95Mps: 1, accelerationP95Mps2: 2.5,
-      eventOnsetS: 0.25, collisionOnsetS: 0.1, laneAgreementMin: 0.95,
+      eventOnsetS: 0.25, collisionOnsetS: 0.1, signalOnsetS: 0.25, laneAgreementMin: 0.95,
       presenceAgreementMin: 0.99, durationToleranceS: 0.02,
     },
     requireAllActors: true,
@@ -185,6 +187,32 @@ function compareCollisions(canonical: readonly ObservableCollision[], external: 
   });
 }
 
+function compareSignals(canonical: readonly ObservableSignalState[], external: readonly ObservableSignalState[]): SignalComparison[] {
+  const grouped = (signals: readonly ObservableSignalState[]) => {
+    const groups = new Map<string, number[]>();
+    for (const signal of signals) {
+      const key = `${signal.signalId}:${signal.state}`;
+      groups.set(key, [...(groups.get(key) ?? []), signal.t]);
+    }
+    return groups;
+  };
+  const a = grouped(canonical), b = grouped(external);
+  const result: SignalComparison[] = [];
+  for (const key of [...new Set([...a.keys(), ...b.keys()])].sort()) {
+    const aa = a.get(key) ?? [], bb = b.get(key) ?? [];
+    for (let index = 0; index < Math.max(aa.length, bb.length); index++) {
+      const canonicalT = aa[index] ?? null, externalT = bb[index] ?? null;
+      result.push({
+        key: Math.max(aa.length, bb.length) > 1 ? `${key}#${index + 1}` : key,
+        canonicalT,
+        externalT,
+        onsetErrorS: canonicalT === null || externalT === null ? null : Math.abs(canonicalT - externalT),
+      });
+    }
+  }
+  return result;
+}
+
 function delta(a: number | null | undefined, b: number | null | undefined): number | null {
   return a == null || b == null ? null : b - a;
 }
@@ -277,6 +305,15 @@ export function compareNormalizedTraces(
       message: `Collision ${collision.pair.join('/')} differs between simulations`, observed: collision.onsetErrorS, limit: profile.tolerances.collisionOnsetS,
     });
   }
+  const signalComparison = compareSignals(canonical.signals, external.signals);
+  for (const signal of signalComparison) {
+    if (signal.canonicalT === null || signal.externalT === null || (signal.onsetErrorS ?? Infinity) > profile.tolerances.signalOnsetS + 1e-9) findings.push({
+      code: 'signal-parity', severity: 'error',
+      classification: signal.externalT === null ? 'export-loss' : 'execution-divergence',
+      message: `Signal edge ${signal.key} differs between simulations`,
+      observed: signal.onsetErrorS, limit: profile.tolerances.signalOnsetS,
+    });
+  }
   const durationError = Math.abs(canonical.sourceDurationS - external.sourceDurationS);
   if (!canonical.completed || !external.completed || durationError > profile.tolerances.durationToleranceS) findings.push({
     code: 'duration-completion', severity: 'error', classification: 'execution-divergence',
@@ -297,7 +334,7 @@ export function compareNormalizedTraces(
     canonicalTraceHash: canonical.contentHash,
     externalTraceHash: external.contentHash,
     actorMetrics: compared.map((item) => item.metrics), globalMetrics,
-    eventComparison, collisionComparison,
+    eventComparison, collisionComparison, signalComparison,
     metricDelta: {
       minClearanceM: delta(canonical.metrics.minClearanceM, external.metrics.minClearanceM),
       minTtcS: delta(canonical.metrics.minTtcS, external.metrics.minTtcS),

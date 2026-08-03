@@ -10,9 +10,11 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   AsamExportError,
+  OFFICIAL_OPENSCENARIO_140_XSD,
   assertOpenScenarioDsl22ProfileSyntax,
   exportOpenScenarioDsl22,
   exportOpenScenarioXml14,
+  validateOpenScenarioXml14,
   validateOpenScenarioDsl22ProfileSyntax,
 } from '../asam/index.js';
 
@@ -925,12 +927,6 @@ describe('honest unsupported-feature failures', () => {
   });
 });
 
-const OFFICIAL_XML_14_SCHEMA = {
-  url: 'https://publications.pages.asam.net/standards/ASAM_OpenSCENARIO/ASAM_OpenSCENARIO_XML/v1.4.0/_attachments/generated/ASAM_OpenSCENARIO_v1.4.0_Schema.zip',
-  archiveSha256: 'efbb2da3432ef8bb9f87daa9d710fb20a2ad65276bc386d28885a5fe9511a39c',
-  xsdSha256: '949fe2bcebd1f3fdb941a2cc56641482737ab48e3c5b0eed0ee5294b2355c0e9',
-} as const;
-
 function sha256(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex');
 }
@@ -940,16 +936,16 @@ async function acquireOfficialXml14Xsd(dir: string): Promise<string> {
   if (override && existsSync(override)) {
     const bytes = await readFile(override);
     expect(sha256(bytes), 'ASAM_OPENSCENARIO_14_XSD is not the pinned official 1.4.0 schema').toBe(
-      OFFICIAL_XML_14_SCHEMA.xsdSha256,
+      OFFICIAL_OPENSCENARIO_140_XSD.xsdSha256,
     );
     return override;
   }
 
-  const response = await fetch(OFFICIAL_XML_14_SCHEMA.url);
+  const response = await fetch(OFFICIAL_OPENSCENARIO_140_XSD.url);
   expect(response.ok, `failed to fetch official ASAM schema: HTTP ${response.status}`).toBe(true);
   const archiveBytes = new Uint8Array(await response.arrayBuffer());
   expect(sha256(archiveBytes), 'official ASAM 1.4.0 schema archive checksum changed').toBe(
-    OFFICIAL_XML_14_SCHEMA.archiveSha256,
+    OFFICIAL_OPENSCENARIO_140_XSD.archiveSha256,
   );
   const archive = path.join(dir, 'ASAM_OpenSCENARIO_v1.4.0_Schema.zip');
   await writeFile(archive, archiveBytes);
@@ -957,7 +953,7 @@ async function acquireOfficialXml14Xsd(dir: string): Promise<string> {
   expect(unzip.exitCode, unzip.stderr).toBe(0);
   const xsd = path.join(dir, 'OpenSCENARIO.xsd');
   expect(sha256(await readFile(xsd)), 'extracted official ASAM 1.4.0 XSD checksum mismatch').toBe(
-    OFFICIAL_XML_14_SCHEMA.xsdSha256,
+    OFFICIAL_OPENSCENARIO_140_XSD.xsdSha256,
   );
   return xsd;
 }
@@ -978,8 +974,8 @@ describe('official ASAM XML 1.4.0 schema', () => {
     ] as const) {
       const file = path.join(dir, `${name}.xosc`);
       await writeFile(file, exportOpenScenarioXml14(input, { graph }).content, 'utf8');
-      const result = await execa('xmllint', ['--noout', '--schema', officialXsd!, file], { reject: false });
-      expect(result.exitCode, result.stderr).toBe(0);
+      const result = await validateOpenScenarioXml14(await readFile(file, 'utf8'), officialXsd!);
+      expect(result.valid, result.diagnostics.join('\n')).toBe(true);
     }
     const replayFile = path.join(dir, 'trajectory-replay.xosc');
     await writeFile(
@@ -987,8 +983,8 @@ describe('official ASAM XML 1.4.0 schema', () => {
       exportOpenScenarioXml14(fixture(), { graph, executionMode: 'trajectory-replay' }).content,
       'utf8',
     );
-    const replayResult = await execa('xmllint', ['--noout', '--schema', officialXsd!, replayFile], { reject: false });
-    expect(replayResult.exitCode, replayResult.stderr).toBe(0);
+    const replayResult = await validateOpenScenarioXml14(await readFile(replayFile, 'utf8'), officialXsd!);
+    expect(replayResult.valid, replayResult.diagnostics.join('\n')).toBe(true);
 
     const appearanceReplayFile = path.join(dir, 'trajectory-replay-appearance.xosc');
     await writeFile(
@@ -996,12 +992,14 @@ describe('official ASAM XML 1.4.0 schema', () => {
       exportOpenScenarioXml14(standardActionsXmlFixture(), { graph, executionMode: 'trajectory-replay' }).content,
       'utf8',
     );
-    const appearanceReplayResult = await execa(
-      'xmllint',
-      ['--noout', '--schema', officialXsd!, appearanceReplayFile],
-      { reject: false },
+    const appearanceReplayResult = await validateOpenScenarioXml14(await readFile(appearanceReplayFile, 'utf8'), officialXsd!);
+    expect(appearanceReplayResult.valid, appearanceReplayResult.diagnostics.join('\n')).toBe(true);
+
+    const hostile = await validateOpenScenarioXml14(
+      '<!DOCTYPE OpenSCENARIO [<!ENTITY secret SYSTEM "file:///etc/passwd">]><OpenSCENARIO>&secret;</OpenSCENARIO>',
+      officialXsd!,
     );
-    expect(appearanceReplayResult.exitCode, appearanceReplayResult.stderr).toBe(0);
+    expect(hostile).toMatchObject({ valid: false, diagnostics: [expect.stringContaining('forbidden')] });
   }, 60_000);
 });
 
