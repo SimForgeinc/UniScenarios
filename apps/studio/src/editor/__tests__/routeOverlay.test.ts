@@ -3,7 +3,7 @@ import { Color, type LineBasicMaterial, type LineSegments, type Points, type Poi
 import { parseSimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, routesFromTemplate, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, routesFromTemplate, timeAnnotationsFromTrace, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -118,6 +118,81 @@ describe('vehicle route overlays', () => {
     expect(route.actual).toEqual(exact);
   });
 
+  it('interpolates absolute one-second labels from nonuniform canonical samples', () => {
+    const trace = {
+      header: { clipSeconds: 2 },
+      ticks: {
+        t: [0, .6, 1.4, 2],
+        actors: { ego: { x: [0, 6, 14, 20], z: [0, 3, 7, 10], present: [1, 1, 1, 1] } },
+      },
+      events: [],
+    } as unknown as SceneTrace;
+    expect(timeAnnotationsFromTrace(trace, 'ego')).toEqual([
+      expect.objectContaining({ label: '0s', point: { x: 0, z: 0 } }),
+      expect.objectContaining({ label: '1s', point: { x: 10, z: 5 } }),
+      expect.objectContaining({ label: '2s', point: { x: 20, z: 10 } }),
+    ]);
+  });
+
+  it('does not interpolate labels or path segments across absent trace gaps', () => {
+    const trace = {
+      header: { clipSeconds: 3 },
+      ticks: {
+        t: [0, .5, 1, 1.5, 2, 3],
+        actors: { ego: { x: [0, 5, 10, 90, 100, 110], z: [0, 0, 0, 0, 0, 0], present: [0, 1, 1, 0, 1, 1] } },
+      },
+      events: [],
+    } as unknown as SceneTrace;
+    const annotations = timeAnnotationsFromTrace(trace, 'ego');
+    expect(annotations.map((item) => item.label)).toEqual(['1s', '2s', '3s']);
+    const route = routesFromSimulation(input(), index(), trace).find((item) => item.actorId === 'ego')!;
+    expect(route.canonicalSpans?.map((span) => span.points)).toEqual([
+      [{ x: 5, z: 0 }, { x: 10, z: 0 }],
+      [{ x: 100, z: 0 }, { x: 110, z: 0 }],
+    ]);
+  });
+
+  it('collapses stopped seconds into a readable range and stacks self-intersections', () => {
+    const trace = {
+      header: { clipSeconds: 6 },
+      ticks: {
+        t: [0, 1, 2, 3, 4, 5, 6],
+        actors: { ego: { x: [0, 0, 0, 0, 4, 0, 8], z: [0, 0, 0, 0, 0, 0, 0], present: [1, 1, 1, 1, 1, 1, 1] } },
+      },
+      events: [],
+    } as unknown as SceneTrace;
+    const annotations = timeAnnotationsFromTrace(trace, 'ego');
+    expect(annotations[0]).toMatchObject({ label: '0–3s', startTimeS: 0, endTimeS: 3 });
+    const returned = annotations.find((item) => item.label === '5s')!;
+    expect(returned.stackCount).toBe(2);
+    expect(returned.stackIndex).toBe(1);
+  });
+
+  it('renders only the primary selected canonical trace as connected gold and never intercepts picking', () => {
+    const exactTrace = {
+      header: { clipSeconds: 2 },
+      ticks: { t: [0, 1, 2], actors: {
+        ego: { x: [0, 1, 2], z: [0, 0, 0], present: [1, 1, 1] },
+        walker: { x: [0, 0, 0], z: [0, 1, 2], present: [1, 1, 1] },
+      } }, events: [],
+    } as unknown as SceneTrace;
+    const routes = routesFromSimulation(input(), index(), exactTrace);
+    const renderer = new VehicleRouteOverlayRenderer();
+    renderer.sync(routes, {
+      showAmbient: false,
+      showActual: false,
+      selectedActorIds: new Set(['ego', 'walker']),
+      primarySelectedActorId: 'walker',
+    });
+    expect(renderer.group.getObjectByName('selected-route-gold')).toBeTruthy();
+    expect(renderer.group.getObjectByName('selected-route-halo')).toBeTruthy();
+    const gold = renderer.group.getObjectByName('selected-route-gold') as LineSegments;
+    const intersections: unknown[] = [];
+    gold.raycast({} as never, intersections as never);
+    expect(intersections).toEqual([]);
+    renderer.dispose();
+  });
+
   it('fails closed when compiled Play input changes a persisted route plan or explicit maneuver', () => {
     const template = {
       roles: [{
@@ -218,6 +293,38 @@ describe('vehicle route overlays', () => {
     const elapsed = performance.now() - start;
     expect(elapsed).toBeLessThan(8);
     expect(renderer.group.children.length).toBeLessThanOrEqual(3);
+    renderer.dispose();
+  });
+
+  it('keeps 32 full canonical traces inside the selection-update budget', () => {
+    const points = Array.from({ length: 1_001 }, (_, i) => ({ x: i * .08, z: Math.sin(i * .005) }));
+    const base = routesFromSimulation(input(), index()).find((route) => route.actorId === 'ego')!;
+    const routes = Array.from({ length: 32 }, (_, i) => ({
+      ...base,
+      actorId: `vehicle-${i}`,
+      planned: points,
+      actual: points,
+      canonicalSpans: [{ points }],
+      timeAnnotations: Array.from({ length: 21 }, (__, second) => ({
+        startTimeS: second,
+        endTimeS: second,
+        label: `${second}s`,
+        point: points[second * 50]!,
+        stackIndex: 0,
+        stackCount: 1,
+      })),
+    }));
+    const renderer = new VehicleRouteOverlayRenderer();
+    renderer.sync(routes, { showAmbient: false, showActual: false, selectedActorIds: new Set() });
+    const start = performance.now();
+    renderer.sync(routes, {
+      showAmbient: false,
+      showActual: false,
+      selectedActorIds: new Set(['vehicle-0']),
+      primarySelectedActorId: 'vehicle-0',
+    });
+    expect(performance.now() - start).toBeLessThan(16);
+    expect(renderer.group.getObjectByName('selected-route-gold')).toBeTruthy();
     renderer.dispose();
   });
 });

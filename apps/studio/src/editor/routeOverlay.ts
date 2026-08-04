@@ -7,6 +7,12 @@ import {
   LineSegments,
   Points,
   PointsMaterial,
+  Sprite,
+  SpriteMaterial,
+  CanvasTexture,
+  LinearFilter,
+  SRGBColorSpace,
+  type Texture,
 } from 'three';
 import {
   buildRoute,
@@ -22,6 +28,16 @@ import type { LaneIndex } from './laneIndex';
 export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'reroute' | 'lane-change' | 'stop' | 'speed-change' | 'near-miss';
 
 export interface RoutePoint { readonly x: number; readonly z: number }
+export interface RouteTraceSpan { readonly points: readonly RoutePoint[] }
+export interface RouteTimeAnnotation {
+  readonly startTimeS: number;
+  readonly endTimeS: number;
+  readonly label: string;
+  readonly point: RoutePoint;
+  /** Labels sharing a world-space crossing are vertically stacked, not hidden. */
+  readonly stackIndex: number;
+  readonly stackCount: number;
+}
 export interface VehicleRouteOverlay {
   readonly actorId: string;
   readonly actorKind?: 'vehicle' | 'pedestrian';
@@ -29,6 +45,10 @@ export interface VehicleRouteOverlay {
   readonly color: string;
   readonly planned: readonly RoutePoint[];
   readonly actual: readonly RoutePoint[];
+  /** Exact, gap-preserving native trace geometry. Playback consumes this trace. */
+  readonly canonicalSpans?: readonly RouteTraceSpan[];
+  /** Exact scenario-time labels sampled from the same native trace. */
+  readonly timeAnnotations?: readonly RouteTimeAnnotation[];
   readonly markers: readonly { kind: RouteMarkerKind; point: RoutePoint }[];
   readonly triggerPoint?: RoutePoint;
   readonly triggerRadiusM?: number;
@@ -39,6 +59,8 @@ export interface RouteOverlayOptions {
   readonly showAmbient: boolean;
   readonly showActual: boolean;
   readonly selectedActorIds: ReadonlySet<string>;
+  /** In a multi-selection, only the primary actor receives gold emphasis/text. */
+  readonly primarySelectedActorId?: string | null;
 }
 
 export type RouteHeightSampler = (x: number, z: number) => number | null;
@@ -112,17 +134,114 @@ function routePoints(actor: SimActor, index: LaneIndex): readonly RoutePoint[] {
     : undefined);
 }
 
-function actualPoints(actorId: string, trace?: SceneTrace): RoutePoint[] {
+function canonicalTracePath(actorId: string, trace?: SceneTrace): {
+  readonly points: RoutePoint[];
+  readonly spans: RouteTraceSpan[];
+  readonly annotations: RouteTimeAnnotation[];
+} {
   const track = trace?.ticks.actors[actorId];
-  if (!track) return [];
+  if (!track || !trace) return { points: [], spans: [], annotations: [] };
   const out: RoutePoint[] = [];
+  const spans: RouteTraceSpan[] = [];
+  let span: RoutePoint[] = [];
   for (let i = 0; i < track.x.length; i++) {
-    if (track.present[i] === 0) continue;
+    if (track.present[i] === 0) {
+      if (span.length) spans.push({ points: span });
+      span = [];
+      continue;
+    }
     const point = { x: track.x[i]!, z: track.z[i]! };
-    const last = out.at(-1);
-    if (!last || Math.hypot(last.x - point.x, last.z - point.z) >= 0.35) out.push(point);
+    out.push(point);
+    const last = span.at(-1);
+    // Keep the exact endpoints while avoiding thousands of zero-length line
+    // segments for stopped actors. Time labels retain the unmodified samples.
+    if (!last || Math.hypot(last.x - point.x, last.z - point.z) >= .02) span.push(point);
   }
-  return out;
+  if (span.length) spans.push({ points: span });
+  return { points: out, spans, annotations: timeAnnotationsFromTrace(trace, actorId) };
+}
+
+function pointAtScenarioTime(trace: SceneTrace, actorId: string, timeS: number): RoutePoint | null {
+  const times = trace.ticks.t;
+  const track = trace.ticks.actors[actorId];
+  if (!track || times.length === 0 || timeS < times[0]! - 1e-9 || timeS > times.at(-1)! + 1e-9) return null;
+  let lo = 0;
+  let hi = times.length - 1;
+  while (lo < hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (times[mid]! < timeS - 1e-9) lo = mid + 1;
+    else hi = mid;
+  }
+  if (Math.abs(times[lo]! - timeS) <= 1e-9) {
+    return track.present[lo] ? { x: track.x[lo]!, z: track.z[lo]! } : null;
+  }
+  const before = lo - 1;
+  if (before < 0 || !track.present[before] || !track.present[lo]) return null;
+  const duration = times[lo]! - times[before]!;
+  if (duration <= 0) return null;
+  const alpha = (timeS - times[before]!) / duration;
+  return {
+    x: track.x[before]! + (track.x[lo]! - track.x[before]!) * alpha,
+    z: track.z[before]! + (track.z[lo]! - track.z[before]!) * alpha,
+  };
+}
+
+function compactTime(timeS: number): string {
+  return Number.isInteger(timeS) ? `${timeS}s` : `${Number(timeS.toFixed(3))}s`;
+}
+
+/** Exact absolute-second annotations, interpolated by time rather than tick index. */
+export function timeAnnotationsFromTrace(trace: SceneTrace, actorId: string): RouteTimeAnnotation[] {
+  const times = trace.ticks.t;
+  if (!trace.ticks.actors[actorId] || times.length === 0) return [];
+  const requested: Array<{ timeS: number; point: RoutePoint }> = [];
+  const firstInteger = Math.ceil(Math.max(0, times[0]!));
+  const end = Math.min(trace.header?.clipSeconds ?? times.at(-1)!, times.at(-1)!);
+  for (let timeS = firstInteger; timeS <= Math.floor(end + 1e-9); timeS++) {
+    const point = pointAtScenarioTime(trace, actorId, timeS);
+    if (point) requested.push({ timeS, point });
+  }
+  // A non-integer final frame is valuable when the authored clip does not end
+  // on a whole second, but do not duplicate an integer end marker.
+  if (Math.abs(end - Math.round(end)) > 1e-6) {
+    const point = pointAtScenarioTime(trace, actorId, end);
+    if (point) requested.push({ timeS: end, point });
+  }
+
+  // Consecutive labels occupying essentially the same position describe a
+  // stop. Collapse them into a readable range instead of painting a pile.
+  const grouped: Array<Omit<RouteTimeAnnotation, 'stackIndex' | 'stackCount'>> = [];
+  for (const item of requested) {
+    const previous = grouped.at(-1);
+    if (previous
+      && Math.abs(item.timeS - previous.endTimeS - 1) <= 1e-6
+      && Math.hypot(item.point.x - previous.point.x, item.point.z - previous.point.z) < .3) {
+      grouped[grouped.length - 1] = {
+        ...previous,
+        endTimeS: item.timeS,
+        label: `${compactTime(previous.startTimeS).replace(/s$/, '')}–${compactTime(item.timeS)}`,
+      };
+    } else {
+      grouped.push({ startTimeS: item.timeS, endTimeS: item.timeS, label: compactTime(item.timeS), point: item.point });
+    }
+  }
+
+  // Preserve distinct times at self-intersections by stacking them vertically.
+  const clusters: number[][] = [];
+  for (let i = 0; i < grouped.length; i++) {
+    const cluster = clusters.find((indices) => {
+      const anchor = grouped[indices[0]!]!.point;
+      return Math.hypot(anchor.x - grouped[i]!.point.x, anchor.z - grouped[i]!.point.z) < .7;
+    });
+    if (cluster) cluster.push(i); else clusters.push([i]);
+  }
+  const stack = new Map<number, { index: number; count: number }>();
+  for (const indices of clusters) indices.forEach((item, index) => stack.set(item, { index, count: indices.length }));
+  return grouped.map((annotation, index) => ({
+    ...annotation,
+    stackIndex: stack.get(index)?.index ?? 0,
+    stackCount: stack.get(index)?.count ?? 1,
+  }));
 }
 
 function turnMarkers(points: readonly RoutePoint[]): Array<{ kind: RouteMarkerKind; point: RoutePoint }> {
@@ -172,7 +291,8 @@ export function routesFromSimulation(
     .sort((a, b) => a.id.localeCompare(b.id))
     .map((actor) => {
       const planned = routePoints(actor, index);
-      const actual = actualPoints(actor.id, trace);
+      const canonical = canonicalTracePath(actor.id, trace);
+      const actual = canonical.points;
       const nearMiss = input.nearMissCriteria?.find((criterion) => criterion.pedestrianId === actor.id);
       let nearMissPoint: RoutePoint | undefined;
       if (nearMiss && trace) {
@@ -189,6 +309,7 @@ export function routesFromSimulation(
         color: routeColor(actor.id, authoredColors.get(actor.id)),
         planned,
         actual,
+        ...(canonical.spans.length ? { canonicalSpans: canonical.spans, timeAnnotations: canonical.annotations } : {}),
         markers: [...turnMarkers(planned), ...actionMarkers(actor.id, input.interactions, trace)],
         ...(nearMissPoint && nearMiss ? { triggerPoint: nearMissPoint, triggerRadiusM: nearMiss.clearanceM } : {}),
       };
@@ -412,7 +533,8 @@ function appendArrows(target: number[], points: readonly RoutePoint[], y: number
 
 export class VehicleRouteOverlayRenderer {
   readonly group = new Group();
-  private objects: Array<LineSegments | Points> = [];
+  private objects: Array<LineSegments | Points | Sprite> = [];
+  private textures: Texture[] = [];
 
   constructor(private readonly sampleHeight?: RouteHeightSampler) {
     this.group.name = 'vehicle-route-overlays';
@@ -422,6 +544,9 @@ export class VehicleRouteOverlayRenderer {
   sync(routes: readonly VehicleRouteOverlay[], options: RouteOverlayOptions): void {
     this.clear();
     const visible = routes.filter((route) => !route.ambient || options.showAmbient);
+    const primarySelectedActorId = options.primarySelectedActorId
+      ?? visible.find((route) => options.selectedActorIds.has(route.actorId))?.actorId
+      ?? null;
     // One dot batch and one arrow batch for all paths. Selection is encoded in
     // vertex colour so adding actors never adds draw calls.
     const plannedPositions: number[] = [];
@@ -430,28 +555,56 @@ export class VehicleRouteOverlayRenderer {
     const pedestrianColors: number[] = [];
     const arrowPositions: number[] = [];
     const arrowColors: number[] = [];
+    const selectedPositions: number[] = [];
+    const selectedColors: number[] = [];
     for (const route of visible) {
       const selected = options.selectedActorIds.has(route.actorId);
-      const color = new Color(route.invalidReason ? '#ff5568' : route.color).multiplyScalar(selected ? 1 : .45);
-      if (route.actorKind === 'pedestrian') {
-        const segments = dashedSegments(route.planned, 1.1, .65);
-        for (let i = 0; i < segments.length; i += 3) {
-          const x = segments[i]!; const z = segments[i + 2]!;
-          pedestrianPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .46 : .34), z);
-          pedestrianColors.push(color.r, color.g, color.b);
+      const primary = route.actorId === primarySelectedActorId;
+      const color = new Color(route.invalidReason ? '#ff5568' : route.color).multiplyScalar(selected ? .86 : .32);
+      const spans = route.canonicalSpans ?? [{ points: route.planned }];
+      if (primary && route.canonicalSpans?.length) {
+        const gold = new Color('#ffc857');
+        for (const traceSpan of route.canonicalSpans) {
+          for (let i = 1; i < traceSpan.points.length; i++) {
+            const a = traceSpan.points[i - 1]!;
+            const b = traceSpan.points[i]!;
+            const ay = (this.sampleHeight?.(a.x, a.z) ?? 0) + .48;
+            const by = (this.sampleHeight?.(b.x, b.z) ?? 0) + .48;
+            selectedPositions.push(a.x, ay, a.z, b.x, by, b.z);
+            selectedColors.push(gold.r, gold.g, gold.b, gold.r, gold.g, gold.b);
+          }
         }
-      } else for (const point of dottedPoints(route.planned)) {
+        continue;
+      }
+      if (route.actorKind === 'pedestrian') {
+        for (const traceSpan of spans) {
+          const segments = dashedSegments(traceSpan.points, 1.1, .65);
+          for (let i = 0; i < segments.length; i += 3) {
+            const x = segments[i]!; const z = segments[i + 2]!;
+            pedestrianPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .46 : .34), z);
+            pedestrianColors.push(color.r, color.g, color.b);
+          }
+        }
+      } else for (const point of spans.flatMap((traceSpan) => dottedPoints(traceSpan.points))) {
           plannedPositions.push(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + (selected ? .38 : .27), point.z);
           plannedColors.push(color.r, color.g, color.b);
         }
-      const arrows: number[] = [];
-      appendArrows(arrows, route.planned, 0);
-      for (let i = 0; i < arrows.length; i += 3) {
-        const x = arrows[i]!;
-        const z = arrows[i + 2]!;
-        arrowPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .4 : .29), z);
-        arrowColors.push(color.r, color.g, color.b);
+      for (const traceSpan of spans) {
+        const arrows: number[] = [];
+        appendArrows(arrows, traceSpan.points, 0);
+        for (let i = 0; i < arrows.length; i += 3) {
+          const x = arrows[i]!;
+          const z = arrows[i + 2]!;
+          arrowPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .4 : .29), z);
+          arrowColors.push(color.r, color.g, color.b);
+        }
       }
+    }
+    if (selectedPositions.length) {
+      const black = new Color('#17120a');
+      const haloColors = Array.from({ length: selectedPositions.length / 3 }, () => [black.r, black.g, black.b]).flat();
+      this.addLines(selectedPositions, haloColors, .82, 'selected-route-halo', 5, 28);
+      this.addLines(selectedPositions, selectedColors, 1, 'selected-route-gold', 2.5, 29);
     }
     if (pedestrianPositions.length) this.addLines(pedestrianPositions, pedestrianColors, .98, 'pedestrian-projected-paths');
     if (plannedPositions.length) {
@@ -462,6 +615,7 @@ export class VehicleRouteOverlayRenderer {
       const points = new Points(geometry, new PointsMaterial({ size: .48, vertexColors: true, transparent: true, opacity: .98, depthTest: false, depthWrite: false, sizeAttenuation: true }));
       points.name = 'planned-route-dots';
       points.renderOrder = 21;
+      points.raycast = () => undefined;
       this.group.add(points); this.objects.push(points);
     }
     if (arrowPositions.length) this.addLines(arrowPositions, arrowColors, .98, 'planned-route-arrows');
@@ -470,14 +624,17 @@ export class VehicleRouteOverlayRenderer {
       const colors: number[] = [];
       for (const route of visible) {
         const color = new Color(route.color);
-        for (let i = 1; i < route.actual.length; i++) {
-          const a = route.actual[i - 1]!;
-          const b = route.actual[i]!;
-          positions.push(
-            a.x, (this.sampleHeight?.(a.x, a.z) ?? 0) + .38, a.z,
-            b.x, (this.sampleHeight?.(b.x, b.z) ?? 0) + .38, b.z,
-          );
-          colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+        const actualSpans = route.canonicalSpans ?? [{ points: route.actual }];
+        for (const traceSpan of actualSpans) {
+          for (let i = 1; i < traceSpan.points.length; i++) {
+            const a = traceSpan.points[i - 1]!;
+            const b = traceSpan.points[i]!;
+            positions.push(
+              a.x, (this.sampleHeight?.(a.x, a.z) ?? 0) + .38, a.z,
+              b.x, (this.sampleHeight?.(b.x, b.z) ?? 0) + .38, b.z,
+            );
+            colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
+          }
         }
       }
       if (positions.length) this.addLines(positions, colors, .9);
@@ -497,6 +654,7 @@ export class VehicleRouteOverlayRenderer {
       points.name = 'route-action-markers';
       points.renderOrder = 23;
       points.frustumCulled = true;
+      points.raycast = () => undefined;
       this.group.add(points); this.objects.push(points);
     }
     const triggerPositions: number[] = [];
@@ -517,20 +675,77 @@ export class VehicleRouteOverlayRenderer {
       }
     }
     if (triggerPositions.length) this.addLines(triggerPositions, triggerColors, .82, 'pedestrian-trigger-envelopes');
+
+    const selectedRoute = visible.find((route) => route.actorId === primarySelectedActorId);
+    if (selectedRoute?.canonicalSpans?.length) {
+      for (const annotation of selectedRoute.timeAnnotations ?? []) this.addTimeLabel(annotation);
+    }
   }
 
   dispose(): void { this.clear(); this.group.removeFromParent(); }
 
-  private addLines(positions: number[], colors: number[], opacity: number, name = 'route-lines'): void {
+  private addLines(
+    positions: number[],
+    colors: number[],
+    opacity: number,
+    name = 'route-lines',
+    linewidth = 1,
+    renderOrder = opacity > .9 ? 22 : 21,
+  ): void {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(Float32Array.from(positions), 3));
     geometry.setAttribute('color', new BufferAttribute(Float32Array.from(colors), 3));
     geometry.computeBoundingSphere();
-    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthTest: false, depthWrite: false }));
+    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthTest: false, depthWrite: false, linewidth }));
     lines.name = name;
-    lines.renderOrder = opacity > .9 ? 22 : 21;
+    lines.renderOrder = renderOrder;
     lines.frustumCulled = true;
+    lines.raycast = () => undefined;
     this.group.add(lines); this.objects.push(lines);
+  }
+
+  private addTimeLabel(annotation: RouteTimeAnnotation): void {
+    if (typeof document === 'undefined') return;
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 96;
+    const context = canvas.getContext('2d');
+    if (!context) return;
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    context.fillStyle = 'rgba(15, 13, 10, .88)';
+    context.strokeStyle = '#ffc857';
+    context.lineWidth = 5;
+    context.beginPath();
+    context.roundRect(7, 7, 242, 82, 22);
+    context.fill();
+    context.stroke();
+    context.font = '700 42px ui-sans-serif, system-ui, sans-serif';
+    context.textAlign = 'center';
+    context.textBaseline = 'middle';
+    context.lineJoin = 'round';
+    context.strokeStyle = 'rgba(0, 0, 0, .95)';
+    context.lineWidth = 9;
+    context.strokeText(annotation.label, 128, 50);
+    context.fillStyle = '#ffe19a';
+    context.fillText(annotation.label, 128, 50);
+    const texture = new CanvasTexture(canvas);
+    texture.minFilter = LinearFilter;
+    texture.magFilter = LinearFilter;
+    texture.colorSpace = SRGBColorSpace;
+    texture.needsUpdate = true;
+    const material = new SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
+    const sprite = new Sprite(material);
+    const baseY = (this.sampleHeight?.(annotation.point.x, annotation.point.z) ?? 0) + 1.25;
+    sprite.position.set(annotation.point.x, baseY + annotation.stackIndex * .62, annotation.point.z);
+    sprite.scale.set(2.35, .88, 1);
+    sprite.name = 'selected-route-time-label';
+    sprite.renderOrder = 31 + annotation.stackIndex;
+    sprite.frustumCulled = true;
+    sprite.userData.routeTimeAnnotation = annotation;
+    sprite.raycast = () => undefined;
+    this.group.add(sprite);
+    this.objects.push(sprite);
+    this.textures.push(texture);
   }
 
   private clear(): void {
@@ -540,5 +755,7 @@ export class VehicleRouteOverlayRenderer {
       for (const material of materials) material.dispose();
     }
     this.objects = [];
+    for (const texture of this.textures) texture.dispose();
+    this.textures = [];
   }
 }

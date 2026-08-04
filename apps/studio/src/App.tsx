@@ -551,6 +551,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       showAmbient: viewSettings.routes.ambient,
       showActual: viewSettings.routes.actual,
       selectedActorIds: new Set(state.selection),
+      primarySelectedActorId: state.selection[0] ?? null,
     });
   }, [ambientPreview, ambientPreviewState, authoredPlayback, cameraPlaybackRequested, editorController, mapWorkspaceOpen,
     playbackBundle, state, studioSession.state.mode, viewSettings.routes]);
