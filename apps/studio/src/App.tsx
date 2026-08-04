@@ -11,7 +11,6 @@ import type { EditorController } from './editor/controller';
 import { MapPicker } from './editor/ui';
 import { WorkspaceHeader } from './editor/EditorChrome';
 import { EditorToolRail, shouldShowEditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from './editor/EditorToolRail';
-import { ScenarioActionsPanel } from './editor/ScenarioActionsPanel';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
 import { PlaybackLoadError, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
@@ -95,6 +94,7 @@ import {
 } from './settings/model';
 import { OpenScenarioWorkspace } from './openscenario/OpenScenarioWorkspace';
 import type { OpenScenarioWorkspaceState } from './openscenario/model';
+import { openScenarioLocationIntent } from './openscenario/navigation';
 import { MapWorkspace } from './map-workspace';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { compiledWorldMatchesRevision, simulationClassFor, type ActorRecord } from './editor/document';
@@ -222,7 +222,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   const [ambientRobustnessBusy, setAmbientRobustnessBusy] = useState(false);
   const [leftPanelOpen, setLeftPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [openScenarioOpen, setOpenScenarioOpen] = useState(false);
+  const [openScenarioOpen, setOpenScenarioOpen] = useState(() => openScenarioLocationIntent(window.location).open);
   const [mapWorkspaceOpen, setMapWorkspaceOpen] = useState(false);
   const [openScenarioState, setOpenScenarioState] = useState<OpenScenarioWorkspaceState>({ status: 'empty', reason: 'Place at least one actor before generating an interchange artifact.' });
   const [signalAuthoringCatalog, setSignalAuthoringCatalog] = useState<Awaited<ReturnType<ScenarioWorkerClient['inspectSignals']>> | null>(null);
@@ -246,6 +246,16 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   pendingMapId.current = mapId;
 
   const viewer = session && session.mapId === mapId ? session.viewer : null;
+
+  useEffect(() => {
+    const intent = openScenarioLocationIntent(window.location);
+    if (!intent.open || intent.canonicalSearch === null) return;
+    window.history.replaceState(
+      window.history.state,
+      '',
+      `${window.location.pathname}${intent.canonicalSearch}${intent.canonicalHash ?? window.location.hash}`,
+    );
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -1313,6 +1323,9 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         state={presentedOpenScenarioState}
         onRetry={regenerateOpenScenario}
         onClose={() => setOpenScenarioOpen(false)}
+        templateValidation={editorController?.doc.validation ?? null}
+        physicsSummary={activePhysicsSummary}
+        initialSection={openScenarioLocationIntent(window.location).section}
         onLocateSource={(sourceId) => {
           editorController?.setSelection([sourceId]);
           setOpenScenarioOpen(false);
@@ -1364,8 +1377,6 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
               }}
               onClose={() => setAuxiliaryTool(null)}
             />
-          ) : auxiliaryTool === 'validate' && editorController ? (
-            <ScenarioActionsPanel controller={editorController} physicsSummary={activePhysicsSummary} onClose={() => setAuxiliaryTool(null)} />
           ) : auxiliaryTool === 'measure' ? (
             <div style={styles.measurePanel}>
               <div style={styles.drawerHeading}>Viewport performance</div>

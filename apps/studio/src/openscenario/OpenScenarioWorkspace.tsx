@@ -9,7 +9,9 @@ import {
   type OpenScenarioWorkspaceState,
 } from './model';
 import { buildLocalEsminiBundle, cancelLocalEsminiRun, submitLocalEsminiRun, waitForLocalEsminiRun } from './localClient';
-import { physicsReasonLabel, physicsSummaryForTrace } from '../playback/physics';
+import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '../playback/physics';
+import type { ValidationReport } from '@uniscenarios/scenario-model';
+import { PlannedAuthoringFormats, ScenarioReadinessSummary } from '../editor/ScenarioActionsPanel';
 
 type Section = 'overview' | 'schema' | 'compatibility' | 'issues' | 'mapping' | 'validation' | 'external' | 'files';
 
@@ -18,13 +20,19 @@ export function OpenScenarioWorkspace({
   onRetry,
   onClose,
   onLocateSource,
+  templateValidation,
+  physicsSummary,
+  initialSection = 'overview',
 }: {
   state: OpenScenarioWorkspaceState;
   onRetry(): void;
   onClose(): void;
   onLocateSource?(sourceId: string): void;
+  templateValidation?: ValidationReport | null;
+  physicsSummary?: PhysicsDisplaySummary | null;
+  initialSection?: Section;
 }): JSX.Element {
-  const [section, setSection] = useState<Section>('overview');
+  const [section, setSection] = useState<Section>(initialSection);
   const [profile, setProfile] = useState<OpenScenarioExportProfile>('native-1.4');
   const [localBundle, setLocalBundle] = useState<OpenScenarioLocalBundle | null>(null);
   const [bundleBusy, setBundleBusy] = useState(false);
@@ -64,7 +72,7 @@ export function OpenScenarioWorkspace({
       <div style={styles.subtitle}>Interoperability workspace</div>
       <nav style={styles.nav} aria-label="OpenSCENARIO sections">
         {(['overview', 'schema', 'compatibility', 'issues', 'mapping', 'validation', 'external', 'files'] as const).map((id) => (
-          <button key={id} type="button" onClick={() => setSection(id)} style={{ ...styles.navButton, ...(section === id ? styles.navActive : null) }}>
+          <button key={id} type="button" onClick={() => setSection(id)} aria-current={section === id ? 'page' : undefined} style={{ ...styles.navButton, ...(section === id ? styles.navActive : null) }}>
             {label(id)}
             {id === 'issues' && state.status === 'ready' ? <span style={styles.count}>{state.snapshot.artifact.issues.length + state.snapshot.artifact.warnings.length}</span> : null}
           </button>
@@ -86,13 +94,13 @@ export function OpenScenarioWorkspace({
       <div style={styles.body}>
         {state.status === 'ready' ? <ProfileBar profile={profile} onProfile={(next) => { setProfile(next); setLocalBundle(null); setRunEvidence(null); setLocalError(null); }} localBundle={localBundle} busy={bundleBusy} onBuild={() => void buildProfile()} /> : null}
         {localError ? <div style={styles.errorBanner} role="alert">{localError}</div> : null}
-        <WorkspaceBody state={state} section={section} onRetry={onRetry} onLocateSource={onLocateSource} profile={profile} localBundle={localBundle} runEvidence={runEvidence} onRun={() => void runExternal()} onCancel={() => void cancelExternal()} />
+        <WorkspaceBody state={state} section={section} onRetry={onRetry} onLocateSource={onLocateSource} profile={profile} localBundle={localBundle} runEvidence={runEvidence} onRun={() => void runExternal()} onCancel={() => void cancelExternal()} templateValidation={templateValidation} physicsSummary={physicsSummary} />
       </div>
     </main>
   </section>;
 }
 
-function WorkspaceBody({ state, section, onRetry, onLocateSource, profile, localBundle, runEvidence, onRun, onCancel }: { state: OpenScenarioWorkspaceState; section: Section; onRetry(): void; onLocateSource?: (id: string) => void; profile: OpenScenarioExportProfile; localBundle: OpenScenarioLocalBundle | null; runEvidence: OpenScenarioLocalRunEvidence | null; onRun(): void; onCancel(): void }): JSX.Element {
+function WorkspaceBody({ state, section, onRetry, onLocateSource, profile, localBundle, runEvidence, onRun, onCancel, templateValidation, physicsSummary }: { state: OpenScenarioWorkspaceState; section: Section; onRetry(): void; onLocateSource?: (id: string) => void; profile: OpenScenarioExportProfile; localBundle: OpenScenarioLocalBundle | null; runEvidence: OpenScenarioLocalRunEvidence | null; onRun(): void; onCancel(): void; templateValidation?: ValidationReport | null; physicsSummary?: PhysicsDisplaySummary | null }): JSX.Element {
   if (state.status === 'empty') return <Empty title="Nothing to export yet" detail={state.reason} action="Return to Author and place an actor" />;
   if (state.status === 'loading') return <Empty title="Building exact export snapshot…" detail="Materializing this revision, simulating its canonical trace, and generating the fail-closed XML 1.4 artifact." busy />;
   if (state.status === 'error') return <Empty title="Could not prepare this revision" detail={state.message} action="Retry" onAction={onRetry} />;
@@ -102,9 +110,14 @@ function WorkspaceBody({ state, section, onRetry, onLocateSource, profile, local
   if (section === 'compatibility') return profile === 'native-1.4' ? <Compatibility snapshot={snapshot} /> : <EsminiCompatibility bundle={localBundle} />;
   if (section === 'issues') return <Issues snapshot={snapshot} onLocateSource={onLocateSource} />;
   if (section === 'mapping') return <Mapping snapshot={snapshot} onLocateSource={onLocateSource} />;
-  if (section === 'validation') return <Validation snapshot={snapshot} bundle={localBundle} evidence={runEvidence} />;
+  if (section === 'validation') return <><ScenarioReadiness templateValidation={templateValidation} physicsSummary={physicsSummary ?? physicsSummaryForTrace(snapshot.concrete.trace)} /><Validation snapshot={snapshot} bundle={localBundle} evidence={runEvidence} /></>;
   if (section === 'external') return <ExternalValidation bundle={localBundle} evidence={runEvidence} onRun={onRun} onCancel={onCancel} />;
   return <Files snapshot={snapshot} bundle={localBundle} evidence={runEvidence} />;
+}
+
+function ScenarioReadiness({ templateValidation, physicsSummary }: { templateValidation?: ValidationReport | null; physicsSummary: PhysicsDisplaySummary }): JSX.Element | null {
+  if (!templateValidation) return null;
+  return <ScenarioReadinessSummary validation={templateValidation} physicsSummary={physicsSummary} />;
 }
 
 function ProfileBar({ profile, onProfile, localBundle, busy, onBuild }: { profile: OpenScenarioExportProfile; onProfile(profile: OpenScenarioExportProfile): void; localBundle: OpenScenarioLocalBundle | null; busy: boolean; onBuild(): void }): JSX.Element {
@@ -220,7 +233,7 @@ function Files({ snapshot, bundle, evidence }: { snapshot: OpenScenarioSnapshot;
     { kind: 'capability' as const, name: snapshot.artifact.filename.replace('.xosc', '.capabilities.json'), detail: 'Fail-closed per-field fidelity report', enabled: !!snapshot.artifact.capabilityReport },
     { kind: 'manifest' as const, name: snapshot.artifact.filename.replace('.xosc', '.export-manifest.json'), detail: 'Hashes, mapping, dependency and validation evidence', enabled: true },
   ];
-  return <div style={styles.list}>{items.map((item) => <article style={styles.file} key={item.kind}><div><strong>{item.name}</strong><div style={styles.muted}>{item.detail}</div></div><button type="button" style={styles.secondaryButton} disabled={!item.enabled} onClick={() => downloadSnapshotFile(snapshot, item.kind)}>Download</button></article>)}{bundle ? <article style={styles.file}><div><strong>{bundle.filename.replace('.xosc', '.bundle.zip')}</strong><div style={styles.muted}>Complete XML 1.3 + OpenDRIVE + trace + provenance runnable bundle</div></div><a style={styles.downloadLink} href={bundle.downloadUrl} download>Download bundle</a></article> : <article style={styles.fileDisabled}><div><strong>{snapshot.map.roadFile}</strong><div style={styles.muted}>Complete immutable OpenDRIVE dependency · resolved only after bundle build</div></div><Badge text="Pending bundle" tone="warn" /></article>}{evidence?.artifacts.map((artifact) => <article style={styles.file} key={artifact.artifactId}><div><strong>{artifact.name}</strong><div style={styles.muted}>{artifact.kind} · {artifact.byteLength.toLocaleString()} bytes · {artifact.authoritative ? 'authoritative evidence' : 'human evidence'}</div></div><a style={styles.downloadLink} href={artifact.downloadUrl} download>Download</a></article>)}</div>;
+  return <div style={styles.list}>{items.map((item) => <article style={styles.file} key={item.kind}><div><strong>{item.name}</strong><div style={styles.muted}>{item.detail}</div></div><button type="button" style={styles.secondaryButton} disabled={!item.enabled} onClick={() => downloadSnapshotFile(snapshot, item.kind)}>Download</button></article>)}{bundle ? <article style={styles.file}><div><strong>{bundle.filename.replace('.xosc', '.bundle.zip')}</strong><div style={styles.muted}>Complete XML 1.3 + OpenDRIVE + trace + provenance runnable bundle</div></div><a style={styles.downloadLink} href={bundle.downloadUrl} download>Download bundle</a></article> : <article style={styles.fileDisabled}><div><strong>{snapshot.map.roadFile}</strong><div style={styles.muted}>Complete immutable OpenDRIVE dependency · resolved only after bundle build</div></div><Badge text="Pending bundle" tone="warn" /></article>}{evidence?.artifacts.map((artifact) => <article style={styles.file} key={artifact.artifactId}><div><strong>{artifact.name}</strong><div style={styles.muted}>{artifact.kind} · {artifact.byteLength.toLocaleString()} bytes · {artifact.authoritative ? 'authoritative evidence' : 'human evidence'}</div></div><a style={styles.downloadLink} href={artifact.downloadUrl} download>Download</a></article>)}<PlannedAuthoringFormats /></div>;
 }
 
 function Empty({ title, detail, action, onAction, busy }: { title: string; detail: string; action?: string; onAction?: () => void; busy?: boolean }): JSX.Element { return <div style={styles.empty}>{busy ? <div style={styles.spinner} /> : null}<h2>{title}</h2><p>{detail}</p>{action ? <button type="button" style={styles.secondaryButton} onClick={onAction} disabled={!onAction}>{action}</button> : null}</div>; }
@@ -234,7 +247,7 @@ function label(section: Section): string { return ({ overview: 'Overview', schem
 
 const styles: Record<string, CSSProperties> = {
   root: { position: 'absolute', inset: 0, zIndex: 40, display: 'flex', background: '#111318', color: '#e9edf3' },
-  sidebar: { width: 226, flex: '0 0 226px', padding: '22px 14px', boxSizing: 'border-box', borderRight: '1px solid #30343c', background: '#181b20', display: 'flex', flexDirection: 'column' },
+  sidebar: { width: 'clamp(168px, 22vw, 226px)', flex: '0 0 clamp(168px, 22vw, 226px)', minWidth: 0, overflowY: 'auto', padding: '22px 14px', boxSizing: 'border-box', borderRight: '1px solid #30343c', background: '#181b20', display: 'flex', flexDirection: 'column' },
   title: { fontSize: 17, fontWeight: 750 }, subtitle: { fontSize: 11, color: '#8993a2', marginTop: 2 },
   nav: { display: 'flex', flexDirection: 'column', gap: 3, marginTop: 24 },
   navButton: { display: 'flex', justifyContent: 'space-between', padding: '9px 10px', border: 0, borderRadius: 6, color: '#9ea7b4', background: 'transparent', font: 'inherit', textAlign: 'left', cursor: 'pointer' },
@@ -246,9 +259,9 @@ const styles: Record<string, CSSProperties> = {
   headerActions: { display: 'flex', gap: 8, alignItems: 'center' }, closeButton: { border: 0, background: 'transparent', color: '#aab3bf', fontSize: 27, cursor: 'pointer' },
   secondaryButton: { border: '1px solid #454b55', borderRadius: 6, padding: '7px 10px', color: '#edf1f6', background: '#282d35', font: 'inherit', cursor: 'pointer' },
   body: { flex: 1, minHeight: 0, overflow: 'auto', padding: 28 },
-  profileBar: { display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16, padding: 12, border: '1px solid #30353e', borderRadius: 8, background: '#181b20' },
+  profileBar: { display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginBottom: 16, padding: 12, border: '1px solid #30353e', borderRadius: 8, background: '#181b20' },
   profileLabel: { display: 'flex', alignItems: 'center', gap: 9, color: '#98a3b1', fontSize: 11 },
-  select: { minWidth: 280, border: '1px solid #454b55', borderRadius: 6, padding: '7px 9px', background: '#262b33', color: '#eef2f7', font: 'inherit' },
+  select: { width: 'min(100%, 340px)', minWidth: 0, border: '1px solid #454b55', borderRadius: 6, padding: '7px 9px', background: '#262b33', color: '#eef2f7', font: 'inherit' },
   primaryButton: { border: '1px solid #d9722c', borderRadius: 6, padding: '8px 11px', color: '#fff', background: '#c85f1d', font: 'inherit', fontWeight: 700, cursor: 'pointer' },
   profileHint: { color: '#7f8996', fontSize: 10 },
   errorBanner: { padding: 12, marginBottom: 14, border: '1px solid #8b3c43', borderRadius: 7, color: '#ffc0c0', background: '#3b2023' },

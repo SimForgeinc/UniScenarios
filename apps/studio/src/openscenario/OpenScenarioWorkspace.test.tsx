@@ -46,4 +46,35 @@ describe('OpenScenarioWorkspace', () => {
     expect(error).toContain('Could not prepare this revision');
     expect(error).toContain('No intent-preserving site');
   });
+
+  it('contains the retired drawer validation, provenance and format coverage in OpenSCENARIO', () => {
+    const markup = renderToStaticMarkup(<OpenScenarioWorkspace
+      state={{ status: 'ready', sourceHash: 'template-hash-123456789', snapshot: snapshot() }}
+      initialSection="validation"
+      templateValidation={{ ok: false, issues: [{ severity: 'error', path: 'roles[0]', message: 'Missing actor binding' }] } as never}
+      physicsSummary={{ mode: 'dynamic-v1', legacyReplay: false, actors: [{ id: 'car', label: 'Sedan 1', mode: 'dynamic-v1', reason: 'selected', profile: 'car' }], dynamicCount: 1, fallbackCount: 0, staticCount: 0, unknownCount: 0 }}
+      onRetry={vi.fn()}
+      onClose={vi.fn()}
+    />);
+    expect(markup).toContain('Template validation');
+    expect(markup).toContain('Missing actor binding');
+    expect(markup).toContain('Physics provenance');
+    expect(markup).toContain('Sedan 1');
+    expect(markup).toContain('Strict model passed');
+    expect(markup).toContain('aria-current="page"');
+  });
+
+  it('keeps unsupported editable formats explicit alongside existing download actions', () => {
+    const markup = renderToStaticMarkup(<OpenScenarioWorkspace
+      state={{ status: 'ready', sourceHash: 'template-hash-123456789', snapshot: snapshot() }}
+      initialSection="files"
+      onRetry={vi.fn()}
+      onClose={vi.fn()}
+    />);
+    expect(markup).toContain('crossing-scenario.xosc');
+    expect(markup).toContain('Download');
+    expect(markup).toContain('XML 1.4 · editable actions');
+    expect(markup).toContain('DSL 2.2 · editable actions');
+    expect(markup).toContain('Not supported');
+  });
 });
