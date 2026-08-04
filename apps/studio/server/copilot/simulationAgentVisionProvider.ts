@@ -59,8 +59,15 @@ export async function generateSimulationAgentVision(
       },
     };
   }));
+  const resultIterationTrace = visualIterations.map((item, index) => ({
+    iteration: item.iteration,
+    summary: `Visual grounding for agent iteration ${item.iteration}; ${item.source.replace('-', ' ')}. ${item.render.altText}`,
+    toolCalls: (result.agentDetails?.iterations[index]?.toolCalls ?? []).map((call) => ({ name: call.name, status: call.ok ? 'success' as const : 'failure' as const, summary: call.outputSummary })),
+    thumbnailDataUrl: item.render.dataUrl, altText: item.render.altText, legend: item.render.legend, provenance: item.render.provenance,
+  }));
   return {
     ...result, runId: result.runId.replace(/^simulation-agent-run-/u, 'simulation-agent-vision-run-'), provider: 'simulation-agent-vision', candidates,
+    iterationTrace: resultIterationTrace,
     diagnostics: [...result.diagnostics, ...(candidates.length ? [{ severity: 'info' as const, code: 'visual_input_verified', message: `The configured model accepted ${visualIterations.length} deterministic PNG image input${visualIterations.length === 1 ? '' : 's'} at ${result.agentDetails?.reasoningEffort ?? request.agentReasoningEffort ?? 'high'} reasoning effort.` }] : [])],
     ...(result.agentDetails ? { agentDetails: {
       ...result.agentDetails,

@@ -192,6 +192,8 @@ export interface CopilotGenerationResult {
   readonly warnings: readonly string[];
   /** Present for iterative providers, including failed runs with no candidate. */
   readonly agentDetails?: CopilotProvenance['agentDetails'];
+  /** Sanitized public iteration evidence, including visuals for failed runs. */
+  readonly iterationTrace?: CopilotProvenance['iterationTrace'];
 }
 
 export interface CopilotProvider {

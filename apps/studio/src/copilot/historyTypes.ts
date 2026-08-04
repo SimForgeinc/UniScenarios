@@ -47,6 +47,9 @@ export interface CopilotGenerationHistoryEntry {
     readonly summary: string;
     readonly toolCalls: readonly { readonly name: string; readonly status: 'success' | 'failure' | 'skipped'; readonly summary: string }[];
     readonly thumbnailDataUrl: string | null;
+    readonly altText?: string;
+    readonly legend?: readonly string[];
+    readonly provenance?: Record<string, unknown>;
   }[] | null;
 }
 

@@ -112,7 +112,7 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
     provenance: candidate ? { ...candidate.provenance } : { provider: result.provider, model: result.model },
     generatedScenic: null,
     directTypedDraft: candidate ? { intent: candidate.intent, scenarioDoc: candidate.scenarioDoc } : null,
-    iterationTrace: sanitizeIterationTrace((candidate?.provenance as unknown as Record<string, unknown> | undefined)?.['iterationTrace']),
+    iterationTrace: sanitizeIterationTrace((candidate?.provenance as unknown as Record<string, unknown> | undefined)?.['iterationTrace'] ?? result.iterationTrace),
   };
 }
 
@@ -129,7 +129,9 @@ function sanitizeIterationTrace(value: unknown): CopilotGenerationHistoryEntry['
       return [{ name: call['name'].slice(0, 100), status, summary: typeof call['summary'] === 'string' ? call['summary'].slice(0, 500) : '' }];
     }) : [];
     const thumbnail = typeof item['thumbnailDataUrl'] === 'string' && item['thumbnailDataUrl'].startsWith('data:image/') && item['thumbnailDataUrl'].length < 350_000 ? item['thumbnailDataUrl'] : null;
-    return [{ iteration: typeof item['iteration'] === 'number' ? item['iteration'] : index + 1, summary: typeof item['summary'] === 'string' ? item['summary'].slice(0, 1_000) : 'No summary recorded.', toolCalls: calls, thumbnailDataUrl: thumbnail }];
+    const legend = Array.isArray(item['legend']) ? item['legend'].filter((entry): entry is string => typeof entry === 'string').slice(0, 16).map((entry) => entry.slice(0, 200)) : undefined;
+    const provenance = item['provenance'] && typeof item['provenance'] === 'object' ? item['provenance'] as Record<string, unknown> : undefined;
+    return [{ iteration: typeof item['iteration'] === 'number' ? item['iteration'] : index + 1, summary: typeof item['summary'] === 'string' ? item['summary'].slice(0, 1_000) : 'No summary recorded.', toolCalls: calls, thumbnailDataUrl: thumbnail, ...(typeof item['altText'] === 'string' ? { altText: item['altText'].slice(0, 2_000) } : {}), ...(legend ? { legend } : {}), ...(provenance ? { provenance } : {}) }];
   });
 }
 
