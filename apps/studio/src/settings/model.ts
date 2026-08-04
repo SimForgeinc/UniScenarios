@@ -48,7 +48,7 @@ export const DEFAULT_STUDIO_VIEW_SETTINGS: StudioViewSettings = Object.freeze({
   routes: Object.freeze({ visible: true, ambient: false, actual: false, duringPlayback: true }),
   controls: Object.freeze({
     version: 2,
-    reverseHorizontalLook: true,
+    reverseHorizontalLook: false,
     reverseVerticalLook: false,
     reversePanDirection: true,
     horizontalLookSensitivity: 40,
@@ -97,7 +97,7 @@ export function parseStudioViewSettings(value: unknown): StudioViewSettings {
     },
     controls: {
       version: 2,
-      reverseHorizontalLook: typeof controls?.reverseHorizontalLook === 'boolean' ? controls.reverseHorizontalLook : true,
+      reverseHorizontalLook: typeof controls?.reverseHorizontalLook === 'boolean' ? controls.reverseHorizontalLook : false,
       reverseVerticalLook: typeof controls?.reverseVerticalLook === 'boolean' ? controls.reverseVerticalLook : false,
       reversePanDirection: typeof controls?.reversePanDirection === 'boolean' ? controls.reversePanDirection : true,
       horizontalLookSensitivity: sensitivity(controls?.horizontalLookSensitivity, 40),

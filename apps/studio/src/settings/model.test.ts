@@ -20,6 +20,7 @@ describe('Studio view settings', () => {
       routes: cloneDefaults().routes,
       controls: cloneDefaults().controls,
     });
+    expect(cloneDefaults().controls.reverseHorizontalLook).toBe(false);
   });
 
   it('persists an intentional preference and fills missing fields safely', () => {
@@ -72,6 +73,13 @@ describe('Studio view settings', () => {
         reverseVerticalLook: true,
         reversePanDirection: false,
       });
+  });
+
+  it('preserves both explicit horizontal-look directions from persisted settings', () => {
+    const off = parseStudioViewSettings({ controls: { version: 2, reverseHorizontalLook: false } });
+    const on = parseStudioViewSettings({ controls: { version: 2, reverseHorizontalLook: true } });
+    expect(off.controls.reverseHorizontalLook).toBe(false);
+    expect(on.controls.reverseHorizontalLook).toBe(true);
   });
 
   it('preserves explicitly saved look speeds while fresh and reset defaults use 40%', () => {

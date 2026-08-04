@@ -138,7 +138,8 @@ describe('simplified editor settings UI', () => {
     expect(markup).toContain('Reverse horizontal look');
     expect(markup).toContain('Reverse vertical look');
     expect(markup).toContain('Reverse pan direction');
-    expect(markup).toContain('data-testid="camera-control-reverseHorizontalLook" checked=""');
+    expect(markup).toContain('data-testid="camera-control-reverseHorizontalLook"');
+    expect(markup).not.toContain('data-testid="camera-control-reverseHorizontalLook" checked=""');
     expect(markup).not.toContain('data-testid="camera-control-reverseVerticalLook" checked=""');
     expect(markup).toContain('data-testid="camera-control-reversePanDirection" checked=""');
     expect(markup).toContain('Q/E direction and WASD direction stay unchanged');
