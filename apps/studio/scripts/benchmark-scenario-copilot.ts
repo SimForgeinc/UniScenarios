@@ -21,6 +21,8 @@ interface BenchmarkRow {
   readonly mapId: string;
   readonly requestedModel: string;
   readonly actualModel: string | null;
+  readonly modelFallback: boolean;
+  readonly providerWarnings: readonly string[];
   readonly outcome: 'success' | 'semantic-mismatch' | 'expected-rejection' | 'unexpected-generation' | 'failure';
   readonly failureCategory: string | null;
   readonly safeError: string | null;
@@ -181,13 +183,14 @@ async function runCase(
   const wallStart = performance.now();
   const base = (): Omit<BenchmarkRow, 'outcome' | 'failureCategory' | 'safeError'> => ({
     provider: providerName, caseId: benchmarkCase.id, caseSummary: benchmarkCase.summary, mapId: mapContext.mapId,
-    requestedModel: model, actualModel: null, generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
+    requestedModel: model, actualModel: null, modelFallback: false, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
     inputTokens: null, outputTokens: null, totalTokens: null, apiCalls: null, repairCount: null,
     scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null,
     mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
     simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
     semanticPass: false, semanticAssertions: [], editablePass: false,
   });
+  let observed = base();
   let phase = 'provider-generation';
   try {
     const request = {
@@ -205,17 +208,20 @@ async function runCase(
     const common = {
       ...base(),
       actualModel: generated.model,
+      modelFallback: generated.model !== model,
+      providerWarnings: generated.warnings.map((warning) => safeError(warning)),
       generationLatencyMs: generated.metrics.latencyMs,
       inputTokens: generated.metrics.inputTokens,
       outputTokens: generated.metrics.outputTokens,
       totalTokens: generated.metrics.totalTokens,
-      apiCalls: research.apiCalls ?? (generated.model.includes('deterministic') ? 0 : 1 + repairCount),
+      apiCalls: research.apiCalls ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
       repairCount,
       scenicCompileMs: research.scenicCompileMs,
       scenicCompilePass: research.scenicCompilePass,
       scenicSampleMs: research.scenicSampleMs,
       scenicSamplePass: research.scenicSamplePass,
     };
+    observed = common;
     if (!candidate) {
       if (benchmarkCase.expectedRejection) return { ...common, outcome: 'expected-rejection', failureCategory: 'expected-rejection', safeError: 'Provider returned no candidate for an unsupported request', totalLatencyMs: Math.round(performance.now() - wallStart) };
       return { ...common, outcome: 'failure', failureCategory: 'no-candidate', safeError: 'Provider returned no candidate', totalLatencyMs: Math.round(performance.now() - wallStart) };
@@ -230,6 +236,7 @@ async function runCase(
     const product = materializeMapBound(candidate.scenarioDoc, bundle, { drawIndex: -1 });
     const mapBindingPass = product.input.actors.length === candidate.scenarioDoc.roles.length;
     const nativeValidationPass = product.manifest.feasible;
+    observed = { ...common, mapBindingPass, nativeValidationPass, editablePass, actorCount: candidate.scenarioDoc.roles.length, actionCount: candidate.scenarioDoc.choreography.interactions.length };
     if (!nativeValidationPass) throw new BenchmarkPhaseError('native-validation', `Materializer rejected candidate: ${product.manifest.issues.slice(0, 3).join('; ')}`);
     phase = 'simulation';
     const simulationStart = performance.now();
@@ -237,6 +244,7 @@ async function runCase(
     const simulationWallMs = Math.round(performance.now() - simulationStart);
     const simulationDurationS = simulated.trace.ticks.t.at(-1) ?? 0;
     const simulationPass = simulationDurationS >= 19.9;
+    observed = { ...observed, simulationPass, simulationDurationS, simulationWallMs };
     if (!simulationPass) throw new BenchmarkPhaseError('simulation-incomplete', `Canonical simulation ended at ${simulationDurationS.toFixed(3)} seconds`);
     const semanticAssertions = evaluateCopilotSemantics(benchmarkCase.id, candidate.scenarioDoc);
     const semanticPass = semanticAssertions.every((assertion) => assertion.pass);
@@ -262,9 +270,9 @@ async function runCase(
   } catch (error) {
     const failureCategory = error instanceof BenchmarkPhaseError ? error.phase : categorizeError(error, phase);
     if (benchmarkCase.expectedRejection && phase === 'provider-generation') {
-      return { ...base(), outcome: 'expected-rejection', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+      return { ...observed, outcome: 'expected-rejection', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
     }
-    return { ...base(), outcome: 'failure', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+    return { ...observed, outcome: 'failure', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
   }
 }
 
@@ -304,7 +312,7 @@ function categorizeError(error: unknown, phase: string): string {
 
 function toCsv(rows: readonly BenchmarkRow[]): string {
   const columns: (keyof BenchmarkRow)[] = [
-    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'outcome', 'failureCategory',
+    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'outcome', 'failureCategory',
     'generationLatencyMs', 'totalLatencyMs', 'inputTokens', 'outputTokens', 'totalTokens', 'apiCalls', 'repairCount',
     'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'mapBindingPass', 'nativeValidationPass',
     'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
