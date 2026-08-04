@@ -1,6 +1,7 @@
 import { Euler, MathUtils, PerspectiveCamera, Vector2, Vector3 } from 'three';
 import {
   applyEyeOrbit,
+  cameraLookSensitivityMultiplier,
   cameraLookDrag,
   cameraKeyboardMagnitude,
   cameraPanDrag,
@@ -114,10 +115,11 @@ export class CameraRig {
   /** Changes future input signs only; the current pose and queued motion stay untouched. */
   setControlPreferences(preferences: CameraControlPreferences): void {
     const sensitivity = (value: number): number => cameraSensitivityMultiplier(value) * 100;
+    const lookSensitivity = (value: number): number => cameraLookSensitivityMultiplier(value) * 250;
     this.controlPreferences = {
       ...preferences,
-      horizontalLookSensitivity: sensitivity(preferences.horizontalLookSensitivity),
-      verticalLookSensitivity: sensitivity(preferences.verticalLookSensitivity),
+      horizontalLookSensitivity: lookSensitivity(preferences.horizontalLookSensitivity),
+      verticalLookSensitivity: lookSensitivity(preferences.verticalLookSensitivity),
       middlePanSensitivity: sensitivity(preferences.middlePanSensitivity),
       rightPanSensitivity: sensitivity(preferences.rightPanSensitivity),
       wheelZoomSensitivity: sensitivity(preferences.wheelZoomSensitivity),
@@ -332,11 +334,11 @@ export class CameraRig {
       if (!this.pointerLocked) return;
       this.euler.yaw += event.movementX * this.lookSpeed
         * (this.controlPreferences.reverseHorizontalLook ? 1 : -1)
-        * cameraSensitivityMultiplier(this.controlPreferences.horizontalLookSensitivity);
+        * cameraLookSensitivityMultiplier(this.controlPreferences.horizontalLookSensitivity);
       this.euler.pitch = MathUtils.clamp(
         this.euler.pitch + event.movementY * this.lookSpeed
           * (this.controlPreferences.reverseVerticalLook ? 1 : -1)
-          * cameraSensitivityMultiplier(this.controlPreferences.verticalLookSensitivity),
+          * cameraLookSensitivityMultiplier(this.controlPreferences.verticalLookSensitivity),
         -Math.PI / 2 + 0.01,
         Math.PI / 2 - 0.01,
       );

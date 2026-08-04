@@ -4,6 +4,7 @@ import {
   applyEyeOrbit,
   cameraKeyboardMagnitude,
   cameraLookDrag,
+  cameraLookSensitivityMultiplier,
   cameraPanDrag,
   cameraWheelDollyScale,
   crossedCameraDragThreshold,
@@ -11,11 +12,13 @@ import {
 } from './camera-drag';
 
 describe('eye-orbit and inverted camera drags', () => {
-  it('defaults both look axes to 40%', () => {
+  it('defaults both look axes to a displayed 100% and an internal 0.4 multiplier', () => {
     expect(DEFAULT_CAMERA_CONTROL_PREFERENCES).toMatchObject({
-      horizontalLookSensitivity: 40,
-      verticalLookSensitivity: 40,
+      horizontalLookSensitivity: 100,
+      verticalLookSensitivity: 100,
     });
+    expect(cameraLookSensitivityMultiplier(100)).toBe(0.4);
+    expect(cameraLookSensitivityMultiplier(200)).toBe(0.8);
   });
 
   it('keeps the camera eye byte-for-byte invariant while changing orientation and target', () => {
@@ -35,27 +38,31 @@ describe('eye-orbit and inverted camera drags', () => {
 
   it('applies each look preference once and independently', () => {
     const defaults = cameraLookDrag(12, -7, 0.001125, 0.12);
-    expect(defaults.yaw).toBeGreaterThan(0);
+    expect(defaults.yaw).toBeLessThan(0);
     expect(defaults.pitch).toBeGreaterThan(0);
     const ordinary = cameraLookDrag(12, -7, 0.001125, 0.12, {
       reverseHorizontalLook: false,
       reverseVerticalLook: false,
     });
-    expect(ordinary.yaw).toBeCloseTo(-defaults.yaw, 12);
+    expect(ordinary.yaw).toBeCloseTo(defaults.yaw, 12);
     expect(ordinary.pitch).toBeCloseTo(defaults.pitch, 12);
     const both = cameraLookDrag(12, -7, 0.001125, 0.12, {
       reverseHorizontalLook: true,
       reverseVerticalLook: true,
     });
-    expect(both.yaw).toBeCloseTo(defaults.yaw, 12);
+    expect(both.yaw).toBeCloseTo(-defaults.yaw, 12);
     expect(both.pitch).toBeCloseTo(-defaults.pitch, 12);
   });
 
-  it('uses one pan direction for middle and right drag, with RMB precision scaling', () => {
-    expect(cameraPanDrag(1, 12, -7, 0.25)).toEqual({ dx: -12, dy: 7 });
-    expect(cameraPanDrag(2, 12, -7, 0.25)).toEqual({ dx: -3, dy: 1.75 });
-    expect(cameraPanDrag(1, 12, -7, 0.25, { reversePanDirection: false })).toEqual({ dx: 12, dy: -7 });
-    expect(cameraPanDrag(2, 12, -7, 0.25, { reversePanDirection: false })).toEqual({ dx: 3, dy: -1.75 });
+  it('keeps horizontal and vertical pan directions independent for mouse and touch deltas', () => {
+    expect(cameraPanDrag(1, 12, -7, 0.25)).toEqual({ dx: 12, dy: -7 });
+    expect(cameraPanDrag(2, 12, -7, 0.25)).toEqual({ dx: 3, dy: -1.75 });
+    expect(cameraPanDrag(1, 12, -7, 0.25, { reverseHorizontalPan: true, reverseVerticalPan: false }))
+      .toEqual({ dx: -12, dy: -7 });
+    expect(cameraPanDrag(1, 12, -7, 0.25, { reverseHorizontalPan: false, reverseVerticalPan: true }))
+      .toEqual({ dx: 12, dy: 7 });
+    expect(cameraPanDrag(2, 12, -7, 0.25, { reverseHorizontalPan: true, reverseVerticalPan: true }))
+      .toEqual({ dx: -3, dy: 1.75 });
   });
 
   it.each([25, 100, 300])('scales every movement family by %i%% without changing its sign', (percent) => {
@@ -76,12 +83,14 @@ describe('eye-orbit and inverted camera drags', () => {
     expect(look.pitch).toBeCloseTo(baseLook.pitch * multiplier, 12);
 
     const middle = cameraPanDrag(1, 12, -7, 0.25, {
-      reversePanDirection: true,
+      reverseHorizontalPan: true,
+      reverseVerticalPan: true,
       middlePanSensitivity: percent,
       rightPanSensitivity: 100,
     });
     const right = cameraPanDrag(2, 12, -7, 0.25, {
-      reversePanDirection: true,
+      reverseHorizontalPan: true,
+      reverseVerticalPan: true,
       middlePanSensitivity: 100,
       rightPanSensitivity: percent,
     });
@@ -99,7 +108,8 @@ describe('eye-orbit and inverted camera drags', () => {
 
   it('keeps middle and right pan sensitivity independent', () => {
     const preferences = {
-      reversePanDirection: true,
+      reverseHorizontalPan: true,
+      reverseVerticalPan: true,
       middlePanSensitivity: 300,
       rightPanSensitivity: 25,
     };

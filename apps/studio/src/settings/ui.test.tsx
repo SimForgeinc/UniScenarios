@@ -137,19 +137,21 @@ describe('simplified editor settings UI', () => {
     expect(markup).toContain('data-testid="camera-control-preferences"');
     expect(markup).toContain('Reverse horizontal look');
     expect(markup).toContain('Reverse vertical look');
-    expect(markup).toContain('Reverse pan direction');
     expect(markup).toContain('data-testid="camera-control-reverseHorizontalLook"');
+    expect(markup).toContain('Reverse horizontal pan');
+    expect(markup).toContain('Reverse vertical pan');
     expect(markup).not.toContain('data-testid="camera-control-reverseHorizontalLook" checked=""');
     expect(markup).not.toContain('data-testid="camera-control-reverseVerticalLook" checked=""');
-    expect(markup).toContain('data-testid="camera-control-reversePanDirection" checked=""');
+    expect(markup).not.toContain('data-testid="camera-control-reverseHorizontalPan" checked=""');
+    expect(markup).not.toContain('data-testid="camera-control-reverseVerticalPan" checked=""');
     expect(markup).toContain('Q/E direction and WASD direction stay unchanged');
     for (const label of [
       'Horizontal look speed', 'Vertical look speed', 'Middle-drag pan speed',
       'Right-drag pan speed', 'Wheel zoom speed', 'Keyboard movement speed', 'Keyboard turning speed',
     ]) expect(markup).toContain(label);
     expect(markup.match(/type="range"/g)).toHaveLength(7);
-    expect(markup.match(/>40%<\/output>/g)).toHaveLength(2);
-    expect(markup.match(/>100%<\/output>/g)).toHaveLength(5);
+    expect(markup.match(/>100%<\/output>/g)).toHaveLength(7);
+    expect(markup).toContain('100% is the original 0.4× camera sensitivity');
     expect(markup).toContain('data-testid="reset-camera-controls"');
     expect(markup).not.toContain('data-testid="camera-effective-sensitivities"');
   });

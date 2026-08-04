@@ -88,14 +88,14 @@ describe('CameraRig eye-orbit and inverted drags', () => {
     rig.dispose();
   });
 
-  it('middle and right drags share the reversed direction and keep RMB precise', () => {
+  it('middle and right drags share the default direction and keep RMB precise', () => {
     const middle = rigFixture();
     const middleStart = middle.camera.position.clone();
     middle.dom.dispatch('pointerdown', { pointerId: 1, button: 1, clientX: 20, clientY: 20 });
     middle.dom.dispatch('pointermove', { pointerId: 1, clientX: 32, clientY: 13, movementX: 12, movementY: -7 });
     middle.rig.update(1 / 60);
     const middleDelta = middle.camera.position.clone().sub(middleStart);
-    expect(middleDelta.x).toBeGreaterThan(0);
+    expect(middleDelta.x).toBeLessThan(0);
     middle.rig.dispose();
 
     const right = rigFixture();
@@ -104,7 +104,7 @@ describe('CameraRig eye-orbit and inverted drags', () => {
     right.dom.dispatch('pointermove', { pointerId: 1, clientX: 32, clientY: 13, movementX: 12, movementY: -7 });
     right.rig.update(1 / 60);
     const rightDelta = right.camera.position.clone().sub(rightStart);
-    expect(rightDelta.x).toBeGreaterThan(0);
+    expect(rightDelta.x).toBeLessThan(0);
     expect(Math.abs(rightDelta.x)).toBeLessThan(Math.abs(middleDelta.x));
     right.rig.dispose();
   });
@@ -117,7 +117,8 @@ describe('CameraRig eye-orbit and inverted drags', () => {
       ...DEFAULT_CAMERA_CONTROL_PREFERENCES,
       reverseHorizontalLook: false,
       reverseVerticalLook: true,
-      reversePanDirection: false,
+      reverseHorizontalPan: true,
+      reverseVerticalPan: false,
     });
     expect(pose(reversed.camera)).toEqual(initial);
     expect(reversed.rig.target.toArray()).toEqual(initialTarget);
@@ -125,14 +126,15 @@ describe('CameraRig eye-orbit and inverted drags', () => {
       ...DEFAULT_CAMERA_CONTROL_PREFERENCES,
       reverseHorizontalLook: false,
       reverseVerticalLook: true,
-      reversePanDirection: false,
+      reverseHorizontalPan: true,
+      reverseVerticalPan: false,
     });
 
     const start = reversed.camera.position.clone();
     reversed.dom.dispatch('pointerdown', { pointerId: 1, button: 1, clientX: 20, clientY: 20 });
     reversed.dom.dispatch('pointermove', { pointerId: 1, clientX: 32, clientY: 13, movementX: 12, movementY: -7 });
     reversed.rig.update(1 / 60);
-    expect(reversed.camera.position.x - start.x).toBeLessThan(0);
+    expect(reversed.camera.position.x - start.x).toBeGreaterThan(0);
     reversed.rig.dispose();
   });
 

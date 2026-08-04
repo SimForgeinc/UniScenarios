@@ -10,7 +10,8 @@ export interface EyeOrbitDelta {
 export interface CameraControlPreferences {
   reverseHorizontalLook: boolean;
   reverseVerticalLook: boolean;
-  reversePanDirection: boolean;
+  reverseHorizontalPan: boolean;
+  reverseVerticalPan: boolean;
   horizontalLookSensitivity: number;
   verticalLookSensitivity: number;
   middlePanSensitivity: number;
@@ -21,11 +22,12 @@ export interface CameraControlPreferences {
 }
 
 export const DEFAULT_CAMERA_CONTROL_PREFERENCES: Readonly<CameraControlPreferences> = Object.freeze({
-  reverseHorizontalLook: true,
+  reverseHorizontalLook: false,
   reverseVerticalLook: false,
-  reversePanDirection: true,
-  horizontalLookSensitivity: 40,
-  verticalLookSensitivity: 40,
+  reverseHorizontalPan: false,
+  reverseVerticalPan: false,
+  horizontalLookSensitivity: 100,
+  verticalLookSensitivity: 100,
   middlePanSensitivity: 100,
   rightPanSensitivity: 100,
   wheelZoomSensitivity: 100,
@@ -35,6 +37,11 @@ export const DEFAULT_CAMERA_CONTROL_PREFERENCES: Readonly<CameraControlPreferenc
 
 export function cameraSensitivityMultiplier(percent: number): number {
   return MathUtils.clamp(Number.isFinite(percent) ? percent : 100, 25, 300) / 100;
+}
+
+/** User-facing look speed: 100% preserves the historical 0.4 multiplier. */
+export function cameraLookSensitivityMultiplier(percent: number): number {
+  return MathUtils.clamp(Number.isFinite(percent) ? percent : 100, 25, 750) * 0.004;
 }
 
 const UP = new Vector3(0, 1, 0);
@@ -54,32 +61,33 @@ export function cameraLookDrag(
   const scale = speed / Math.max(damping, 1e-3);
   return {
     yaw: dx * scale * (preferences.reverseHorizontalLook ? 1 : -1)
-      * cameraSensitivityMultiplier(
+      * cameraLookSensitivityMultiplier(
         preferences.horizontalLookSensitivity ?? DEFAULT_CAMERA_CONTROL_PREFERENCES.horizontalLookSensitivity,
       ),
     pitch: dy * scale * (preferences.reverseVerticalLook ? 1 : -1)
-      * cameraSensitivityMultiplier(
+      * cameraLookSensitivityMultiplier(
         preferences.verticalLookSensitivity ?? DEFAULT_CAMERA_CONTROL_PREFERENCES.verticalLookSensitivity,
       ),
   };
 }
 
-/** Convert middle/right pointer travel to a shared, predictable pan sign. */
+/** Convert middle/right pointer travel with independent screen-axis signs. */
 export function cameraPanDrag(
   button: 1 | 2,
   dx: number,
   dy: number,
   rightPanScale: number,
-  preferences: Pick<CameraControlPreferences, 'reversePanDirection'>
+  preferences: Pick<CameraControlPreferences, 'reverseHorizontalPan' | 'reverseVerticalPan'>
     & Partial<Pick<CameraControlPreferences, 'middlePanSensitivity' | 'rightPanSensitivity'>> = DEFAULT_CAMERA_CONTROL_PREFERENCES,
 ): { dx: number; dy: number } {
   const sensitivity = button === 2
     ? preferences.rightPanSensitivity ?? 100
     : preferences.middlePanSensitivity ?? 100;
-  const scale = (button === 2 ? rightPanScale : 1)
-    * cameraSensitivityMultiplier(sensitivity)
-    * (preferences.reversePanDirection ? -1 : 1);
-  return { dx: dx * scale, dy: dy * scale };
+  const scale = (button === 2 ? rightPanScale : 1) * cameraSensitivityMultiplier(sensitivity);
+  return {
+    dx: dx * scale * (preferences.reverseHorizontalPan ? -1 : 1),
+    dy: dy * scale * (preferences.reverseVerticalPan ? -1 : 1),
+  };
 }
 
 export function cameraWheelDollyScale(deltaY: number, zoomSpeed: number, sensitivityPercent: number): number {

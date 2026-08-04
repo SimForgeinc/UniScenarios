@@ -1,15 +1,17 @@
 import type { MapOverlayLayer } from '../mapOverlays';
 
-export const STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v4';
-export const PREVIOUS_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v3';
+export const STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v5';
+export const PREVIOUS_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v4';
+export const LEGACY_SENSITIVITY_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v3';
 export const REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v2';
 export const LEGACY_STUDIO_VIEW_SETTINGS_KEY = 'uniscenarios.studio.view-settings.v1';
 
 export interface StudioCameraControlSettings {
-  version: 2;
+  version: 3;
   reverseHorizontalLook: boolean;
   reverseVerticalLook: boolean;
-  reversePanDirection: boolean;
+  reverseHorizontalPan: boolean;
+  reverseVerticalPan: boolean;
   horizontalLookSensitivity: number;
   verticalLookSensitivity: number;
   middlePanSensitivity: number;
@@ -47,12 +49,13 @@ export const DEFAULT_STUDIO_VIEW_SETTINGS: StudioViewSettings = Object.freeze({
   debugGraphics: false,
   routes: Object.freeze({ visible: true, ambient: false, actual: false, duringPlayback: true }),
   controls: Object.freeze({
-    version: 2,
+    version: 3,
     reverseHorizontalLook: false,
     reverseVerticalLook: false,
-    reversePanDirection: true,
-    horizontalLookSensitivity: 40,
-    verticalLookSensitivity: 40,
+    reverseHorizontalPan: false,
+    reverseVerticalPan: false,
+    horizontalLookSensitivity: 100,
+    verticalLookSensitivity: 100,
     middlePanSensitivity: 100,
     rightPanSensitivity: 100,
     wheelZoomSensitivity: 100,
@@ -67,13 +70,27 @@ export function parseStudioViewSettings(value: unknown): StudioViewSettings {
   const layers: Partial<StudioViewSettings['layers']> = input.layers && typeof input.layers === 'object' ? input.layers : {};
   const overlays: Partial<StudioViewSettings['overlays']> = input.overlays && typeof input.overlays === 'object' ? input.overlays : {};
   const rawControls = input.controls && typeof input.controls === 'object'
-    ? input.controls as Partial<StudioCameraControlSettings>
+    ? input.controls as Partial<StudioCameraControlSettings> & Record<string, unknown>
     : null;
   const controlVersion: unknown = rawControls?.version;
-  const controls = controlVersion === 1 || controlVersion === 2 ? rawControls : null;
+  const controls = controlVersion === 1 || controlVersion === 2 || controlVersion === 3 ? rawControls : null;
   const sensitivity = (value: unknown, fallback = 100): number => typeof value === 'number' && Number.isFinite(value)
     ? Math.min(300, Math.max(25, value))
     : fallback;
+  const lookSensitivity = (axisValue: unknown): number => {
+    const singleValue = controls?.['lookSensitivity'] ?? controls?.['lookSpeed'];
+    const value = typeof axisValue === 'number' ? axisValue : singleValue;
+    if (typeof value !== 'number' || !Number.isFinite(value)) return 100;
+    // v1/v2 persisted the renderer's internal multiplier as a percentage:
+    // 40 meant 0.4. v3 is user-facing, where 100 means the same 0.4.
+    const displayed = controlVersion === 3 ? value : value / 0.4;
+    return Math.min(750, Math.max(25, displayed));
+  };
+  const legacyPan = typeof controls?.['reversePan'] === 'boolean'
+    ? controls['reversePan']
+    : typeof controls?.['reversePanDirection'] === 'boolean'
+      ? controls['reversePanDirection']
+      : false;
   return {
     layers: {
       city: typeof layers.city === 'boolean' ? layers.city : true,
@@ -96,12 +113,13 @@ export function parseStudioViewSettings(value: unknown): StudioViewSettings {
       duringPlayback: typeof input.routes?.duringPlayback === 'boolean' ? input.routes.duringPlayback : true,
     },
     controls: {
-      version: 2,
+      version: 3,
       reverseHorizontalLook: typeof controls?.reverseHorizontalLook === 'boolean' ? controls.reverseHorizontalLook : false,
       reverseVerticalLook: typeof controls?.reverseVerticalLook === 'boolean' ? controls.reverseVerticalLook : false,
-      reversePanDirection: typeof controls?.reversePanDirection === 'boolean' ? controls.reversePanDirection : true,
-      horizontalLookSensitivity: sensitivity(controls?.horizontalLookSensitivity, 40),
-      verticalLookSensitivity: sensitivity(controls?.verticalLookSensitivity, 40),
+      reverseHorizontalPan: typeof controls?.reverseHorizontalPan === 'boolean' ? controls.reverseHorizontalPan : legacyPan,
+      reverseVerticalPan: typeof controls?.reverseVerticalPan === 'boolean' ? controls.reverseVerticalPan : legacyPan,
+      horizontalLookSensitivity: lookSensitivity(controls?.horizontalLookSensitivity),
+      verticalLookSensitivity: lookSensitivity(controls?.verticalLookSensitivity),
       middlePanSensitivity: sensitivity(controls?.middlePanSensitivity),
       rightPanSensitivity: sensitivity(controls?.rightPanSensitivity),
       wheelZoomSensitivity: sensitivity(controls?.wheelZoomSensitivity),
@@ -116,6 +134,7 @@ export function loadStudioViewSettings(storage: Pick<Storage, 'getItem'> | null 
   try {
     const raw = storage.getItem(STUDIO_VIEW_SETTINGS_KEY)
       ?? storage.getItem(PREVIOUS_STUDIO_VIEW_SETTINGS_KEY)
+      ?? storage.getItem(LEGACY_SENSITIVITY_STUDIO_VIEW_SETTINGS_KEY)
       ?? storage.getItem(REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY)
       ?? storage.getItem(LEGACY_STUDIO_VIEW_SETTINGS_KEY);
     return raw ? parseStudioViewSettings(JSON.parse(raw)) : cloneDefaults();

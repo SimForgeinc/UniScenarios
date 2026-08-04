@@ -25,13 +25,13 @@ export interface SettingsPanelProps {
 
 const OVERLAY_LAYERS: readonly MapOverlayLayer[] = ['lanes', 'signals'];
 const CAMERA_SENSITIVITIES = [
-  ['horizontalLookSensitivity', 'Horizontal look speed'],
-  ['verticalLookSensitivity', 'Vertical look speed'],
-  ['middlePanSensitivity', 'Middle-drag pan speed'],
-  ['rightPanSensitivity', 'Right-drag pan speed'],
-  ['wheelZoomSensitivity', 'Wheel zoom speed'],
-  ['keyboardMoveSensitivity', 'Keyboard movement speed'],
-  ['keyboardTurnSensitivity', 'Keyboard turning speed'],
+  ['horizontalLookSensitivity', 'Horizontal look speed', 750, 2.5, '100% keeps the original camera speed (0.4×); the scale is linear.'],
+  ['verticalLookSensitivity', 'Vertical look speed', 750, 2.5, '100% keeps the original camera speed (0.4×); the scale is linear.'],
+  ['middlePanSensitivity', 'Middle-drag pan speed', 300, 5, 'Adjust middle-drag and two-finger pan speed.'],
+  ['rightPanSensitivity', 'Right-drag pan speed', 300, 5, 'Adjust right-drag precision pan speed.'],
+  ['wheelZoomSensitivity', 'Wheel zoom speed', 300, 5, 'Adjust mouse-wheel and trackpad zoom speed.'],
+  ['keyboardMoveSensitivity', 'Keyboard movement speed', 300, 5, 'Adjust WASD and arrow-key movement speed.'],
+  ['keyboardTurnSensitivity', 'Keyboard turning speed', 300, 5, 'Adjust Q/E and Page Up/Page Down turning speed.'],
 ] as const;
 
 /** Layer toggles + camera mode. Stub surface that the scenario tools grow into. */
@@ -174,7 +174,8 @@ export function SettingsPanel({
         {([
           ['reverseHorizontalLook', 'Reverse horizontal look'],
           ['reverseVerticalLook', 'Reverse vertical look'],
-          ['reversePanDirection', 'Reverse pan direction'],
+          ['reverseHorizontalPan', 'Reverse horizontal pan'],
+          ['reverseVerticalPan', 'Reverse vertical pan'],
         ] as const).map(([key, label]) => (
           <label key={key} style={styles.check}>
             <input
@@ -190,18 +191,18 @@ export function SettingsPanel({
           </label>
         ))}
         <div style={styles.hint}>
-          Reverse look affects left-drag and free-camera mouse look. Reverse pan affects middle/right drag only.
+          Reverse look affects left-drag and free-camera mouse look. Pan axes affect middle/right drag and touch pan only.
           Q/E direction and WASD direction stay unchanged.
         </div>
         <div style={styles.sensitivityList} data-testid="camera-sensitivity-controls">
-          {CAMERA_SENSITIVITIES.map(([key, label]) => (
-            <label key={key} style={styles.sensitivity}>
+          {CAMERA_SENSITIVITIES.map(([key, label, max, step, title]) => (
+            <label key={key} style={styles.sensitivity} title={title}>
               <span style={styles.sensitivityLabel}>{label}</span>
               <input
                 type="range"
                 min={25}
-                max={300}
-                step={5}
+                max={max}
+                step={step}
                 value={settings.controls[key]}
                 aria-label={label}
                 data-testid={`camera-sensitivity-${key}`}
@@ -216,6 +217,7 @@ export function SettingsPanel({
           ))}
         </div>
         <div style={styles.hint}>
+          Look speed is linear: 100% is the original 0.4× camera sensitivity and 200% is twice that speed.
           Keyboard movement controls WASD in both modes. Keyboard turning controls Q/E while using the city camera.
         </div>
         <button

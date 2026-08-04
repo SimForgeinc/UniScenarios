@@ -8,6 +8,7 @@ import {
   LEGACY_STUDIO_VIEW_SETTINGS_KEY,
   REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY,
   STUDIO_VIEW_SETTINGS_KEY,
+  PREVIOUS_STUDIO_VIEW_SETTINGS_KEY,
 } from './model';
 
 describe('Studio view settings', () => {
@@ -45,12 +46,13 @@ describe('Studio view settings', () => {
     });
   });
 
-  it('serializes control preferences and migrates legacy settings to reversed defaults', () => {
+  it('serializes independent axes and migrates legacy pan direction consistently', () => {
     let stored = '';
     const settings = cloneDefaults();
     settings.controls.reverseHorizontalLook = false;
     settings.controls.reverseVerticalLook = true;
-    settings.controls.reversePanDirection = false;
+    settings.controls.reverseHorizontalPan = true;
+    settings.controls.reverseVerticalPan = false;
     settings.controls.horizontalLookSensitivity = 85;
     settings.controls.verticalLookSensitivity = 65;
     saveStudioViewSettings(settings, { setItem: (_key, value) => { stored = value; } });
@@ -64,14 +66,15 @@ describe('Studio view settings', () => {
       version: 1,
       reverseHorizontalLook: false,
       reverseVerticalLook: true,
-      reversePanDirection: false,
+      reversePanDirection: true,
     } });
     expect(loadStudioViewSettings({ getItem: (key) => key === REVERSE_ONLY_STUDIO_VIEW_SETTINGS_KEY ? reverseOnly : null }).controls)
       .toEqual({
         ...cloneDefaults().controls,
         reverseHorizontalLook: false,
         reverseVerticalLook: true,
-        reversePanDirection: false,
+        reverseHorizontalPan: true,
+        reverseVerticalPan: true,
       });
   });
 
@@ -82,40 +85,64 @@ describe('Studio view settings', () => {
     expect(on.controls.reverseHorizontalLook).toBe(true);
   });
 
-  it('preserves explicitly saved look speeds while fresh and reset defaults use 40%', () => {
+  it('shows 100% while preserving the historical 0.4 look speed', () => {
     expect(cloneDefaults().controls).toMatchObject({
-      horizontalLookSensitivity: 40,
-      verticalLookSensitivity: 40,
+      horizontalLookSensitivity: 100,
+      verticalLookSensitivity: 100,
       middlePanSensitivity: 100,
       rightPanSensitivity: 100,
       wheelZoomSensitivity: 100,
       keyboardMoveSensitivity: 100,
       keyboardTurnSensitivity: 100,
     });
-    const saved = cloneDefaults();
-    saved.controls.horizontalLookSensitivity = 100;
-    saved.controls.verticalLookSensitivity = 125;
-    expect(parseStudioViewSettings(saved).controls).toMatchObject({
-      horizontalLookSensitivity: 100,
+    const legacyV2 = { controls: {
+      version: 2,
+      horizontalLookSensitivity: 40,
       verticalLookSensitivity: 125,
+    } };
+    expect(parseStudioViewSettings(legacyV2).controls).toMatchObject({
+      horizontalLookSensitivity: 100,
+      verticalLookSensitivity: 312.5,
     });
   });
 
-  it('fills only missing look speeds with 40% when migrating partial saved controls', () => {
-    expect(parseStudioViewSettings({ controls: {
-      version: 2,
-      horizontalLookSensitivity: 85,
-    } }).controls).toMatchObject({
-      horizontalLookSensitivity: 85,
-      verticalLookSensitivity: 40,
-    });
+  it('migrates a legacy single look speed to both axes without changing perceived speed', () => {
     expect(parseStudioViewSettings({ controls: {
       version: 1,
-      verticalLookSensitivity: 65,
+      lookSensitivity: 80,
     } }).controls).toMatchObject({
-      horizontalLookSensitivity: 40,
-      verticalLookSensitivity: 65,
+      horizontalLookSensitivity: 200,
+      verticalLookSensitivity: 200,
     });
+  });
+
+  it('fills only missing normalized look speeds and lets newer pan axes win', () => {
+    expect(parseStudioViewSettings({ controls: {
+      version: 3,
+      horizontalLookSensitivity: 85,
+      reversePan: true,
+      reverseHorizontalPan: false,
+    } }).controls).toMatchObject({
+      horizontalLookSensitivity: 85,
+      verticalLookSensitivity: 100,
+      reverseHorizontalPan: false,
+      reverseVerticalPan: true,
+    });
+  });
+
+  it('loads the v4 storage key and normalizes its internal look scale', () => {
+    const previous = JSON.stringify({ controls: {
+      version: 2,
+      reverseHorizontalLook: false,
+      horizontalLookSensitivity: 40,
+      verticalLookSensitivity: 60,
+    } });
+    expect(loadStudioViewSettings({ getItem: (key) => key === PREVIOUS_STUDIO_VIEW_SETTINGS_KEY ? previous : null }).controls)
+      .toMatchObject({
+        reverseHorizontalLook: false,
+        horizontalLookSensitivity: 100,
+        verticalLookSensitivity: 150,
+      });
   });
 
   it('fails malformed and unknown control versions closed to defaults', () => {
@@ -126,7 +153,7 @@ describe('Studio view settings', () => {
 
   it('clamps finite sensitivity values and falls back for malformed values', () => {
     const controls = parseStudioViewSettings({ controls: {
-      version: 2,
+      version: 3,
       horizontalLookSensitivity: 0,
       verticalLookSensitivity: 999,
       middlePanSensitivity: 25,
@@ -137,7 +164,7 @@ describe('Studio view settings', () => {
     } }).controls;
     expect(controls).toMatchObject({
       horizontalLookSensitivity: 25,
-      verticalLookSensitivity: 300,
+      verticalLookSensitivity: 750,
       middlePanSensitivity: 25,
       rightPanSensitivity: 300,
       wheelZoomSensitivity: 100,
