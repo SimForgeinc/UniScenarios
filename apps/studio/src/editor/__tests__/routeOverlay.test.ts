@@ -37,28 +37,11 @@ function input() {
 }
 
 describe('vehicle route overlays', () => {
-  it('projects authored pedestrian movement before and during Play with a trigger envelope', () => {
-    const template = {
-      roles: [{ id: 'walker', kind: 'scene_absolute', actor: { class: 'pedestrian', static: false }, pose: { position: { x: 2, y: 0, z: 3 }, headingRad: 0 } }],
-      choreography: { clipSeconds: 10, interactions: [{ id: 'walk', actor: 'walker', trigger: { kind: 'when', condition: { kind: 'distance', from: 'car', to: { role: 'walker' }, measure: 'euclidean', op: '<=', valueM: 8 }, byLatest: 8, ifNever: 'skip' }, verb: 'speed', target: { mode: 'absolute', valueKph: 5 } }] },
-    } as unknown as ScenarioTemplateV2;
-    const before = routesFromTemplate(template, index()).find((route) => route.actorId === 'walker')!;
-    const during = authoringRoutes(template, index(), input()).find((route) => route.actorId === 'walker')!;
-    expect(before.actorKind).toBe('pedestrian');
-    expect(before.triggerRadiusM).toBe(8);
-    expect(before.planned.length).toBeGreaterThan(1);
-    expect(during.planned).toEqual(before.planned);
-    const renderer = new VehicleRouteOverlayRenderer();
-    renderer.sync([before], { showAmbient: false, showActual: false, selectedActorIds: new Set(['walker']) });
-    expect(renderer.group.getObjectByName('pedestrian-projected-paths')).toBeTruthy();
-    expect(renderer.group.getObjectByName('pedestrian-trigger-envelopes')).toBeTruthy();
-    renderer.dispose();
-  });
   it('uses lane travel order and scene transform deterministically', () => {
     const a = routesFromSimulation(input(), index());
     const b = routesFromSimulation(input(), index());
     expect(a).toEqual(b);
-    expect(a.map((route) => route.actorId)).toEqual(['ambient-1', 'ego']);
+    expect(a.map((route) => route.actorId)).toEqual(['ambient-1', 'ego', 'walker']);
     const ego = a.find((route) => route.actorId === 'ego')!.planned;
     expect(ego[0]).toEqual({ x: 0, z: 0 });
     expect(ego).toContainEqual({ x: 10, z: 0 });
@@ -69,10 +52,23 @@ describe('vehicle route overlays', () => {
     expect(ambient.at(-1)).toEqual({ x: 20, z: 0 });
   });
 
-  it('never produces guides for pedestrians or static objects and marks ambient routes', () => {
+  it('includes canonical pedestrian guides, excludes static objects, and marks ambient routes', () => {
     const routes = routesFromSimulation(input(), index());
-    expect(routes.some((route) => route.actorId === 'walker' || route.actorId === 'parked')).toBe(false);
+    expect(routes.find((route) => route.actorId === 'walker')?.actorKind).toBe('pedestrian');
+    expect(routes.some((route) => route.actorId === 'parked')).toBe(false);
     expect(routes.find((route) => route.actorId === 'ambient-1')?.ambient).toBe(true);
+  });
+
+  it('renders the hash-covered near-miss clearance envelope at the canonical trace sample', () => {
+    const concrete = { ...input(), nearMissCriteria: [{ interactionId: 'near', pedestrianId: 'walker', targetId: 'ego', clearanceM: .6, toleranceM: .15, pass: 'front' as const, planHash: '1234abcd', predictedClosestApproachS: 1, predictedTimeGapS: .25 }] };
+    const trace = { header: { clipSeconds: 1 }, ticks: { t: [0, 1], actors: { walker: { x: [0, 3], z: [0, 4], present: [1, 1] } } }, events: [] } as unknown as SceneTrace;
+    const walker = routesFromSimulation(concrete, index(), trace).find((route) => route.actorId === 'walker')!;
+    expect(walker.triggerPoint).toEqual({ x: 3, z: 4 });
+    expect(walker.triggerRadiusM).toBe(.6);
+    const renderer = new VehicleRouteOverlayRenderer();
+    renderer.sync([walker], { showAmbient: false, showActual: false, selectedActorIds: new Set(['walker']) });
+    expect(renderer.group.getObjectByName('pedestrian-trigger-envelopes')).toBeTruthy();
+    renderer.dispose();
   });
 
   it('keeps the authored plan separate from observed simulation geometry', () => {
@@ -189,9 +185,9 @@ describe('vehicle route overlays', () => {
     const routes = routesFromSimulation(input(), index());
     const renderer = new VehicleRouteOverlayRenderer();
     renderer.sync(routes, { showAmbient: false, showActual: false, selectedActorIds: new Set() });
-    expect(renderer.group.children).toHaveLength(3); // dots + arrows + semantic marker batch
+    expect(renderer.group.children).toHaveLength(4); // vehicle dots + pedestrian dashes + arrows + semantic markers
     renderer.sync(routes, { showAmbient: true, showActual: false, selectedActorIds: new Set(['ego']) });
-    expect(renderer.group.children).toHaveLength(3); // one dots + one arrows + markers
+    expect(renderer.group.children).toHaveLength(4);
     const arrows = renderer.group.getObjectByName('planned-route-arrows') as LineSegments<import('three').BufferGeometry, LineBasicMaterial>;
     const dots = renderer.group.getObjectByName('planned-route-dots') as Points<import('three').BufferGeometry, PointsMaterial>;
     expect(arrows.material.depthTest).toBe(false);

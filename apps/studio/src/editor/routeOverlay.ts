@@ -19,7 +19,7 @@ import {
 import type { Interaction, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { LaneIndex } from './laneIndex';
 
-export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'reroute' | 'lane-change' | 'stop' | 'speed-change';
+export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'reroute' | 'lane-change' | 'stop' | 'speed-change' | 'near-miss';
 
 export interface RoutePoint { readonly x: number; readonly z: number }
 export interface VehicleRouteOverlay {
@@ -162,7 +162,7 @@ function actionMarkers(actorId: string, interactions: readonly SimScenarioInput[
 
 /** Build overlays from the exact concrete simulator input. Static actors and pedestrians are excluded. */
 export function routesFromSimulation(
-  input: Pick<SimScenarioInput, 'actors' | 'interactions'>,
+  input: Pick<SimScenarioInput, 'actors' | 'interactions' | 'nearMissCriteria'>,
   index: LaneIndex,
   trace?: SceneTrace,
   authoredColors: ReadonlyMap<string, string | undefined> = new Map(),
@@ -173,6 +173,14 @@ export function routesFromSimulation(
     .map((actor) => {
       const planned = routePoints(actor, index);
       const actual = actualPoints(actor.id, trace);
+      const nearMiss = input.nearMissCriteria?.find((criterion) => criterion.pedestrianId === actor.id);
+      let nearMissPoint: RoutePoint | undefined;
+      if (nearMiss && trace) {
+        let tick = 0;
+        while (tick + 1 < trace.ticks.t.length && trace.ticks.t[tick + 1]! <= nearMiss.predictedClosestApproachS) tick++;
+        const track = trace.ticks.actors[actor.id];
+        if (track?.present[tick]) nearMissPoint = { x: track.x[tick]!, z: track.z[tick]! };
+      }
       const ambient = actor.id.startsWith('ambient-') || actor.tags.some((tag) => tag === 'ambient' || tag.startsWith('ambient:'));
       return {
         actorId: actor.id,
@@ -182,6 +190,7 @@ export function routesFromSimulation(
         planned,
         actual,
         markers: [...turnMarkers(planned), ...actionMarkers(actor.id, input.interactions, trace)],
+        ...(nearMissPoint && nearMiss ? { triggerPoint: nearMissPoint, triggerRadiusM: nearMiss.clearanceM } : {}),
       };
     })
     .filter((route) => route.planned.length > 1 || route.actual.length > 1);
@@ -305,7 +314,7 @@ export function routeExecutionParity(
 export function authoringRoutes(
   template: ScenarioTemplateV2,
   index: LaneIndex,
-  concrete?: Pick<SimScenarioInput, 'actors' | 'interactions'>,
+  concrete?: Pick<SimScenarioInput, 'actors' | 'interactions' | 'nearMissCriteria'>,
   trace?: SceneTrace,
 ): VehicleRouteOverlay[] {
   const traceComplete = Boolean(trace && (trace.ticks.t.at(-1) ?? -Infinity) >= (trace.header?.clipSeconds ?? Infinity) - 1e-9);

@@ -535,7 +535,8 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   useEffect(() => {
     const renderer = routeOverlayRenderer.current;
     if (!renderer || !editorController || !state) return;
-    const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
+    const currentAuthoringPreview = ambientPreviewState?.revision === editorController.doc.revision ? ambientPreview : null;
+    const concrete = playbackBundle ?? authoredPlayback ?? currentAuthoringPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
     const routes = playbackBundle !== null && concrete
@@ -551,9 +552,10 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       showActual: viewSettings.routes.actual,
       selectedActorIds: new Set(state.selection),
     });
-  }, [ambientPreview, authoredPlayback, cameraPlaybackRequested, editorController, mapWorkspaceOpen,
+  }, [ambientPreview, ambientPreviewState, authoredPlayback, cameraPlaybackRequested, editorController, mapWorkspaceOpen,
     playbackBundle, state, studioSession.state.mode, viewSettings.routes]);
   const authoringEnabled = playbackBundle === null && studioSession.state.mode === 'authoring' && !mapWorkspaceOpen;
+  const previewUpdating = authoringEnabled && Boolean(editorController) && (ambientPreviewBusy || ambientPreviewState?.revision !== editorController?.doc.revision);
   const signalPickingEnabled = authoringEnabled && state?.mode === 'idle';
 
   useEffect(() => {
@@ -1324,6 +1326,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         editorReady={state !== null}
         error={worldRenderError ?? editorError}
       /> : null}
+      {previewUpdating ? <div role="status" aria-live="polite" data-testid="canonical-preview-updating" style={{ position: 'absolute', top: 14, left: '50%', zIndex: 24, transform: 'translateX(-50%)', padding: '7px 11px', border: '1px solid #56708d', borderRadius: 999, background: 'rgba(22,30,40,.94)', color: '#cde6ff', fontSize: 11, pointerEvents: 'none' }}>Updating preview…</div> : null}
       {shouldShowEditorToolRail(authoringEnabled, mapWorkspaceOpen) ? <EditorToolRail
         controller={editorController}
         state={state}
