@@ -14,7 +14,8 @@ import { DirectGenerationRequestSchema, DirectNativeDraftSchema, type DirectNati
 
 const REQUESTED_MODEL = 'gpt-5.6-luna';
 
-function requestedReasoningEffort(): 'low' | 'medium' | 'high' | undefined {
+function requestedReasoningEffort(request: CopilotGenerationRequest): 'low' | 'medium' | 'high' | undefined {
+  if (request.agentReasoningEffort) return request.agentReasoningEffort;
   const value = process.env['OPENAI_SCENARIO_REASONING_EFFORT']?.trim();
   if (!value) return undefined;
   if (value === 'low' || value === 'medium' || value === 'high') return value;
@@ -132,7 +133,7 @@ export async function generateDirectDraft(
   let actualModel = request.model ?? process.env['OPENAI_SCENARIO_MODEL'] ?? REQUESTED_MODEL;
   let substituted = false;
   const generatedAt = now().toISOString();
-  const reasoningEffort = requestedReasoningEffort();
+  const reasoningEffort = requestedReasoningEffort(request);
   let client: DirectOpenAIClient | undefined;
 
   progress('interpreting', 'Reading the prompt and current map slots', 0, count);

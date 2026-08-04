@@ -10,9 +10,10 @@ import { COPILOT_EDGE_CASES, evaluateCopilotSemantics, type CopilotBenchmarkCase
 import { generateDirectDraft } from '../server/copilot/directProvider.js';
 import { generateStagedScenario } from '../server/copilot/stagedProvider.js';
 import { generateSimulationAgent } from '../server/copilot/simulationAgentProvider.js';
+import { generateSimulationAgentVision } from '../server/copilot/simulationAgentVisionProvider.js';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
-type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent';
+type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision';
 type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
 
 interface BenchmarkRow {
@@ -23,6 +24,7 @@ interface BenchmarkRow {
   readonly requestedModel: string;
   readonly actualModel: string | null;
   readonly modelFallback: boolean;
+  readonly reasoningEffort: 'low' | 'medium' | 'high';
   readonly providerWarnings: readonly string[];
   readonly outcome: 'success' | 'semantic-mismatch' | 'expected-rejection' | 'unexpected-generation' | 'failure';
   readonly failureCategory: string | null;
@@ -54,6 +56,10 @@ interface BenchmarkRow {
   readonly relativeActionCount: number | null;
   readonly relativeTriggerFireCount: number | null;
   readonly relativeTimingPass: boolean | null;
+  readonly stopReason: string | null;
+  readonly imagesSent: number | null;
+  readonly totalImageBytes: number | null;
+  readonly imageCostUsd: number | null;
 }
 
 class BenchmarkPhaseError extends Error {
@@ -71,6 +77,7 @@ for (let index = 2; index < process.argv.length; index++) {
   index++;
 }
 const requestedModel = argv.get('--model') || 'gpt-5.6-luna';
+const reasoningEffort = parseEffort(argv.get('--effort') || 'high');
 const mapIds = (argv.get('--maps') || 'richmond-field-station').split(',').filter(Boolean);
 const providerNames = (argv.get('--providers') || 'staged-rag,direct-llm,upstream-chat2scenic').split(',').filter(Boolean) as ProviderName[];
 const selectedCaseIds = new Set((argv.get('--cases') || COPILOT_EDGE_CASES.map((item) => item.id).join(',')).split(',').filter(Boolean));
@@ -98,7 +105,7 @@ for (const mapId of mapIds) {
     if (!provider) throw new Error(`Provider ${providerName} was not loaded`);
     for (const benchmarkCase of benchmarkCases) {
       process.stdout.write(`[${providerName}] ${mapId}/${benchmarkCase.id} ... `);
-      const row = await runCase(providerName, provider, benchmarkCase, mapContext, bundle, requestedModel, abortAfterMs);
+      const row = await runCase(providerName, provider, benchmarkCase, mapContext, bundle, requestedModel, reasoningEffort, abortAfterMs);
       rows.push(row);
       process.stdout.write(`${row.outcome}${row.safeError ? ` (${row.failureCategory})` : ''}\n`);
     }
@@ -110,8 +117,9 @@ const metadata = {
   schemaVersion: 1,
   startedAt,
   completedAt: new Date().toISOString(),
-  requestedDisplayName: '5.6 LUNA',
+  requestedDisplayName: requestedModel,
   requestedApiModel: requestedModel,
+  reasoningEffort,
   providerNames: [...new Set(rows.map((row) => row.provider))],
   mapIds,
   cases: benchmarkCases.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
@@ -127,6 +135,7 @@ async function loadProviders(names: readonly ProviderName[]): Promise<Map<Provid
     ['staged-rag', generateStagedScenario],
     ['direct-llm', generateDirectDraft],
     ['simulation-agent', generateSimulationAgent],
+    ['simulation-agent-vision', generateSimulationAgentVision],
   ]);
   if (names.includes('upstream-chat2scenic')) {
     // Kept dynamic so the harness remains independently testable while the
@@ -195,18 +204,20 @@ async function runCase(
   mapContext: CopilotMapContext,
   bundle: Awaited<ReturnType<typeof loadMap>>,
   model: string,
+  effort: 'low' | 'medium' | 'high',
   timeoutMs: number,
 ): Promise<BenchmarkRow> {
   const wallStart = performance.now();
   const base = (): Omit<BenchmarkRow, 'outcome' | 'failureCategory' | 'safeError'> => ({
     provider: providerName, caseId: benchmarkCase.id, caseSummary: benchmarkCase.summary, mapId: mapContext.mapId,
-    requestedModel: model, actualModel: null, modelFallback: false, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
+    requestedModel: model, actualModel: null, modelFallback: false, reasoningEffort: effort, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
     inputTokens: null, outputTokens: null, totalTokens: null, apiCalls: null, repairCount: null,
     scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null, scenicCompileSampleMs: null,
     mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
     simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
     semanticPass: false, semanticAssertions: [], editablePass: false,
     convergenceIterations: null, relativeActionCount: null, relativeTriggerFireCount: null, relativeTimingPass: null,
+    stopReason: null, imagesSent: null, totalImageBytes: null, imageCostUsd: null,
   });
   let observed = base();
   let phase = 'provider-generation';
@@ -217,7 +228,8 @@ async function runCase(
       mapContext,
       maxCandidates: 1,
       model,
-      ...(providerName === 'simulation-agent' ? { maxAgentIterations: 4 } : {}),
+      ...((providerName === 'simulation-agent' || providerName === 'simulation-agent-vision') ? { maxAgentIterations: 4 } : {}),
+      agentReasoningEffort: effort,
       ...(providerName === 'simulation-agent' ? { agentReasoningEffort: 'high' as const } : {}),
     } as unknown as CopilotGenerationRequest;
     const signal = AbortSignal.timeout(timeoutMs);
@@ -237,6 +249,10 @@ async function runCase(
       apiCalls: research.apiCalls ?? generated.agentDetails?.iterations.length ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
       repairCount,
       convergenceIterations: generated.agentDetails?.iterations.length ?? null,
+      stopReason: generated.agentDetails?.stopReason ?? null,
+      imagesSent: generated.agentDetails?.visualGrounding?.imagesSent ?? null,
+      totalImageBytes: generated.agentDetails?.visualGrounding?.totalImageBytes ?? null,
+      imageCostUsd: null,
       scenicCompileMs: research.scenicCompileMs,
       scenicCompilePass: research.scenicCompilePass,
       scenicSampleMs: research.scenicSampleMs,
@@ -345,23 +361,25 @@ function categorizeError(error: unknown, phase: string): string {
 
 function toCsv(rows: readonly BenchmarkRow[]): string {
   const columns: (keyof BenchmarkRow)[] = [
-    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'outcome', 'failureCategory',
+    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'reasoningEffort', 'outcome', 'failureCategory',
     'generationLatencyMs', 'totalLatencyMs', 'inputTokens', 'outputTokens', 'totalTokens', 'apiCalls', 'repairCount',
     'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'scenicCompileSampleMs', 'mapBindingPass', 'nativeValidationPass',
     'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
     'semanticPass', 'editablePass', 'safeError',
     'convergenceIterations', 'relativeActionCount', 'relativeTriggerFireCount', 'relativeTimingPass',
+    'stopReason', 'imagesSent', 'totalImageBytes', 'imageCostUsd',
   ];
   const quote = (value: unknown): string => `"${String(value ?? '').replaceAll('"', '""')}"`;
   return `${columns.map(quote).join(',')}\n${rows.map((row) => columns.map((column) => quote(row[column])).join(',')).join('\n')}\n`;
 }
 
-function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: string; completedAt: string; requestedApiModel: string; mapIds: readonly string[] }): string {
+function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: string; completedAt: string; requestedApiModel: string; reasoningEffort: string; mapIds: readonly string[] }): string {
   const providers = [...new Set(rows.map((row) => row.provider))];
   const lines = [
     '# Scenario Copilot edge-case evaluation', '',
     `- Run: ${metadata.startedAt} to ${metadata.completedAt}`,
     `- Model requested uniformly: \`${metadata.requestedApiModel}\``,
+    `- Reasoning effort: \`${metadata.reasoningEffort}\``,
     `- Maps: ${metadata.mapIds.join(', ')}`,
     '- Success requires native map materialization, an editable ScenarioDoc, full 20-second canonical simulation, and every deterministic semantic assertion.',
     '', '| Provider | Strict success | Full 20s | Semantic mismatch | Pipeline failure | Expected rejection | Relative triggers fired | Median convergence iterations | Median generation ms | Median total ms | Median simulation ms | Scenic compile+sample ms | API calls | Tokens |',
@@ -384,6 +402,11 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
   for (const row of failures) lines.push(`- **${row.provider} / ${row.caseSummary}:** ${row.failureCategory ?? row.outcome} — ${row.safeError ?? 'no safe diagnostic'}`);
   lines.push('', 'Raw model responses and credentials are deliberately excluded. See `results.json` for executable assertion evidence and per-run metrics.', '');
   return `${lines.join('\n')}\n`;
+}
+
+function parseEffort(value: string): 'low' | 'medium' | 'high' {
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  throw new Error('--effort must be low, medium, or high');
 }
 
 function median(values: readonly (number | null)[]): number | '—' {
