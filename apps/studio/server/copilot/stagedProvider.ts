@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotIntent, CopilotProgress, CopilotProvenance, CopilotStage } from '../../src/copilot/types.js';
 import { compileNativeCandidate, heuristicIntent, normalizeIntent, promptHash } from './nativeCompiler.js';
 import { configuredOpenAI, CopilotModelUnavailableError, generateJsonText } from './openaiClient.js';
+import { CopilotMapContextSchema } from './directTypes.js';
 import { retrieveOwnedExamples } from './retrieval.js';
 
 const INTERPRETER_INSTRUCTIONS = `You are a driving-scenario interpreter. Return JSON only. Never return code.
@@ -9,10 +10,39 @@ Convert the request into this exact structure: {"scenario":string,"ego":Actor,"a
 Actor is {"id":string,"role":"ego"|"adversary"|"context","kind":"vehicle"|"pedestrian"|"prop","catalogId":string,"behavior":string,"initialSpeedKph"?:number}.
 Allowed catalogId values: vehicle.sedan, vehicle.pickup, vehicle.van, vehicle.motorcycle, vehicle.bicycle, vehicle.bus, pedestrian.adult_walking, pedestrian.child_walking, pedestrian.adult_standing. Use at most 12 actors.`;
 
+const ACTOR_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['id', 'role', 'kind', 'catalogId', 'behavior', 'initialSpeedKph'],
+  properties: {
+    id: { type: 'string' },
+    role: { type: 'string', enum: ['ego', 'adversary', 'context'] },
+    kind: { type: 'string', enum: ['vehicle', 'pedestrian', 'prop'] },
+    catalogId: { type: 'string' },
+    behavior: { type: 'string' },
+    initialSpeedKph: { type: ['number', 'null'] },
+  },
+} as const;
+
+const INTENT_JSON_SCHEMA = {
+  type: 'object', additionalProperties: false,
+  required: ['scenario', 'ego', 'adversaries', 'contextActors', 'spatialRelations', 'restrictions', 'desiredOutcome', 'assumptions'],
+  properties: {
+    scenario: { type: 'string' },
+    ego: ACTOR_SCHEMA,
+    adversaries: { type: 'array', maxItems: 11, items: ACTOR_SCHEMA },
+    contextActors: { type: 'array', maxItems: 11, items: ACTOR_SCHEMA },
+    spatialRelations: { type: 'array', maxItems: 12, items: { type: 'string' } },
+    restrictions: { type: 'array', maxItems: 12, items: { type: 'string' } },
+    desiredOutcome: { type: 'string' },
+    assumptions: { type: 'array', maxItems: 12, items: { type: 'string' } },
+  },
+} as const;
+
 export async function generateStagedScenario(
   request: CopilotGenerationRequest,
   options: { readonly signal?: AbortSignal; readonly onProgress?: (progress: CopilotProgress) => void } = {},
 ): Promise<CopilotGenerationResult> {
+  CopilotMapContextSchema.parse(request.mapContext);
   const started = performance.now();
   const stages: { name: CopilotStage; durationMs: number }[] = [];
   const progress = (stage: CopilotStage, message: string, completed: number, total = 6): void => options.onProgress?.({ stage, message, completed, total });
@@ -30,28 +60,26 @@ export async function generateStagedScenario(
   let intent: CopilotIntent;
   if (request.confirmedIntent) {
     intent = await runStage('interpreting', () => normalizeIntent(request.confirmedIntent!));
-  } else if (request.evaluationMode === 'deterministic' || !config.apiKey) {
-    if (!config.apiKey && request.evaluationMode !== 'deterministic') warnings.push('No server-side OpenAI credential is configured; this run used the deterministic clean-room fallback.');
+  } else if (request.evaluationMode === 'deterministic') {
     intent = await runStage('interpreting', () => heuristicIntent(request.prompt));
   } else {
+    if (!config.apiKey) throw new Error('OPENAI_API_KEY is not configured; live staged generation will not silently use a deterministic fallback.');
     const requested = request.model?.trim() || config.requestedModel;
     const context = compactContext(request, examples);
     try {
-      const generated = await runStage('interpreting', () => generateJsonText({ apiKey: config.apiKey!, model: requested, instructions: INTERPRETER_INSTRUCTIONS, prompt: context, signal: options.signal }));
+      const generated = await runStage('interpreting', () => generateJsonText({ apiKey: config.apiKey, model: requested, instructions: INTERPRETER_INSTRUCTIONS, prompt: context, signal: options.signal, responseSchema: { name: 'uniscenarios_copilot_intent', schema: INTENT_JSON_SCHEMA } }));
       model = generated.model;
       usage = addUsage(usage, generated.usage);
       intent = parseIntent(generated.text);
     } catch (error) {
       if (error instanceof CopilotModelUnavailableError && config.fallbackModel && config.fallbackModel !== requested) {
         warnings.push(`Requested model "${requested}" was unavailable; the run used the configured fallback "${config.fallbackModel}".`);
-        const generated = await runStage('interpreting', () => generateJsonText({ apiKey: config.apiKey!, model: config.fallbackModel!, instructions: INTERPRETER_INSTRUCTIONS, prompt: context, signal: options.signal }));
+        const generated = await runStage('interpreting', () => generateJsonText({ apiKey: config.apiKey, model: config.fallbackModel!, instructions: INTERPRETER_INSTRUCTIONS, prompt: context, signal: options.signal, responseSchema: { name: 'uniscenarios_copilot_intent', schema: INTENT_JSON_SCHEMA } }));
         model = generated.model;
         usage = addUsage(usage, generated.usage);
         intent = parseIntent(generated.text);
       } else {
-        repairAttempts++;
-        warnings.push(`The staged language-model interpreter could not complete safely (${safeError(error)}); deterministic interpretation was used.`);
-        intent = heuristicIntent(request.prompt);
+        throw new Error(`The staged language-model interpreter failed; no deterministic result was substituted (${safeError(error)}).`);
       }
     }
   }
@@ -123,7 +151,16 @@ function parseIntent(text: string): CopilotIntent {
     || !Array.isArray(raw.spatialRelations) || !Array.isArray(raw.restrictions) || typeof raw.desiredOutcome !== 'string' || !Array.isArray(raw.assumptions)) {
     throw new Error('Interpreter JSON did not satisfy the typed intent boundary.');
   }
-  return raw as CopilotIntent;
+  const cleanActor = (actor: CopilotIntent['ego']): CopilotIntent['ego'] => {
+    const { initialSpeedKph, ...rest } = actor;
+    return typeof initialSpeedKph === 'number' ? { ...rest, initialSpeedKph } : rest;
+  };
+  return {
+    ...(raw as CopilotIntent),
+    ego: cleanActor(raw.ego as CopilotIntent['ego']),
+    adversaries: raw.adversaries.map((actor) => cleanActor(actor as CopilotIntent['ego'])),
+    contextActors: raw.contextActors.map((actor) => cleanActor(actor as CopilotIntent['ego'])),
+  };
 }
 
 function addUsage(a: typeof usageShape, b: typeof usageShape): typeof usageShape {

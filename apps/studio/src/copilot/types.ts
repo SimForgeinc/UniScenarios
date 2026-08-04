@@ -4,6 +4,9 @@ export type CopilotProviderId = 'staged-rag' | 'direct-llm';
 
 export type CopilotActorKind = 'vehicle' | 'pedestrian' | 'prop';
 
+/** Hard contract bound for route runway values crossing the browser/server boundary. */
+export const COPILOT_MAX_RUNWAY_M = 1_000_000;
+
 export interface CopilotPlacementSlot {
   readonly id: string;
   readonly actorKinds: readonly CopilotActorKind[];

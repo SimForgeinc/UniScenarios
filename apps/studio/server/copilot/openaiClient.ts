@@ -13,16 +13,22 @@ export async function generateJsonText(input: {
   readonly instructions: string;
   readonly prompt: string;
   readonly signal?: AbortSignal;
+  readonly responseSchema?: { readonly name: string; readonly schema: Readonly<Record<string, unknown>> };
+  readonly fetchImpl?: typeof fetch;
+  readonly baseUrl?: string;
 }): Promise<TextGeneration> {
-  const response = await fetch('https://api.openai.com/v1/responses', {
+  const request = input.fetchImpl ?? fetch;
+  const response = await request(`${(input.baseUrl ?? 'https://api.openai.com/v1').replace(/\/$/u, '')}/responses`, {
     method: 'POST',
     headers: { authorization: `Bearer ${input.apiKey}`, 'content-type': 'application/json' },
     body: JSON.stringify({
       model: input.model,
-      instructions: input.instructions,
+      instructions: input.responseSchema ? input.instructions : `${input.instructions}\nReturn valid lowercase json.`,
       input: input.prompt,
       max_output_tokens: 1800,
-      text: { format: { type: 'json_object' } },
+      text: { format: input.responseSchema
+        ? { type: 'json_schema', name: input.responseSchema.name, strict: true, schema: input.responseSchema.schema }
+        : { type: 'json_object' } },
     }),
     signal: input.signal,
   });

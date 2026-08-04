@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotProgress, CopilotProviderId } from '../../src/copilot/types.js';
 import { configuredOpenAI } from './openaiClient.js';
+import { CopilotMapContextSchema } from './directTypes.js';
 import { generateStagedScenario } from './stagedProvider.js';
 
 export type CopilotServerProvider = (
@@ -80,9 +81,9 @@ function parseRequest(value: unknown): CopilotGenerationRequest {
   const input = value as Partial<CopilotGenerationRequest>;
   if (input.providerId !== 'staged-rag' && input.providerId !== 'direct-llm') throw new Error('Unknown Scenario Copilot provider.');
   if (typeof input.prompt !== 'string' || input.prompt.trim().length < 8 || input.prompt.length > 4_000) throw new Error('Describe the scenario in 8–4,000 characters.');
-  if (!input.mapContext || typeof input.mapContext.mapId !== 'string' || !Array.isArray(input.mapContext.placementSlots)) throw new Error('A current-map context is required.');
-  if (input.mapContext.placementSlots.length < 2 || input.mapContext.placementSlots.length > 64) throw new Error('Current-map placement slots must contain 2–64 entries.');
-  return input as CopilotGenerationRequest;
+  if (!input.mapContext) throw new Error('A current-map context is required.');
+  const mapContext = CopilotMapContextSchema.parse(input.mapContext);
+  return { ...input, mapContext } as CopilotGenerationRequest;
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {

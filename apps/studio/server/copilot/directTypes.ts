@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { COPILOT_MAX_RUNWAY_M } from '../../src/copilot/types.js';
 
 export const DirectPlacementSlotSchema = z.strictObject({
   id: z.string().min(1).max(160),
@@ -10,19 +11,23 @@ export const DirectPlacementSlotSchema = z.strictObject({
     s: z.number().min(0), t: z.number(), headingOffsetRad: z.number(),
   }).optional(),
   routeLaneRsls: z.array(z.string().min(1)).min(1).max(128).optional(),
+  availableDownstreamM: z.number().finite().min(0).max(COPILOT_MAX_RUNWAY_M).optional(),
   recommendedSpeedKph: z.number().min(0).max(160).optional(),
   labels: z.array(z.string().min(1).max(160)).max(32).default([]),
 });
 
-export const DirectMapContextSchema = z.strictObject({
+export const CopilotMapContextSchema = z.strictObject({
   mapId: z.string().min(1).max(200),
   mapName: z.string().min(1).max(240),
   xodrSha256: z.string().nullable(),
   laneCount: z.number().int().min(0),
   junctionLaneCount: z.number().int().min(0),
   bounds: z.strictObject({ minX: z.number(), minZ: z.number(), maxX: z.number(), maxZ: z.number() }),
-  placementSlots: z.array(DirectPlacementSlotSchema).min(1).max(128),
+  placementSlots: z.array(DirectPlacementSlotSchema).min(2).max(64),
 });
+
+/** Backwards-compatible name for the direct provider's shared map boundary. */
+export const DirectMapContextSchema = CopilotMapContextSchema;
 
 export const DirectActionDraftSchema = z.strictObject({
   id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),

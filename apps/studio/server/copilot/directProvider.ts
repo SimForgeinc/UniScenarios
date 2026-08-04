@@ -23,6 +23,7 @@ function compactMapContext(request: CopilotGenerationRequest): string {
       id: slot.id,
       actorKinds: slot.actorKinds,
       catalogIds: slot.catalogIds ?? null,
+      availableDownstreamM: slot.availableDownstreamM ?? null,
       recommendedSpeedKph: slot.recommendedSpeedKph ?? null,
       labels: slot.labels,
       hasLaneRoute: Boolean(slot.laneRef && slot.routeLaneRsls?.length),
