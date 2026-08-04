@@ -22,6 +22,18 @@ export function simulationSourceHash(template: ScenarioTemplateV2): string {
     roles: template.roles.map((role) => {
       const { label: _label, extensions, actor, ...binding } = role;
       const { catalogId: _catalogId, sensors: _sensors, ...behaviorActor } = actor;
+      if (binding.kind === 'scene_absolute') {
+        // World elevation is authoring presentation state. The canonical
+        // simulation consumes scene x/z and heading only, so grounding a
+        // legacy draft must not invalidate otherwise identical 2D evidence.
+        const { y: _groundElevation, ...positionXZ } = binding.pose.position;
+        return {
+          ...binding,
+          pose: { ...binding.pose, position: positionXZ },
+          extensions: executionExtensions(extensions),
+          actor: behaviorActor,
+        };
+      }
       return { ...binding, extensions: executionExtensions(extensions), actor: behaviorActor };
     }),
     props: template.props.map((prop) => {

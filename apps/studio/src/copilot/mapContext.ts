@@ -2,12 +2,17 @@ import { buildDefaultPlacementRoute } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
 import type { LaneIndex } from '../editor/laneIndex';
 import type { CopilotMapContext, CopilotPlacementSlot } from './types';
+import type { GroundHeightSampler } from './grounding';
 
 /**
  * Build a bounded, serialisable view of the current map for scenario generation.
  * The model selects slot ids; it never invents world coordinates or lane ids.
  */
-export function buildCopilotMapContext(map: MapEntry, lanes: LaneIndex): CopilotMapContext {
+export function buildCopilotMapContext(
+  map: MapEntry,
+  lanes: LaneIndex,
+  sampleHeight: GroundHeightSampler | null = null,
+): CopilotMapContext {
   const candidates = [...lanes.all]
     .filter((lane) => lane.length >= 45)
     .sort((a, b) => Number(a.isJunction) - Number(b.isJunction) || b.length - a.length || a.rsl.localeCompare(b.rsl));
@@ -33,7 +38,12 @@ export function buildCopilotMapContext(map: MapEntry, lanes: LaneIndex): Copilot
           'vehicle.sedan', 'vehicle.pickup', 'vehicle.van', 'vehicle.bus', 'vehicle.ambulance',
           'vehicle.motorcycle', 'vehicle.bicycle', 'pedestrian.adult_walking', 'pedestrian.child_walking',
         ],
-        pose: { x: pose.x, y: 0, z: pose.z, headingRad: pose.headingRad },
+        pose: {
+          x: pose.x,
+          y: sampleHeight?.(pose.x, pose.z) ?? 0,
+          z: pose.z,
+          headingRad: pose.headingRad,
+        },
         laneRef: {
           roadId: lane.roadId,
           section: lane.section,

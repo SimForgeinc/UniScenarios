@@ -6,6 +6,7 @@ import { generateScenarioCandidates, updateLiveCopilotValidation } from './clien
 import type { CopilotCandidate, CopilotGenerationResult, CopilotIntent, CopilotProgress, CopilotProviderId } from './types';
 import type { EditorController } from '../editor/controller';
 import type { MapEntry } from '../maps';
+import type { GroundHeightSampler } from './grounding';
 
 export interface CandidateValidation {
   readonly valid: boolean;
@@ -17,6 +18,7 @@ export interface CandidateValidation {
 export interface ScenarioCopilotPanelProps {
   readonly controller: EditorController;
   readonly map: MapEntry;
+  readonly sampleHeight: GroundHeightSampler | null;
   readonly onValidate: (candidate: CopilotCandidate) => Promise<CandidateValidation>;
   readonly onApply: (candidate: CopilotCandidate) => void;
   readonly onOpenGenerations: () => void;
@@ -25,7 +27,7 @@ export interface ScenarioCopilotPanelProps {
 
 const STARTER = 'A sedan approaches a pedestrian who emerges from behind a stopped van. The pedestrian starts after four seconds and the sedan should brake to avoid a collision.';
 
-export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onOpenGenerations, onClose }: ScenarioCopilotPanelProps): JSX.Element {
+export function ScenarioCopilotPanel({ controller, map, sampleHeight, onValidate, onApply, onOpenGenerations, onClose }: ScenarioCopilotPanelProps): JSX.Element {
   const [provider, setProvider] = useState<CopilotProviderId>('staged-rag');
   const [prompt, setPrompt] = useState(STARTER);
   const [progress, setProgress] = useState<CopilotProgress | null>(null);
@@ -35,7 +37,10 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onO
   const [busy, setBusy] = useState(false);
   const [validations, setValidations] = useState<Record<string, CandidateValidation | 'running'>>({});
   const abortRef = useRef<AbortController | null>(null);
-  const mapContext = useMemo(() => buildCopilotMapContext(map, controller.laneIndex), [controller, map]);
+  const mapContext = useMemo(
+    () => buildCopilotMapContext(map, controller.laneIndex, sampleHeight),
+    [controller, map, sampleHeight],
+  );
 
   useEffect(() => () => abortRef.current?.abort(), []);
 

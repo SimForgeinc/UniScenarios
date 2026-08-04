@@ -71,7 +71,6 @@ import {
   dashCameras,
   defaultDashCamera,
   supportsDashCamera,
-  TemplateDocument,
   type DashCameraSensor,
   type RoleBinding,
   type ScenarioTemplateV2,
@@ -110,6 +109,7 @@ import { StudioSignalSelectionModel } from './signalSelection';
 import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializer';
 import { WorldLoadingOverlay } from './WorldLoadingOverlay';
 import { GenerationsWorkspace, ScenarioCopilotPanel, draftCompatibility, hasMaterialAuthoredContent, parseSavedGenerationDraft, type CandidateValidation, type CopilotCandidate, type CopilotGenerationHistoryEntry } from './copilot';
+import { groundEditableActors } from './copilot/grounding';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(quality: QualityPreference): CityViewerOptions {
@@ -1275,11 +1275,12 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
 
   const applyCopilotCandidate = useCallback((candidate: CopilotCandidate): void => {
     if (!editorController) return;
-    editorController.doc.importTemplate(candidate.scenarioDoc, { saveName: candidate.title });
-    editorController.setSelection(candidate.scenarioDoc.roles.map((role) => role.id));
+    const grounded = groundEditableActors(candidate.scenarioDoc, sampleHeight);
+    editorController.doc.importTemplate(grounded, { saveName: candidate.title });
+    editorController.setSelection(grounded.roles.map((role) => role.id));
     setAuxiliaryTool(null);
     setActorDetailsId(null);
-  }, [editorController]);
+  }, [editorController, sampleHeight]);
 
   const openSavedGeneration = useCallback((entry: CopilotGenerationHistoryEntry): void => {
     if (!editorController || !entry.candidate) return;
@@ -1293,15 +1294,16 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     const current = editorController.doc.data;
     const hasAuthoredWork = hasMaterialAuthoredContent(current);
     if (hasAuthoredWork && !window.confirm(`Open “${entry.caseTitle}” in Author? Your current scenario is already autosaved, and this will replace the open canvas. You can return to the saved scenario from the gallery.`)) return;
-    editorController.doc.importTemplate(exact, { saveName: entry.candidate.title });
-    editorController.setSelection(exact.roles.map((role) => role.id));
+    const grounded = groundEditableActors(exact, sampleHeight);
+    editorController.doc.importTemplate(grounded, { saveName: entry.candidate.title });
+    editorController.setSelection(grounded.roles.map((role) => role.id));
     setPlaybackBundle(null); setCampaignPlaybackTitle(null); setCampaignSource(null);
     setOpenScenarioOpen(false); setMapWorkspaceOpen(false); setAuxiliaryTool(null); setSettingsOpen(false);
-    setActorDetailsId(exact.roles[0]?.id ?? null);
+    setActorDetailsId(grounded.roles[0]?.id ?? null);
     setTimelineOpenGeneration((value) => value + 1);
     navigateGenerations(false);
-    frameEditableActors(viewer, exact);
-  }, [editorController, map.id, navigateGenerations, viewer]);
+    frameEditableActors(viewer, grounded);
+  }, [editorController, map.id, navigateGenerations, sampleHeight, viewer]);
 
   const switchToGenerationMap = useCallback((entry: CopilotGenerationHistoryEntry): void => {
     const target = mapById(entry.mapId);
@@ -1506,6 +1508,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
             <ScenarioCopilotPanel
               controller={editorController}
               map={map}
+              sampleHeight={sampleHeight}
               onValidate={validateCopilotCandidate}
               onApply={applyCopilotCandidate}
               onOpenGenerations={() => navigateGenerations(true)}
@@ -1810,26 +1813,6 @@ function sampledTraceSpeed(bundle: PlaybackBundle, actorId: string, time: number
 
 function getEntrySafeLabel(id: CatalogId): string {
   try { return getEntry(id).label; } catch { return id; }
-}
-
-function groundEditableActors(
-  template: ScenarioTemplateV2,
-  sampleHeight: ((x: number, z: number) => number | null) | null,
-): ScenarioTemplateV2 {
-  if (!sampleHeight) return template;
-  return TemplateDocument.fromJSON({
-    ...template,
-    roles: template.roles.map((role) => role.kind !== 'scene_absolute' ? role : ({
-      ...role,
-      pose: {
-        ...role.pose,
-        position: {
-          ...role.pose.position,
-          y: sampleHeight(role.pose.position.x, role.pose.position.z) ?? role.pose.position.y,
-        },
-      },
-    })),
-  }).data;
 }
 
 function frameEditableActors(viewer: CityViewer | null, template: ScenarioTemplateV2): void {
