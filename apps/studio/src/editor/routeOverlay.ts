@@ -69,19 +69,6 @@ const VEHICLE_KINDS = new Set<SimActor['kind']>(['vehicle', 'car', 'truck', 'bus
 const PALETTE = ['#55a7ff', '#ff8a65', '#8bd17c', '#d590ef', '#ffd166', '#54d6c4', '#ef6f9b'];
 const ROUTE_CACHE_LIMIT = 256;
 const routeGeometryCache = new Map<string, readonly RoutePoint[]>();
-/**
- * Visual-only clearance above the sampled road/terrain surface. The previous
- * 27–52 cm lifts made guides float and relied on x-ray rendering. Five to nine
- * centimetres clears Yale's marking decals (8 mm p95) and depth-buffer noise
- * while keeping the route visibly attached to the pavement.
- */
-export const ROUTE_OVERLAY_CLEARANCE_M = Object.freeze({
-  subdued: .05,
-  selected: .07,
-  actual: .065,
-  marker: .09,
-  trigger: .055,
-});
 
 /** Test/diagnostic hook: route edits add one entry without evicting unrelated actors. */
 export function routeGeometryCacheSize(): number { return routeGeometryCache.size; }
@@ -554,11 +541,6 @@ export class VehicleRouteOverlayRenderer {
     this.group.renderOrder = 20;
   }
 
-  private surfaceY(point: RoutePoint, clearanceM: number): number {
-    const sampled = this.sampleHeight?.(point.x, point.z);
-    return (sampled !== null && sampled !== undefined && Number.isFinite(sampled) ? sampled : 0) + clearanceM;
-  }
-
   sync(routes: readonly VehicleRouteOverlay[], options: RouteOverlayOptions): void {
     this.clear();
     const visible = routes.filter((route) => !route.ambient || options.showAmbient);
@@ -586,8 +568,8 @@ export class VehicleRouteOverlayRenderer {
           for (let i = 1; i < traceSpan.points.length; i++) {
             const a = traceSpan.points[i - 1]!;
             const b = traceSpan.points[i]!;
-            const ay = this.surfaceY(a, ROUTE_OVERLAY_CLEARANCE_M.selected);
-            const by = this.surfaceY(b, ROUTE_OVERLAY_CLEARANCE_M.selected);
+            const ay = (this.sampleHeight?.(a.x, a.z) ?? 0) + .48;
+            const by = (this.sampleHeight?.(b.x, b.z) ?? 0) + .48;
             selectedPositions.push(a.x, ay, a.z, b.x, by, b.z);
             selectedColors.push(gold.r, gold.g, gold.b, gold.r, gold.g, gold.b);
           }
@@ -599,12 +581,12 @@ export class VehicleRouteOverlayRenderer {
           const segments = dashedSegments(traceSpan.points, 1.1, .65);
           for (let i = 0; i < segments.length; i += 3) {
             const x = segments[i]!; const z = segments[i + 2]!;
-            pedestrianPositions.push(x, this.surfaceY({ x, z }, selected ? ROUTE_OVERLAY_CLEARANCE_M.selected : ROUTE_OVERLAY_CLEARANCE_M.subdued), z);
+            pedestrianPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .46 : .34), z);
             pedestrianColors.push(color.r, color.g, color.b);
           }
         }
       } else for (const point of spans.flatMap((traceSpan) => dottedPoints(traceSpan.points))) {
-          plannedPositions.push(point.x, this.surfaceY(point, selected ? ROUTE_OVERLAY_CLEARANCE_M.selected : ROUTE_OVERLAY_CLEARANCE_M.subdued), point.z);
+          plannedPositions.push(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + (selected ? .38 : .27), point.z);
           plannedColors.push(color.r, color.g, color.b);
         }
       for (const traceSpan of spans) {
@@ -613,7 +595,7 @@ export class VehicleRouteOverlayRenderer {
         for (let i = 0; i < arrows.length; i += 3) {
           const x = arrows[i]!;
           const z = arrows[i + 2]!;
-          arrowPositions.push(x, this.surfaceY({ x, z }, selected ? ROUTE_OVERLAY_CLEARANCE_M.selected : ROUTE_OVERLAY_CLEARANCE_M.subdued), z);
+          arrowPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .4 : .29), z);
           arrowColors.push(color.r, color.g, color.b);
         }
       }
@@ -630,7 +612,7 @@ export class VehicleRouteOverlayRenderer {
       geometry.setAttribute('position', new BufferAttribute(Float32Array.from(plannedPositions), 3));
       geometry.setAttribute('color', new BufferAttribute(Float32Array.from(plannedColors), 3));
       geometry.computeBoundingSphere();
-      const points = new Points(geometry, new PointsMaterial({ size: .4, vertexColors: true, transparent: true, opacity: .98, depthTest: true, depthWrite: false, sizeAttenuation: true }));
+      const points = new Points(geometry, new PointsMaterial({ size: .48, vertexColors: true, transparent: true, opacity: .98, depthTest: false, depthWrite: false, sizeAttenuation: true }));
       points.name = 'planned-route-dots';
       points.renderOrder = 21;
       points.raycast = () => undefined;
@@ -648,8 +630,8 @@ export class VehicleRouteOverlayRenderer {
             const a = traceSpan.points[i - 1]!;
             const b = traceSpan.points[i]!;
             positions.push(
-              a.x, this.surfaceY(a, ROUTE_OVERLAY_CLEARANCE_M.actual), a.z,
-              b.x, this.surfaceY(b, ROUTE_OVERLAY_CLEARANCE_M.actual), b.z,
+              a.x, (this.sampleHeight?.(a.x, a.z) ?? 0) + .38, a.z,
+              b.x, (this.sampleHeight?.(b.x, b.z) ?? 0) + .38, b.z,
             );
             colors.push(color.r, color.g, color.b, color.r, color.g, color.b);
           }
@@ -660,7 +642,7 @@ export class VehicleRouteOverlayRenderer {
     const markerPositions: number[] = [];
     const markerColors: number[] = [];
     for (const route of visible) for (const marker of route.markers) {
-      markerPositions.push(marker.point.x, this.surfaceY(marker.point, ROUTE_OVERLAY_CLEARANCE_M.marker), marker.point.z);
+      markerPositions.push(marker.point.x, (this.sampleHeight?.(marker.point.x, marker.point.z) ?? 0) + .52, marker.point.z);
       const color = marker.kind === 'stop' ? new Color('#ff4d5a') : marker.kind === 'speed-change' ? new Color('#ffd166') : new Color(route.color);
       markerColors.push(color.r, color.g, color.b);
     }
@@ -668,7 +650,7 @@ export class VehicleRouteOverlayRenderer {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(Float32Array.from(markerPositions), 3));
       geometry.setAttribute('color', new BufferAttribute(Float32Array.from(markerColors), 3));
-      const points = new Points(geometry, new PointsMaterial({ size: .72, vertexColors: true, transparent: true, opacity: 1, depthTest: true, depthWrite: false, sizeAttenuation: true }));
+      const points = new Points(geometry, new PointsMaterial({ size: .9, vertexColors: true, transparent: true, opacity: 1, depthTest: false, depthWrite: false, sizeAttenuation: true }));
       points.name = 'route-action-markers';
       points.renderOrder = 23;
       points.frustumCulled = true;
@@ -687,7 +669,7 @@ export class VehicleRouteOverlayRenderer {
         for (const angle of [a, b]) {
           const x = route.triggerPoint.x + Math.cos(angle) * radius;
           const z = route.triggerPoint.z + Math.sin(angle) * radius;
-          triggerPositions.push(x, this.surfaceY({ x, z }, ROUTE_OVERLAY_CLEARANCE_M.trigger), z);
+          triggerPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + .32, z);
           triggerColors.push(color.r, color.g, color.b);
         }
       }
@@ -714,7 +696,7 @@ export class VehicleRouteOverlayRenderer {
     geometry.setAttribute('position', new BufferAttribute(Float32Array.from(positions), 3));
     geometry.setAttribute('color', new BufferAttribute(Float32Array.from(colors), 3));
     geometry.computeBoundingSphere();
-    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthTest: true, depthWrite: false, linewidth }));
+    const lines = new LineSegments(geometry, new LineBasicMaterial({ vertexColors: true, transparent: true, opacity, depthTest: false, depthWrite: false, linewidth }));
     lines.name = name;
     lines.renderOrder = renderOrder;
     lines.frustumCulled = true;
@@ -751,7 +733,7 @@ export class VehicleRouteOverlayRenderer {
     texture.magFilter = LinearFilter;
     texture.colorSpace = SRGBColorSpace;
     texture.needsUpdate = true;
-    const material = new SpriteMaterial({ map: texture, transparent: true, depthTest: true, depthWrite: false });
+    const material = new SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false });
     const sprite = new Sprite(material);
     const baseY = (this.sampleHeight?.(annotation.point.x, annotation.point.z) ?? 0) + 1.25;
     sprite.position.set(annotation.point.x, baseY + annotation.stackIndex * .62, annotation.point.z);
