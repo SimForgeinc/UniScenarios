@@ -15,7 +15,7 @@ const FAVORITES_KEY = 'uniscenarios.studio.catalog-favorites.v1';
 const RECENTS_KEY = 'uniscenarios.studio.catalog-recents.v1';
 const MAX_RECENTS = 8;
 
-export type ViewportTool = 'select' | 'move' | 'rotate' | 'add' | 'ambient' | 'camera' | 'saved' | 'variations' | 'measure';
+export type ViewportTool = 'select' | 'rotate' | 'add' | 'ambient' | 'camera' | 'saved' | 'variations' | 'measure';
 export type CatalogFilter = 'all' | 'vehicle' | 'pedestrian' | 'prop' | 'favorite' | 'recent';
 
 /**
@@ -39,9 +39,9 @@ export interface EditorToolRailProps {
   /** False throughout preparing, paused, playing and ended playback states. */
   authoringEnabled: boolean;
   /** Opens an application-owned drawer, or closes it with `null`. */
-  onToolRequest?: (tool: Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null) => void;
+  onToolRequest?: (tool: Exclude<ViewportTool, 'select' | 'rotate' | 'add'> | null) => void;
   /** Application-owned auxiliary tool, kept in sync when a popover closes externally. */
-  auxiliaryTool?: Exclude<ViewportTool, 'select' | 'move' | 'rotate' | 'add'> | null;
+  auxiliaryTool?: Exclude<ViewportTool, 'select' | 'rotate' | 'add'> | null;
 }
 
 /** The authoring rail is overlay chrome and should disappear outside mutable authoring. */
@@ -59,7 +59,6 @@ interface ToolDefinition {
 
 const TOOLS: readonly ToolDefinition[] = [
   { id: 'select', label: 'Select', glyph: '↖', shortcut: 'Esc' },
-  { id: 'move', label: 'Move', glyph: '✥', shortcut: 'G', needsSelection: true },
   { id: 'rotate', label: 'Rotate', glyph: '↻', shortcut: 'R', needsSelection: true },
   { id: 'add', label: 'Add actor', glyph: '+', shortcut: 'A' },
   { id: 'ambient', label: 'Ambient traffic', glyph: '≋' },
@@ -144,9 +143,6 @@ export const EditorToolRail = memo(function EditorToolRail({
     if (tool.id === 'select') {
       placement.cancel();
       controller.cancel();
-      onToolRequest?.(null);
-    } else if (tool.id === 'move') {
-      controller.beginGrab();
       onToolRequest?.(null);
     } else if (tool.id === 'rotate') {
       controller.beginRotate();
@@ -400,9 +396,14 @@ function CatalogCard({
 
 function toolForMode(mode: EditorMode | undefined, catalogOpen: boolean, auxiliary: ViewportTool | null): ViewportTool {
   if (catalogOpen || mode === 'placing') return 'add';
-  if (mode === 'grab') return 'move';
   if (mode === 'rotate') return 'rotate';
   return auxiliary ?? 'select';
+}
+
+/** Saved workspaces from the dedicated-Move era reopen in ordinary Select. */
+export function migrateViewportTool(value: unknown): ViewportTool {
+  if (value === 'move') return 'select';
+  return TOOLS.some((tool) => tool.id === value) ? value as ViewportTool : 'select';
 }
 
 function groupEntries(entries: readonly CatalogEntry[]): [PropClass, CatalogEntry[]][] {

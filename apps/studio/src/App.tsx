@@ -553,7 +553,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
     const routes = playbackBundle !== null && concrete
       ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
-      : authoringRoutes(editorController.doc.data, editorController.laneIndex, concrete?.instance.input, concrete?.trace);
+      : authoringRoutes(editorController.authoringPreviewData, editorController.laneIndex, concrete?.instance.input, concrete?.trace);
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;
     renderer.group.visible = viewSettings.routes.visible
       && !mapWorkspaceOpen

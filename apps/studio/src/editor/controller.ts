@@ -39,6 +39,7 @@
 import { Raycaster, Vector2, Vector3, type Intersection } from 'three';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
+import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { buildDefaultPlacementRoute, buildFollowRoute } from '@uniscenarios/sim-engine';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
 import { handleEditorHistoryKey, isTextEditingTarget } from './keyboard';
@@ -109,6 +110,18 @@ interface GrabSession {
   origin: Map<string, ActorRecord>;
   start: Vector3;
   broke: boolean;
+  direct: boolean;
+  valid: boolean;
+  reason: string | null;
+  headingOffsetRad: number;
+}
+
+interface DirectMovePress {
+  pointerId: number;
+  actorId: string;
+  startGround: Vector3;
+  active: boolean;
+  timer: ReturnType<typeof setTimeout> | null;
 }
 
 interface RotateSession {
@@ -148,6 +161,12 @@ const CLICK_SLOP_PX = 5;
 const LATERAL_STEP_M = 0.25;
 /** Shift-snap increment while rotating, degrees. */
 const ROTATE_SNAP_DEG = 15;
+/** Direct manipulation intentionally distinguishes a hold from a normal click. */
+const DIRECT_MOVE_HOLD_MS = 220;
+/** Static props rotate in small deterministic increments while being positioned. */
+const PROP_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
+/** Lift the authored object while its original footprint remains visible. */
+const DIRECT_MOVE_LIFT_M = 0.42;
 /** How long a transient status message stays up. */
 const MESSAGE_MS = 2600;
 
@@ -180,6 +199,7 @@ export class EditorController {
   private ghostPose: GhostPose | null = null;
   private preview = new Map<string, PosePatch>();
   private grab: GrabSession | null = null;
+  private directPress: DirectMovePress | null = null;
   private rotate: RotateSession | null = null;
   private message: string | null = null;
   private messageTimer: ReturnType<typeof setTimeout> | null = null;
@@ -191,6 +211,7 @@ export class EditorController {
   private pressMoved = false;
   private headingDrag: { x: number; z: number } | null = null;
   private freeHeading = 0;
+  private placementHeadingOffsetRad = 0;
   private altDown = false;
   private shiftDown = false;
   private lastGroundY = 0;
@@ -223,6 +244,33 @@ export class EditorController {
 
   get state(): EditorState {
     return this.snapshot;
+  }
+
+  /** Immutable template view used only to draw in-flight route previews. */
+  get authoringPreviewData(): ScenarioTemplateV2 {
+    const data = this.doc.data;
+    if (this.preview.size === 0) return data;
+    return {
+      ...data,
+      roles: data.roles.map((role) => {
+        const patch = this.preview.get(role.id);
+        if (!patch || role.kind !== 'scene_absolute') return role;
+        const next = {
+          ...role,
+          pose: {
+            position: { x: patch.x, y: patch.y, z: patch.z },
+            headingRad: patch.headingRad,
+          },
+        };
+        if (patch.laneRef === null) delete next.laneRef;
+        else if (patch.laneRef !== undefined) next.laneRef = patch.laneRef;
+        if (patch.routeLaneRsls === null) delete next.initialRoute;
+        else if (patch.routeLaneRsls !== undefined) {
+          next.initialRoute = { mode: 'lanePath', lanes: [...patch.routeLaneRsls] };
+        }
+        return next;
+      }),
+    };
   }
 
   subscribe = (listener: () => void): (() => void) => {
@@ -262,6 +310,7 @@ export class EditorController {
     host.addEventListener('pointerdown', this.onPointerDown, { capture: true });
     host.addEventListener('pointermove', this.onPointerMove, { capture: true });
     host.addEventListener('pointerup', this.onPointerUp, { capture: true });
+    host.addEventListener('pointercancel', this.onPointerCancel, { capture: true });
     host.addEventListener('wheel', this.onWheel, { capture: true, passive: false });
     host.addEventListener('contextmenu', this.onContextMenu, { capture: true });
     window.addEventListener('keydown', this.onKeyDown, { capture: true });
@@ -274,10 +323,12 @@ export class EditorController {
     host.removeEventListener('pointerdown', this.onPointerDown, { capture: true });
     host.removeEventListener('pointermove', this.onPointerMove, { capture: true });
     host.removeEventListener('pointerup', this.onPointerUp, { capture: true });
+    host.removeEventListener('pointercancel', this.onPointerCancel, { capture: true });
     host.removeEventListener('wheel', this.onWheel, { capture: true });
     host.removeEventListener('contextmenu', this.onContextMenu, { capture: true });
     window.removeEventListener('keydown', this.onKeyDown, { capture: true });
     window.removeEventListener('keyup', this.onKeyUp, { capture: true });
+    this.endDirectPress();
     this.host = null;
   }
 
@@ -309,6 +360,7 @@ export class EditorController {
     this.placing = catalogId;
     this.lateral = 0;
     this.flipped = false;
+    this.placementHeadingOffsetRad = 0;
     this.ghost.show(catalogId);
     this.ghost.hide(); // stays hidden until the cursor is over the map
     this.notify();
@@ -327,6 +379,7 @@ export class EditorController {
     this.prepareRandomActorAppearance(kind);
     this.lateral = 0;
     this.flipped = false;
+    this.placementHeadingOffsetRad = 0;
     this.notify();
   }
 
@@ -470,6 +523,10 @@ export class EditorController {
       origin: new Map(this.selection.map((id) => [id, this.doc.actor(id) as ActorRecord])),
       start: start.clone(),
       broke: false,
+      direct: false,
+      valid: true,
+      reason: null,
+      headingOffsetRad: 0,
     };
     this.mode = 'grab';
     this.notify();
@@ -623,6 +680,13 @@ export class EditorController {
     }
     if (meta) return; // leave the rest of the browser's shortcuts alone
 
+    if ((event.key === 'q' || event.key === 'Q' || event.key === 'e' || event.key === 'E')
+      && this.rotateStaticPreview(event.key.toLowerCase() === 'q' ? 1 : -1)) {
+      event.preventDefault();
+      event.stopPropagation();
+      return;
+    }
+
     switch (event.key) {
       case 'Escape':
         event.preventDefault();
@@ -684,6 +748,23 @@ export class EditorController {
     if (this.mode === 'rotate') this.updateRotate();
   }
 
+  /** Q turns left and E turns right, but only for fixed authored props. */
+  private rotateStaticPreview(direction: 1 | -1): boolean {
+    if (this.mode === 'placing' && this.placing && actorKindFor(this.placing) === 'prop') {
+      this.placementHeadingOffsetRad = normalizeHeading(
+        this.placementHeadingOffsetRad + direction * PROP_ROTATE_STEP_RAD,
+      );
+      this.refreshGhost();
+      return true;
+    }
+    const session = this.grab;
+    if (this.mode !== 'grab' || !session?.direct
+      || [...session.origin.values()].some((actor) => actor.kind !== 'prop')) return false;
+    session.headingOffsetRad = normalizeHeading(session.headingOffsetRad + direction * PROP_ROTATE_STEP_RAD);
+    this.updateGrab();
+    return true;
+  }
+
   // -------------------------------------------------------- input: pointer
 
   private onContextMenu = (event: MouseEvent): void => {
@@ -727,6 +808,30 @@ export class EditorController {
     this.pressY = event.clientY;
     this.pressMoved = false;
 
+    if (this.mode === 'idle' && event.button === 0) {
+      const actorId = this.actorIdAt(event);
+      const actor = actorId ? this.doc.actor(actorId) : undefined;
+      const ground = actor ? this.groundPoint(event) : null;
+      if (actor && ground) {
+        // Consume the press immediately. If it stays short it is selection; if
+        // it crosses the hold/slop boundary it becomes direct manipulation.
+        event.preventDefault();
+        event.stopPropagation();
+        const press: DirectMovePress = {
+          pointerId: event.pointerId,
+          actorId: actor.id,
+          startGround: ground.clone(),
+          active: false,
+          timer: null,
+        };
+        press.timer = setTimeout(() => this.activateDirectMove(press), DIRECT_MOVE_HOLD_MS);
+        this.directPress = press;
+        try { this.viewer.renderer.domElement.setPointerCapture(event.pointerId); } catch { /* synthetic/legacy canvas */ }
+        this.viewer.controls.setEnabled(false);
+        return;
+      }
+    }
+
     if (this.mode === 'placing' && event.button === 0) {
       // The camera must not orbit while the user is dropping actors.
       event.preventDefault();
@@ -747,6 +852,16 @@ export class EditorController {
         Math.abs(event.clientY - this.pressY) > CLICK_SLOP_PX)
     ) {
       this.pressMoved = true;
+    }
+
+    const direct = this.directPress;
+    if (direct && direct.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (!direct.active && this.pressMoved) this.activateDirectMove(direct);
+      if (direct.active) this.updateGrab(event);
+      else this.groundPoint(event);
+      return;
     }
 
     switch (this.mode) {
@@ -781,6 +896,28 @@ export class EditorController {
   private onPointerUp = (event: PointerEvent): void => {
     if (!this.isCanvasEvent(event)) return;
     if (!this.authoringEnabled) return;
+    const direct = this.directPress;
+    if (direct && direct.pointerId === event.pointerId) {
+      event.preventDefault();
+      event.stopPropagation();
+      const actorId = direct.actorId;
+      const active = direct.active;
+      const valid = this.grab?.valid !== false;
+      const reason = this.grab?.reason;
+      this.pressButton = -1;
+      this.pressMoved = false;
+      if (!active) {
+        this.endDirectPress();
+        this.selectPickedActor(actorId, event.shiftKey, true);
+      } else if (valid) {
+        this.commitModal();
+      } else {
+        this.cancelModal();
+        this.flash(reason ?? 'Move cancelled — choose a valid position');
+      }
+      return;
+    }
+
     const wasPlacing = this.mode === 'placing';
     const button = this.pressButton;
     const moved = this.pressMoved;
@@ -800,6 +937,17 @@ export class EditorController {
     this.pick(event);
   };
 
+  private onPointerCancel = (event: PointerEvent): void => {
+    const direct = this.directPress;
+    if (!direct || direct.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    this.pressButton = -1;
+    this.pressMoved = false;
+    this.cancelModal();
+    this.notify();
+  };
+
   private onWheel = (event: WheelEvent): void => {
     // Only steal the wheel when it has a lane to nudge along; otherwise it is
     // the camera's zoom and must stay that way.
@@ -811,6 +959,43 @@ export class EditorController {
     this.lateral += step;
     this.refreshGhost();
   };
+
+  private activateDirectMove(press: DirectMovePress): void {
+    if (this.directPress !== press || press.active || !this.authoringEnabled) return;
+    const actor = this.doc.actor(press.actorId);
+    if (!actor) {
+      this.endDirectPress();
+      return;
+    }
+    if (press.timer !== null) clearTimeout(press.timer);
+    press.timer = null;
+    press.active = true;
+    this.selection = [actor.id];
+    this.grab = {
+      origin: new Map([[actor.id, actor]]),
+      start: press.startGround.clone(),
+      broke: false,
+      direct: true,
+      valid: true,
+      reason: null,
+      headingOffsetRad: 0,
+    };
+    this.mode = 'grab';
+    this.ghost.show(actor.catalogId);
+    this.updateGrab();
+  }
+
+  private endDirectPress(): void {
+    const press = this.directPress;
+    if (!press) return;
+    if (press.timer !== null) clearTimeout(press.timer);
+    try {
+      const canvas = this.viewer.renderer.domElement;
+      if (canvas.hasPointerCapture?.(press.pointerId)) canvas.releasePointerCapture(press.pointerId);
+    } catch { /* capture is optional in synthetic/legacy canvases */ }
+    this.directPress = null;
+    this.viewer.controls.setEnabled(true);
+  }
 
   // ------------------------------------------------------------- placement
 
@@ -891,7 +1076,7 @@ export class EditorController {
     }
 
     // Free placement: ground snap, heading from the drag (or the last one).
-    const heading = this.freeHeading;
+    const heading = normalizeHeading(this.freeHeading + this.placementHeadingOffsetRad);
     const blocker = this.overlap({
       x: ground.x,
       z: ground.z,
@@ -976,6 +1161,8 @@ export class EditorController {
     const dz = ground.z - session.start.z;
     const breakAnchor = this.altDown;
     if (breakAnchor) session.broke = true;
+    session.valid = true;
+    session.reason = null;
 
     this.preview.clear();
     for (const actor of session.origin.values()) {
@@ -1009,9 +1196,13 @@ export class EditorController {
               };
         const route = this.routeForLaneMutation(actor, anchor);
         if (!route) {
-          this.preview.clear();
-          this.flash('No usable route from that road position — move cancelled');
-          return;
+          if (!session.direct) {
+            this.preview.clear();
+            this.flash('No usable route from that road position — move cancelled');
+            return;
+          }
+          session.valid = false;
+          session.reason = 'No usable route from that road position';
         }
         const pose = this.laneIndex.poseAt(use.lane, anchor.s, anchor.t);
         this.preview.set(actor.id, {
@@ -1020,7 +1211,7 @@ export class EditorController {
           z: pose.z,
           headingRad: normalizeHeading(pose.headingRad + anchor.headingOffsetRad),
           laneRef: anchor,
-          routeLaneRsls: route,
+          ...(route ? { routeLaneRsls: route } : {}),
         });
         continue;
       }
@@ -1028,10 +1219,32 @@ export class EditorController {
         x: targetX,
         y: this.groundY(targetX, targetZ, actor.y),
         z: targetZ,
-        headingRad: actor.headingRad,
+        headingRad: normalizeHeading(actor.headingRad + (actor.kind === 'prop' ? session.headingOffsetRad : 0)),
         laneRef: breakAnchor && actor.laneRef ? null : undefined,
         routeLaneRsls: breakAnchor && actor.laneRef ? null : undefined,
       });
+    }
+    if (session.direct) {
+      const movingIds = new Set(session.origin.keys());
+      for (const [id, actor] of session.origin) {
+        const patch = this.preview.get(id);
+        if (!patch) continue;
+        const blocker = this.overlap({
+          x: patch.x,
+          z: patch.z,
+          length: actor.dims.l,
+          width: actor.dims.w,
+          headingRad: patch.headingRad,
+        }, movingIds);
+        if (blocker) {
+          session.valid = false;
+          session.reason = `Overlaps ${describe(blocker)}`;
+        }
+        this.ghost.show(actor.catalogId);
+        this.ghost.setPose(patch.x, patch.y, patch.z, patch.headingRad);
+        this.ghost.setValid(session.valid);
+        break;
+      }
     }
     this.syncScene();
     this.notify();
@@ -1073,6 +1286,10 @@ export class EditorController {
   }
 
   private commitModal(): void {
+    if (this.grab?.direct && !this.grab.valid) {
+      this.flash(this.grab.reason ?? 'Move cancelled — choose a valid position');
+      return;
+    }
     const updates: ActorUpdate[] = [];
     for (const [id, patch] of this.preview) {
       updates.push({
@@ -1090,6 +1307,8 @@ export class EditorController {
     this.grab = null;
     this.rotate = null;
     this.mode = 'idle';
+    this.ghost.hide();
+    this.endDirectPress();
     if (updates.length > 0) this.doc.update(updates);
     if (broke) this.flash('lane anchor cleared');
     this.syncScene();
@@ -1134,12 +1353,14 @@ export class EditorController {
 
   /** Drop any in-flight gesture without writing to the document. */
   private cancelModal(): void {
+    this.endDirectPress();
     this.preview.clear();
     this.grab = null;
     this.rotate = null;
     this.placing = null;
     this.placingKind = null;
     this.pendingActorId = null;
+    this.placementHeadingOffsetRad = 0;
     this.ghost.hide();
     this.ghostPose = null;
     this.mode = 'idle';
@@ -1149,23 +1370,28 @@ export class EditorController {
   // -------------------------------------------------------------- picking
 
   private pick(event: PointerEvent): void {
-    const targets = this.renderer.pickables();
-    if (targets.length === 0) {
-      if (!event.shiftKey) this.setSelection([]);
-      return;
-    }
-    this.setRay(event);
-    const hits: Intersection[] = this.raycaster.intersectObjects(targets, false);
-    let id: string | null = null;
-    for (const hit of hits) {
-      id = this.renderer.actorIdForHit(hit);
-      if (id) break;
-    }
+    const id = this.actorIdAt(event);
     if (!id) {
       if (!event.shiftKey) this.setSelection([]);
       return;
     }
-    if (event.shiftKey) {
+    this.selectPickedActor(id, event.shiftKey, true);
+  }
+
+  private actorIdAt(event: PointerEvent): string | null {
+    const targets = this.renderer.pickables();
+    if (targets.length === 0) return null;
+    this.setRay(event);
+    const hits: Intersection[] = this.raycaster.intersectObjects(targets, false);
+    for (const hit of hits) {
+      const id = this.renderer.actorIdForHit(hit);
+      if (id) return id;
+    }
+    return null;
+  }
+
+  private selectPickedActor(id: string, additive: boolean, frame: boolean): void {
+    if (additive) {
       const next = this.selection.includes(id)
         ? this.selection.filter((x) => x !== id)
         : [...this.selection, id];
@@ -1176,7 +1402,7 @@ export class EditorController {
       // actor's name in the timeline: smoothly frame that actor.  Keep this
       // out of `setSelection` so Speed/Actions controls, box selection, and
       // playback-driven selection remain completely camera-neutral.
-      this.frameActor(id);
+      if (frame) this.frameActor(id);
     }
   }
 
@@ -1241,8 +1467,8 @@ export class EditorController {
     return this.laneIndex.laneFor(anchor.roadId, anchor.section, anchor.laneId) ?? null;
   }
 
-  private overlap(probe: Footprint): (Footprint & { id: string; catalogId: CatalogId }) | null {
-    const others = this.doc.actors.map((a) => ({
+  private overlap(probe: Footprint, exclude = new Set<string>()): (Footprint & { id: string; catalogId: CatalogId }) | null {
+    const others = this.doc.actors.filter((a) => !exclude.has(a.id)).map((a) => ({
       id: a.id,
       catalogId: a.catalogId,
       x: a.x,
@@ -1262,7 +1488,7 @@ export class EditorController {
         id: actor.id,
         catalogId: actor.catalogId,
         x: patch?.x ?? actor.x,
-        y: patch?.y ?? actor.y,
+        y: (patch?.y ?? actor.y) + (this.grab?.direct && this.preview.has(actor.id) ? DIRECT_MOVE_LIFT_M : 0),
         z: patch?.z ?? actor.z,
         headingRad: patch?.headingRad ?? actor.headingRad,
         dims: actor.dims,
@@ -1312,7 +1538,21 @@ export class EditorController {
       revision: this.doc.revision,
       name: this.doc.name,
       mode: this.mode,
-      actors: this.doc.actors,
+      actors: this.doc.actors.map((actor) => {
+        const patch = this.preview.get(actor.id);
+        if (!patch) return actor;
+        return {
+          ...actor,
+          x: patch.x,
+          y: patch.y,
+          z: patch.z,
+          headingRad: patch.headingRad,
+          laneRef: patch.laneRef === undefined ? actor.laneRef : patch.laneRef ?? undefined,
+          routeLaneRsls: patch.routeLaneRsls === undefined
+            ? actor.routeLaneRsls
+            : patch.routeLaneRsls ?? undefined,
+        };
+      }),
       selection: this.selection,
       placing: this.placing,
       snapped: this.ghostPose?.laneRef != null,
@@ -1340,16 +1580,25 @@ export class EditorController {
             ? `click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · ⌥ free · right-click cancel`
             : 'free placement (⌥) · click place · drag set heading · right-click cancel';
         }
-        return 'click place · click-drag set heading · right-click cancel';
+        return kind === 'prop'
+          ? 'click place · click-drag set heading · Q / E rotate 5° · right-click cancel'
+          : 'click place · click-drag set heading · right-click cancel';
       }
-      case 'grab':
+      case 'grab': {
+        if (this.grab?.direct) {
+          const staticProp = [...this.grab.origin.values()].every((actor) => actor.kind === 'prop');
+          return staticProp
+            ? 'move · Q / E rotate 5° · release confirm · Esc cancel'
+            : 'move · release confirm · Esc cancel';
+        }
         return 'move · click confirm · ⌥ break lane anchor · right-click cancel';
+      }
       case 'rotate':
         return 'rotate · ⇧ 15° snap · click confirm · right-click cancel';
       default:
         return this.selection.length > 0
-          ? `${this.selection.length} selected · G move · R rotate · ⌘D duplicate · ⌫ delete · ⇧click add`
-          : 'choose a build tool · click select · left-drag rotate · middle-drag / WASD pan';
+          ? `${this.selection.length} selected · hold-drag move · R rotate · ⌘D duplicate · ⌫ delete · ⇧click add`
+          : 'choose a build tool · click select · hold-drag actor move · left-drag rotate · middle-drag / WASD pan';
     }
   }
 }

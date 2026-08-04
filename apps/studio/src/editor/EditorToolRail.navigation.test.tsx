@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import { EditorToolRail } from './EditorToolRail';
+import { EditorToolRail, migrateViewportTool } from './EditorToolRail';
 
 describe('Editor tool navigation', () => {
   it('does not expose a standalone Validate and Export entry', () => {
@@ -13,5 +13,13 @@ describe('Editor tool navigation', () => {
     expect(markup).not.toContain('tool-validate');
     expect(markup).not.toContain('aria-label="Validate"');
     expect(markup).not.toContain('Validate &amp; export');
+    expect(markup).not.toContain('data-testid="tool-move"');
+    expect(markup).not.toContain('aria-label="Move"');
+  });
+
+  it('maps a legacy saved Move selection back to Select', () => {
+    expect(migrateViewportTool('move')).toBe('select');
+    expect(migrateViewportTool('rotate')).toBe('rotate');
+    expect(migrateViewportTool('unknown')).toBe('select');
   });
 });
