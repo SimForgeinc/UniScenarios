@@ -32,6 +32,19 @@ function compactMapContext(request: CopilotGenerationRequest): string {
       changeLane: 'value is -1 (right) or 1 (left)',
       laneOffset: 'value is lane-width fraction -1..1',
     },
+    currentScenario: request.currentScenario ? {
+      name: request.currentScenario.meta.name,
+      actors: request.currentScenario.roles.slice(0, 32).map((role) => ({
+        id: role.id,
+        label: role.label ?? null,
+        catalogId: role.actor.catalogId ?? null,
+        actorClass: role.actor.class,
+        mapBound: role.kind === 'scene_absolute',
+      })),
+      actions: request.currentScenario.choreography.interactions.slice(0, 128).map((action) => ({
+        id: action.id, actorId: action.actor, kind: action.verb, label: action.label ?? null,
+      })),
+    } : null,
     clipSeconds: 20,
   });
 }
@@ -42,6 +55,7 @@ Security and correctness rules:
 - Select only slot ids and catalog ids present in MAP_CONTEXT; never invent coordinates, lanes, ids, or catalog entries.
 - Vehicle actors require slots where hasLaneRoute is true. Never reuse a slot.
 - Use 1–32 actors. Keep every action inside the 20 second clip.
+- If a current scenario summary is present, preserve actors or behavior the request does not ask to replace when compatible with the supplied slots. The result is a complete replacement draft, not executable code.
 - Prefer a simple scenario that deterministically satisfies the request. Avoid unsupported behaviors.
 - The output is compiled and simulated by UniScenarios; return only the required structured result.`;
 
