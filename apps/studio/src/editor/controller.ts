@@ -163,7 +163,7 @@ const LATERAL_STEP_M = 0.25;
 const ROTATE_SNAP_DEG = 15;
 /** Direct manipulation intentionally distinguishes a hold from a normal click. */
 const DIRECT_MOVE_HOLD_MS = 220;
-/** Static props rotate in small deterministic increments while being positioned. */
+/** Non-vehicle authored actors rotate in deterministic increments while positioned. */
 const PROP_ROTATE_STEP_RAD = (5 * Math.PI) / 180;
 /** Lift the authored object while its original footprint remains visible. */
 const DIRECT_MOVE_LIFT_M = 0.42;
@@ -748,9 +748,9 @@ export class EditorController {
     if (this.mode === 'rotate') this.updateRotate();
   }
 
-  /** Q turns left and E turns right, but only for fixed authored props. */
+  /** Q turns left and E turns right for props and pedestrians, never vehicles. */
   private rotateStaticPreview(direction: 1 | -1): boolean {
-    if (this.mode === 'placing' && this.placing && actorKindFor(this.placing) === 'prop') {
+    if (this.mode === 'placing' && this.placing && actorKindFor(this.placing) !== 'vehicle') {
       this.placementHeadingOffsetRad = normalizeHeading(
         this.placementHeadingOffsetRad + direction * PROP_ROTATE_STEP_RAD,
       );
@@ -759,7 +759,7 @@ export class EditorController {
     }
     const session = this.grab;
     if (this.mode !== 'grab' || !session?.direct
-      || [...session.origin.values()].some((actor) => actor.kind !== 'prop')) return false;
+      || [...session.origin.values()].some((actor) => actor.kind === 'vehicle')) return false;
     session.headingOffsetRad = normalizeHeading(session.headingOffsetRad + direction * PROP_ROTATE_STEP_RAD);
     this.updateGrab();
     return true;
@@ -1219,7 +1219,7 @@ export class EditorController {
         x: targetX,
         y: this.groundY(targetX, targetZ, actor.y),
         z: targetZ,
-        headingRad: normalizeHeading(actor.headingRad + (actor.kind === 'prop' ? session.headingOffsetRad : 0)),
+        headingRad: normalizeHeading(actor.headingRad + (actor.kind !== 'vehicle' ? session.headingOffsetRad : 0)),
         laneRef: breakAnchor && actor.laneRef ? null : undefined,
         routeLaneRsls: breakAnchor && actor.laneRef ? null : undefined,
       });
@@ -1580,14 +1580,12 @@ export class EditorController {
             ? `click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · ⌥ free · right-click cancel`
             : 'free placement (⌥) · click place · drag set heading · right-click cancel';
         }
-        return kind === 'prop'
-          ? 'click place · click-drag set heading · Q / E rotate 5° · right-click cancel'
-          : 'click place · click-drag set heading · right-click cancel';
+        return 'click place · click-drag set heading · Q / E rotate 5° · right-click cancel';
       }
       case 'grab': {
         if (this.grab?.direct) {
-          const staticProp = [...this.grab.origin.values()].every((actor) => actor.kind === 'prop');
-          return staticProp
+          const rotatable = [...this.grab.origin.values()].every((actor) => actor.kind !== 'vehicle');
+          return rotatable
             ? 'move · Q / E rotate 5° · release confirm · Esc cancel'
             : 'move · release confirm · Esc cancel';
         }

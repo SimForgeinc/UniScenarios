@@ -2,6 +2,7 @@ import { PerspectiveCamera, Scene, Vector3 } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { MemoryStorage, WebTemplateFileStore } from '@uniscenarios/scenario-model';
+import type { CatalogId } from '@uniscenarios/prop-catalog';
 import { MAPS } from '../../maps';
 import { EditorController } from '../controller';
 import { EditorDocument } from '../document';
@@ -15,7 +16,7 @@ interface ControllerInternals {
   onPointerUp: (event: PointerEvent) => void;
   onPointerCancel: (event: PointerEvent) => void;
   onKeyDown: (event: KeyboardEvent) => void;
-  computeGhostPose: (catalogId: 'construction.traffic_cone', ground: Vector3) => { headingRad: number };
+  computeGhostPose: (catalogId: CatalogId, ground: Vector3) => { headingRad: number };
   preview: Map<string, { x: number; headingRad: number; routeLaneRsls?: readonly string[] | null }>;
   selection: string[];
   publish: () => void;
@@ -36,14 +37,14 @@ afterEach(() => {
 
 async function fixture(actors: Array<{
   id: string;
-  catalogId: 'construction.traffic_cone' | 'vehicle.sedan';
+  catalogId: 'construction.traffic_cone' | 'vehicle.sedan' | 'pedestrian.adult_standing';
   x: number;
   z: number;
   lane?: boolean;
 }> = [{ id: 'cone', catalogId: 'construction.traffic_cone', x: 0, z: 0 }]) {
-  const document = await EditorDocument.openBlank(MAPS[0]!, {
-    store: new WebTemplateFileStore({ storage: new MemoryStorage() }), autosaveMs: 60_000,
-  });
+  const storage = new MemoryStorage();
+  const store = new WebTemplateFileStore({ storage });
+  const document = await EditorDocument.open(MAPS[0]!, { store, autosaveMs: 60_000 });
   document.add(actors.map((actor) => ({
     id: actor.id,
     catalogId: actor.catalogId,
@@ -87,7 +88,7 @@ async function fixture(actors: Array<{
     (internals as unknown as { lastGround: Vector3 }).lastGround = point;
     return point;
   };
-  return { controller, document, internals, controls, canvas, captures };
+  return { controller, document, internals, controls, canvas, captures, store };
 }
 
 function pointer(canvas: object, clientX: number, clientY = 0, extras: Record<string, unknown> = {}): PointerEvent {
@@ -210,7 +211,7 @@ describe('direct authored-actor manipulation', () => {
   });
 });
 
-describe('static prop Q/E rotation', () => {
+describe('non-vehicle Q/E rotation', () => {
   it('rotates placement left/right in repeatable 5° steps and ignores focused fields', async () => {
     const { controller, document, internals } = await fixture();
     controller.togglePlacement('construction.traffic_cone');
@@ -248,5 +249,61 @@ describe('static prop Q/E rotation', () => {
     expect(event.preventDefault).not.toHaveBeenCalled();
     vehicle.internals.onPointerCancel(pointer(vehicle.canvas, 20));
     vehicle.controller.dispose(); vehicle.document.dispose();
+  });
+
+  it('rotates a newly placed pedestrian and preserves the yaw through ground-snap movement', async () => {
+    const { controller, document, internals, canvas } = await fixture([]);
+    controller.togglePlacement('pedestrian.adult_standing');
+    internals.onPointerMove(pointer(canvas, 20));
+    internals.onKeyDown(key('q'));
+    internals.onPointerMove(pointer(canvas, 28));
+    internals.publish();
+    expect(controller.state.hint).toContain('Q / E rotate 5°');
+    expect(internals.computeGhostPose('pedestrian.adult_standing', new Vector3(28, 0, 0)).headingRad)
+      .toBeCloseTo(5 * Math.PI / 180, 10);
+    internals.onPointerDown(pointer(canvas, 28));
+    internals.onPointerUp(pointer(canvas, 28));
+    expect(document.actors).toHaveLength(1);
+    expect(document.actors[0]).toMatchObject({ kind: 'pedestrian', x: 28, y: 0 });
+    expect(document.actors[0]?.headingRad).toBeCloseTo(5 * Math.PI / 180, 5);
+    controller.dispose(); document.dispose();
+  });
+
+  it('cancels, undoes, redoes, and reloads a directly repositioned pedestrian yaw', async () => {
+    const first = await fixture([
+      { id: 'walker', catalogId: 'pedestrian.adult_standing', x: 0, z: 0 },
+    ]);
+    const revision = first.document.revision;
+    first.internals.onPointerDown(pointer(first.canvas, 0));
+    first.internals.onPointerMove(pointer(first.canvas, 8));
+    first.internals.onKeyDown(key('q'));
+    first.internals.onPointerMove(pointer(first.canvas, 12));
+    first.internals.onKeyDown(key('Escape'));
+    expect(first.document.revision).toBe(revision);
+    expect(first.document.actor('walker')).toMatchObject({ x: 0, headingRad: 0 });
+
+    first.internals.onPointerDown(pointer(first.canvas, 0));
+    first.internals.onPointerMove(pointer(first.canvas, 8));
+    first.internals.onKeyDown(key('q'));
+    first.internals.onKeyDown(key('q', null, true));
+    first.internals.onPointerMove(pointer(first.canvas, 15));
+    first.internals.publish();
+    expect(first.controller.state.hint).toContain('Q / E rotate 5°');
+    expect(first.internals.preview.get('walker')).toMatchObject({ x: 15 });
+    expect(first.internals.preview.get('walker')?.headingRad).toBeCloseTo(10 * Math.PI / 180, 10);
+    first.internals.onPointerUp(pointer(first.canvas, 15));
+    expect(first.document.actor('walker')).toMatchObject({ x: 15, y: 0 });
+    expect(first.document.actor('walker')?.headingRad).toBeCloseTo(10 * Math.PI / 180, 5);
+    expect(first.document.undo()).toBe(true);
+    expect(first.document.actor('walker')).toMatchObject({ x: 0, headingRad: 0 });
+    expect(first.document.redo()).toBe(true);
+    expect(first.document.actor('walker')?.headingRad).toBeCloseTo(10 * Math.PI / 180, 5);
+    await first.document.flush();
+    first.controller.dispose(); first.document.dispose();
+
+    const reloaded = await EditorDocument.open(MAPS[0]!, { store: first.store, autosaveMs: 60_000 });
+    expect(reloaded.actor('walker')).toMatchObject({ x: 15, kind: 'pedestrian' });
+    expect(reloaded.actor('walker')?.headingRad).toBeCloseTo(10 * Math.PI / 180, 5);
+    reloaded.dispose();
   });
 });
