@@ -20,6 +20,13 @@ describe('Scenario Copilot generation history', () => {
     expect(store.list().entries.filter((entry) => entry.source === 'live')).toHaveLength(0);
     expect(store.list().entries.filter((entry) => entry.source === 'benchmark').length).toBeGreaterThan(0);
   });
+
+  it('loads each draft-backed controlled matrix row once rather than duplicating the consolidated index', () => {
+    const rows = new CopilotHistoryStore().list().entries.filter((entry) => entry.artifactId?.startsWith('copilot-high-matrix-20260803/'));
+    expect(rows.length).toBeGreaterThan(0);
+    expect(new Set(rows.map((entry) => entry.id)).size).toBe(rows.length);
+    expect(rows.every((entry) => entry.artifactId !== 'copilot-high-matrix-20260803/results.json')).toBe(true);
+  });
 });
 
 function request(): CopilotGenerationRequest {

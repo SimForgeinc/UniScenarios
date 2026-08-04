@@ -112,7 +112,7 @@ export function hasExactDraft(entry: CopilotGenerationHistoryEntry): boolean {
   return entry.savedDraftStatus === 'original'
     && entry.scenarioSchemaVersion === 2
     && entry.candidate?.scenarioDoc.scenarioVersion === 2
-    && entry.candidate.scenarioDoc.sourceMap.mapId === entry.mapId;
+    && entry.candidate.scenarioDoc.sourceMap?.mapId === entry.mapId;
 }
 
 export function draftCompatibility(entry: CopilotGenerationHistoryEntry, currentMapId: string, currentMapHash: string | null): { compatible: boolean; switchable: boolean; message: string } {

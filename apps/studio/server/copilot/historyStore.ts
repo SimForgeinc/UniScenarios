@@ -10,6 +10,7 @@ interface BenchmarkArtifact {
   completedAt?: string;
   rows?: BenchmarkRow[];
   artifactId?: string;
+  artifacts?: string[];
   artifactKind?: string;
   rerunOf?: string | null;
   sourceCommit?: string;
@@ -78,7 +79,7 @@ export function isDraftBackedEntry(entry: CopilotGenerationHistoryEntry): boolea
     && entry.scenarioSchemaVersion === 2
     && entry.candidate !== null
     && entry.candidate.scenarioDoc.scenarioVersion === 2
-    && entry.candidate.scenarioDoc.sourceMap.mapId === entry.mapId;
+    && entry.candidate.scenarioDoc.sourceMap?.mapId === entry.mapId;
 }
 
 function loadBenchmarks(): BenchmarkArtifact[] {
@@ -86,7 +87,9 @@ function loadBenchmarks(): BenchmarkArtifact[] {
   return discover(root, 'results.json').flatMap((file) => {
     try {
       const parsed = JSON.parse(readFileSync(file, 'utf8')) as BenchmarkArtifact;
-      if (!Array.isArray(parsed.rows)) return [];
+      // A consolidated matrix index points at canonical child artifacts. Load
+      // those children, not both copies of every row.
+      if (!Array.isArray(parsed.rows) || Array.isArray(parsed.artifacts)) return [];
       return [{ ...parsed, artifactId: path.relative(root, file), rows: parsed.rows }];
     } catch { return []; }
   });
