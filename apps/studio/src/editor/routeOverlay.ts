@@ -497,6 +497,89 @@ export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneInde
   }).sort((a, b) => a.actorId.localeCompare(b.actorId));
 }
 
+export interface RouteExecutionParity {
+  readonly ok: boolean;
+  readonly authoredHash: string;
+  readonly compiledHash: string;
+  readonly mismatches: readonly string[];
+}
+
+/**
+ * Fail-closed contract between the persisted authoring plan and the concrete
+ * simulator input installed by Play. It deliberately covers only map-bound
+ * route-bearing geometry; appearance, ambient population and signal-engine
+ * choices cannot change this hash.
+ */
+export function routeExecutionParity(
+  template: ScenarioTemplateV2,
+  input: Pick<SimScenarioInput, 'actors' | 'interactions'>,
+): RouteExecutionParity {
+  const routeRoles = template.roles
+    .flatMap((role) => role.kind === 'scene_absolute' && role.initialRoute?.lanes.length ? [role] : [])
+    .sort((a, b) => a.id.localeCompare(b.id));
+  const canonicalAuthoredInteraction = (interaction: Interaction): unknown | null => {
+    if (interaction.verb === 'route' && interaction.target.mode === 'lanePath') {
+      return { id: interaction.id, verb: 'route', lanes: interaction.target.lanes };
+    }
+    if (interaction.verb === 'changeLane') {
+      const target = interaction.target.mode === 'relative'
+        ? { mode: interaction.target.dk > 0 ? 'left' : 'right', count: Math.abs(interaction.target.dk) }
+        : interaction.target.mode === 'absolute'
+          ? { mode: 'lane' }
+          : { mode: 'actorLane', actorId: interaction.target.role };
+      return { id: interaction.id, verb: 'changeLane', target };
+    }
+    if (interaction.verb === 'laneOffset') {
+      return { id: interaction.id, verb: 'laneOffset', target: { mode: 'fraction', value: interaction.target.tFrac } };
+    }
+    return null;
+  };
+  const authored = routeRoles.map((role) => ({
+    id: role.id,
+    initialRoute: role.initialRoute!.lanes,
+    interactions: template.choreography.interactions
+      .filter((interaction) => interaction.actor === role.id)
+      .map(canonicalAuthoredInteraction)
+      .filter((interaction) => interaction !== null),
+  }));
+  const canonicalCompiledInteraction = (interaction: SimScenarioInput['interactions'][number]): unknown | null => {
+    if (interaction.verb === 'route' && interaction.target.kind === 'lanePath') {
+      return { id: interaction.id, verb: 'route', lanes: interaction.target.lanes };
+    }
+    if (interaction.verb === 'changeLane') {
+      const target = interaction.target.mode === 'lane'
+        ? { mode: 'lane' }
+        : interaction.target.mode === 'actorLane'
+          ? { mode: 'actorLane', actorId: interaction.target.actorId }
+          : { mode: interaction.target.mode, count: interaction.target.count };
+      return { id: interaction.id, verb: 'changeLane', target };
+    }
+    if (interaction.verb === 'laneOffset') {
+      return { id: interaction.id, verb: 'laneOffset', target: interaction.target };
+    }
+    return null;
+  };
+  const compiled = routeRoles.map((role) => {
+    const actor = input.actors.find((candidate) => candidate.id === role.id);
+    return {
+      id: role.id,
+      initialRoute: actor?.behavior.route.kind === 'lanePath' ? actor.behavior.route.lanes : null,
+      interactions: input.interactions
+        .filter((interaction) => interaction.actorId === role.id)
+        .map(canonicalCompiledInteraction)
+        .filter((interaction) => interaction !== null),
+    };
+  });
+  const mismatches = authored.flatMap((plan, index) =>
+    contentHash(plan) === contentHash(compiled[index]) ? [] : [plan.id]);
+  return {
+    ok: mismatches.length === 0,
+    authoredHash: contentHash(authored),
+    compiledHash: contentHash(compiled),
+    mismatches,
+  };
+}
+
 /** Authored actors are always optimistic; concrete data contributes ambient only. */
 export function authoringRoutes(
   template: ScenarioTemplateV2,
@@ -506,8 +589,14 @@ export function authoringRoutes(
 ): VehicleRouteOverlay[] {
   const authored = routesFromTemplate(template, index);
   if (!concrete) return authored;
-  const ambient = routesFromSimulation(concrete, index, trace).filter((route) => route.ambient);
-  return [...authored, ...ambient].sort((a, b) => a.actorId.localeCompare(b.actorId));
+  const simulated = routesFromSimulation(concrete, index, trace);
+  const simulatedById = new Map(simulated.map((route) => [route.actorId, route]));
+  const authoredWithActual = authored.map((route) => ({
+    ...route,
+    actual: simulatedById.get(route.actorId)?.actual ?? [],
+  }));
+  const ambient = simulated.filter((route) => route.ambient);
+  return [...authoredWithActual, ...ambient].sort((a, b) => a.actorId.localeCompare(b.actorId));
 }
 
 /** Backwards-compatible name for callers outside the editor shell. */

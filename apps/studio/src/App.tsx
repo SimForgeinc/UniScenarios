@@ -100,6 +100,7 @@ import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { compiledWorldMatchesRevision, simulationClassFor, type ActorRecord } from './editor/document';
 import {
   authoringRoutes,
+  routeExecutionParity,
   routesFromSimulation,
   VehicleRouteOverlayRenderer,
 } from './editor/routeOverlay';
@@ -468,8 +469,29 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     const pending = ambientPreparation.current;
     if (pending?.previewKey === previewKey && pending.revision === editorController.doc.revision) await pending.promise;
     throwIfPreparationAborted(signal);
-    const bundle = ambientPreviewCache.current.playback(editorController.doc.revision);
+    let bundle = ambientPreviewCache.current.playback(editorController.doc.revision);
+    if (!bundle && ambientTrafficProvider === 'off') {
+      const revision = editorController.doc.revision;
+      const prepared = await runtimeWorker.current!.prepare(
+        editorController.doc.data,
+        map,
+        materializedAmbientProfile,
+        undefined,
+        { staticCollisionMode: 'skip', timeoutMs: 30_000, materializeOnly: true },
+      );
+      throwIfPreparationAborted(signal);
+      if (!compiledWorldMatchesRevision(editorController.doc, revision)) {
+        throw new Error('Scenario changed while preparing playback. Press Play again.');
+      }
+      const token = ambientPreviewCache.current.begin();
+      ambientPreviewCache.current.commit(token, { candidatePoolRequestKey, previewKey, revision, value: prepared });
+      bundle = prepared;
+    }
     if (!bundle) throw new Error('Traffic is still loading. Press Play again when the map population is visible.');
+    const routeParity = routeExecutionParity(editorController.doc.data, bundle.instance.input);
+    if (!routeParity.ok) {
+      throw new Error(`Playback route plan does not match the projected route for: ${routeParity.mismatches.join(', ')}. Rebuild the preview before Play.`);
+    }
     const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
     if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
       // A completed live trace is immutable cache data and replays instantly.
@@ -494,7 +516,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
       }
     });
-  }, [editorController, map, materializedAmbientProfile]);
+  }, [ambientTrafficProvider, editorController, map, materializedAmbientProfile]);
   const cancelAuthoredPlayback = useCallback(() => {
     runtimeWorker.current?.cancel();
     livePlayback.current = null;
@@ -529,7 +551,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     const concrete = playbackBundle ?? authoredPlayback ?? ambientPreview;
     const authoredColors = new Map(state.actors.map((actor) => [actor.id, actor.bodyColor]));
     const playback = playbackBundle !== null || studioSession.state.mode !== 'authoring';
-    const routes = playback && concrete
+    const routes = playbackBundle !== null && concrete
       ? routesFromSimulation(concrete.instance.input, editorController.laneIndex, concrete.trace, authoredColors)
       : authoringRoutes(editorController.doc.data, editorController.laneIndex, concrete?.instance.input, concrete?.trace);
     const hiddenForCameraPlayback = playback && cameraPlaybackRequested;

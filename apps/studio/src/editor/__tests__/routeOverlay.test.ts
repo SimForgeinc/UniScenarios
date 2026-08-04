@@ -3,7 +3,7 @@ import { Color, type LineBasicMaterial, type LineSegments, type Points, type Poi
 import { parseSimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -72,6 +72,54 @@ describe('vehicle route overlays', () => {
     expect(route.planned[0]).toEqual({ x: 0, z: 0 });
     expect(route.actual).toEqual([{ x: 1, z: 7 }, { x: 2, z: 8 }]);
     expect(route.actual).not.toEqual(route.planned);
+  });
+
+  it('keeps the authored projected line stable when Play contributes an actual trace', () => {
+    const template = {
+      roles: [{
+        id: 'ego', kind: 'scene_absolute', actor: { class: 'car', static: false },
+        laneRef: { roadId: '1', section: 0, laneId: -1, s: 0, t: 0, headingOffsetRad: 0 },
+        initialRoute: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] },
+      }],
+      choreography: { clipSeconds: 5, interactions: [] },
+    } as unknown as ScenarioTemplateV2;
+    const trace = {
+      ticks: { t: [0, 1], actors: { ego: { x: [0, 5], z: [0, 0], present: [1, 1] } } }, events: [],
+    } as unknown as SceneTrace;
+    const beforePlay = routesForAuthoringPreview(template, index(), input()).find((route) => route.actorId === 'ego')!;
+    const duringPlay = authoringRoutes(template, index(), input(), trace).find((route) => route.actorId === 'ego')!;
+    expect(duringPlay.planned).toEqual(beforePlay.planned);
+    expect(duringPlay.actual).toEqual([{ x: 0, z: 0 }, { x: 5, z: 0 }]);
+  });
+
+  it('fails closed when compiled Play input changes a persisted route plan or explicit maneuver', () => {
+    const template = {
+      roles: [{
+        id: 'ego', kind: 'scene_absolute', actor: { class: 'car', static: false },
+        initialRoute: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] },
+      }],
+      choreography: { interactions: [
+        { id: 'turn', actor: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'route', target: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] } },
+        { id: 'left', actor: 'ego', trigger: { kind: 'at', t: 2 }, verb: 'changeLane', target: { mode: 'relative', dk: 1 } },
+      ] },
+    } as unknown as ScenarioTemplateV2;
+    const concrete = input();
+    const actor = concrete.actors.find((candidate) => candidate.id === 'ego')!;
+    const matching = {
+      actors: concrete.actors,
+      interactions: [
+        { id: 'turn', actorId: 'ego', trigger: { kind: 'at', t: 1 }, verb: 'route', target: { kind: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] } },
+        { id: 'left', actorId: 'ego', trigger: { kind: 'at', t: 2 }, verb: 'changeLane', target: { mode: 'left', count: 1 }, dynamics: { shape: 'linear', duration: 1 } },
+      ],
+    } as unknown as Pick<ReturnType<typeof input>, 'actors' | 'interactions'>;
+    expect(routeExecutionParity(template, matching).ok).toBe(true);
+    const changed = {
+      ...matching,
+      actors: concrete.actors.map((candidate) => candidate.id === actor.id
+        ? { ...candidate, behavior: { ...candidate.behavior, route: { kind: 'lanePath' as const, lanes: ['1:0:-1', '3:0:1'] } } }
+        : candidate),
+    };
+    expect(routeExecutionParity(template, changed)).toMatchObject({ ok: false, mismatches: ['ego'] });
   });
 
   it('uses the current authored timeline route while retaining warmed ambient routes', () => {
