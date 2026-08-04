@@ -1,18 +1,21 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { CopilotCandidate, CopilotGenerationRequest, CopilotGenerationResult } from '../../src/copilot/types.js';
-import type { CopilotGenerationHistoryEntry, CopilotGenerationHistoryResponse } from '../../src/copilot/historyTypes.js';
+import type { CopilotExperimentRecord, CopilotGenerationHistoryEntry, CopilotGenerationHistoryResponse } from '../../src/copilot/historyTypes.js';
 import { COPILOT_EDGE_CASES } from './benchmarkCases.js';
 
 interface BenchmarkArtifact {
   startedAt?: string;
   completedAt?: string;
   rows?: BenchmarkRow[];
+  artifactId?: string;
 }
 
 interface BenchmarkRow {
   provider?: string; caseId?: string; caseSummary?: string; mapId?: string;
   requestedModel?: string; actualModel?: string; generationLatencyMs?: number;
+  reasoningEffort?: string;
   totalTokens?: number; apiCalls?: number; repairCount?: number; actorCount?: number;
   actionCount?: number; semanticPass?: boolean; semanticAssertions?: Array<{ id: string; pass: boolean; evidence: string }>;
   mapBindingPass?: boolean; nativeValidationPass?: boolean; simulationPass?: boolean; simulationDurationS?: number;
@@ -20,22 +23,25 @@ interface BenchmarkRow {
   providerWarnings?: string[];
   savedResult?: {
     hash?: string; mapId?: string; mapHash?: string | null; scenarioSchemaVersion?: number;
-    intent?: unknown; candidate?: CopilotCandidate; canonicalTraceSummary?: CopilotGenerationHistoryEntry['canonicalTraceSummary'];
+    intent?: unknown; candidate?: CopilotCandidate | null; canonicalTraceSummary?: CopilotGenerationHistoryEntry['canonicalTraceSummary'];
     generatedScenic?: string | null;
+    birdEye?: { dataUrl?: string; sha256?: string; width?: number; height?: number; altText?: string; legend?: string[] } | null;
   };
 }
 
 const MAX_LIVE_RUNS = 60;
 
 export class CopilotHistoryStore {
-  private readonly benchmark = loadBenchmark();
+  private readonly benchmarks = loadBenchmarks();
+  private readonly experiments = loadExperiments();
   private live: CopilotGenerationHistoryEntry[] = [];
 
   list(): CopilotGenerationHistoryResponse {
     return {
-      benchmarkStartedAt: this.benchmark.startedAt ?? null,
-      benchmarkCompletedAt: this.benchmark.completedAt ?? null,
-      entries: [...benchmarkEntries(this.benchmark), ...this.live],
+      benchmarkStartedAt: boundaryDate(this.benchmarks.map((item) => item.startedAt), 'first'),
+      benchmarkCompletedAt: boundaryDate(this.benchmarks.map((item) => item.completedAt), 'last'),
+      entries: [...this.benchmarks.flatMap(benchmarkEntries), ...this.live],
+      experiments: this.experiments,
     };
   }
 
@@ -57,14 +63,38 @@ export class CopilotHistoryStore {
   clearLive(): void { this.live = []; }
 }
 
-function loadBenchmark(): BenchmarkArtifact {
+function loadBenchmarks(): BenchmarkArtifact[] {
+  const root = fileURLToPath(new URL('../../../../research/evaluations/', import.meta.url));
+  return discover(root, 'results.json').flatMap((file) => {
+    try {
+      const parsed = JSON.parse(readFileSync(file, 'utf8')) as BenchmarkArtifact;
+      if (!Array.isArray(parsed.rows)) return [];
+      return [{ ...parsed, artifactId: path.relative(root, file), rows: parsed.rows }];
+    } catch { return []; }
+  });
+}
+
+function loadExperiments(): CopilotExperimentRecord[] {
+  const root = fileURLToPath(new URL('../../../../research/evaluations/', import.meta.url));
+  const seen = new Set<string>();
+  return discover(root, 'manifest.json').flatMap((file) => {
+    try {
+      const raw = JSON.parse(readFileSync(file, 'utf8')) as { experiments?: unknown[] };
+      return (raw.experiments ?? []).flatMap((item) => {
+        if (!isExperiment(item) || seen.has(item.id)) return [];
+        seen.add(item.id); return [item];
+      });
+    } catch { return []; }
+  });
+}
+
+function discover(root: string, name: string, depth = 4): string[] {
+  if (depth < 0) return [];
   try {
-    const path = fileURLToPath(new URL('../../../../research/evaluations/chat2scenic-20260803/results.json', import.meta.url));
-    const parsed = JSON.parse(readFileSync(path, 'utf8')) as BenchmarkArtifact;
-    return { ...parsed, rows: Array.isArray(parsed.rows) ? parsed.rows : [] };
-  } catch {
-    return { rows: [] };
-  }
+    return readdirSync(root, { withFileTypes: true }).flatMap((entry) => entry.isDirectory()
+      ? discover(path.join(root, entry.name), name, depth - 1)
+      : entry.isFile() && entry.name === name ? [path.join(root, entry.name)] : []);
+  } catch { return []; }
 }
 
 function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistoryEntry[] {
@@ -73,10 +103,11 @@ function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistory
     const benchmarkCase = cases.get(row.caseId ?? '');
     if (!benchmarkCase || !isProvider(row.provider)) return [];
     return [{
-      id: `benchmark:${row.caseId}:${row.provider}:${index}`, source: 'benchmark' as const,
+      id: `benchmark:${artifact.artifactId}:${row.caseId}:${row.provider}:${index}`, source: 'benchmark' as const,
       caseId: row.caseId ?? null, caseTitle: row.caseSummary ?? benchmarkCase.summary, prompt: benchmarkCase.prompt,
       expectedRejection: Boolean(benchmarkCase.expectedRejection), provider: row.provider,
       requestedModel: row.requestedModel ?? null, actualModel: row.actualModel ?? null, mapId: row.savedResult?.mapId ?? row.mapId ?? 'not recorded',
+      reasoningEffort: parseEffort(row.reasoningEffort), artifactId: artifact.artifactId ?? null,
       mapHash: row.savedResult?.mapHash ?? null, scenarioSchemaVersion: numberOrNull(row.savedResult?.scenarioSchemaVersion),
       savedDraftStatus: row.savedResult?.candidate ? 'original' as const : 'not-recorded' as const, savedResultHash: row.savedResult?.hash ?? null, seed: null,
       generatedAt: artifact.startedAt ?? null, intent: isIntent(row.savedResult?.intent) ? row.savedResult.intent : null, candidate: row.savedResult?.candidate ?? null,
@@ -89,9 +120,13 @@ function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistory
       latencyMs: numberOrNull(row.generationLatencyMs), totalTokens: numberOrNull(row.totalTokens), apiCalls: numberOrNull(row.apiCalls), repairCount: numberOrNull(row.repairCount),
       outcome: row.outcome ?? null, failureCategory: row.failureCategory ?? null,
       diagnostic: row.safeError ?? row.providerWarnings?.join('; ') ?? null,
-      provenance: { artifact: 'chat2scenic-20260803/results.json', benchmarkStartedAt: artifact.startedAt ?? null, savedResultHash: row.savedResult?.hash ?? null },
+      provenance: { artifact: artifact.artifactId ?? 'unknown-results.json', benchmarkStartedAt: artifact.startedAt ?? null, savedResultHash: row.savedResult?.hash ?? null },
       generatedScenic: row.savedResult?.generatedScenic ?? null, directTypedDraft: row.savedResult?.candidate ? { intent: row.savedResult.intent ?? null, scenarioDoc: row.savedResult.candidate.scenarioDoc } : null,
-      iterationTrace: null,
+      iterationTrace: row.savedResult?.birdEye?.dataUrl ? sanitizeIterationTrace([{
+        iteration: 1, summary: 'Saved deterministic bird-eye evidence from the original benchmark result.', toolCalls: [],
+        thumbnailDataUrl: row.savedResult.birdEye.dataUrl, altText: row.savedResult.birdEye.altText,
+        legend: row.savedResult.birdEye.legend, provenance: { sha256: row.savedResult.birdEye.sha256, width: row.savedResult.birdEye.width, height: row.savedResult.birdEye.height },
+      }]) : null,
     }];
   });
 }
@@ -106,6 +141,7 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
     id: `live:${result.runId}:${candidate?.id ?? 'none'}`, source: 'live', caseId: null,
     caseTitle: candidate?.title ?? 'Live generation', prompt: request.prompt, expectedRejection: false,
     provider: result.provider, requestedModel: request.model ?? null, actualModel: result.model, mapId: request.mapContext.mapId,
+    reasoningEffort: request.agentReasoningEffort ?? 'default-or-unrecorded', artifactId: null,
     mapHash: candidate?.provenance.mapHash ?? request.mapContext.xodrSha256, scenarioSchemaVersion: candidate?.scenarioDoc.schemaVersion ?? null,
     savedDraftStatus: candidate ? 'original' : 'not-recorded', savedResultHash: candidate ? candidate.provenance.promptHash : null, seed: null,
     generatedAt: candidate?.provenance.generatedAt ?? new Date().toISOString(), intent: candidate?.intent ?? result.intent, candidate: safeCandidate,
@@ -169,3 +205,13 @@ function isIntent(value: unknown): value is NonNullable<CopilotGenerationHistory
 }
 function boolOrNull(value: unknown): boolean | null { return typeof value === 'boolean' ? value : null; }
 function numberOrNull(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
+function parseEffort(value: unknown): CopilotGenerationHistoryEntry['reasoningEffort'] { return value === 'low' || value === 'medium' || value === 'high' ? value : 'default-or-unrecorded'; }
+function boundaryDate(values: readonly (string | undefined)[], which: 'first' | 'last'): string | null { const dates = values.filter((item): item is string => Boolean(item)).sort(); return (which === 'first' ? dates[0] : dates.at(-1)) ?? null; }
+function isExperiment(value: unknown): value is CopilotExperimentRecord {
+  if (!value || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return typeof item['id'] === 'string' && typeof item['title'] === 'string' && typeof item['hypothesis'] === 'string'
+    && typeof item['independentVariable'] === 'string' && Array.isArray(item['controls']) && typeof item['sampleCount'] === 'number'
+    && ['planned', 'running', 'complete', 'unavailable'].includes(String(item['status'])) && Array.isArray(item['models'])
+    && Array.isArray(item['providers']) && Array.isArray(item['artifacts']);
+}

@@ -31,7 +31,7 @@ function entry(): CopilotGenerationHistoryEntry {
   const actor = { id: 'ego', role: 'ego' as const, kind: 'vehicle' as const, catalogId: 'vehicle.sedan', behavior: 'drive' };
   return {
     id: 'saved', source: 'live', caseId: null, caseTitle: 'Saved', prompt: 'A saved prompt', expectedRejection: false,
-    provider: 'direct-llm', requestedModel: 'model', actualModel: 'model', mapId: 'richmond-field-station', mapHash: 'map-hash', scenarioSchemaVersion: 2,
+    provider: 'direct-llm', requestedModel: 'model', actualModel: 'model', reasoningEffort: 'high', artifactId: null, mapId: 'richmond-field-station', mapHash: 'map-hash', scenarioSchemaVersion: 2,
     savedDraftStatus: 'original', savedResultHash: 'saved-hash', seed: null, generatedAt: null,
     intent: { scenario: 'Saved', ego: actor, adversaries: [], contextActors: [], spatialRelations: [], restrictions: [], desiredOutcome: 'run', assumptions: [] },
     candidate: { id: 'candidate', title: 'Saved', summary: 'Saved', intent: { scenario: 'Saved', ego: actor, adversaries: [], contextActors: [], spatialRelations: [], restrictions: [], desiredOutcome: 'run', assumptions: [] }, scenarioDoc, diagnostics: [], provenance: { provider: 'direct-llm', model: 'model', generatedAt: '', mapId: 'richmond-field-station', mapHash: 'map-hash', promptHash: 'saved-hash', retrievedExampleIds: [], stages: [], repairAttempts: 0, implementation: 'direct-native' } },

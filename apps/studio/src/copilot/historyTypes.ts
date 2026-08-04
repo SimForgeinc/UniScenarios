@@ -16,6 +16,8 @@ export interface CopilotGenerationHistoryEntry {
   readonly provider: CopilotProviderId;
   readonly requestedModel: string | null;
   readonly actualModel: string | null;
+  readonly reasoningEffort: 'low' | 'medium' | 'high' | 'default-or-unrecorded';
+  readonly artifactId: string | null;
   readonly mapId: string;
   readonly mapHash: string | null;
   readonly scenarioSchemaVersion: number | null;
@@ -70,4 +72,18 @@ export interface CopilotGenerationHistoryResponse {
   readonly benchmarkStartedAt: string | null;
   readonly benchmarkCompletedAt: string | null;
   readonly entries: readonly CopilotGenerationHistoryEntry[];
+  readonly experiments: readonly CopilotExperimentRecord[];
+}
+
+export interface CopilotExperimentRecord {
+  readonly id: string;
+  readonly title: string;
+  readonly hypothesis: string;
+  readonly independentVariable: string;
+  readonly controls: readonly string[];
+  readonly sampleCount: number;
+  readonly status: 'planned' | 'running' | 'complete' | 'unavailable';
+  readonly models: readonly string[];
+  readonly providers: readonly string[];
+  readonly artifacts: readonly string[];
 }
