@@ -35,7 +35,7 @@ import {
   type Range,
   type ScenarioTemplateV2,
 } from '@uniscenarios/scenario-model';
-import { criticalityMetricsInWindow, type ArrivalSolution, type SimTrace } from '@uniscenarios/sim-engine';
+import { criticalityMetricsInWindow, verifyNearMissOutcome, type ArrivalSolution, type SimTrace } from '@uniscenarios/sim-engine';
 
 export interface InvariantResidualReport {
   readonly id: string;
@@ -228,6 +228,32 @@ export function checkInvariants(ctx: InvariantContext): InvariantResidualReport[
             `min PET ${min.value.toFixed(2)} s at t=${min.t.toFixed(2)} s, wanted ${fmtRange(inv.range)}`,
           ),
         );
+        break;
+      }
+      case 'near_miss': {
+        const verification = verifyNearMissOutcome(trace, {
+          pedestrianId: inv.pedestrian,
+          targetId: inv.target,
+          requestedClearanceM: 0,
+          toleranceM: Number.MAX_SAFE_INTEGER,
+        });
+        if (verification.realizedClearanceM === null) {
+          out.push(unchecked(inv, verification.reason));
+          break;
+        }
+        const result = report(
+          inv,
+          inv.clearanceRangeM,
+          verification.realizedClearanceM,
+          'exact-sampled-obb-clearance',
+          `closest footprint clearance ${verification.realizedClearanceM.toFixed(3)} m at t=${verification.closestApproachTimeS?.toFixed(2) ?? '?'} s`,
+        );
+        out.push(verification.collision ? {
+          ...result,
+          status: 'violated',
+          residual: result.residual === 0 ? -Math.max(0.001, inv.clearanceRangeM[0] ?? 0.001) : result.residual,
+          reason: 'collision occurred; near-miss intent requires strictly positive contact-free clearance',
+        } : result);
         break;
       }
       case 'gap': {

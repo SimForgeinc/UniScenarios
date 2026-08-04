@@ -69,6 +69,45 @@ describe('byLatest / ifNever', () => {
   });
 });
 
+describe('actor-relative trigger boundaries', () => {
+  it('applies distance hysteresis on the entry side of the threshold', () => {
+    const run = (hysteresis: number) => runSimulation(scenario(graph, {
+      clipSeconds: 8,
+      warmupSeconds: 0,
+      actors: [
+        vehicle(graph, { id: 'walker-carrier', s: 20, speedMps: 12, cruiseSpeedMps: 12 }),
+        vehicle(graph, { id: 'target', s: 50, speedMps: 6, cruiseSpeedMps: 6 }),
+      ],
+      interactions: [{
+        id: 'relative', actorId: 'walker-carrier',
+        trigger: { kind: 'when', condition: { kind: 'distance', a: 'walker-carrier', b: 'target', mode: 'euclidean', cmp: 'lte', value: 15, hysteresis }, byLatest: 7, ifNever: 'skip' },
+        verb: 'set', target: { key: 'audio.horn', value: true },
+      }],
+    }), { graph, guards: 'collect' }).trace.events.find((event) => event.kind === 'trigger_fired')?.t;
+    const without = run(0)!;
+    const withBand = run(2)!;
+    expect(withBand).toBeGreaterThan(without);
+    expect(withBand - without).toBeGreaterThan(0.1);
+  });
+
+  it('fails TTC comparisons closed for a diverging pair', () => {
+    const { trace } = runSimulation(scenario(graph, {
+      clipSeconds: 4,
+      actors: [
+        vehicle(graph, { id: 'front', s: 50, speedMps: 12, cruiseSpeedMps: 12 }),
+        vehicle(graph, { id: 'rear', s: 20, speedMps: 6, cruiseSpeedMps: 6 }),
+      ],
+      interactions: [{
+        id: 'undefined-ttc', actorId: 'front',
+        trigger: { kind: 'when', condition: { kind: 'ttc', a: 'front', b: 'rear', cmp: 'gte', value: 2 }, byLatest: 3, ifNever: 'skip' },
+        verb: 'set', target: { key: 'audio.horn', value: true },
+      }],
+    }), { graph, guards: 'collect' });
+    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'undefined-ttc')).toBe(false);
+    expect(trace.metrics.triggerNeverFired).toContain('undefined-ttc');
+  });
+});
+
 describe('after and until', () => {
   it('after(id, delay) chains off the referenced fire time', () => {
     const input = scenario(graph, {

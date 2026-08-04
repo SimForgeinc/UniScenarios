@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolvePedestrianProjection, solvePedestrianNearMiss } from '../index.js';
+import { resolvePedestrianProjection, solvePedestrianNearMiss, verifyNearMissOutcome, type SimTrace } from '../index.js';
 
 const request = (overrides: Record<string, unknown> = {}) => ({
   pedestrianId: 'walker', targetId: 'ego', pedestrianStart: { x: 10, z: -8 },
@@ -53,5 +53,21 @@ describe('pedestrian projection', () => {
     expect(preview.segments.map((segment) => segment.kind)).toEqual(['stationary', 'walking', 'stationary', 'walking', 'invalid', 'stationary']);
     expect(preview.triggerPoints).toHaveLength(2);
     expect(preview.endpoint).toEqual({ x: 4, z: 3 });
+  });
+});
+
+describe('near-miss outcome evidence', () => {
+  it('fails intent on collision even when the requested range could include zero', () => {
+    const track = { x: [0], y: [0], headingRad: [0], speedMps: [0], lateralOffsetM: [0], laneRsl: [null], s: [0], present: [1] };
+    const trace = {
+      header: { actorMetadata: {
+        walker: { kind: 'pedestrian', dims: { l: .6, w: .6, h: 1.75 }, static: false, tags: [] },
+        ego: { kind: 'car', dims: { l: 4.8, w: 1.9, h: 1.5 }, static: false, tags: [] },
+      } },
+      ticks: { t: [0], actors: { walker: track, ego: track } },
+      metrics: { collisions: [{ t: 0, a: 'walker', b: 'ego' }] },
+    } as unknown as SimTrace;
+    expect(verifyNearMissOutcome(trace, { pedestrianId: 'walker', targetId: 'ego', requestedClearanceM: 0 }))
+      .toMatchObject({ status: 'failed', collision: true, realizedClearanceM: 0 });
   });
 });

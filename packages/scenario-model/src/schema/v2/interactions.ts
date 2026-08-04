@@ -356,6 +356,19 @@ export const RouteTargetSchema = z.discriminatedUnion('mode', [
   SceneAbsoluteInitialRouteSchema,
   /** Drive to a specific pose and stop being routed. */
   z.strictObject({ mode: z.literal('acquire'), pose: FramePoseSchema }),
+  /**
+   * Re-solved, contact-free pedestrian crossing intent. Unlike a baked
+   * polyline this stays valid when the target route/speed or site changes.
+   */
+  z.strictObject({
+    mode: z.literal('nearMiss'),
+    target: RoleRefSchema,
+    clearanceM: NumberOrExprSchema.default(0.5),
+    pass: z.enum(['front', 'behind', 'auto']).default('auto'),
+    minSpeedKph: NumberOrExprSchema.default(1.8),
+    maxSpeedKph: NumberOrExprSchema.default(10.8),
+    deadlineS: NumberOrExprSchema.optional(),
+  }),
 ]);
 
 /** Existence target. Teleports are only expressible as `absent` → `present`. */

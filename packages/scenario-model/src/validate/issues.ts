@@ -49,6 +49,7 @@ export const ISSUE_CODES = [
   'set_value_type',
   'set_value_range',
   'set_actor_mismatch',
+  'actor_class_mismatch',
   // --- document coherence ---------------------------------------------------
   'authored_actor_limit_exceeded',
   'metric_subject_unknown',

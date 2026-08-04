@@ -76,6 +76,7 @@ import {
   normalizeSimScenarioInput,
   safeParseSimScenarioInput,
   solveArrival,
+  solvePedestrianNearMiss,
   applyArrivalSolution,
   resolveArrivalTriggers,
   buildOccluders,
@@ -86,6 +87,7 @@ import {
   type Condition as SimCondition,
   type Interaction as SimInteraction,
   type LaneGraph,
+  type NearMissCriterion,
   type Occluder,
   type OcclusionPair,
   type RoadControl,
@@ -1188,6 +1190,7 @@ class Materializer {
   private readonly props: StaticProp[] = [];
   private readonly occluders: Occluder[] = [];
   private readonly occlusionPairs: OcclusionPair[] = [];
+  private readonly nearMissCriteria: NearMissCriterion[] = [];
   private readonly bindingByRole = new Map<string, FeatureBinding>();
   private readonly roleById = new Map<string, V2Role>();
   private readonly routeByRole = new Map<string, Route>();
@@ -2113,6 +2116,10 @@ class Materializer {
   private buildInteractions(): void {
     for (const interaction of this.template.choreography.interactions) {
       if (this.foldedInteractions.has(interaction.id)) continue;
+      if (interaction.verb === 'route' && interaction.target.mode === 'nearMiss') {
+        this.interactions.push(...this.buildNearMissInteractions(interaction));
+        continue;
+      }
       const built = this.buildInteraction(interaction);
       if (built) this.interactions.push(built);
     }
@@ -2125,6 +2132,145 @@ class Materializer {
         reason: `command removed during concrete normalization because after(${removal.missingInteractionId}) no longer has a materialized source interaction`,
       });
     }
+  }
+
+  /** Resolve semantic near-miss intent against the target's concrete site route. */
+  private buildNearMissInteractions(
+    interaction: Extract<V2Interaction, { verb: 'route' }>,
+  ): SimInteraction[] {
+    const path = `choreography.interactions.${interaction.id}`;
+    const goal = interaction.target;
+    if (goal.mode !== 'nearMiss') return [];
+    const pedestrian = this.actors.find((actor) => actor.id === interaction.actor);
+    const target = this.actors.find((actor) => actor.id === goal.target);
+    const targetRoute = this.routeByRole.get(goal.target);
+    if (!pedestrian || pedestrian.kind !== 'pedestrian' || !target || !targetRoute) {
+      throw new CliError('near_miss_actor_unavailable', 'near-miss pedestrian or target has no concrete actor/route at this site', { path: `${path}.target`, exitCode: 2 });
+    }
+    const scope = this.scopeByRole.get(interaction.actor) ?? this.baseScope();
+    const clipSeconds = this.template.choreography.clipSeconds;
+    const spawnTime = (actor: SimActor): number => {
+      if (actor.presentAtStart) return 0;
+      const spawn = this.template.choreography.interactions.find((candidate) =>
+        candidate.actor === actor.id && candidate.verb === 'exist' && candidate.target.state === 'present' && candidate.trigger.kind === 'at'
+      );
+      return spawn && spawn.trigger.kind === 'at'
+        ? Math.max(0, evalNum(spawn.trigger.t, this.scopeByRole.get(actor.id) ?? this.baseScope(), `choreography.${spawn.id}.trigger.t`))
+        : Infinity;
+    };
+    const targetSpawnS = spawnTime(target);
+    const pedestrianSpawnS = spawnTime(pedestrian);
+    if (!Number.isFinite(targetSpawnS) || !Number.isFinite(pedestrianSpawnS)) {
+      throw new CliError('near_miss_actor_unavailable', 'near-miss actors must have a deterministic initial or at(t) spawn', { path: `${path}.target`, exitCode: 2 });
+    }
+    const targetStart = targetRoute.projectPoint(localFromScene(target.initial.pose)).s;
+    const speedEvents = this.template.choreography.interactions
+      .flatMap((candidate) => candidate.actor === target.id && candidate.verb === 'speed' && candidate.trigger.kind === 'at'
+        ? [{ t: evalNum(candidate.trigger.t, this.scopeByRole.get(target.id) ?? this.baseScope(), `choreography.${candidate.id}.trigger.t`), target: candidate.target }]
+        : [])
+      .sort((a, b) => a.t - b.t);
+    let speed = target.initial.speedMps;
+    let routeS = targetStart;
+    let eventIndex = 0;
+    const trajectory: Array<{ t: number; x: number; z: number; headingRad: number }> = [];
+    for (let tick = Math.ceil(targetSpawnS * 20); tick <= Math.ceil(clipSeconds * 20); tick++) {
+      const t = Math.min(clipSeconds, tick / 20);
+      while (eventIndex < speedEvents.length && speedEvents[eventIndex]!.t <= t + 1e-9) {
+        const command = speedEvents[eventIndex]!.target;
+        if (command.mode === 'stop') speed = 0;
+        else if (command.mode === 'absolute') speed = Math.max(0, evalNum(command.valueKph, scope, `${path}.targetTrajectory.speed`) * KPH_TO_MPS);
+        else if (command.mode === 'delta') speed = Math.max(0, speed + evalNum(command.deltaKph, scope, `${path}.targetTrajectory.speed`) * KPH_TO_MPS);
+        else if (command.mode === 'factor') speed = Math.max(0, speed * evalNum(command.factor, scope, `${path}.targetTrajectory.speed`));
+        eventIndex++;
+      }
+      const pose = targetRoute.poseAt(routeS);
+      const scene = toSceneXZ(pose.point);
+      trajectory.push({ t, x: scene.x, z: scene.z, headingRad: -pose.headingRad });
+      routeS = Math.min(targetRoute.lengthM, routeS + speed / 20);
+    }
+    const pedStart = pedestrian.initial.pose;
+    const triggerTime = (() => {
+      if (interaction.trigger.kind === 'at') return Math.max(pedestrianSpawnS, targetSpawnS, evalNum(interaction.trigger.t, scope, `${path}.trigger.t`));
+      if (interaction.trigger.kind !== 'when') return null;
+      const condition = interaction.trigger.condition;
+      if (condition.kind === 'distance' && 'role' in condition.to) {
+        const pairMatches = (condition.from === target.id && condition.to.role === pedestrian.id)
+          || (condition.from === pedestrian.id && condition.to.role === target.id);
+        if (!pairMatches) return null;
+        const value = Math.max(0, evalNum(condition.valueM, scope, `${path}.trigger.condition.valueM`));
+        const band = condition.hysteresisM === undefined ? 0 : Math.max(0, evalNum(condition.hysteresisM, scope, `${path}.trigger.condition.hysteresisM`));
+        const threshold = condition.op === '<' || condition.op === '<=' ? Math.max(0, value - band) : value + band;
+        const radii = Math.hypot(pedestrian.dims.l, pedestrian.dims.w) / 2 + Math.hypot(target.dims.l, target.dims.w) / 2;
+        return trajectory.find((sample) => sample.t >= pedestrianSpawnS && (() => {
+          const gap = Math.max(0, Math.hypot(sample.x - pedStart.x, sample.z - pedStart.z) - radii);
+          return condition.op === '<' || condition.op === '<=' ? gap <= threshold : gap >= threshold;
+        })())?.t ?? null;
+      }
+      if (condition.kind === 'ttc' && ((condition.of === target.id && condition.to === pedestrian.id) || (condition.of === pedestrian.id && condition.to === target.id))) {
+        const threshold = Math.max(0, evalNum(condition.valueS, scope, `${path}.trigger.condition.valueS`));
+        for (let index = 0; index + 1 < trajectory.length; index++) {
+          const sample = trajectory[index]!;
+          if (sample.t < pedestrianSpawnS) continue;
+          const next = trajectory[index + 1]!;
+          const vx = (next.x - sample.x) * 20;
+          const vz = (next.z - sample.z) * 20;
+          const dx = pedStart.x - sample.x;
+          const dz = pedStart.z - sample.z;
+          const speed2 = vx * vx + vz * vz;
+          if (speed2 <= 1e-9) continue;
+          const approaching = (dx * vx + dz * vz) / speed2;
+          const closest2 = (dx - vx * approaching) ** 2 + (dz - vz * approaching) ** 2;
+          const radius = Math.hypot(pedestrian.dims.l, pedestrian.dims.w) / 2 + Math.hypot(target.dims.l, target.dims.w) / 2;
+          if (approaching < 0 || closest2 > radius * radius) continue;
+          const ttc = Math.max(0, approaching - Math.sqrt(Math.max(0, radius * radius - closest2) / speed2));
+          const match = condition.op === '<' || condition.op === '<=' ? ttc <= threshold : ttc >= threshold;
+          if (match) return sample.t;
+        }
+      }
+      return null;
+    })();
+    if (triggerTime === null) {
+      throw new CliError('near_miss_trigger_unresolved', 'near-miss trigger cannot be resolved against the canonical target trajectory', { path: `${path}.trigger`, exitCode: 2 });
+    }
+    const deadline = goal.deadlineS === undefined
+      ? interaction.trigger.kind === 'when' && interaction.trigger.byLatest !== undefined
+        ? evalNum(interaction.trigger.byLatest, scope, `${path}.trigger.byLatest`)
+        : clipSeconds
+      : evalNum(goal.deadlineS, scope, `${path}.target.deadlineS`);
+    const result = solvePedestrianNearMiss({
+      pedestrianId: pedestrian.id, targetId: target.id,
+      pedestrianStart: { x: pedStart.x, z: pedStart.z }, pedestrianDims: pedestrian.dims,
+      targetTrajectory: trajectory, targetDims: target.dims, triggerTimeS: triggerTime,
+      deadlineS: deadline, clearanceM: Math.max(0.01, evalNum(goal.clearanceM, scope, `${path}.target.clearanceM`)),
+      pass: goal.pass,
+      minSpeedMps: Math.max(0.1, evalNum(goal.minSpeedKph, scope, `${path}.target.minSpeedKph`) * KPH_TO_MPS),
+      maxSpeedMps: Math.max(0.1, evalNum(goal.maxSpeedKph, scope, `${path}.target.maxSpeedKph`) * KPH_TO_MPS),
+    });
+    if (!result.ok) throw new CliError(result.diagnostic.code, result.diagnostic.message, { path: `${path}.target`, detail: result.diagnostic.detail, exitCode: 2 });
+    const trigger = this.buildTrigger(interaction.trigger, scope, `${path}.trigger`);
+    if (!trigger) throw new CliError('near_miss_trigger_unresolved', 'near-miss trigger did not materialize', { path: `${path}.trigger`, exitCode: 2 });
+    const route = parseInteraction({ id: interaction.id, actorId: pedestrian.id, trigger, verb: 'route', target: { kind: 'polyline', points: result.solution.points } });
+    const walking = parseInteraction({
+      id: `${interaction.id}__speed`, actorId: pedestrian.id, trigger,
+      verb: 'speed', target: { mode: 'absolute', value: result.solution.speedMps },
+      dynamics: { shape: 'linear', constraint: 'time', value: 0.1 },
+    });
+    this.notes.push({
+      path: `${path}.target`, impact: 'informational',
+      reason: `near miss re-solved: ${result.solution.pass}, ${result.solution.predictedClearanceM.toFixed(3)} m clearance, ${result.solution.speedMps.toFixed(3)} m/s, plan ${result.solution.planHash}`,
+    });
+    this.nearMissCriteria.push({
+      interactionId: interaction.id,
+      pedestrianId: pedestrian.id,
+      targetId: target.id,
+      clearanceM: result.solution.requestedClearanceM,
+      toleranceM: 0.15,
+      pass: result.solution.pass,
+      planHash: result.solution.planHash,
+      predictedClosestApproachS: result.solution.closestApproachTimeS,
+      predictedTimeGapS: result.solution.predictedTimeGapS,
+    });
+    return [route, walking];
   }
 
   /** Bind portable control stop lines onto concrete lateral lanes. */
@@ -3068,6 +3214,7 @@ class Materializer {
       props: this.props,
       occluders: this.occluders,
       occlusionPairs: this.occlusionPairs,
+      nearMissCriteria: this.nearMissCriteria,
     });
 
     // --- arrival: the criticality that makes the scenario a scenario --------

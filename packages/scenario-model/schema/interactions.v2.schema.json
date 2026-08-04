@@ -525,6 +525,44 @@
                     "pose"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "nearMiss"
+                    },
+                    "target": {
+                      "$ref": "#/$defs/__schema3"
+                    },
+                    "clearanceM": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "pass": {
+                      "default": "auto",
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "behind",
+                        "auto"
+                      ]
+                    },
+                    "minSpeedKph": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "maxSpeedKph": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "deadlineS": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "target"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }

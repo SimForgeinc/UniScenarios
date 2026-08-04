@@ -79,6 +79,16 @@ export const PetInvariantSchema = z.strictObject({
   range: RangeSchema,
 });
 
+/** Contact-free closest OBB clearance for a pedestrian/target near miss. */
+export const NearMissInvariantSchema = z.strictObject({
+  ...invariantBase,
+  kind: z.literal('near_miss'),
+  pedestrian: RoleRefSchema,
+  target: RoleRefSchema,
+  /** Exact sampled footprint-to-footprint clearance, metres. Zero is contact. */
+  clearanceRangeM: RangeSchema,
+});
+
 /** Arrival-time offset at a conflict point — the criticality of a crossing conflict. */
 export const ArrivalInvariantSchema = z.strictObject({
   ...invariantBase,
@@ -159,6 +169,7 @@ export const InvariantSchema = z.discriminatedUnion('kind', [
   TtcInvariantSchema,
   PathTtcInvariantSchema,
   PetInvariantSchema,
+  NearMissInvariantSchema,
   ArrivalInvariantSchema,
   ClosingSpeedInvariantSchema,
   SpeedRelLimitInvariantSchema,

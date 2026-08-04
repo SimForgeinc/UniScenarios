@@ -76,6 +76,19 @@ export interface AsamExportOptions {
   readonly executionMode?: 'actions' | 'trajectory-replay' | undefined;
   /** Maximum distance between exported route waypoints. */
   readonly routeSampleM?: number | undefined;
+  /**
+   * UniScenarios near-miss acceptance intent. OSC 1.4 preserves the executable
+   * trigger/trajectory natively; these criteria are carried as FileHeader
+   * properties because OSC has no standard OBB-clearance success criterion.
+   */
+  readonly nearMissCriteria?: readonly {
+    readonly pedestrianId: string;
+    readonly targetId: string;
+    readonly clearanceM: number;
+    readonly toleranceM?: number;
+    readonly pass?: 'front' | 'behind' | 'auto';
+    readonly planHash?: string;
+  }[] | undefined;
 }
 
 export interface AsamExportResult {

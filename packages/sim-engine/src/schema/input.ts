@@ -599,6 +599,20 @@ export const occlusionPairSchema = z.object({
 });
 export type OcclusionPair = z.infer<typeof occlusionPairSchema>;
 
+/** Hash-covered semantic acceptance intent for a materialized near miss. */
+export const nearMissCriterionSchema = z.object({
+  interactionId: idSchema,
+  pedestrianId: idSchema,
+  targetId: idSchema,
+  clearanceM: positive,
+  toleranceM: positive.default(0.15),
+  pass: z.enum(['front', 'behind']),
+  planHash: z.string().regex(/^[0-9a-f]{8}$/),
+  predictedClosestApproachS: nonNeg,
+  predictedTimeGapS: finite,
+});
+export type NearMissCriterion = z.infer<typeof nearMissCriterionSchema>;
+
 /* ------------------------------------------------ operational conditions */
 
 /**
@@ -736,6 +750,7 @@ export const simScenarioInputSchema = z
     props: z.array(staticPropSchema).default([]),
     occluders: z.array(occluderSchema).default([]),
     occlusionPairs: z.array(occlusionPairSchema).default([]),
+    nearMissCriteria: z.array(nearMissCriterionSchema).default([]),
   })
   .superRefine((doc, ctx) => {
     const actorIds = new Set<string>();
@@ -776,6 +791,12 @@ export const simScenarioInputSchema = z
     }
     if (doc.metricSubject !== undefined && !actorIds.has(doc.metricSubject)) {
       ctx.addIssue({ code: 'custom', path: ['metricSubject'], message: 'unknown actor' });
+    }
+    for (let i = 0; i < doc.nearMissCriteria.length; i++) {
+      const criterion = doc.nearMissCriteria[i]!;
+      if (!actorIds.has(criterion.pedestrianId) || !actorIds.has(criterion.targetId)) {
+        ctx.addIssue({ code: 'custom', path: ['nearMissCriteria', i], message: 'near-miss criterion references an unknown actor' });
+      }
     }
     const propIds = new Set<string>();
     for (let i = 0; i < doc.props.length; i++) {
@@ -923,6 +944,7 @@ export function normalizeSimScenarioInput(input: SimScenarioInput): SimScenarioI
         a.target.localeCompare(b.target) ||
         (a.occluderId ?? '').localeCompare(b.occluderId ?? ''),
     ),
+    nearMissCriteria: [...input.nearMissCriteria].sort((a, b) => a.interactionId.localeCompare(b.interactionId)),
   };
 }
 

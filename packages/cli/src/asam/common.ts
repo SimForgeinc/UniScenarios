@@ -65,6 +65,7 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
     props: decision('omitted', 'none', 'render-catalog props are not emitted by the current profiles'),
     occluders: decision('preserved', 'approximate', 'exported as stationary bounding-box objects without catalog appearance'),
     occlusionPairs: decision('omitted', 'none', 'line-of-sight evaluation pairs are not an ASAM execution concept'),
+    nearMissCriteria: decision('extension', 'metadata-only', 'executable triggers/trajectories are standard; exact OBB-clearance acceptance is retained in UniScenarios Properties'),
   } satisfies Record<keyof SimScenarioInput, CapabilityDecision>;
 }
 
@@ -78,6 +79,7 @@ function fieldHasMaterialValue(input: SimScenarioInput, path: keyof SimScenarioI
     case 'props': return input.props.length > 0;
     case 'occluders': return input.occluders.length > 0;
     case 'occlusionPairs': return input.occlusionPairs.length > 0;
+    case 'nearMissCriteria': return input.nearMissCriteria.length > 0;
     default: return true;
   }
 }

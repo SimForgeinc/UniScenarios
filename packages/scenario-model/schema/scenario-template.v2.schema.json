@@ -3562,6 +3562,44 @@
                     "pose"
                   ],
                   "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
+                      "const": "nearMiss"
+                    },
+                    "target": {
+                      "$ref": "#/$defs/__schema44"
+                    },
+                    "clearanceM": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "pass": {
+                      "default": "auto",
+                      "type": "string",
+                      "enum": [
+                        "front",
+                        "behind",
+                        "auto"
+                      ]
+                    },
+                    "minSpeedKph": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "maxSpeedKph": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    },
+                    "deadlineS": {
+                      "$ref": "#/$defs/NumberOrExpr"
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "target"
+                  ],
+                  "additionalProperties": false
                 }
               ]
             }
@@ -4521,6 +4559,44 @@
             "of",
             "to",
             "range"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/__schema102"
+            },
+            "essentiality": {
+              "$ref": "#/$defs/__schema103"
+            },
+            "window": {
+              "$ref": "#/$defs/__schema104"
+            },
+            "label": {
+              "$ref": "#/$defs/__schema105"
+            },
+            "kind": {
+              "type": "string",
+              "const": "near_miss"
+            },
+            "pedestrian": {
+              "$ref": "#/$defs/__schema44"
+            },
+            "target": {
+              "$ref": "#/$defs/__schema44"
+            },
+            "clearanceRangeM": {
+              "$ref": "#/$defs/Range"
+            }
+          },
+          "required": [
+            "id",
+            "kind",
+            "pedestrian",
+            "target",
+            "clearanceRangeM"
           ],
           "additionalProperties": false
         },

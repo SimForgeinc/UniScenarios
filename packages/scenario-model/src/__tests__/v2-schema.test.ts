@@ -37,6 +37,26 @@ import { validateTemplate } from '../validate/index.js';
 import { interaction, ltapTemplate, ltapTemplateInput } from './v2-fixtures.js';
 
 describe('ScenarioTemplate v2', () => {
+  it('round-trips contact-free pedestrian near-miss intent', () => {
+    const invariant = InvariantSchema.parse({
+      id: 'ped-clearance', kind: 'near_miss', pedestrian: 'challenger', target: 'ego',
+      clearanceRangeM: [0.35, 0.65], essentiality: 'required',
+    });
+    expect(invariant).toEqual({
+      id: 'ped-clearance', kind: 'near_miss', pedestrian: 'challenger', target: 'ego',
+      clearanceRangeM: [0.35, 0.65], essentiality: 'required',
+    });
+  });
+
+  it('persists a semantic near-miss route goal instead of a stale scene polyline', () => {
+    const parsed = InteractionSchema.parse({
+      id: 'ped-near-miss', actor: 'challenger',
+      trigger: { kind: 'when', condition: { kind: 'distance', from: 'ego', to: { role: 'challenger' }, measure: 'euclidean', op: '<=', valueM: 25, hysteresisM: 0.5 }, byLatest: 8, ifNever: 'skip' },
+      verb: 'route', target: { mode: 'nearMiss', target: 'ego', clearanceM: 0.5, pass: 'auto', minSpeedKph: 1.8, maxSpeedKph: 10.8 },
+    });
+    expect(parsed.target).toMatchObject({ mode: 'nearMiss', target: 'ego', clearanceM: 0.5, pass: 'auto' });
+    expect(parsed.trigger).toMatchObject({ condition: { hysteresisM: 0.5 } });
+  });
   it('round-trips lateral maneuver duration and style independently of clip timing', () => {
     const parsed = InteractionSchema.parse({
       id: 'pull-over', actor: 'ego', trigger: { kind: 'at', t: 1 }, until: { kind: 'at', t: 2 },

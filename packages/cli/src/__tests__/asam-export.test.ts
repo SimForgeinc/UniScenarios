@@ -264,6 +264,16 @@ function standardActionsXmlFixture() {
 }
 
 describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
+  it('preserves near-miss criterion metadata and states the OSC limitation', () => {
+    const result = exportOpenScenarioXml14(fixture(), {
+      graph,
+      nearMissCriteria: [{ pedestrianId: 'challenger', targetId: 'ego', clearanceM: 0.5, toleranceM: 0.1, pass: 'front', planHash: 'deadbeef' }],
+    });
+    expect(result.content).toContain('uniscenarios.nearMiss.0.clearanceM');
+    expect(result.content).toContain('value="0.5"');
+    expect(result.content).toContain('uniscenarios.nearMiss.0.planHash');
+    expect(result.warnings).toContainEqual(expect.objectContaining({ code: 'near_miss_criterion_metadata' }));
+  });
   it('exports the runtime-clamped effective lane-change duration', () => {
     const input = mappedLaneChangeFixture(1, 1);
     const simulation = runSimulation(input, { graph: laneGraph, guards: 'collect' });

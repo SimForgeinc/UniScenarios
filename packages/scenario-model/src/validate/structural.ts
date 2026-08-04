@@ -466,6 +466,15 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
               'an exact lanePath is map-bound and may only drive a pinned scene_absolute actor',
             ));
           }
+        } else if (interaction.target.mode === 'nearMiss') {
+          needRole(interaction.target.target, joinPath(base, 'target', 'target'));
+          if (interaction.target.target === interaction.actor) {
+            out.push(issue('error', 'self_reference', joinPath(base, 'target', 'target'), 'a near miss requires a distinct target actor'));
+          }
+          const actor = roles.get(interaction.actor);
+          if (actor && actor.actor.class !== 'pedestrian') {
+            out.push(issue('error', 'actor_class_mismatch', joinPath(base, 'actor'), 'nearMiss routes are only supported for pedestrians'));
+          }
         }
         break;
       case 'set': {
@@ -590,6 +599,12 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
     const base = joinPath('invariants', index);
     if (invariant.kind === 'event_order') {
       invariant.events.forEach((id, i) => needInteraction(id, joinPath(base, 'events', i)));
+    } else if (invariant.kind === 'near_miss') {
+      needRole(invariant.pedestrian, joinPath(base, 'pedestrian'));
+      needRole(invariant.target, joinPath(base, 'target'));
+      if (invariant.pedestrian === invariant.target) {
+        out.push(issue('error', 'self_reference', base, 'a near miss requires two distinct roles'));
+      }
     } else {
       needRole(invariant.of, joinPath(base, 'of'));
       if ('to' in invariant) {
