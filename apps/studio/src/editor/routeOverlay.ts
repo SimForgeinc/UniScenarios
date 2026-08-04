@@ -27,11 +27,15 @@ export type RouteMarkerKind = 'turn-left' | 'turn-right' | 'reroute' | 'lane-cha
 export interface RoutePoint { readonly x: number; readonly z: number }
 export interface VehicleRouteOverlay {
   readonly actorId: string;
+  readonly actorKind?: 'vehicle' | 'pedestrian';
   readonly ambient: boolean;
   readonly color: string;
   readonly planned: readonly RoutePoint[];
   readonly actual: readonly RoutePoint[];
   readonly markers: readonly { kind: RouteMarkerKind; point: RoutePoint }[];
+  readonly triggerPoint?: RoutePoint;
+  readonly triggerRadiusM?: number;
+  readonly invalidReason?: string;
 }
 
 export interface RouteOverlayOptions {
@@ -467,7 +471,8 @@ function projectAuthoredRoute(
 /** Synchronous optimistic projection from the current editor document. */
 export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneIndex): VehicleRouteOverlay[] {
   return template.roles.flatMap((role) => {
-    if (role.actor.static || role.actor.class === 'pedestrian' || role.actor.class === 'static_object') return [];
+    if (role.actor.static || role.actor.class === 'static_object') return [];
+    if (role.actor.class === 'pedestrian') return pedestrianRouteFromTemplate(role, template, index);
     const roleInteractions = template.choreography.interactions.filter((interaction) => interaction.actor === role.id);
     const initialReroute = roleInteractions.find((interaction): interaction is Extract<Interaction, { verb: 'route' }> =>
       interaction.verb === 'route' && interaction.target.mode === 'lanePath');
@@ -495,6 +500,53 @@ export function routesFromTemplate(template: ScenarioTemplateV2, index: LaneInde
       markers: [...turnMarkers(planned), ...authoredActionMarkers(role.id, template.choreography.interactions, planned, template.choreography.clipSeconds)],
     }];
   }).sort((a, b) => a.actorId.localeCompare(b.actorId));
+}
+
+function pedestrianRouteFromTemplate(
+  role: ScenarioTemplateV2['roles'][number],
+  template: ScenarioTemplateV2,
+  index: LaneIndex,
+): VehicleRouteOverlay[] {
+  if (role.kind !== 'scene_absolute') return [];
+  const start = { x: role.pose.position.x, z: role.pose.position.z };
+  const interactions = template.choreography.interactions.filter((item) => item.actor === role.id);
+  const routeAction = interactions.find((item): item is Extract<Interaction, { verb: 'route' }> => item.verb === 'route');
+  let planned: RoutePoint[] = [start];
+  let invalidReason: string | undefined;
+  if (routeAction?.target.mode === 'lanePath') {
+    planned = [...resolvedRoutePoints({ kind: 'lanePath', lanes: [...routeAction.target.lanes] }, index)];
+  } else if (routeAction?.target.mode === 'polyline' && role.initialRoute?.lanes.length) {
+    const built = buildRoute(index.graph, { kind: 'lanePath', lanes: [...role.initialRoute.lanes] });
+    if (built.ok) planned = routeAction.target.points.map((pose) => {
+      const s = numeric(pose.s, 0);
+      const offset = numeric(pose.tFrac, 0) * built.route.widthAt(s);
+      return scenePoint(built.route.pointWithOffset(s, offset));
+    });
+    else invalidReason = 'Pedestrian path cannot be resolved on the loaded map.';
+  } else {
+    const moving = interactions.find((item): item is Extract<Interaction, { verb: 'speed' }> => item.verb === 'speed' && item.target.mode !== 'stop');
+    if (moving) {
+      const speedKph = moving.target.mode === 'absolute' ? numeric(moving.target.valueKph, 5) : 5;
+      const triggerTime = moving.trigger.kind === 'at' ? numeric(moving.trigger.t, 0) : 0;
+      const distanceM = Math.max(2, speedKph / 3.6 * Math.max(1, template.choreography.clipSeconds - triggerTime));
+      planned.push({ x: start.x + Math.cos(role.pose.headingRad) * distanceM, z: start.z + Math.sin(role.pose.headingRad) * distanceM });
+    }
+  }
+  if (planned.length < 2) planned.push(start);
+  const condition = interactions.map((item) => item.trigger).find((trigger) => trigger.kind === 'when' && (trigger.condition.kind === 'distance' || trigger.condition.kind === 'ttc'));
+  const triggerRadiusM = condition?.kind === 'when' && condition.condition.kind === 'distance' ? numeric(condition.condition.valueM, 0) : undefined;
+  return [{
+    actorId: role.id,
+    actorKind: 'pedestrian',
+    ambient: false,
+    color: '#7de3ff',
+    planned,
+    actual: [],
+    markers: [],
+    triggerPoint: planned[0],
+    ...(triggerRadiusM ? { triggerRadiusM } : {}),
+    ...(invalidReason ? { invalidReason } : {}),
+  }];
 }
 
 export interface RouteExecutionParity {
@@ -694,15 +746,24 @@ export class VehicleRouteOverlayRenderer {
     // vertex colour so adding actors never adds draw calls.
     const plannedPositions: number[] = [];
     const plannedColors: number[] = [];
+    const pedestrianPositions: number[] = [];
+    const pedestrianColors: number[] = [];
     const arrowPositions: number[] = [];
     const arrowColors: number[] = [];
     for (const route of visible) {
       const selected = options.selectedActorIds.has(route.actorId);
-      const color = new Color(route.color).multiplyScalar(selected ? 1 : .34);
-      for (const point of dottedPoints(route.planned)) {
-        plannedPositions.push(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + (selected ? .38 : .27), point.z);
-        plannedColors.push(color.r, color.g, color.b);
-      }
+      const color = new Color(route.invalidReason ? '#ff5568' : route.color).multiplyScalar(selected ? 1 : .45);
+      if (route.actorKind === 'pedestrian') {
+        const segments = dashedSegments(route.planned, 1.1, .65);
+        for (let i = 0; i < segments.length; i += 3) {
+          const x = segments[i]!; const z = segments[i + 2]!;
+          pedestrianPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + (selected ? .46 : .34), z);
+          pedestrianColors.push(color.r, color.g, color.b);
+        }
+      } else for (const point of dottedPoints(route.planned)) {
+          plannedPositions.push(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + (selected ? .38 : .27), point.z);
+          plannedColors.push(color.r, color.g, color.b);
+        }
       const arrows: number[] = [];
       appendArrows(arrows, route.planned, 0);
       for (let i = 0; i < arrows.length; i += 3) {
@@ -712,6 +773,7 @@ export class VehicleRouteOverlayRenderer {
         arrowColors.push(color.r, color.g, color.b);
       }
     }
+    if (pedestrianPositions.length) this.addLines(pedestrianPositions, pedestrianColors, .98, 'pedestrian-projected-paths');
     if (plannedPositions.length) {
       const geometry = new BufferGeometry();
       geometry.setAttribute('position', new BufferAttribute(Float32Array.from(plannedPositions), 3));
@@ -757,6 +819,24 @@ export class VehicleRouteOverlayRenderer {
       points.frustumCulled = true;
       this.group.add(points); this.objects.push(points);
     }
+    const triggerPositions: number[] = [];
+    const triggerColors: number[] = [];
+    for (const route of visible) {
+      if (!route.triggerPoint) continue;
+      const color = new Color(route.invalidReason ? '#ff5568' : '#ffe08a');
+      const radius = Math.max(.5, route.triggerRadiusM ?? .65);
+      const steps = Math.max(16, Math.min(64, Math.ceil(radius * 3)));
+      for (let i = 0; i < steps; i++) {
+        const a = i / steps * Math.PI * 2; const b = (i + 1) / steps * Math.PI * 2;
+        for (const angle of [a, b]) {
+          const x = route.triggerPoint.x + Math.cos(angle) * radius;
+          const z = route.triggerPoint.z + Math.sin(angle) * radius;
+          triggerPositions.push(x, (this.sampleHeight?.(x, z) ?? 0) + .32, z);
+          triggerColors.push(color.r, color.g, color.b);
+        }
+      }
+    }
+    if (triggerPositions.length) this.addLines(triggerPositions, triggerColors, .82, 'pedestrian-trigger-envelopes');
   }
 
   dispose(): void { this.clear(); this.group.removeFromParent(); }

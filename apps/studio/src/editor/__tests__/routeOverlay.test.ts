@@ -3,7 +3,7 @@ import { Color, type LineBasicMaterial, type LineSegments, type Points, type Poi
 import { parseSimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, routesFromTemplate, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -37,6 +37,23 @@ function input() {
 }
 
 describe('vehicle route overlays', () => {
+  it('projects authored pedestrian movement before and during Play with a trigger envelope', () => {
+    const template = {
+      roles: [{ id: 'walker', kind: 'scene_absolute', actor: { class: 'pedestrian', static: false }, pose: { position: { x: 2, y: 0, z: 3 }, headingRad: 0 } }],
+      choreography: { clipSeconds: 10, interactions: [{ id: 'walk', actor: 'walker', trigger: { kind: 'when', condition: { kind: 'distance', from: 'car', to: { role: 'walker' }, measure: 'euclidean', op: '<=', valueM: 8 }, byLatest: 8, ifNever: 'skip' }, verb: 'speed', target: { mode: 'absolute', valueKph: 5 } }] },
+    } as unknown as ScenarioTemplateV2;
+    const before = routesFromTemplate(template, index()).find((route) => route.actorId === 'walker')!;
+    const during = authoringRoutes(template, index(), input()).find((route) => route.actorId === 'walker')!;
+    expect(before.actorKind).toBe('pedestrian');
+    expect(before.triggerRadiusM).toBe(8);
+    expect(before.planned.length).toBeGreaterThan(1);
+    expect(during.planned).toEqual(before.planned);
+    const renderer = new VehicleRouteOverlayRenderer();
+    renderer.sync([before], { showAmbient: false, showActual: false, selectedActorIds: new Set(['walker']) });
+    expect(renderer.group.getObjectByName('pedestrian-projected-paths')).toBeTruthy();
+    expect(renderer.group.getObjectByName('pedestrian-trigger-envelopes')).toBeTruthy();
+    renderer.dispose();
+  });
   it('uses lane travel order and scene transform deterministically', () => {
     const a = routesFromSimulation(input(), index());
     const b = routesFromSimulation(input(), index());

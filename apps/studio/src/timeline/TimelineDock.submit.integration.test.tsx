@@ -52,6 +52,18 @@ function laneIndex(): LaneIndex {
 }
 
 describe('timeline action dialog submission', () => {
+  it('authors distance and TTC triggers against another authored actor and rejects stale/self targets', async () => {
+    const { store } = memoryStore();
+    const document = await EditorDocument.open(MAPS[0]!, { store, autosaveMs: 60_000 });
+    const [pedestrianId] = document.add([{ id: 'walker', catalogId: 'pedestrian.adult_walking', x: 0, y: 0, z: 0, headingRad: 0 }]);
+    const [vehicleId] = document.add([{ id: 'car', catalogId: 'vehicle.sedan', x: 15, y: 0, z: 0, headingRad: Math.PI, routeLaneRsls: ['5:0:-3', '6:0:-3'], initialSpeedKph: 30 }]);
+    const distance = submitTimelineAction(document, { ...draft(pedestrianId!, 'walk'), triggerMode: 'distance', triggerActorId: vehicleId, triggerThreshold: 9.5, triggerDeadline: 12, triggerIfNever: 'skip' });
+    expect(distance.ok).toBe(true);
+    expect(document.data.choreography.interactions[0]!.trigger).toEqual({ kind: 'when', condition: { kind: 'distance', from: vehicleId, to: { role: pedestrianId }, measure: 'euclidean', op: '<=', valueM: 9.5 }, byLatest: 12, ifNever: 'skip' });
+    expect(submitTimelineAction(document, { ...draft(pedestrianId!, 'walk'), triggerMode: 'ttc', triggerActorId: pedestrianId, triggerThreshold: 2, triggerDeadline: 10, triggerIfNever: 'skip' })).toEqual({ ok: false, message: 'An actor cannot trigger itself.' });
+    expect(submitTimelineAction(document, { ...draft(pedestrianId!, 'walk'), triggerMode: 'ttc', triggerActorId: 'deleted-car', triggerThreshold: 2, triggerDeadline: 10, triggerIfNever: 'skip' })).toEqual({ ok: false, message: 'The trigger actor no longer exists. Choose another authored actor.' });
+    document.dispose();
+  });
   it('adds Accelerate as one undoable action and publishes the preview revision synchronously', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);
