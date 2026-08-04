@@ -117,6 +117,9 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" aria-pressed={provider === 'simulation-agent-vision'} style={{ ...styles.provider, ...(provider === 'simulation-agent-vision' ? styles.providerActive : {}) }} onClick={() => setProvider('simulation-agent-vision')}>
         <strong>Simulation agent + 2D</strong><small>Same loop with deterministic bird's-eye grounding</small>
       </button>
+      <button type="button" aria-pressed={provider === 'verified-template-search'} style={{ ...styles.provider, ...(provider === 'verified-template-search' ? styles.providerActive : {}) }} onClick={() => setProvider('verified-template-search')}>
+        <strong>Verified template search</strong><small>Rank proven native patterns, then tune deterministically</small>
+      </button>
     </div>
     <label style={styles.label} htmlFor="copilot-prompt">Describe the scenario</label>
     <textarea id="copilot-prompt" data-testid="scenario-copilot-prompt" style={styles.prompt} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} disabled={busy} />
@@ -124,7 +127,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     {progress ? <div role="status" style={styles.progress}><span>{progress.message}</span><span>{progress.completed}/{progress.total}</span></div> : null}
     {error ? <div role="alert" style={styles.error}>{error}</div> : null}
     {result ? <>
-      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : result.provider === 'simulation-agent' ? 'Simulation agent · no image' : result.provider === 'simulation-agent-vision' ? 'Simulation agent + 2D' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
+      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : result.provider === 'simulation-agent' ? 'Simulation agent · no image' : result.provider === 'simulation-agent-vision' ? 'Simulation agent + 2D' : result.provider === 'verified-template-search' ? 'Verified template search' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
       {result.warnings.map((warning) => <div key={warning} style={styles.warning}>{warning}</div>)}
       <details style={styles.intent} open>
         <summary><strong>Review structured intent</strong> · editable before regeneration</summary>
