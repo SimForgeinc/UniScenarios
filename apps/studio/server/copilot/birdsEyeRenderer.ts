@@ -87,7 +87,7 @@ export function renderBirdEye(input: BirdEyeRenderInput): BirdEyeRenderResult {
     raster.dashedPolyline(center, [207, 207, 191, 255], 1, 9, 8);
     const arrowAt = center[Math.floor(center.length / 2)];
     const arrowNext = center[Math.min(center.length - 1, Math.floor(center.length / 2) + 1)];
-    if (arrowAt && arrowNext) raster.arrow(arrowAt, arrowNext, lane.laneId < 0 ? [112, 188, 255, 255] : [88, 150, 210, 255]);
+    if (arrowAt && arrowNext) raster.arrow(lane.laneId < 0 ? arrowAt : arrowNext, lane.laneId < 0 ? arrowNext : arrowAt, lane.laneId < 0 ? [112, 188, 255, 255] : [88, 150, 210, 255]);
   }
 
   for (const feature of geometry.features) {
