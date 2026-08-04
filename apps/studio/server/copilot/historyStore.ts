@@ -77,7 +77,8 @@ export function isDraftBackedEntry(entry: CopilotGenerationHistoryEntry): boolea
   return entry.savedDraftStatus === 'original'
     && entry.scenarioSchemaVersion === 2
     && entry.candidate !== null
-    && entry.candidate.scenarioDoc.scenarioVersion === 2;
+    && entry.candidate.scenarioDoc.scenarioVersion === 2
+    && entry.candidate.scenarioDoc.sourceMap.mapId === entry.mapId;
 }
 
 function loadBenchmarks(): BenchmarkArtifact[] {

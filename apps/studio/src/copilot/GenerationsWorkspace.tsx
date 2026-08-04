@@ -109,7 +109,10 @@ function GenerationDetails({ entry, onClose }: { entry: CopilotGenerationHistory
 function Detail({ label, value }: { label: string; value: string }): JSX.Element { return <div><dt>{label}</dt><dd>{value}</dd></div>; }
 
 export function hasExactDraft(entry: CopilotGenerationHistoryEntry): boolean {
-  return entry.savedDraftStatus === 'original' && entry.scenarioSchemaVersion === 2 && entry.candidate?.scenarioDoc.scenarioVersion === 2;
+  return entry.savedDraftStatus === 'original'
+    && entry.scenarioSchemaVersion === 2
+    && entry.candidate?.scenarioDoc.scenarioVersion === 2
+    && entry.candidate.scenarioDoc.sourceMap.mapId === entry.mapId;
 }
 
 export function draftCompatibility(entry: CopilotGenerationHistoryEntry, currentMapId: string, currentMapHash: string | null): { compatible: boolean; switchable: boolean; message: string } {
