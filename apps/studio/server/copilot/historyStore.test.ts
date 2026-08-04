@@ -10,6 +10,8 @@ describe('Scenario Copilot generation history', () => {
     expect(new Set(rows.map((entry) => entry.caseId))).toHaveLength(10);
     expect(rows.every((entry) => entry.prompt.length > 20)).toBe(true);
     expect(rows.every((entry) => entry.candidate === null)).toBe(true);
+    expect(rows.every((entry) => entry.savedDraftStatus === 'not-recorded')).toBe(true);
+    expect(rows.every((entry) => entry.savedResultHash === null)).toBe(true);
   });
 
   it('keeps benchmark evidence when live runs are cleared', () => {

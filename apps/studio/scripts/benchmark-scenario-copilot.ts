@@ -13,7 +13,7 @@ import { generateSimulationAgent } from '../server/copilot/simulationAgentProvid
 import { generateSimulationAgentVision } from '../server/copilot/simulationAgentVisionProvider.js';
 import { generateRelativeGoalOptimizer } from '../server/copilot/relativeGoalOptimizerProvider.js';
 import { generateVerifiedTemplateSearch } from '../server/copilot/verifiedTemplateSearchProvider.js';
-import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
+import type { CopilotCandidate, CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
 type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'relative-goal-optimizer' | 'verified-template-search';
 type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
@@ -62,7 +62,26 @@ interface BenchmarkRow {
   readonly imagesSent: number | null;
   readonly totalImageBytes: number | null;
   readonly imageCostUsd: number | null;
+  readonly savedResult: SavedBenchmarkResult | null;
 }
+
+interface SavedBenchmarkResult {
+  readonly format: 'uniscenarios-copilot-saved-result-v1';
+  readonly hash: string;
+  readonly mapId: string;
+  readonly mapHash: string | null;
+  readonly scenarioSchemaVersion: number;
+  readonly intent: CopilotGenerationResult['intent'];
+  readonly candidate: CopilotCandidate;
+  readonly canonicalTraceSummary: {
+    readonly traceHash: string; readonly tickCount: number; readonly durationS: number; readonly actorIds: readonly string[];
+    readonly eventCounts: Record<string, number>;
+    readonly events: readonly { readonly t: number; readonly kind: string; readonly actorId?: string; readonly interactionId?: string }[];
+  };
+  readonly generatedScenic: null;
+}
+
+const MAX_SAVED_RESULT_BYTES = 750_000;
 
 class BenchmarkPhaseError extends Error {
   constructor(readonly phase: string, message: string) { super(message); }
@@ -116,7 +135,7 @@ for (const mapId of mapIds) {
 
 await mkdir(outputDirectory, { recursive: true });
 const metadata = {
-  schemaVersion: 1,
+  schemaVersion: 2,
   startedAt,
   completedAt: new Date().toISOString(),
   requestedDisplayName: requestedModel,
@@ -221,7 +240,7 @@ async function runCase(
     simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
     semanticPass: false, semanticAssertions: [], editablePass: false,
     convergenceIterations: null, relativeActionCount: null, relativeTriggerFireCount: null, relativeTimingPass: null,
-    stopReason: null, imagesSent: null, totalImageBytes: null, imageCostUsd: null,
+    stopReason: null, imagesSent: null, totalImageBytes: null, imageCostUsd: null, savedResult: null,
   });
   let observed = base();
   let phase = 'provider-generation';
@@ -313,6 +332,7 @@ async function runCase(
       relativeActionCount: relativeIds.length,
       relativeTriggerFireCount,
       relativeTimingPass,
+      savedResult: createSavedResult(generated, candidate, mapContext, simulated.trace),
     };
     if (benchmarkCase.expectedRejection) return { ...completed, outcome: 'unexpected-generation', failureCategory: 'unsupported-request-not-rejected', safeError: 'Provider materialized and simulated an unsupported request' };
     if (!editablePass) return { ...completed, outcome: 'failure', failureCategory: 'apply-editability', safeError: 'Generated document did not pass edit/undo probe' };
@@ -349,6 +369,52 @@ function numberOrNull(value: unknown): number | null { return typeof value === '
 function booleanOrNull(value: unknown): boolean | null { return typeof value === 'boolean' ? value : null; }
 function failedAssertions(assertions: readonly SemanticAssertion[]): string { return assertions.filter((item) => !item.pass).map((item) => `${item.id}: ${item.evidence}`).join('; ').slice(0, 500); }
 function traceDigest(trace: unknown): string { return createHash('sha256').update(JSON.stringify(trace)).digest('hex'); }
+function createSavedResult(
+  generated: CopilotGenerationResult,
+  candidate: CopilotCandidate,
+  mapContext: CopilotMapContext,
+  trace: { ticks: { t: readonly number[]; actors: Record<string, unknown> }; events: readonly Record<string, unknown>[] },
+): SavedBenchmarkResult | null {
+  const eventCounts: Record<string, number> = {};
+  for (const event of trace.events) {
+    const kind = typeof event['kind'] === 'string' ? event['kind'] : 'unknown';
+    eventCounts[kind] = (eventCounts[kind] ?? 0) + 1;
+  }
+  const safeCandidate: CopilotCandidate = {
+    ...candidate,
+    diagnostics: candidate.diagnostics.filter((item) => item.code !== 'openai_request'),
+    provenance: { ...candidate.provenance, agentDetails: candidate.provenance.agentDetails ? {
+      ...candidate.provenance.agentDetails,
+      iterations: candidate.provenance.agentDetails.iterations.map(({ requestId: _requestId, ...iteration }) => iteration),
+    } : undefined },
+  };
+  const traceHash = traceDigest(trace);
+  const withoutHash = {
+    format: 'uniscenarios-copilot-saved-result-v1' as const,
+    mapId: mapContext.mapId,
+    mapHash: mapContext.xodrSha256,
+    scenarioSchemaVersion: candidate.scenarioDoc.schemaVersion,
+    intent: generated.intent,
+    candidate: safeCandidate,
+    canonicalTraceSummary: {
+      traceHash,
+      tickCount: trace.ticks.t.length,
+      durationS: trace.ticks.t.at(-1) ?? 0,
+      actorIds: Object.keys(trace.ticks.actors).sort(),
+      eventCounts,
+      events: trace.events.slice(0, 256).flatMap((event) => {
+        if (typeof event['kind'] !== 'string' || typeof event['t'] !== 'number') return [];
+        return [{ t: event['t'], kind: event['kind'], ...(typeof event['actorId'] === 'string' ? { actorId: event['actorId'] } : {}), ...(typeof event['interactionId'] === 'string' ? { interactionId: event['interactionId'] } : {}) }];
+      }),
+    },
+    // Upstream Scenic source is not currently returned across the provider
+    // boundary. Never reconstruct it or label a derived program as original.
+    generatedScenic: null,
+  };
+  const hash = createHash('sha256').update(JSON.stringify(withoutHash)).digest('hex');
+  const saved: SavedBenchmarkResult = { ...withoutHash, hash };
+  return Buffer.byteLength(JSON.stringify(saved), 'utf8') <= MAX_SAVED_RESULT_BYTES ? saved : null;
+}
 function safeError(error: unknown): string {
   return (error instanceof Error ? error.message : String(error))
     .replace(/sk-[A-Za-z0-9_-]+/gu, '[redacted]')

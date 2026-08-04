@@ -17,6 +17,11 @@ export interface CopilotGenerationHistoryEntry {
   readonly requestedModel: string | null;
   readonly actualModel: string | null;
   readonly mapId: string;
+  readonly mapHash: string | null;
+  readonly scenarioSchemaVersion: number | null;
+  /** Whether an original native draft was actually retained with this run. */
+  readonly savedDraftStatus: 'original' | 'not-recorded';
+  readonly savedResultHash: string | null;
   readonly seed: number | null;
   readonly generatedAt: string | null;
   readonly intent: CopilotIntent | null;
@@ -30,6 +35,14 @@ export interface CopilotGenerationHistoryEntry {
   readonly materializationPass: boolean | null;
   readonly simulationPass: boolean | null;
   readonly simulationDurationS: number | null;
+  readonly canonicalTraceSummary: {
+    readonly traceHash: string;
+    readonly tickCount: number;
+    readonly durationS: number;
+    readonly actorIds: readonly string[];
+    readonly eventCounts: Record<string, number>;
+    readonly events: readonly { readonly t: number; readonly kind: string; readonly actorId?: string; readonly interactionId?: string }[];
+  } | null;
   readonly scenicCompilePass: boolean | null;
   readonly scenicSamplePass: boolean | null;
   readonly latencyMs: number | null;

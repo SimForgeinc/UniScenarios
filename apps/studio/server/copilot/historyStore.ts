@@ -18,6 +18,11 @@ interface BenchmarkRow {
   mapBindingPass?: boolean; nativeValidationPass?: boolean; simulationPass?: boolean; simulationDurationS?: number;
   scenicCompilePass?: boolean; scenicSamplePass?: boolean; outcome?: string; failureCategory?: string; safeError?: string;
   providerWarnings?: string[];
+  savedResult?: {
+    hash?: string; mapId?: string; mapHash?: string | null; scenarioSchemaVersion?: number;
+    intent?: unknown; candidate?: CopilotCandidate; canonicalTraceSummary?: CopilotGenerationHistoryEntry['canonicalTraceSummary'];
+    generatedScenic?: string | null;
+  };
 }
 
 const MAX_LIVE_RUNS = 60;
@@ -71,18 +76,21 @@ function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistory
       id: `benchmark:${row.caseId}:${row.provider}:${index}`, source: 'benchmark' as const,
       caseId: row.caseId ?? null, caseTitle: row.caseSummary ?? benchmarkCase.summary, prompt: benchmarkCase.prompt,
       expectedRejection: Boolean(benchmarkCase.expectedRejection), provider: row.provider,
-      requestedModel: row.requestedModel ?? null, actualModel: row.actualModel ?? null, mapId: row.mapId ?? 'not recorded', seed: null,
-      generatedAt: artifact.startedAt ?? null, intent: null, candidate: null,
+      requestedModel: row.requestedModel ?? null, actualModel: row.actualModel ?? null, mapId: row.savedResult?.mapId ?? row.mapId ?? 'not recorded',
+      mapHash: row.savedResult?.mapHash ?? null, scenarioSchemaVersion: numberOrNull(row.savedResult?.scenarioSchemaVersion),
+      savedDraftStatus: row.savedResult?.candidate ? 'original' as const : 'not-recorded' as const, savedResultHash: row.savedResult?.hash ?? null, seed: null,
+      generatedAt: artifact.startedAt ?? null, intent: isIntent(row.savedResult?.intent) ? row.savedResult.intent : null, candidate: row.savedResult?.candidate ?? null,
       actorCount: numberOrNull(row.actorCount), actionCount: numberOrNull(row.actionCount), triggerSummary: null,
       semanticPass: boolOrNull(row.semanticPass), semanticAssertions: row.semanticAssertions ?? null,
       mapBindingPass: boolOrNull(row.mapBindingPass), materializationPass: boolOrNull(row.nativeValidationPass),
       simulationPass: boolOrNull(row.simulationPass), simulationDurationS: numberOrNull(row.simulationDurationS),
+      canonicalTraceSummary: row.savedResult?.canonicalTraceSummary ?? null,
       scenicCompilePass: boolOrNull(row.scenicCompilePass), scenicSamplePass: boolOrNull(row.scenicSamplePass),
       latencyMs: numberOrNull(row.generationLatencyMs), totalTokens: numberOrNull(row.totalTokens), apiCalls: numberOrNull(row.apiCalls), repairCount: numberOrNull(row.repairCount),
       outcome: row.outcome ?? null, failureCategory: row.failureCategory ?? null,
       diagnostic: row.safeError ?? row.providerWarnings?.join('; ') ?? null,
-      provenance: { artifact: 'chat2scenic-20260803/results.json', benchmarkStartedAt: artifact.startedAt ?? null },
-      generatedScenic: null, directTypedDraft: null,
+      provenance: { artifact: 'chat2scenic-20260803/results.json', benchmarkStartedAt: artifact.startedAt ?? null, savedResultHash: row.savedResult?.hash ?? null },
+      generatedScenic: row.savedResult?.generatedScenic ?? null, directTypedDraft: row.savedResult?.candidate ? { intent: row.savedResult.intent ?? null, scenarioDoc: row.savedResult.candidate.scenarioDoc } : null,
       iterationTrace: null,
     }];
   });
@@ -97,12 +105,14 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
   return {
     id: `live:${result.runId}:${candidate?.id ?? 'none'}`, source: 'live', caseId: null,
     caseTitle: candidate?.title ?? 'Live generation', prompt: request.prompt, expectedRejection: false,
-    provider: result.provider, requestedModel: request.model ?? null, actualModel: result.model, mapId: request.mapContext.mapId, seed: null,
+    provider: result.provider, requestedModel: request.model ?? null, actualModel: result.model, mapId: request.mapContext.mapId,
+    mapHash: candidate?.provenance.mapHash ?? request.mapContext.xodrSha256, scenarioSchemaVersion: candidate?.scenarioDoc.schemaVersion ?? null,
+    savedDraftStatus: candidate ? 'original' : 'not-recorded', savedResultHash: candidate ? candidate.provenance.promptHash : null, seed: null,
     generatedAt: candidate?.provenance.generatedAt ?? new Date().toISOString(), intent: candidate?.intent ?? result.intent, candidate: safeCandidate,
     actorCount: candidate?.scenarioDoc.roles.length ?? null, actionCount: interactions.length,
     triggerSummary: interactions.map((interaction) => `${interaction.verb} · ${interaction.trigger.kind}`),
     semanticPass: null, semanticAssertions: null, mapBindingPass: candidate ? true : false, materializationPass: candidate ? true : false,
-    simulationPass: null, simulationDurationS: null,
+    simulationPass: null, simulationDurationS: null, canonicalTraceSummary: null,
     scenicCompilePass: candidate?.provenance.researchDetails?.scenicCompiled ?? null,
     scenicSamplePass: candidate?.provenance.researchDetails?.scenicSampled ?? null,
     latencyMs: result.metrics.latencyMs, totalTokens: result.metrics.totalTokens,
@@ -152,7 +162,10 @@ function sanitizeIterationTrace(value: unknown): CopilotGenerationHistoryEntry['
 
 function isProvider(value: unknown): value is CopilotGenerationHistoryEntry['provider'] {
   return value === 'staged-rag' || value === 'direct-llm' || value === 'upstream-chat2scenic'
-    || value === 'simulation-agent' || value === 'simulation-agent-vision' || value === 'relative-goal-optimizer';
+    || value === 'simulation-agent' || value === 'simulation-agent-vision' || value === 'relative-goal-optimizer' || value === 'verified-template-search';
+}
+function isIntent(value: unknown): value is NonNullable<CopilotGenerationHistoryEntry['intent']> {
+  return Boolean(value && typeof value === 'object' && typeof (value as { scenario?: unknown }).scenario === 'string');
 }
 function boolOrNull(value: unknown): boolean | null { return typeof value === 'boolean' ? value : null; }
 function numberOrNull(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }

@@ -98,7 +98,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" data-testid="copilot-generate-tab" aria-current={view === 'generate' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'generate' ? styles.tabActive : {}) }} onClick={() => setView('generate')}>Create</button>
       <button type="button" data-testid="copilot-comparison-tab" aria-current={view === 'comparison' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'comparison' ? styles.tabActive : {}) }} onClick={() => setView('comparison')}>All generations</button>
     </nav>
-    {view === 'comparison' ? <CopilotComparisonView onRerun={rerunHistory} onApply={onApply} /> : <>
+    {view === 'comparison' ? <CopilotComparisonView onRerun={rerunHistory} onApply={onApply} currentMapId={mapContext.mapId} currentMapHash={mapContext.xodrSha256} /> : <>
     {rerunNotice ? <div style={styles.rerunNotice}>{rerunNotice}<button type="button" aria-label="Dismiss re-run notice" onClick={() => setRerunNotice(null)}>×</button></div> : null}
     <label style={styles.label}>Generation approach</label>
     <div style={styles.providers}>
