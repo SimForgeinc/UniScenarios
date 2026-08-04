@@ -1,6 +1,6 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
-export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent';
+export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision';
 
 export type CopilotActorKind = 'vehicle' | 'pedestrian' | 'prop';
 
@@ -75,12 +75,13 @@ export interface CopilotProvenance {
   readonly retrievedExampleIds: readonly string[];
   readonly stages: readonly { readonly name: CopilotStage; readonly durationMs: number }[];
   readonly repairAttempts: number;
-  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent';
+  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent' | 'iterative-simulation-agent-vision';
   /** Sanitized agent evidence: tool outcomes and draft deltas, never hidden reasoning or secrets. */
   readonly agentDetails?: {
     readonly reasoningEffort: 'medium';
     readonly maxIterations: number;
     readonly stopReason: 'verified' | 'iteration-budget-exhausted' | 'unsupported-request';
+    readonly visualGrounding?: { readonly imageInputSupported: boolean; readonly renderer: 'uniscenarios-deterministic-birds-eye-v1'; readonly imagesSent: number; readonly totalImageBytes: number; readonly imageSha256: readonly string[] };
     readonly iterations: readonly {
       readonly iteration: number;
       readonly durationMs: number;
@@ -123,6 +124,7 @@ export interface CopilotProvenance {
       readonly semanticChecks: readonly { readonly id: string; readonly pass: boolean; readonly evidence: string }[];
     }[];
   };
+  readonly iterationTrace?: readonly { readonly iteration: number; readonly summary: string; readonly toolCalls: readonly { readonly name: string; readonly status: 'success' | 'failure' | 'skipped'; readonly summary: string }[]; readonly thumbnailDataUrl: string | null; readonly altText?: string; readonly legend?: readonly string[]; readonly provenance?: Record<string, unknown> }[];
   /** Research-only evidence. Never interpreted by the browser as executable code. */
   readonly researchDetails?: {
     readonly upstreamSha: string;

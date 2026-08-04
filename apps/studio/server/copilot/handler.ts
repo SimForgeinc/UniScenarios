@@ -14,6 +14,7 @@ export interface CopilotHandlerOptions {
   readonly directProvider?: CopilotServerProvider;
   readonly upstreamProvider?: CopilotServerProvider;
   readonly simulationAgentProvider?: CopilotServerProvider;
+  readonly simulationAgentVisionProvider?: CopilotServerProvider;
 }
 
 export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}) {
@@ -34,6 +35,7 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
           ...(options.directProvider ? ['direct-llm'] : []),
           ...(options.upstreamProvider ? ['upstream-chat2scenic'] : []),
           ...(options.simulationAgentProvider ? ['simulation-agent'] : []),
+          ...(options.simulationAgentVisionProvider ? ['simulation-agent-vision'] : []),
         ],
         executionBoundary: 'server-only',
       });
@@ -107,6 +109,7 @@ function providerFor(id: CopilotProviderId, options: CopilotHandlerOptions): Cop
   if (id === 'direct-llm' && options.directProvider) return options.directProvider;
   if (id === 'upstream-chat2scenic' && options.upstreamProvider) return options.upstreamProvider;
   if (id === 'simulation-agent' && options.simulationAgentProvider) return options.simulationAgentProvider;
+  if (id === 'simulation-agent-vision' && options.simulationAgentVisionProvider) return options.simulationAgentVisionProvider;
   throw new Error(`Scenario Copilot provider "${id}" is not installed in this build.`);
 }
 
@@ -125,7 +128,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 function parseRequest(value: unknown): CopilotGenerationRequest {
   if (!value || typeof value !== 'object') throw new Error('Scenario Copilot request must be an object.');
   const input = value as Partial<CopilotGenerationRequest>;
-  if (input.providerId !== 'staged-rag' && input.providerId !== 'direct-llm' && input.providerId !== 'upstream-chat2scenic' && input.providerId !== 'simulation-agent') throw new Error('Unknown Scenario Copilot provider.');
+  if (input.providerId !== 'staged-rag' && input.providerId !== 'direct-llm' && input.providerId !== 'upstream-chat2scenic' && input.providerId !== 'simulation-agent' && input.providerId !== 'simulation-agent-vision') throw new Error('Unknown Scenario Copilot provider.');
   if (typeof input.prompt !== 'string' || input.prompt.trim().length < 8 || input.prompt.length > 4_000) throw new Error('Describe the scenario in 8–4,000 characters.');
   if (!input.mapContext) throw new Error('A current-map context is required.');
   const mapContext = CopilotMapContextSchema.parse(input.mapContext);

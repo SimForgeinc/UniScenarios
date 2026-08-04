@@ -65,7 +65,7 @@ export const DirectNativeDraftSchema = z.strictObject({
 export const DirectGenerationRequestSchema = z.strictObject({
   prompt: z.string().min(3).max(12_000),
   mapContext: DirectMapContextSchema,
-  providerId: z.enum(['direct-llm', 'simulation-agent']),
+  providerId: z.enum(['direct-llm', 'simulation-agent', 'simulation-agent-vision']),
   currentScenario: z.unknown().optional(),
   maxCandidates: z.number().int().min(1).max(5).default(1),
   model: z.string().min(1).max(200).optional(),
