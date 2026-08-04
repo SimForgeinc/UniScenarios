@@ -11,7 +11,15 @@ import { StudioPortableBindingAdapter } from './studioPortableBindingAdapter';
 import { VariationProjectStore } from './store';
 import { useVariationOverlay } from './VariationOverlay';
 import type { EligibilityReport, PortableBindingAdapter, VariationCandidateResult, VariationFunnelCounts, VariationSearchPayload } from './model';
-import { adaptiveVariationWorkerCount, carlaConformanceEligibility, scenarioRevision } from './contracts';
+import { carlaConformanceEligibility, scenarioRevision } from './contracts';
+import {
+  DEFAULT_VARIATION_CANDIDATE_BUDGET,
+  DEFAULT_VARIATION_WORKERS,
+  MAX_VARIATION_CANDIDATE_BUDGET,
+  deriveDefaultVariationPlan,
+  loadVariationPreferences,
+  saveVariationPreferences,
+} from './planning';
 
 export interface VariationsPanelProps {
   controller: EditorController;
@@ -28,12 +36,16 @@ export function VariationsPanel({ controller, viewer, map, authoringEnabled, por
   const analysisClient = useRef(new VariationSearchClient());
   const defaultAdapter = useRef(new StudioPortableBindingAdapter());
   const store = useRef(new VariationProjectStore());
+  const persistedPreferences = useRef(loadVariationPreferences());
+  const manualPreferences = useRef(persistedPreferences.current !== null);
+  const defaultsApplied = useRef(new Set<string>());
   useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   const [eligibility, setEligibility] = useState<EligibilityReport | null>(null);
   const [analysisStatus, setAnalysisStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const [axisCombinations, setAxisCombinations] = useState(1);
-  const [drawsPerLocation, setDrawsPerLocation] = useState(1);
-  const [workerCount, setWorkerCount] = useState(() => adaptiveVariationWorkerCount());
+  const axisCombinations = 1;
+  const [drawsPerLocation, setDrawsPerLocation] = useState(() => persistedPreferences.current?.drawsPerLocation ?? 1);
+  const [candidateBudget, setCandidateBudget] = useState(() => persistedPreferences.current?.candidateBudget ?? DEFAULT_VARIATION_CANDIDATE_BUDGET);
+  const [workerCount, setWorkerCount] = useState(() => persistedPreferences.current?.workerCount ?? DEFAULT_VARIATION_WORKERS);
   const [funnel, setFunnel] = useState<VariationFunnelCounts>({ enumerated: 0, materialized: 0, simulated: 0, gated: 0, deduplicated: 0, ranked: 0, verified: 0, failed: 0 });
   const [progressCandidates, setProgressCandidates] = useState<VariationCandidateResult[]>([]);
   const [status, setStatus] = useState<'idle' | 'searching' | 'done' | 'error'>('idle');
@@ -46,6 +58,7 @@ export function VariationsPanel({ controller, viewer, map, authoringEnabled, por
   useVariationOverlay(viewer, selected?.preview ?? null);
   useEffect(() => () => { client.current.cancel(); analysisClient.current.cancel(); }, []);
   const revision = controller.state.revision;
+  const sampledParameters = controller.doc.data.params.declarations.some((parameter) => parameter.type !== 'derived');
   useEffect(() => {
     client.current.cancel();
     setStatus((current) => current === 'searching' ? 'idle' : current);
@@ -53,8 +66,17 @@ export function VariationsPanel({ controller, viewer, map, authoringEnabled, por
   useEffect(() => {
     setAnalysisStatus('loading'); setError(null);
     const handle = setTimeout(() => {
-      void analysisClient.current.analyze(controller.doc.data, map, portableBindingAdapter ?? defaultAdapter.current, { axisCombinations, drawsPerLocation }).then((report) => {
+      void analysisClient.current.analyze(controller.doc.data, map, portableBindingAdapter ?? defaultAdapter.current, { axisCombinations, drawsPerLocation, candidateBudget }).then((report) => {
         if (report.sourceRevision !== scenarioRevision(controller.doc.data)) return;
+        const defaultKey = `${report.sourceRevision}:${map.id}`;
+        if (!manualPreferences.current && !defaultsApplied.current.has(defaultKey)) {
+          defaultsApplied.current.add(defaultKey);
+          const plan = deriveDefaultVariationPlan(report.locations.compatible, sampledParameters, candidateBudget);
+          if (plan.drawsPerLocation !== drawsPerLocation || plan.candidateBudget !== candidateBudget) {
+            setDrawsPerLocation(plan.drawsPerLocation);
+            setCandidateBudget(plan.candidateBudget);
+          }
+        }
         setEligibility(report); setAnalysisStatus('ready');
       }).catch((reason) => {
         if ((reason as { name?: string })?.name === 'AbortError') return;
@@ -62,14 +84,19 @@ export function VariationsPanel({ controller, viewer, map, authoringEnabled, por
       });
     }, 220);
     return () => { clearTimeout(handle); };
-  }, [revision, map.id, axisCombinations, drawsPerLocation, portableBindingAdapter]);
+  }, [revision, map.id, axisCombinations, drawsPerLocation, candidateBudget, sampledParameters, portableBindingAdapter]);
+
+  const saveControls = (next: { drawsPerLocation: number; candidateBudget: number; workerCount: number }): void => {
+    manualPreferences.current = true;
+    saveVariationPreferences({ axisCombinations: 1, ...next });
+  };
 
   const search = async (resume = false): Promise<void> => {
     if (!authoringEnabled) return;
     setStatus('searching'); setError(null); setLiftIssues([]); setResult(null); setSelectedKey(null); setProgressCandidates([]);
     try {
       const next = await client.current.search(controller.doc.data, map, [map], portableBindingAdapter ?? defaultAdapter.current, {
-        ...(resume && (result?.resumeToken ?? eligibility?.resumeToken) ? { resumeToken: result?.resumeToken ?? eligibility?.resumeToken } : {}), workerCount, axisCombinations, drawsPerLocation,
+        ...(resume && (result?.resumeToken ?? eligibility?.resumeToken) ? { resumeToken: result?.resumeToken ?? eligibility?.resumeToken } : {}), workerCount, axisCombinations, drawsPerLocation, candidateBudget,
         onProgress: (progress) => {
           if (progress.sourceRevision !== scenarioRevision(controller.doc.data)) return;
           setFunnel(progress.counts);
@@ -140,10 +167,12 @@ export function VariationsPanel({ controller, viewer, map, authoringEnabled, por
         {analysisStatus === 'loading' ? <div style={styles.preflight}>Updating structural compatibility…</div> : null}
         {eligibility ? <EligibilityOverview report={eligibility} /> : null}
         <div style={styles.axes}>
-          <label>Axis combinations <input aria-label="Axis combinations" type="number" min={1} max={64} value={axisCombinations} onChange={(event) => setAxisCombinations(clamp(event.currentTarget.value, 1, 64))} /></label>
-          <label>Draws / location <input aria-label="Draws per location" type="number" min={1} max={32} value={drawsPerLocation} onChange={(event) => setDrawsPerLocation(clamp(event.currentTarget.value, 1, 32))} /></label>
-          <label>Workers <select aria-label="Verification workers" value={workerCount} onChange={(event) => setWorkerCount(Number(event.currentTarget.value))}><option value={2}>2</option><option value={3}>3</option><option value={4}>4 max</option></select></label>
+          <label>Candidate budget <input aria-label="Candidate budget" type="number" min={1} max={MAX_VARIATION_CANDIDATE_BUDGET} value={candidateBudget} onChange={(event) => { const next = clamp(event.currentTarget.value, 1, MAX_VARIATION_CANDIDATE_BUDGET); setCandidateBudget(next); saveControls({ drawsPerLocation, candidateBudget: next, workerCount }); }} /></label>
+          <label>Draws / location <input aria-label="Draws per location" type="number" min={1} max={32} value={drawsPerLocation} onChange={(event) => { const next = clamp(event.currentTarget.value, 1, 32); setDrawsPerLocation(next); saveControls({ drawsPerLocation: next, candidateBudget, workerCount }); }} /></label>
+          <div style={styles.axisStatus}>Axis combinations <strong>1</strong><small>Typed axes not yet expanded</small></div>
+          <label>Workers <select aria-label="Verification workers" value={workerCount} onChange={(event) => { const next = Number(event.currentTarget.value); setWorkerCount(next); saveControls({ drawsPerLocation, candidateBudget, workerCount: next }); }}><option value={2}>2</option><option value={3}>3</option><option value={4}>4 max</option></select></label>
         </div>
+        {!sampledParameters ? <div style={styles.drawNotice}>This scenario has no sampled typed parameters, so extra draws would be identical. The default verifies one candidate per compatible location, capped by the candidate budget.</div> : null}
         <button type="button" data-testid="variation-search" style={styles.primary} disabled={!authoringEnabled || !eligibility?.locations.compatible || status === 'searching'} onClick={() => void search()}>
           {status === 'searching' ? 'Verifying candidates…' : 'Generate & verify'}
         </button>
@@ -235,7 +264,9 @@ const styles: Record<string, CSSProperties> = {
   section: { padding: 13, borderBottom: '1px solid #343840' }, copy: { color: '#aeb6c2', fontSize: 11, marginBottom: 10 },
   currentMap: { color: '#76c8ee', fontSize: 10, marginBottom: 8 }, preflight: { padding: 9, color: '#aeb6c2', background: '#20242a', borderRadius: 5, marginBottom: 8, fontSize: 10 },
   overview: { padding: 10, background: '#20242a', border: '1px solid #3b4049', borderRadius: 7, marginBottom: 10 }, compatible: { display: 'flex', alignItems: 'baseline', gap: 7, color: '#75e69c' }, breakdown: { marginTop: 3, color: '#aeb6c2', fontSize: 9 }, requirements: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }, chip: { padding: '3px 5px', border: '1px solid #4a515d', borderRadius: 9, color: '#cbd2dc', fontSize: 8 }, formula: { marginTop: 8, color: '#f0c177', fontSize: 10, fontWeight: 650 }, structural: { marginTop: 3, color: '#8f98a5', fontSize: 9 }, reason: { marginTop: 5, color: '#edc778', fontSize: 8 },
-  axes: { display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 9, fontSize: 9, color: '#abb3bf' },
+  axes: { display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 6, marginBottom: 9, fontSize: 9, color: '#abb3bf' },
+  axisStatus: { display: 'flex', flexDirection: 'column', gap: 2, padding: '4px 0' },
+  drawNotice: { margin: '-2px 0 9px', color: '#8f98a5', fontSize: 9, lineHeight: 1.45 },
   primary: { width: '100%', padding: '8px 10px', border: '1px solid #d76d25', borderRadius: 6, background: '#f07f2f', color: '#16181c', fontWeight: 750, cursor: 'pointer' },
   cancel: { width: '100%', marginTop: 6, padding: 6, border: '1px solid #755', borderRadius: 5, background: '#35282a', color: '#ffb4b4' }, resume: { width: '100%', marginTop: 6, padding: 6, border: '1px solid #4b6075', borderRadius: 5, background: '#263441', color: '#b8dcff' }, funnel: { marginTop: 8, padding: 7, background: '#18252b', color: '#9bdcf5', borderRadius: 5, fontSize: 9 },
   blocker: { marginTop: 8, color: '#e9c77d', fontSize: 10 }, error: { marginTop: 7, color: '#ff9b9b', fontSize: 10, whiteSpace: 'pre-wrap' },

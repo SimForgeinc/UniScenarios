@@ -26,9 +26,9 @@ import type {
 
 interface BaseRequest { id: number; sourceRevision: string; template: ScenarioTemplateV2; sourceMap: VariationMapSource; portableBinding?: PortableVariationBinding }
 export type VariationWorkerRequest =
-  | (BaseRequest & { kind: 'analyze'; axisCombinations: number; drawsPerLocation: number })
+  | (BaseRequest & { kind: 'analyze'; axisCombinations: number; drawsPerLocation: number; candidateBudget: number })
   | (BaseRequest & { kind: 'baseline' })
-  | (BaseRequest & { kind: 'verify'; candidate: VariationCandidate; sourceBehavior: BehaviorSignature; patternId: string });
+  | (BaseRequest & { kind: 'verify'; candidate: VariationCandidate; drawIndex: number; sourceBehavior: BehaviorSignature; patternId: string });
 
 export type VariationWorkerResponse =
   | { id: number; ok: true; kind: 'analyze'; report: EligibilityReport }
@@ -87,10 +87,11 @@ function analyze(
   const cacheKey = `${bundle.mapId}:${bundle.index.topologyDigest}:${request.sourceRevision}`;
   const cached = eligibilityCache.get(cacheKey);
   if (cached) {
-    const axisCombinations = Math.max(1, Math.floor(request.axisCombinations));
-    const drawsPerLocation = Math.max(1, Math.floor(request.drawsPerLocation));
-    const potentialCandidates = cached.locations.compatible * axisCombinations * drawsPerLocation;
-    return { ...cached, computedInMs: Math.round((performance.now() - started) * 100) / 100, axisCombinations, drawsPerLocation, potentialCandidates, formula: `${cached.locations.compatible} compatible locations × ${axisCombinations} axis combinations × ${drawsPerLocation} draws = ${potentialCandidates} potential candidates` };
+    const axisCombinations = 1;
+    const drawsPerLocation = Math.max(1, Math.min(32, Math.floor(request.drawsPerLocation)));
+    const candidateBudget = Math.max(1, Math.min(500, Math.floor(request.candidateBudget)));
+    const potentialCandidates = Math.min(candidateBudget, cached.locations.compatible * drawsPerLocation);
+    return { ...cached, computedInMs: Math.round((performance.now() - started) * 100) / 100, axisCombinations, drawsPerLocation, candidateBudget, potentialCandidates, formula: `${cached.locations.compatible} compatible locations × ${drawsPerLocation} parameter draws, capped at ${candidateBudget} = ${potentialCandidates} potential candidates` };
   }
   const adapted = adaptTemplate(binding.template);
   const requiredRoles = binding.template.roles.filter((role) => role.essentiality === 'required').map((role) => role.id);
@@ -102,9 +103,13 @@ function analyze(
   const rejectedCandidates = candidates.filter((candidate) => candidate.equivalence.verdict === 'rejected');
   const rejected = search.reportsByMap[bundle.mapId]?.rejected.length ?? rejectedCandidates.length;
   const compatible = exact + degraded;
-  const axisCombinations = Math.max(1, Math.floor(request.axisCombinations));
-  const drawsPerLocation = Math.max(1, Math.floor(request.drawsPerLocation));
-  const potentialCandidates = compatible * axisCombinations * drawsPerLocation;
+  // Typed parameter axes are not yet independently enumerable. Keep this
+  // dimension truthful at one and spend the bounded campaign on deterministic
+  // materializer draws instead.
+  const axisCombinations = 1;
+  const drawsPerLocation = Math.max(1, Math.min(32, Math.floor(request.drawsPerLocation)));
+  const candidateBudget = Math.max(1, Math.min(500, Math.floor(request.candidateBudget)));
+  const potentialCandidates = Math.min(candidateBudget, compatible * drawsPerLocation);
   const issuePool = [...pattern.issues, ...search.issues, ...rejectedCandidates.flatMap((candidate) => candidate.equivalence.issues)];
   const groups = new Map<EligibilityReasonCode, { count: number; message: string; repair?: string }>();
   for (const issue of issuePool) {
@@ -125,8 +130,8 @@ function analyze(
     requirements: requirementsFor(binding.template, binding.sourceSite),
     locations: { exact, degraded, rejected, compatible },
     reasons: [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([code, group]) => ({ code, ...group })),
-    axisCombinations, drawsPerLocation, potentialCandidates,
-    formula: `${compatible} compatible locations × ${axisCombinations} axis combinations × ${drawsPerLocation} draws = ${potentialCandidates} potential candidates`,
+    axisCombinations, drawsPerLocation, candidateBudget, potentialCandidates,
+    formula: `${compatible} compatible locations × ${drawsPerLocation} parameter draws, capped at ${candidateBudget} = ${potentialCandidates} potential candidates`,
     structuralOnly: true, patternId: pattern.patternId, resumeToken: search.resumeToken, candidates, issues: search.issues,
   };
   eligibilityCache.set(cacheKey, report);
@@ -165,7 +170,7 @@ function verify(
   }
   try {
     const bound = bindPortableVariation(binding.template, candidate.site);
-    const product = materialize(bound.template, bundle, bound.site, { drawIndex: -1 });
+    const product = materialize(bound.template, bundle, bound.site, { drawIndex: request.drawIndex });
     const materializationIssues: VariationIssue[] = product.manifest.notes.map((note) => ({
       code: 'behavior_mismatch', stage: 'materialize', severity: 'warning', path: note.path,
       mapId: candidate.mapId, siteId: candidate.site.siteId, message: note.reason,

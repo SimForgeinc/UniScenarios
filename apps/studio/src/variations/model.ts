@@ -124,6 +124,7 @@ export interface EligibilityReport {
   reasons: EligibilityReasonGroup[];
   axisCombinations: number;
   drawsPerLocation: number;
+  candidateBudget: number;
   potentialCandidates: number;
   formula: string;
   structuralOnly: true;

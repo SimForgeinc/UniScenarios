@@ -3,13 +3,15 @@ import type { MapEntry } from '../maps';
 import type { PortableBindingAdapter, EligibilityReport, VariationProgress, VariationSearchPayload, PortableVariationBinding, VariationCandidateResult } from './model';
 import type { PortableLiftIssue } from '@uniscenarios/scenario-materializer';
 import type { VariationWorkerRequest, VariationWorkerResponse } from './variation-worker';
-import { adaptiveVariationWorkerCount, scenarioRevision } from './contracts';
+import { scenarioRevision } from './contracts';
+import { DEFAULT_VARIATION_CANDIDATE_BUDGET, enumerateVariationCandidates } from './planning';
 
 export interface VariationSearchOptions {
   resumeToken?: string;
   workerCount?: number;
   axisCombinations?: number;
   drawsPerLocation?: number;
+  candidateBudget?: number;
   onProgress?: (progress: VariationProgress) => void;
 }
 
@@ -24,7 +26,7 @@ export class VariationSearchClient {
     template: ScenarioTemplateV2,
     sourceMap: MapEntry,
     adapter?: PortableBindingAdapter,
-    axes: { axisCombinations?: number; drawsPerLocation?: number } = {},
+    axes: { axisCombinations?: number; drawsPerLocation?: number; candidateBudget?: number } = {},
   ): Promise<EligibilityReport> {
     if (template.roles.length > MAX_AUTHORED_ACTORS) throw new AuthoredActorLimitError(template.roles.length);
     const started = performance.now();
@@ -35,6 +37,7 @@ export class VariationSearchClient {
     const response = await this.call(worker, {
       id: ++this.sequence, kind: 'analyze', sourceRevision: revision, template, sourceMap: source,
       axisCombinations: axes.axisCombinations ?? 1, drawsPerLocation: axes.drawsPerLocation ?? 1,
+      candidateBudget: axes.candidateBudget ?? DEFAULT_VARIATION_CANDIDATE_BUDGET,
       ...(portableBinding ? { portableBinding } : {}),
     });
     if (!response.ok) throw new Error(response.error);
@@ -59,17 +62,23 @@ export class VariationSearchClient {
     const analyzeResponse = await this.call(analyzer, {
       id: ++this.sequence, kind: 'analyze', sourceRevision, template, sourceMap: source,
       axisCombinations: options.axisCombinations ?? 1, drawsPerLocation: options.drawsPerLocation ?? 1,
+      candidateBudget: options.candidateBudget ?? DEFAULT_VARIATION_CANDIDATE_BUDGET,
       ...(binding ? { portableBinding: binding } : {}),
     });
     if (!analyzeResponse.ok) throw new Error(analyzeResponse.error);
     if (analyzeResponse.kind !== 'analyze') throw new Error('Variation analysis response was malformed');
     const eligibility = analyzeResponse.report;
-    const jobId = `${sourceRevision}:${eligibility.resumeToken ?? 'new'}`;
-    const checkpointKey = `${sourceRevision}:${eligibility.resumeToken ?? 'new'}`;
+    const planKey = `${eligibility.axisCombinations}:${eligibility.drawsPerLocation}:${eligibility.candidateBudget}`;
+    const jobId = `${sourceRevision}:${eligibility.resumeToken ?? 'new'}:${planKey}`;
+    const checkpointKey = jobId;
     const resumed = options.resumeToken === eligibility.resumeToken ? this.checkpoints.get(checkpointKey) : undefined;
     const results = new Map<number, VariationCandidateResult>(resumed ?? []);
     const prior = [...results.values()];
-    const eligibleCandidates = eligibility.candidates.filter((candidate) => candidate.equivalence.eligibleForMaterialization);
+    const eligibleCandidates = enumerateVariationCandidates(
+      eligibility.candidates.filter((candidate) => candidate.equivalence.eligibleForMaterialization),
+      eligibility.drawsPerLocation,
+      eligibility.candidateBudget,
+    );
     const counts = { enumerated: eligibleCandidates.length, materialized: prior.filter((item) => item.instance).length, simulated: prior.filter((item) => item.trace).length, gated: prior.length, deduplicated: prior.length, ranked: prior.length, verified: prior.filter((item) => item.acceptance.status === 'accepted').length, failed: prior.filter((item) => item.stage === 'failed').length };
     options.onProgress?.({ jobId, sourceRevision, counts: { ...counts } });
     const baselineResponse = await this.call(analyzer, {
@@ -80,14 +89,15 @@ export class VariationSearchClient {
     if (!baselineResponse.ok) throw new Error(baselineResponse.error);
     if (baselineResponse.kind !== 'baseline') throw new Error('Variation baseline response was malformed');
 
-    const workerCount = Math.max(2, Math.min(4, options.workerCount ?? adaptiveVariationWorkerCount()));
-    const queue = eligibleCandidates.filter((candidate) => !results.has(candidate.rank)).sort((a, b) => a.rank - b.rank);
+    const workerCount = Math.max(2, Math.min(4, options.workerCount ?? 4));
+    const queue = eligibleCandidates.filter((planned) => !results.has(planned.candidate.rank)).sort((a, b) => a.candidate.rank - b.candidate.rank);
     const runners = Array.from({ length: Math.min(workerCount, Math.max(1, queue.length)) }, async () => {
       const worker = this.createWorker();
       try {
         while (queue.length) {
-          const candidate = queue.shift();
-          if (!candidate) break;
+          const planned = queue.shift();
+          if (!planned) break;
+          const { candidate, drawIndex } = planned;
           const pending: VariationCandidateResult = {
             candidate,
             acceptance: { status: 'pending_materialization', candidate, requiredChecksPassed: false, issues: [], resumeToken: eligibility.resumeToken ?? '' },
@@ -96,6 +106,7 @@ export class VariationSearchClient {
           options.onProgress?.({ jobId, sourceRevision, counts: { ...counts }, candidate: pending });
           const response = await this.call(worker, {
             id: ++this.sequence, kind: 'verify', sourceRevision, template, sourceMap: source, candidate,
+            drawIndex,
             sourceBehavior: baselineResponse.sourceBehavior, patternId: eligibility.patternId ?? 'variation',
             ...(binding ? { portableBinding: binding } : {}),
           });
