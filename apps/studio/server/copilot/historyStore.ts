@@ -112,8 +112,23 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
     provenance: candidate ? { ...candidate.provenance } : { provider: result.provider, model: result.model },
     generatedScenic: null,
     directTypedDraft: candidate ? { intent: candidate.intent, scenarioDoc: candidate.scenarioDoc } : null,
-    iterationTrace: sanitizeIterationTrace((candidate?.provenance as unknown as Record<string, unknown> | undefined)?.['iterationTrace'] ?? result.iterationTrace),
+    iterationTrace: sanitizeIterationTrace(
+      (candidate?.provenance as unknown as Record<string, unknown> | undefined)?.['iterationTrace']
+      ?? result.iterationTrace
+      ?? traceFromAgentDetails(candidate?.provenance.agentDetails ?? result.agentDetails),
+    ),
   };
+}
+
+function traceFromAgentDetails(details: CopilotCandidate['provenance']['agentDetails'] | undefined): unknown[] | null {
+  if (!details) return null;
+  return details.iterations.map((iteration) => ({
+    iteration: iteration.iteration,
+    summary: `Draft changes: ${iteration.draftDiff.join('; ') || 'none'}. ${iteration.semanticChecks.filter((check) => !check.pass).map((check) => `${check.id}: ${check.evidence}`).join('; ') || 'All recorded semantic checks passed.'}`,
+    toolCalls: iteration.toolCalls.map((call) => ({ name: call.name, status: call.ok ? 'success' : 'failure', summary: call.outputSummary })),
+    thumbnailDataUrl: null,
+    provenance: { draftHash: iteration.draftHash, durationMs: iteration.durationMs, totalTokens: iteration.totalTokens, simulation: iteration.simulation ?? null },
+  }));
 }
 
 function sanitizeIterationTrace(value: unknown): CopilotGenerationHistoryEntry['iterationTrace'] {
