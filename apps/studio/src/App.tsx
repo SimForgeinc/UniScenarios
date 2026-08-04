@@ -33,6 +33,7 @@ import type { AmbientRobustnessSummary } from './playback/scenario-worker';
 import { CameraPanel, EMPTY_CAMERA_PRESENTATION, useCameras, type CameraPresentation } from './cameras';
 import {
   inspectQualityPreference,
+  loadQualityPreference,
   selectAndSaveQualityPreset,
   shouldDeferWorldLoading,
   type QualityPreference,
@@ -96,6 +97,7 @@ import { OpenScenarioWorkspace } from './openscenario/OpenScenarioWorkspace';
 import type { OpenScenarioWorkspaceState } from './openscenario/model';
 import { openScenarioLocationIntent } from './openscenario/navigation';
 import { MapWorkspace } from './map-workspace';
+import { copyScenarioDiagnosticText, createScenarioDiagnostic } from './diagnostics/scenarioDiagnostic';
 import { CATALOG, getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import { compiledWorldMatchesRevision, simulationClassFor, type ActorRecord } from './editor/document';
 import {
@@ -1223,6 +1225,26 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     return { status: 'loading', sourceHash: openScenarioSourceHash };
   }, [openScenarioSourceHash, openScenarioState]);
 
+  const copyCurrentScenario = useCallback(async (): Promise<number> => {
+    if (!editorController) throw new Error('The scenario is still loading.');
+    // Capture one committed revision synchronously. Preview/playback traces are
+    // deliberately excluded, so an in-flight simulation cannot make this stale.
+    const scenario = editorController.doc.data;
+    const revision = editorController.doc.revision;
+    const diagnostic = createScenarioDiagnostic({
+      scenario,
+      revision,
+      map,
+      currentXodrSha256: editorController.laneIndex.stats.xodrSha256,
+      validation: editorController.doc.validation,
+      graphicsPreset: loadQualityPreference().preset,
+      cameraControls: viewSettings.controls,
+      buildCommit: import.meta.env.VITE_GIT_COMMIT ?? import.meta.env.VITE_COMMIT_SHA,
+    });
+    await copyScenarioDiagnosticText(diagnostic.text);
+    return diagnostic.bytes;
+  }, [editorController, map, viewSettings.controls]);
+
   return (
     <div style={styles.root}>
       <WorkspaceHeader
@@ -1233,6 +1255,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         mapWorkspace={mapWorkspaceOpen}
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
+        onCopyScenario={editorController ? copyCurrentScenario : undefined}
         onOpenScenario={() => {
           setMapWorkspaceOpen(false);
           setOpenScenarioOpen((open) => !open);

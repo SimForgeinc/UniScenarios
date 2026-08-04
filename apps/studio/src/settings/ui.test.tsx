@@ -50,6 +50,23 @@ describe('simplified editor settings UI', () => {
     expect(markup).not.toContain('Playback');
   });
 
+  it('places the accessible Copy scenario control immediately beside Settings in authoring and playback', () => {
+    for (const playback of [false, true]) {
+      const markup = renderToStaticMarkup(<WorkspaceHeader
+        state={null}
+        map={{ id: 'test', label: 'Test map' } as never}
+        playback={playback}
+        settingsOpen={false}
+        onSettings={vi.fn()}
+        onCopyScenario={async () => 128}
+      />);
+      expect(markup).toContain('data-testid="copy-scenario"');
+      expect(markup).toContain('aria-label="Copy scenario diagnostic"');
+      expect(markup.indexOf('data-testid="copy-scenario"')).toBeLessThan(markup.indexOf('aria-label="Open settings"'));
+      expect(markup).toContain('copy-scenario-label');
+    }
+  });
+
   it('uses compatible longhand borders for the active settings control', () => {
     const markup = renderToStaticMarkup(
       <WorkspaceHeader

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
 import type { EditorController, EditorState } from './controller';
 import type { ActorRecord } from './document';
@@ -17,6 +17,7 @@ export function WorkspaceHeader({
   mapWorkspace = false,
   settingsOpen,
   onSettings,
+  onCopyScenario,
   onOpenScenario,
   onMapWorkspace,
   onAuthorWorkspace,
@@ -29,6 +30,7 @@ export function WorkspaceHeader({
   mapWorkspace?: boolean;
   settingsOpen: boolean;
   onSettings: () => void;
+  onCopyScenario?: () => Promise<number>;
   onOpenScenario?: () => void;
   onMapWorkspace?: () => void;
   onAuthorWorkspace?: () => void;
@@ -64,6 +66,7 @@ export function WorkspaceHeader({
           </span>
         </div>
       ) : null}
+      <CopyScenarioButton onCopy={onCopyScenario} />
       <button
         type="button"
         aria-label={settingsOpen ? 'Close settings' : 'Open settings'}
@@ -77,6 +80,49 @@ export function WorkspaceHeader({
       </button>
     </header>
   );
+}
+
+export function CopyScenarioButton({ onCopy }: { onCopy?: () => Promise<number> }): JSX.Element {
+  const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
+  const [feedback, setFeedback] = useState<{ ok: boolean; text: string } | null>(null);
+  const copy = async (): Promise<void> => {
+    if (!onCopy || busyRef.current) return;
+    busyRef.current = true;
+    setBusy(true);
+    setFeedback(null);
+    try {
+      const bytes = await onCopy();
+      const size = bytes < 1024 ? `${bytes} B` : `${(bytes / 1024).toFixed(1)} KB`;
+      setFeedback({ ok: true, text: `Scenario diagnostic copied · ${size}` });
+    } catch (reason) {
+      setFeedback({ ok: false, text: reason instanceof Error ? reason.message : 'Could not copy the scenario diagnostic.' });
+    } finally {
+      busyRef.current = false;
+      setBusy(false);
+    }
+  };
+  return <div style={styles.copyScenarioWrap}>
+    <style>{'@media (max-width: 820px) { .copy-scenario-label { display: none; } }'}</style>
+    <button
+      type="button"
+      data-testid="copy-scenario"
+      aria-label="Copy scenario diagnostic"
+      title="Copy scenario diagnostic for support or chat"
+      disabled={!onCopy || busy}
+      onClick={() => void copy()}
+      style={{ ...styles.settingsButton, ...styles.copyScenarioButton, ...(!onCopy || busy ? styles.disabled : null) }}
+    >
+      <span aria-hidden="true">⧉</span>
+      <span className="copy-scenario-label">{busy ? 'Copying…' : 'Copy scenario'}</span>
+    </button>
+    {feedback ? <span
+      role="status"
+      aria-live="polite"
+      data-testid="copy-scenario-status"
+      style={{ ...styles.copyScenarioStatus, color: feedback.ok ? '#b7efce' : '#ffb4bc' }}
+    >{feedback.text}</span> : null}
+  </div>;
 }
 
 export function PhysicsSummaryBadge({ summary }: { summary: PhysicsDisplaySummary }): JSX.Element | null {
@@ -274,6 +320,9 @@ const styles: Record<string, CSSProperties> = {
   physicsNote: { color: '#8e98a6' },
   physicsRow: { display: 'flex', flexDirection: 'column', gap: 2, paddingTop: 6, borderTop: BORDER },
   settingsButton: { display: 'flex', alignItems: 'center', gap: 6, marginLeft: 6, borderWidth: 1, borderStyle: 'solid', borderColor: '#34373d', borderRadius: 5, background: '#202226', color: '#b7bdc7', padding: '5px 8px', font: 'inherit', fontSize: 11, cursor: 'pointer' },
+  copyScenarioWrap: { position: 'relative', display: 'flex', alignItems: 'center' },
+  copyScenarioButton: { marginLeft: 2, whiteSpace: 'nowrap' },
+  copyScenarioStatus: { position: 'absolute', zIndex: 40, top: 34, right: 0, width: 'max-content', maxWidth: 310, padding: '7px 9px', border: '1px solid #414851', borderRadius: 6, background: 'rgba(24,27,32,.98)', boxShadow: '0 8px 24px rgba(0,0,0,.35)', fontSize: 10, pointerEvents: 'none' },
   settingsButtonActive: { color: '#fff', borderColor: '#f07f2f', background: '#34261d' },
   disabled: { opacity: 0.32, cursor: 'default' },
   outliner: {
