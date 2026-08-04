@@ -1,5 +1,7 @@
 # Scenario Copilot controlled high-effort matrix
 
+> **Postmortem:** Subsequent product-owner review found the saved scenarios broadly incoherent and far below usable quality. The automated `strict success` metric below is not a product-quality indicator. See the [canonical generation postmortem](../scenario-copilot-generation-postmortem-20260804.md).
+
 ## Findings
 
 - **Highest positive-case coverage:** direct-llm with gpt-5.6-luna (12/20), but it falsely accepted 2 negative controls.
@@ -44,4 +46,3 @@
 - `iterative-vision-luna/results.json`
 - `relative-optimizer-luna/results.json`
 - `template-search-luna/results.json`
-

@@ -1,5 +1,7 @@
 # Scenario Copilot saved-result inspection rerun
 
+> **Postmortem:** Product-owner inspection of these saved scenarios found them broadly nonsensical and not close to usable. The retained drafts and traces are evidence for debugging, not successful authoring examples. See the [canonical generation postmortem](../scenario-copilot-generation-postmortem-20260804.md).
+
 This artifact contains fresh reruns of the original ten edge-case prompts across
 the original three providers. It does not recover, replace, or relabel the
 original `chat2scenic-20260803` outputs.

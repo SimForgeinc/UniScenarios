@@ -1,5 +1,7 @@
 # Scenario Copilot edge-case evaluation
 
+> **Postmortem:** Subsequent product-owner review found the saved scenarios broadly incoherent and far below usable quality. Mechanical simulation and the limited semantic assertions did not establish scenario quality. See the [canonical generation postmortem](../scenario-copilot-generation-postmortem-20260804.md).
+
 - Run: 2026-08-04T04:23:34.881Z to 2026-08-04T04:39:44.552Z
 - Model requested uniformly: `gpt-5.6-luna`
 - Maps: richmond-field-station
