@@ -139,7 +139,7 @@ function hasStoppedActor(doc: ScenarioTemplateV2): boolean {
 
 function hasTurnRoute(doc: ScenarioTemplateV2): boolean {
   return doc.choreography.interactions.some((interaction) => interaction.verb === 'route'
-    && (interaction.target.mode === 'turns' || interaction.target.mode === 'lanePath'));
+    && (interaction.target.mode === 'turn' || interaction.target.mode === 'lanePath'));
 }
 
 function hasNearMiss(doc: ScenarioTemplateV2): boolean {
@@ -179,7 +179,7 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       return [
         check('two-vehicles', vehicleCount(doc) >= 2, `${vehicleCount(doc)} vehicles`),
         check('explicit-stop', hasStoppedActor(doc), 'stopped actor or zero-speed action'),
-        check('timed-speed-action', doc.choreography.interactions.some((i) => i.verb === 'speed' && i.trigger.kind === 'at' && i.trigger.t >= 4), 'speed action at/after 4s'),
+        check('timed-speed-action', doc.choreography.interactions.some((i) => i.verb === 'speed' && i.trigger.kind === 'at' && numeric(i.trigger.t) >= 4), 'speed action at/after 4s'),
       ];
     case 'cut-in':
       return [check('two-vehicles', vehicleCount(doc) >= 2, `${vehicleCount(doc)} vehicles`), check('lateral-action', action(doc, 'changeLane') || action(doc, 'laneOffset'), 'changeLane or laneOffset action')];
@@ -211,7 +211,7 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       const relative = actorActions(doc, pedestrianIds).filter((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'distance');
       return [
         check('vehicle-and-pedestrian', vehicleCount(doc) >= 1 && pedestrianIds.length >= 1, `${vehicleCount(doc)} vehicles; ${pedestrianIds.length} pedestrians`),
-        check('pedestrian-distance-start', relative.some((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'distance' && interaction.trigger.condition.valueM <= 12), `${relative.length} pedestrian distance-triggered actions`),
+        check('pedestrian-distance-start', relative.some((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'distance' && numeric(interaction.trigger.condition.valueM) <= 12), `${relative.length} pedestrian distance-triggered actions`),
       ];
     }
     case 'pedestrian-ttc-trigger': {
@@ -219,7 +219,7 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       const relative = actorActions(doc, pedestrianIds).filter((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'ttc');
       return [
         check('vehicle-and-pedestrian', vehicleCount(doc) >= 1 && pedestrianIds.length >= 1, `${vehicleCount(doc)} vehicles; ${pedestrianIds.length} pedestrians`),
-        check('pedestrian-ttc-start', relative.some((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'ttc' && interaction.trigger.condition.valueS <= 3), `${relative.length} pedestrian TTC-triggered actions`),
+        check('pedestrian-ttc-start', relative.some((interaction) => interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'ttc' && numeric(interaction.trigger.condition.valueS) <= 3), `${relative.length} pedestrian TTC-triggered actions`),
       ];
     }
     case 'child-between-parked-vehicles': {
@@ -235,7 +235,7 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       const nearMiss = doc.choreography.interactions.filter((interaction) => interaction.verb === 'route' && interaction.target.mode === 'nearMiss');
       return [
         check('vehicle-and-pedestrian', vehicleCount(doc) >= 1 && hasPedestrian, `${vehicleCount(doc)} vehicles; pedestrian=${hasPedestrian}`),
-        check('near-miss-clearance', nearMiss.some((interaction) => interaction.target.mode === 'nearMiss' && interaction.target.clearanceM <= .7), `${nearMiss.length} near-miss actions`),
+        check('near-miss-clearance', nearMiss.some((interaction) => interaction.verb === 'route' && interaction.target.mode === 'nearMiss' && numeric(interaction.target.clearanceM) <= .7), `${nearMiss.length} near-miss actions`),
         check('relative-synchronization', nearMiss.some((interaction) => interaction.trigger.kind === 'when'), 'near-miss uses a relative trigger'),
       ];
     }
@@ -243,11 +243,11 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       const emergency = actorByCatalog(doc, 'ambulance');
       const yieldActions = doc.choreography.interactions.filter((interaction) => interaction.verb === 'speed'
         && interaction.trigger.kind === 'when' && interaction.trigger.condition.kind === 'distance'
-        && (interaction.target.mode === 'stop' || (interaction.target.mode === 'absolute' && interaction.target.valueKph <= 5)));
+        && (interaction.target.mode === 'stop' || (interaction.target.mode === 'absolute' && numeric(interaction.target.valueKph) <= 5)));
       return [check('emergency-actor', emergency.length >= 1, `emergency actors=${emergency.length}`), check('relative-yield', yieldActions.length >= 1, `${yieldActions.length} relative yield actions`)];
     }
     case 'signal-delayed-turn': {
-      const delayed = doc.choreography.interactions.some((interaction) => interaction.verb === 'route' && interaction.trigger.kind === 'at' && interaction.trigger.t >= 8);
+      const delayed = doc.choreography.interactions.some((interaction) => interaction.verb === 'route' && interaction.trigger.kind === 'at' && numeric(interaction.trigger.t) >= 8);
       return [
         check('two-vehicles', vehicleCount(doc) >= 2, `${vehicleCount(doc)} vehicles`),
         check('delayed-turn', hasTurnRoute(doc) && delayed, `turn=${hasTurnRoute(doc)}; delayed=${delayed}`),
@@ -271,10 +271,10 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
       for (const interaction of doc.choreography.interactions) byActor.set(interaction.actor, [...(byActor.get(interaction.actor) ?? []), interaction]);
       const sequential = [...byActor.values()].some((interactions) => {
         const lane = interactions.find((interaction) => interaction.verb === 'changeLane');
-        const brake = interactions.find((interaction) => interaction.verb === 'speed' && (interaction.target.mode === 'stop' || (interaction.target.mode === 'absolute' && interaction.target.valueKph <= .1)));
+        const brake = interactions.find((interaction) => interaction.verb === 'speed' && (interaction.target.mode === 'stop' || (interaction.target.mode === 'absolute' && numeric(interaction.target.valueKph) <= .1)));
         if (!lane || !brake || lane.trigger.kind !== 'at' || brake.trigger.kind !== 'at') return false;
         const laneEnd = lane.until?.kind === 'at' ? lane.until.t : lane.trigger.t;
-        return brake.trigger.t >= laneEnd && brake.trigger.t <= 15;
+        return numeric(brake.trigger.t) >= numeric(laneEnd) && numeric(brake.trigger.t) <= 15;
       });
       return [check('two-vehicles', vehicleCount(doc) >= 2, `${vehicleCount(doc)} vehicles`), check('same-actor-sequence', sequential, 'lane change completes before same actor stops')];
     }
@@ -283,4 +283,8 @@ export function evaluateCopilotSemantics(caseId: string, doc: ScenarioTemplateV2
     default:
       throw new Error(`Unknown benchmark case: ${caseId}`);
   }
+}
+
+function numeric(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) ? value : Number.NaN;
 }

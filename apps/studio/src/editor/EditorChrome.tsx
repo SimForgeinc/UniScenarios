@@ -15,11 +15,13 @@ export function WorkspaceHeader({
   playback,
   openScenario = false,
   mapWorkspace = false,
+  generationsOpen = false,
   settingsOpen,
   onSettings,
   onCopyScenario,
   onOpenScenario,
   onMapWorkspace,
+  onGenerations,
   onAuthorWorkspace,
   physicsSummary = physicsSummaryForTrace(null),
 }: {
@@ -28,11 +30,13 @@ export function WorkspaceHeader({
   playback: boolean;
   openScenario?: boolean;
   mapWorkspace?: boolean;
+  generationsOpen?: boolean;
   settingsOpen: boolean;
   onSettings: () => void;
   onCopyScenario?: () => Promise<number>;
   onOpenScenario?: () => void;
   onMapWorkspace?: () => void;
+  onGenerations?: () => void;
   onAuthorWorkspace?: () => void;
   physicsSummary?: PhysicsDisplaySummary;
 }): JSX.Element {
@@ -41,7 +45,7 @@ export function WorkspaceHeader({
       <div style={styles.brandMark}>U</div>
       <div style={styles.brand}>UniScenarios</div>
       <div style={styles.workspaceTabs} aria-label="Workspace">
-        <button type="button" onClick={onAuthorWorkspace} style={{ ...styles.workspaceTab, ...(!openScenario && !mapWorkspace ? styles.workspaceTabActive : null) }}>
+        <button type="button" onClick={onAuthorWorkspace} style={{ ...styles.workspaceTab, ...(!openScenario && !mapWorkspace && !generationsOpen ? styles.workspaceTabActive : null) }}>
           Author
         </button>
         <button type="button" onClick={onOpenScenario} style={{ ...styles.workspaceTab, ...(openScenario ? styles.workspaceTabActive : null) }}>
@@ -49,6 +53,9 @@ export function WorkspaceHeader({
         </button>
         <button type="button" data-testid="map-workspace-tab" onClick={onMapWorkspace} style={{ ...styles.workspaceTab, ...(mapWorkspace ? styles.workspaceTabActive : null) }}>
           Map
+        </button>
+        <button type="button" data-testid="generations-workspace-tab" aria-current={generationsOpen ? 'page' : undefined} onClick={onGenerations} style={{ ...styles.workspaceTab, ...(generationsOpen ? styles.workspaceTabActive : null) }}>
+          Generations
         </button>
       </div>
       <div style={styles.divider} />

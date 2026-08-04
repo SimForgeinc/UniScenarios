@@ -41,16 +41,22 @@ export class CopilotHistoryStore {
   private live: CopilotGenerationHistoryEntry[] = [];
 
   list(): CopilotGenerationHistoryResponse {
+    // The interactive history is a library of reopenable authored drafts, not
+    // an experiment ledger. Research artifacts remain on disk, while rows
+    // without an exact native draft never enter the application feed.
+    const entries = [...this.benchmarks.flatMap(benchmarkEntries), ...this.live]
+      .filter(isDraftBackedEntry);
     return {
       benchmarkStartedAt: boundaryDate(this.benchmarks.map((item) => item.startedAt), 'first'),
       benchmarkCompletedAt: boundaryDate(this.benchmarks.map((item) => item.completedAt), 'last'),
-      entries: [...this.benchmarks.flatMap(benchmarkEntries), ...this.live],
+      entries,
       experiments: this.experiments,
     };
   }
 
   record(request: CopilotGenerationRequest, result: CopilotGenerationResult): void {
-    const entries = result.candidates.length ? result.candidates.map((candidate) => liveEntry(request, result, candidate)) : [liveEntry(request, result, null)];
+    // Failed/draftless runs belong in diagnostics and research evidence only.
+    const entries = result.candidates.map((candidate) => liveEntry(request, result, candidate));
     this.live = [...entries, ...this.live].slice(0, MAX_LIVE_RUNS);
   }
 
@@ -65,6 +71,13 @@ export class CopilotHistoryStore {
   }
 
   clearLive(): void { this.live = []; }
+}
+
+export function isDraftBackedEntry(entry: CopilotGenerationHistoryEntry): boolean {
+  return entry.savedDraftStatus === 'original'
+    && entry.scenarioSchemaVersion === 2
+    && entry.candidate !== null
+    && entry.candidate.scenarioDoc.scenarioVersion === 2;
 }
 
 function loadBenchmarks(): BenchmarkArtifact[] {
@@ -146,7 +159,7 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
     caseTitle: candidate?.title ?? 'Live generation', prompt: request.prompt, expectedRejection: false,
     provider: result.provider, requestedModel: request.model ?? null, actualModel: result.model, mapId: request.mapContext.mapId,
     reasoningEffort: request.agentReasoningEffort ?? 'default-or-unrecorded', artifactId: null,
-    mapHash: candidate?.provenance.mapHash ?? request.mapContext.xodrSha256, scenarioSchemaVersion: candidate?.scenarioDoc.schemaVersion ?? null,
+    mapHash: candidate?.provenance.mapHash ?? request.mapContext.xodrSha256, scenarioSchemaVersion: candidate?.scenarioDoc.scenarioVersion ?? null,
     savedDraftStatus: candidate ? 'original' : 'not-recorded', savedResultHash: candidate ? candidate.provenance.promptHash : null, seed: null,
     generatedAt: candidate?.provenance.generatedAt ?? new Date().toISOString(), intent: candidate?.intent ?? result.intent, candidate: safeCandidate,
     actorCount: candidate?.scenarioDoc.roles.length ?? null, actionCount: interactions.length,
@@ -191,7 +204,7 @@ function sanitizeIterationTrace(value: unknown): CopilotGenerationHistoryEntry['
       const call = rawCall as Record<string, unknown>;
       const status = call['status'];
       if (typeof call['name'] !== 'string' || (status !== 'success' && status !== 'failure' && status !== 'skipped')) return [];
-      return [{ name: call['name'].slice(0, 100), status, summary: typeof call['summary'] === 'string' ? call['summary'].slice(0, 500) : '' }];
+      return [{ name: call['name'].slice(0, 100), status: status as 'success' | 'failure' | 'skipped', summary: typeof call['summary'] === 'string' ? call['summary'].slice(0, 500) : '' }];
     }) : [];
     const thumbnail = typeof item['thumbnailDataUrl'] === 'string' && item['thumbnailDataUrl'].startsWith('data:image/') && item['thumbnailDataUrl'].length < 350_000 ? item['thumbnailDataUrl'] : null;
     const legend = Array.isArray(item['legend']) ? item['legend'].filter((entry): entry is string => typeof entry === 'string').slice(0, 16).map((entry) => entry.slice(0, 200)) : undefined;

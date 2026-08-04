@@ -3,24 +3,22 @@ import type { CopilotGenerationRequest, CopilotGenerationResult } from '../../sr
 import { CopilotHistoryStore } from './historyStore';
 
 describe('Scenario Copilot generation history', () => {
-  it('loads all 30 immutable benchmark runs with exact prompts', () => {
+  it('excludes the original 30 draftless benchmark rows from the application feed', () => {
     const history = new CopilotHistoryStore().list();
     const rows = history.entries.filter((entry) => entry.source === 'benchmark' && entry.artifactId === 'chat2scenic-20260803/results.json');
-    expect(rows).toHaveLength(30);
-    expect(new Set(rows.map((entry) => entry.caseId))).toHaveLength(10);
-    expect(rows.every((entry) => entry.prompt.length > 20)).toBe(true);
-    expect(rows.every((entry) => entry.candidate === null)).toBe(true);
-    expect(rows.every((entry) => entry.savedDraftStatus === 'not-recorded')).toBe(true);
-    expect(rows.every((entry) => entry.savedResultHash === null)).toBe(true);
+    expect(rows).toHaveLength(0);
+    expect(history.entries.every((entry) => entry.candidate !== null)).toBe(true);
+    expect(history.entries.every((entry) => entry.savedDraftStatus === 'original')).toBe(true);
+    expect(history.entries.every((entry) => entry.scenarioSchemaVersion === 2)).toBe(true);
   });
 
   it('keeps benchmark evidence when live runs are cleared', () => {
     const store = new CopilotHistoryStore();
     store.record(request(), result());
-    expect(store.list().entries.filter((entry) => entry.source === 'live')).toHaveLength(1);
+    expect(store.list().entries.filter((entry) => entry.source === 'live')).toHaveLength(0);
     store.clearLive();
     expect(store.list().entries.filter((entry) => entry.source === 'live')).toHaveLength(0);
-    expect(store.list().entries.filter((entry) => entry.source === 'benchmark').length).toBeGreaterThanOrEqual(30);
+    expect(store.list().entries.filter((entry) => entry.source === 'benchmark').length).toBeGreaterThan(0);
   });
 });
 

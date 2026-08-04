@@ -109,7 +109,7 @@ import {
 import { StudioSignalSelectionModel } from './signalSelection';
 import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializer';
 import { WorldLoadingOverlay } from './WorldLoadingOverlay';
-import { ScenarioCopilotPanel, type CandidateValidation, type CopilotCandidate } from './copilot';
+import { GenerationsWorkspace, ScenarioCopilotPanel, draftCompatibility, hasMaterialAuthoredContent, parseSavedGenerationDraft, type CandidateValidation, type CopilotCandidate, type CopilotGenerationHistoryEntry } from './copilot';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(quality: QualityPreference): CityViewerOptions {
@@ -228,6 +228,8 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [openScenarioOpen, setOpenScenarioOpen] = useState(() => openScenarioLocationIntent(window.location).open);
   const [mapWorkspaceOpen, setMapWorkspaceOpen] = useState(false);
+  const [generationsOpen, setGenerationsOpen] = useState(() => window.location.hash === '#generations');
+  const [timelineOpenGeneration, setTimelineOpenGeneration] = useState(0);
   const [openScenarioState, setOpenScenarioState] = useState<OpenScenarioWorkspaceState>({ status: 'empty', reason: 'Place at least one actor before generating an interchange artifact.' });
   const [signalAuthoringCatalog, setSignalAuthoringCatalog] = useState<Awaited<ReturnType<ScenarioWorkerClient['inspectSignals']>> | null>(null);
   const [selectedSignalHeadId, setSelectedSignalHeadId] = useState<string | null>(null);
@@ -259,6 +261,20 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       '',
       `${window.location.pathname}${intent.canonicalSearch}${intent.canonicalHash ?? window.location.hash}`,
     );
+  }, []);
+
+  useEffect(() => {
+    const sync = (): void => setGenerationsOpen(window.location.hash === '#generations');
+    window.addEventListener('hashchange', sync);
+    window.addEventListener('popstate', sync);
+    return () => { window.removeEventListener('hashchange', sync); window.removeEventListener('popstate', sync); };
+  }, []);
+
+  const navigateGenerations = useCallback((open: boolean): void => {
+    const next = open ? '#generations' : '';
+    if (window.location.hash !== next) window.history.pushState(window.history.state, '', `${window.location.pathname}${window.location.search}${next}`);
+    setGenerationsOpen(open);
+    if (open) { setOpenScenarioOpen(false); setMapWorkspaceOpen(false); setAuxiliaryTool(null); setSettingsOpen(false); }
   }, []);
 
   useEffect(() => {
@@ -1265,6 +1281,34 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     setActorDetailsId(null);
   }, [editorController]);
 
+  const openSavedGeneration = useCallback((entry: CopilotGenerationHistoryEntry): void => {
+    if (!editorController || !entry.candidate) return;
+    const compatibility = draftCompatibility(entry, map.id, editorController.laneIndex.stats.xodrSha256);
+    if (!compatibility.compatible) return;
+    // Parse before asking to replace the current scenario so malformed or stale
+    // stored data can never disturb the author's working document.
+    let exact: ScenarioTemplateV2;
+    try { exact = parseSavedGenerationDraft(entry); }
+    catch (reason) { window.alert(`This saved draft cannot be opened: ${reason instanceof Error ? reason.message : String(reason)}`); return; }
+    const current = editorController.doc.data;
+    const hasAuthoredWork = hasMaterialAuthoredContent(current);
+    if (hasAuthoredWork && !window.confirm(`Open “${entry.caseTitle}” in Author? Your current scenario is already autosaved, and this will replace the open canvas. You can return to the saved scenario from the gallery.`)) return;
+    editorController.doc.importTemplate(exact, { saveName: entry.candidate.title });
+    editorController.setSelection(exact.roles.map((role) => role.id));
+    setPlaybackBundle(null); setCampaignPlaybackTitle(null); setCampaignSource(null);
+    setOpenScenarioOpen(false); setMapWorkspaceOpen(false); setAuxiliaryTool(null); setSettingsOpen(false);
+    setActorDetailsId(exact.roles[0]?.id ?? null);
+    setTimelineOpenGeneration((value) => value + 1);
+    navigateGenerations(false);
+    frameEditableActors(viewer, exact);
+  }, [editorController, map.id, navigateGenerations, viewer]);
+
+  const switchToGenerationMap = useCallback((entry: CopilotGenerationHistoryEntry): void => {
+    const target = mapById(entry.mapId);
+    if (!target) { window.alert(`The map ${entry.mapId} is not installed in Studio.`); return; }
+    selectMap(target);
+  }, [selectMap]);
+
   return (
     <div style={styles.root}>
       <WorkspaceHeader
@@ -1273,19 +1317,24 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         playback={playbackBundle !== null || studioSession.state.mode !== 'authoring'}
         openScenario={openScenarioOpen}
         mapWorkspace={mapWorkspaceOpen}
+        generationsOpen={generationsOpen}
         settingsOpen={settingsOpen}
         onSettings={() => setSettingsOpen((open) => !open)}
         onCopyScenario={editorController ? copyCurrentScenario : undefined}
         onOpenScenario={() => {
+          navigateGenerations(false);
           setMapWorkspaceOpen(false);
           setOpenScenarioOpen((open) => !open);
         }}
         onMapWorkspace={() => {
+          navigateGenerations(false);
           setOpenScenarioOpen(false);
           setSettingsOpen(false);
           setMapWorkspaceOpen(true);
         }}
+        onGenerations={() => navigateGenerations(!generationsOpen)}
         onAuthorWorkspace={() => {
+          navigateGenerations(false);
           setOpenScenarioOpen(false);
           setMapWorkspaceOpen(false);
         }}
@@ -1304,6 +1353,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       {!playbackBundle && !mapWorkspaceOpen ? (
         <div style={timelineDrawerLayout ? styles.timelineDrawerPane : styles.timelinePane} data-testid="timeline-pane">
           <TimelineDock
+            key={`timeline-open-${timelineOpenGeneration}`}
             controller={editorController}
             editorState={state}
             session={studioSession}
@@ -1458,6 +1508,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
               map={map}
               onValidate={validateCopilotCandidate}
               onApply={applyCopilotCandidate}
+              onOpenGenerations={() => navigateGenerations(true)}
               onClose={() => setAuxiliaryTool(null)}
             />
           ) : auxiliaryTool === 'measure' ? (
@@ -1478,6 +1529,14 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
           ) : null}
         </div>
       ) : null}
+
+      {generationsOpen ? <GenerationsWorkspace
+        currentMapId={map.id}
+        currentMapHash={editorController?.laneIndex.stats.xodrSha256 ?? null}
+        onOpenDraft={openSavedGeneration}
+        onSwitchMap={switchToGenerationMap}
+        onClose={() => navigateGenerations(false)}
+      /> : null}
 
       {playbackBundle && campaignPlaybackTitle ? (
         <VerifiedReplayBar

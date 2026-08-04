@@ -3,8 +3,6 @@ import type { CSSProperties } from 'react';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { buildCopilotMapContext } from './mapContext';
 import { generateScenarioCandidates, updateLiveCopilotValidation } from './client';
-import { CopilotComparisonView } from './CopilotComparisonView';
-import type { CopilotGenerationHistoryEntry } from './historyTypes';
 import type { CopilotCandidate, CopilotGenerationResult, CopilotIntent, CopilotProgress, CopilotProviderId } from './types';
 import type { EditorController } from '../editor/controller';
 import type { MapEntry } from '../maps';
@@ -21,14 +19,14 @@ export interface ScenarioCopilotPanelProps {
   readonly map: MapEntry;
   readonly onValidate: (candidate: CopilotCandidate) => Promise<CandidateValidation>;
   readonly onApply: (candidate: CopilotCandidate) => void;
+  readonly onOpenGenerations: () => void;
   readonly onClose: () => void;
 }
 
 const STARTER = 'A sedan approaches a pedestrian who emerges from behind a stopped van. The pedestrian starts after four seconds and the sedan should brake to avoid a collision.';
 
-export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onClose }: ScenarioCopilotPanelProps): JSX.Element {
+export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onOpenGenerations, onClose }: ScenarioCopilotPanelProps): JSX.Element {
   const [provider, setProvider] = useState<CopilotProviderId>('staged-rag');
-  const [view, setView] = useState<'generate' | 'comparison'>('generate');
   const [prompt, setPrompt] = useState(STARTER);
   const [progress, setProgress] = useState<CopilotProgress | null>(null);
   const [result, setResult] = useState<CopilotGenerationResult | null>(null);
@@ -36,7 +34,6 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [validations, setValidations] = useState<Record<string, CandidateValidation | 'running'>>({});
-  const [rerunNotice, setRerunNotice] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mapContext = useMemo(() => buildCopilotMapContext(map, controller.laneIndex), [controller, map]);
 
@@ -73,12 +70,6 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     }
   };
 
-  const rerunHistory = (entry: CopilotGenerationHistoryEntry): void => {
-    setProvider(entry.provider); setPrompt(entry.prompt); setView('generate');
-    setRerunNotice(`New evaluation run of “${entry.caseTitle}” with ${entry.provider}. Results may differ from the historical benchmark.`);
-    void generate(undefined, { provider: entry.provider, prompt: entry.prompt });
-  };
-
   const regenerateIntent = (): void => {
     try {
       const parsed = JSON.parse(intentDraft) as CopilotIntent;
@@ -95,11 +86,9 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     </header>
     <div style={styles.mapLock}><span>◉</span><div><strong>{map.label}</strong><small>{mapContext.laneCount} driving lanes · {mapContext.placementSlots.length} bounded placement slots</small></div><span style={styles.lock}>Locked</span></div>
     <nav style={styles.tabs} aria-label="Scenario Copilot views">
-      <button type="button" data-testid="copilot-generate-tab" aria-current={view === 'generate' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'generate' ? styles.tabActive : {}) }} onClick={() => setView('generate')}>Create</button>
-      <button type="button" data-testid="copilot-comparison-tab" aria-current={view === 'comparison' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'comparison' ? styles.tabActive : {}) }} onClick={() => setView('comparison')}>All generations</button>
+      <button type="button" data-testid="copilot-generate-tab" aria-current="page" style={{ ...styles.tab, ...styles.tabActive }}>Create</button>
+      <button type="button" data-testid="copilot-comparison-tab" style={styles.tab} onClick={onOpenGenerations}>Open Generations ↗</button>
     </nav>
-    {view === 'comparison' ? <CopilotComparisonView onRerun={rerunHistory} onApply={onApply} currentMapId={mapContext.mapId} currentMapHash={mapContext.xodrSha256} /> : <>
-    {rerunNotice ? <div style={styles.rerunNotice}>{rerunNotice}<button type="button" aria-label="Dismiss re-run notice" onClick={() => setRerunNotice(null)}>×</button></div> : null}
     <label style={styles.label}>Generation approach</label>
     <div style={styles.providers}>
       <button type="button" aria-pressed={provider === 'staged-rag'} style={{ ...styles.provider, ...(provider === 'staged-rag' ? styles.providerActive : {}) }} onClick={() => setProvider('staged-rag')}>
@@ -173,7 +162,6 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
         })}
       </div>
     </> : null}
-    </>}
     <footer style={styles.caveat}>Structured + retrieval is the clean-room implementation. Upstream Chat2Scenic runs a separately attributed, pinned CC BY-NC 4.0 research adapter; it is not part of the production browser bundle and must not be used commercially.</footer>
   </section>;
 }
