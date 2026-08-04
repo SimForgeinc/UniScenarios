@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Interaction, MapSignalPlan, ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, timelineLanePreferencesForDrop, triggerAnchor, type TimelineItem } from './model';
+import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, moveInteraction, moveMapSignalPlanClip, packActionLanes, resizeMapSignalPlanClip, roundTimelineSeconds, timelineLanePreferencesForDrop, triggerAnchor, type TimelineItem } from './model';
 
 const speed: Interaction = { id: 'speed_ego', actor: 'ego', trigger: { kind: 'at', t: 3 }, verb: 'speed', target: { mode: 'stop' }, dynamics: { shape: 'linear', constraint: 'time', value: 1 } };
 const item = (interaction: Interaction, resource: TimelineItem['resource'], start: number, end: number): TimelineItem => ({ interaction, actorId: interaction.actor, track: 'actions', resource, anchorTime: start, endTime: end, unresolved: false });
@@ -51,6 +51,14 @@ describe('action-only timeline projection', () => {
     expect(editTimelineClipRange({ start: 2, end: 5 }, 'resize-start', 10, 20)).toEqual({ start: 4.8, end: 5 });
     expect(editTimelineClipRange({ start: 2, end: 5 }, 'resize-end', -10, 20)).toEqual({ start: 2, end: 2.2 });
   });
+  it('canonicalizes pointer-derived ranges to millisecond precision without floating-point tails', () => {
+    expect(editTimelineClipRange({ start: 1.7, end: 2.7 }, 'move', .03500000000000014, 20)).toEqual({ start: 1.735, end: 2.735 });
+    expect(editTimelineClipRange({ start: 1.735, end: 2.735 }, 'resize-end', .10000000000000009, 20)).toEqual({ start: 1.735, end: 2.835 });
+    expect(interactionWithTimelineRange(speed, { start: 1.7349999999999999, end: 2.8350000000000004 })).toMatchObject({
+      trigger: { kind: 'at', t: 1.735 }, until: { kind: 'at', t: 2.835 },
+    });
+    expect(roundTimelineSeconds(.1 + .2)).toBe(.3);
+  });
   it('edits eligibility bounds without changing canonical maneuver duration or style', () => {
     const laneChange = { id: 'lane', actor: 'ego', trigger: { kind: 'at', t: 1 }, until: { kind: 'at', t: 4 }, verb: 'changeLane', target: { mode: 'relative', dk: 1 }, dynamics: { shape: 'cubic', constraint: 'time', value: 3 }, maneuverDurationS: 3, maneuverStyle: 'assertive' } as Interaction;
     const resized = interactionWithTimelineRange(laneChange, { start: 6, end: 10 });
@@ -90,6 +98,15 @@ describe('map signal timeline projection', () => {
     expect(editMapSignalPlanClip(plan, { ...plan.clips[0]!, endS: 6 }, 20).ok).toBe(true);
     const result = editMapSignalPlanClip(plan, { ...plan.clips[0]!, endS: 6.001 }, 20);
     expect(result).toEqual({ ok: false, message: expect.stringContaining('overlaps “red_1”') });
+  });
+
+  it('accepts a millisecond-aligned minimum interval despite binary floating-point subtraction', () => {
+    const plan = { ...signalPlan(), clips: [] };
+    const result = editMapSignalPlanClip(plan, {
+      id: 'short', startS: 1.735, endS: 1.835,
+      reference: { controllerId: '447', headId: 'head_a' }, indication: 'green',
+    }, 20);
+    expect(result.ok).toBe(true);
   });
 
   it('moves and resizes while retaining the selected reference head and indication', () => {

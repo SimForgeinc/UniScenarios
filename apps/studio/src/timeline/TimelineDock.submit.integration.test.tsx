@@ -172,6 +172,41 @@ describe('timeline action dialog submission', () => {
     reopened.dispose();
   });
 
+  it('accepts, persists, undoes, and reloads a timeline-generated millisecond timestamp exactly', async () => {
+    const { store } = memoryStore();
+    const { document, actorId } = await boxTruck(store);
+    const result = submitTimelineAction(document, { ...draft(actorId, 'indicator_hazard', 1.735), duration: .3650000000000001 });
+    expect(result.ok).toBe(true);
+    expect(document.data.choreography.interactions[0]).toMatchObject({
+      trigger: { kind: 'at', t: 1.735 }, until: { kind: 'at', t: 2.1 },
+    });
+    expect(document.undo()).toBe(true);
+    expect(document.data.choreography.interactions).toHaveLength(0);
+    expect(document.redo()).toBe(true);
+    await document.flush();
+    const serialized = structuredClone(document.data.choreography.interactions[0]);
+    document.dispose();
+
+    const reopened = await EditorDocument.open(MAPS[0]!, { store, autosaveMs: 60_000 });
+    expect(reopened.data.choreography.interactions[0]).toEqual(serialized);
+    expect(actionEditorStateForItem(buildTimelineGroups(reopened.data)[0]!.lanes[0]!.items[0]!, buildTimelineGroups(reopened.data)[0]!)).toMatchObject({
+      time: 1.735, duration: .365,
+    });
+    reopened.dispose();
+  });
+
+  it('declares millisecond precision for every draggable clip timing input', async () => {
+    const { store } = memoryStore();
+    const { document, actorId } = await boxTruck(store);
+    expect(submitTimelineAction(document, { ...draft(actorId, 'indicator_hazard', 1.735), duration: .365 }).ok).toBe(true);
+    const group = buildTimelineGroups(document.data)[0]!;
+    const state = actionEditorStateForItem(group.lanes[0]!.items[0]!, group)!;
+    const markup = renderToStaticMarkup(<ActionEditor state={state} group={group} readOnly={false} rightInset={16} onChange={() => undefined} onSave={() => undefined} onClose={() => undefined} />);
+    expect(markup.match(/<input[^>]*data-testid="interaction-time"[^>]*>/)?.[0]).toContain('step="0.001"');
+    expect(markup.match(/<input[^>]*data-testid="interaction-window-duration"[^>]*>/)?.[0]).toContain('step="0.001"');
+    document.dispose();
+  });
+
   it('returns explicit validation feedback for stale or invalid drafts', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);

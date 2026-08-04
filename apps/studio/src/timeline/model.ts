@@ -4,6 +4,9 @@ import { actionResource, isActionCompatible, type ActionResource } from './actio
 
 export type TimelineTrackKind = 'actions';
 export const MIN_TIMELINE_CLIP_SECONDS = 0.2;
+/** Canonical authoring precision shared by pointer gestures and timing forms. */
+export const TIMELINE_TIME_STEP_SECONDS = 0.001;
+export const TIMELINE_TIME_EPSILON_SECONDS = 1e-9;
 export const TIMELINE_LAYOUT_EXTENSION_KEY = 'studio.presentation.timeline.v1';
 export interface TimelineItem { readonly interaction: Interaction; readonly actorId: string; readonly track: TimelineTrackKind; readonly resource: ActionResource; readonly anchorTime: number; readonly endTime: number; readonly unresolved: boolean; }
 export interface TimelineActionLane { readonly index: number; readonly items: readonly TimelineItem[]; }
@@ -259,7 +262,8 @@ export function editMapSignalPlanClip(
   durationS: number,
 ): MapSignalClipEditResult {
   if (!Number.isFinite(clip.startS) || !Number.isFinite(clip.endS)
-    || clip.startS < 0 || clip.endS > durationS || clip.endS - clip.startS < .1) {
+    || clip.startS < 0 || clip.endS > durationS
+    || clip.endS - clip.startS < .1 - TIMELINE_TIME_EPSILON_SECONDS) {
     return { ok: false, message: `Signal clips must be at least 0.1 seconds and stay inside 0–${durationS} seconds.` };
   }
   const conflict = plan.clips.find((item) => item.id !== clip.id
@@ -281,8 +285,8 @@ export function moveMapSignalPlanClip(
   const clip = plan.clips.find((item) => item.id === clipId);
   if (!clip) return { ok: false, message: `Signal clip “${clipId}” no longer exists.` };
   const width = clip.endS - clip.startS;
-  const start = clamp(Number(startS.toFixed(3)), 0, Math.max(0, durationS - width));
-  return editMapSignalPlanClip(plan, { ...clip, startS: start, endS: Number((start + width).toFixed(3)) }, durationS);
+  const start = clamp(roundTimelineSeconds(startS), 0, Math.max(0, durationS - width));
+  return editMapSignalPlanClip(plan, { ...clip, startS: start, endS: roundTimelineSeconds(start + width) }, durationS);
 }
 
 export function resizeMapSignalPlanClip(
@@ -294,7 +298,7 @@ export function resizeMapSignalPlanClip(
 ): MapSignalClipEditResult {
   const clip = plan.clips.find((item) => item.id === clipId);
   if (!clip) return { ok: false, message: `Signal clip “${clipId}” no longer exists.` };
-  const time = Number(clamp(timeS, 0, durationS).toFixed(3));
+  const time = roundTimelineSeconds(clamp(timeS, 0, durationS));
   return editMapSignalPlanClip(plan, edge === 'start'
     ? { ...clip, startS: Math.min(time, clip.endS - .1) }
     : { ...clip, endS: Math.max(time, clip.startS + .1) }, durationS);
@@ -330,11 +334,11 @@ export function conflictingAction(candidate: TimelineItem, items: readonly Timel
   return items.find((item) => item.interaction.id !== ignoreId && item.resource === candidate.resource && overlaps(candidate, item));
 }
 export function moveInteraction(interaction: Interaction, time: number): Interaction {
-  const start = Math.max(0, Number(time.toFixed(3)));
+  const start = Math.max(0, roundTimelineSeconds(time));
   const oldStart = interaction.trigger.kind === 'at' ? numeric(interaction.trigger.t) : null;
   const oldEnd = interaction.until?.kind === 'at' ? numeric(interaction.until.t) : null;
   const until = oldStart !== null && oldEnd !== null
-    ? { kind: 'at' as const, t: Number((start + Math.max(.1, oldEnd - oldStart)).toFixed(3)) }
+    ? { kind: 'at' as const, t: roundTimelineSeconds(start + Math.max(.1, oldEnd - oldStart)) }
     : interaction.until;
   return { ...interaction, trigger: { kind: 'at', t: start }, ...(until ? { until } : {}) } as Interaction;
 }
@@ -348,7 +352,7 @@ export function editTimelineClipRange(origin: TimelineClipRange, mode: TimelineC
   return roundedRange(origin.start, clamp(origin.end + deltaSeconds, origin.start + minimum, duration));
 }
 export function interactionWithTimelineRange(interaction: Interaction, range: TimelineClipRange): Interaction {
-  const start = Number(range.start.toFixed(3)); const end = Number(range.end.toFixed(3));
+  const start = roundTimelineSeconds(range.start); const end = roundTimelineSeconds(range.end);
   return { ...interaction, trigger: { kind: 'at' as const, t: start }, until: { kind: 'at' as const, t: end } } as Interaction;
 }
 /** Only an already absolute eligibility window can be rewritten by timeline gestures. */
@@ -363,4 +367,5 @@ function interactionDuration(interaction: Interaction): number { return 'dynamic
 function numeric(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
 function formatNumeric(value: unknown): string { return numeric(value)?.toFixed(1) ?? 'expr'; }
 function clamp(value: number, min: number, max: number): number { return Math.min(max, Math.max(min, value)); }
-function roundedRange(start: number, end: number): TimelineClipRange { return { start: Number(start.toFixed(3)), end: Number(end.toFixed(3)) }; }
+export function roundTimelineSeconds(value: number): number { return Number(value.toFixed(3)); }
+function roundedRange(start: number, end: number): TimelineClipRange { return { start: roundTimelineSeconds(start), end: roundTimelineSeconds(end) }; }

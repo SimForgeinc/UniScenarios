@@ -6,7 +6,7 @@ import type { EditorDocument } from '../editor/document';
 import type { StudioSessionApi } from '../session/useStudioSession';
 import { createMapSignalPlan, physicalSignalChoiceIndex, physicalSignalChoiceIssue, physicalSignalChoices } from '../signals/authoring';
 import { actionsForActor, definitionForInteraction, interactionForAction, type ActionDefinition } from './actions';
-import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, TIMELINE_LAYOUT_EXTENSION_KEY, timelineLanePreferences, timelineLanePreferencesForDrop, timelineLayoutExtension, moveMapSignalPlanClip, resizeMapSignalPlanClip, type TimelineActorGroup, type TimelineClipEditMode, type TimelineClipRange, type TimelineItem, type TimelineLanePreferences, type TimelineMapSignalClip, type TraceOutcomeMarker } from './model';
+import { buildMapSignalTimelineGroups, buildTimelineGroups, conflictingAction, editMapSignalPlanClip, editTimelineClipRange, interactionWithTimelineRange, isTimelineRangeEditable, roundTimelineSeconds, TIMELINE_LAYOUT_EXTENSION_KEY, TIMELINE_TIME_EPSILON_SECONDS, TIMELINE_TIME_STEP_SECONDS, timelineLanePreferences, timelineLanePreferencesForDrop, timelineLayoutExtension, moveMapSignalPlanClip, resizeMapSignalPlanClip, type TimelineActorGroup, type TimelineClipEditMode, type TimelineClipRange, type TimelineItem, type TimelineLanePreferences, type TimelineMapSignalClip, type TraceOutcomeMarker } from './model';
 
 export interface TimelineSpeedSeries { readonly times: readonly number[]; readonly kph: readonly number[]; }
 export type TimelineClickSurface = 'actor-header' | 'speed-row' | 'actions-row';
@@ -106,7 +106,7 @@ export function submitTimelineAction(
     if (timingEditable && (!Number.isFinite(draft.time) || draft.time < 0 || draft.time > template.choreography.clipSeconds)) {
       return { ok: false, message: `Start must be between 0 and ${template.choreography.clipSeconds} seconds.` };
     }
-    if (timingEditable && (!Number.isFinite(draft.duration) || draft.duration < .1 || draft.duration > 20)) {
+    if (timingEditable && (!Number.isFinite(draft.duration) || draft.duration < .1 - TIMELINE_TIME_EPSILON_SECONDS || draft.duration > 20)) {
       return { ok: false, message: 'Duration must be between 0.1 and 20 seconds.' };
     }
     if (timingEditable && draft.time + draft.duration > template.choreography.clipSeconds + 1e-9) {
@@ -125,16 +125,18 @@ export function submitTimelineAction(
       customized = { ...customized, target: { mode: 'lanePath', lanes } };
     }
     let ordinal = template.choreography.interactions.length + 1;
+    const canonicalTime = timingEditable ? roundTimelineSeconds(draft.time) : draft.time;
+    const canonicalDuration = timingEditable ? roundTimelineSeconds(draft.duration) : draft.duration;
     const maneuver = customized.verb === 'changeLane' || customized.verb === 'laneOffset'
-      ? { durationS: draft.maneuverDuration ?? draft.duration, style: draft.maneuverStyle ?? 'normal' }
+      ? { durationS: roundTimelineSeconds(draft.maneuverDuration ?? canonicalDuration), style: draft.maneuverStyle ?? 'normal' }
       : undefined;
     if (maneuver && (!Number.isFinite(maneuver.durationS) || maneuver.durationS < .1 || maneuver.durationS > 30)) {
       return { ok: false, message: 'Maneuver duration must be between 0.1 and 30 seconds.' };
     }
-    let interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ordinal, maneuver);
+    let interaction = interactionForAction({ ...customized, durationS: canonicalDuration }, draft.actorId, canonicalTime, ordinal, maneuver);
     const usedIds = new Set(template.choreography.interactions.map((item) => item.id));
     while (!draft.editingId && usedIds.has(interaction.id)) {
-      interaction = interactionForAction({ ...customized, durationS: draft.duration }, draft.actorId, draft.time, ++ordinal, maneuver);
+      interaction = interactionForAction({ ...customized, durationS: canonicalDuration }, draft.actorId, canonicalTime, ++ordinal, maneuver);
     }
     if (existing) {
       const originalDefinition = definitionForInteraction(existing, role.actor.class, role.actor.catalogId);
@@ -156,8 +158,8 @@ export function submitTimelineAction(
       actorId: draft.actorId,
       track: 'actions',
       resource: customized.resource,
-      anchorTime: draft.time,
-      endTime: Math.min(template.choreography.clipSeconds, draft.time + draft.duration),
+      anchorTime: canonicalTime,
+      endTime: Math.min(template.choreography.clipSeconds, roundTimelineSeconds(canonicalTime + canonicalDuration)),
       unresolved: false,
     };
     const conflict = conflictingAction(candidate, currentGroup.tracks.actions, draft.editingId ?? undefined);
@@ -223,7 +225,7 @@ export function actionEditorStateForItem(item: TimelineItem, group: TimelineActo
     definitionId: definition.id,
     sourceDefinitionId: definition.id,
     time: item.anchorTime,
-    duration: Math.max(.1, item.endTime - item.anchorTime),
+    duration: Math.max(.1, roundTimelineSeconds(item.endTime - item.anchorTime)),
     timingEditable: isTimelineRangeEditable(item.interaction),
     maneuverDuration: lateral && typeof lateral.maneuverDurationS === 'number' ? lateral.maneuverDurationS : legacyDuration,
     maneuverStyle: lateral?.maneuverStyle ?? 'normal',
@@ -346,8 +348,8 @@ export function ActionEditor({ state, group, readOnly, rightInset, onChange, onS
     <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, maneuverDuration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
       {selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}
-      <label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be retimed here.' : undefined} data-testid="interaction-time" /></label>
-      <label style={styles.field}><span>Window</span><input type="number" min={.1} max={20} step={.1} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be resized here.' : undefined} data-testid="interaction-window-duration" /></label>
+      <label style={styles.field}><span>Start</span><input type="number" min={0} step={TIMELINE_TIME_STEP_SECONDS} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be retimed here.' : undefined} data-testid="interaction-time" /></label>
+      <label style={styles.field}><span>Window</span><input type="number" min={.1} max={20} step={TIMELINE_TIME_STEP_SECONDS} value={state.duration} onChange={(event) => onChange({ ...state, duration: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be resized here.' : undefined} data-testid="interaction-window-duration" /></label>
       {lateral ? <><label style={styles.field}><span>Maneuver</span><span><input type="number" min={.1} max={30} step={.1} value={state.maneuverDuration} onChange={(event) => onChange({ ...state, maneuverDuration: Number(event.target.value) })} data-testid="maneuver-duration" /> s</span></label><label style={styles.field}><span>Style</span><select value={state.maneuverStyle} onChange={(event) => onChange({ ...state, maneuverStyle: event.target.value as ActionEditorState['maneuverStyle'] })} data-testid="maneuver-style"><option value="cautious">Cautious</option><option value="normal">Normal</option><option value="assertive">Assertive</option></select></label></> : null}
       <div style={styles.resourceHint}>{!state.timingEditable ? 'This action uses a conditional trigger or end condition. Its timing is preserved; edit the condition in the advanced scenario editor.' : lateral ? 'The window controls when this action may start. Maneuver duration controls the gradual physical motion.' : `Only one ${selected.resource} action can run at once; different resources run in parallel.`}</div>
       <div style={styles.editorActions}><button type="submit" disabled={readOnly} style={styles.save} data-testid="save-interaction">{state.editingId ? 'Update' : 'Add to timeline'}</button>{onDelete ? <button type="button" onClick={onDelete} style={styles.delete}>Delete</button> : null}</div>
@@ -388,7 +390,7 @@ function TimelineClip({ item, duration, lane, laneCount, identityLane, readonly,
     <button type="button" aria-label={`Resize end of ${label}`} style={{ ...styles.resizeHandle, ...styles.resizeEnd }} onMouseDown={beginDrag('resize-end')} onKeyDown={keyboardEdit('resize-end')} disabled={readonly || !rangeEditable} data-testid={`timeline-resize-end-${item.interaction.id}`} />
   </div>;
 }
-function SignalClipEditor({ state, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: TimelineSignalDraft; readOnly: boolean; rightInset: number; onChange: (state: TimelineSignalDraft) => void; onSave: () => void; onDelete: () => void; onClose: () => void }): JSX.Element { return <aside role="dialog" aria-label="Edit traffic signal phase" style={{ ...styles.editor, right: Math.max(16, rightInset) }} data-testid="signal-clip-editor"><div style={styles.editorHeader}><div><strong>Reference light</strong><div style={styles.editorContext}>Controller {state.reference.controllerId} · head {state.reference.headId}</div></div><button type="button" onClick={onClose} style={styles.close} aria-label="Close">×</button></div><form onSubmit={(event) => { event.preventDefault(); onSave(); }}><label style={styles.field}><span>Phase</span><select value={state.indication} onChange={(event) => onChange({ ...state, indication: event.target.value as MapSignalPlanClip['indication'] })} disabled={readOnly} data-testid="signal-indication"><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option><option value="flashing_yellow">Flashing yellow</option><option value="flashing_red">Flashing red (fail-safe)</option><option value="off">Off</option></select></label><label style={styles.field}><span>Start</span><input type="number" min={0} step={.1} value={state.startS} onChange={(event) => onChange({ ...state, startS: Number(event.target.value) })} data-testid="signal-start" /></label><label style={styles.field}><span>End</span><input type="number" min={.1} step={.1} value={state.endS} onChange={(event) => onChange({ ...state, endS: Number(event.target.value) })} data-testid="signal-end" /></label><div style={styles.resourceHint}>The interval is [start, end). Related heads are derived together from this reference light.</div><div style={styles.editorActions}><button type="submit" disabled={readOnly} style={styles.save} data-testid="save-signal-clip">Save phase</button><button type="button" onClick={onDelete} disabled={readOnly} style={styles.delete}>Delete</button></div></form></aside>; }
+function SignalClipEditor({ state, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: TimelineSignalDraft; readOnly: boolean; rightInset: number; onChange: (state: TimelineSignalDraft) => void; onSave: () => void; onDelete: () => void; onClose: () => void }): JSX.Element { return <aside role="dialog" aria-label="Edit traffic signal phase" style={{ ...styles.editor, right: Math.max(16, rightInset) }} data-testid="signal-clip-editor"><div style={styles.editorHeader}><div><strong>Reference light</strong><div style={styles.editorContext}>Controller {state.reference.controllerId} · head {state.reference.headId}</div></div><button type="button" onClick={onClose} style={styles.close} aria-label="Close">×</button></div><form onSubmit={(event) => { event.preventDefault(); onSave(); }}><label style={styles.field}><span>Phase</span><select value={state.indication} onChange={(event) => onChange({ ...state, indication: event.target.value as MapSignalPlanClip['indication'] })} disabled={readOnly} data-testid="signal-indication"><option value="green">Green</option><option value="yellow">Yellow</option><option value="red">Red</option><option value="flashing_yellow">Flashing yellow</option><option value="flashing_red">Flashing red (fail-safe)</option><option value="off">Off</option></select></label><label style={styles.field}><span>Start</span><input type="number" min={0} step={TIMELINE_TIME_STEP_SECONDS} value={state.startS} onChange={(event) => onChange({ ...state, startS: Number(event.target.value) })} data-testid="signal-start" /></label><label style={styles.field}><span>End</span><input type="number" min={.1} step={TIMELINE_TIME_STEP_SECONDS} value={state.endS} onChange={(event) => onChange({ ...state, endS: Number(event.target.value) })} data-testid="signal-end" /></label><div style={styles.resourceHint}>The interval is [start, end). Related heads are derived together from this reference light.</div><div style={styles.editorActions}><button type="submit" disabled={readOnly} style={styles.save} data-testid="save-signal-clip">Save phase</button><button type="button" onClick={onDelete} disabled={readOnly} style={styles.delete}>Delete</button></div></form></aside>; }
 function SignalTimelineClip({ item, duration, readonly, selected, onSelect, onMove, onResize }: { item: TimelineMapSignalClip; duration: number; readonly: boolean; selected: boolean; onSelect: () => void; onMove: (time: number) => void; onResize: (edge: 'start' | 'end', time: number) => void }): JSX.Element {
   const label = signalIndicationLabel(item.clip.indication);
   const beginMove = (event: ReactMouseEvent<HTMLButtonElement>): void => { onSelect(); if (readonly || event.button !== 0) return; event.stopPropagation(); const clipNode = event.currentTarget.parentElement; const track = clipNode?.parentElement; if (!clipNode || !track) return; const grabOffset = event.clientX - clipNode.getBoundingClientRect().left; window.addEventListener('mouseup', (pointer) => { const bounds = track.getBoundingClientRect(); onMove(clamp((pointer.clientX - bounds.left - grabOffset) / bounds.width * duration, 0, duration)); }, { once: true }); };
