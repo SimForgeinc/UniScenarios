@@ -13,7 +13,7 @@ import { createOpenAIResponsesClient, resolveDirectModel, type DirectModelRespon
 import { DirectGenerationRequestSchema, DirectNativeDraftSchema, type DirectNativeDraft } from './directTypes.js';
 
 const REQUESTED_MODEL = 'gpt-5.6-luna';
-const REASONING_EFFORT = 'medium' as const;
+const DEFAULT_REASONING_EFFORT = 'high' as const;
 const DEFAULT_MAX_ITERATIONS = 4;
 
 type AgentIteration = NonNullable<CopilotProvenance['agentDetails']>['iterations'][number];
@@ -175,6 +175,7 @@ export async function generateSimulationAgent(
   if (request.providerId !== 'simulation-agent') throw new Error('Simulation agent received the wrong provider id');
   const started = performance.now();
   const maxIterations = request.maxAgentIterations ?? DEFAULT_MAX_ITERATIONS;
+  const reasoningEffort = request.agentReasoningEffort ?? DEFAULT_REASONING_EFFORT;
   const progress = (stage: CopilotProgress['stage'], message: string, completed: number): void => options.onProgress?.({ stage, message, completed, total: maxIterations });
   const modelRequested = request.model ?? process.env['OPENAI_SCENARIO_MODEL'] ?? REQUESTED_MODEL;
   if (impossible(request.prompt)) throw new Error('Unsupported request: native road actors cannot teleport, fly, or pass through buildings.');
@@ -201,7 +202,7 @@ export async function generateSimulationAgent(
     const user = `USER_REQUEST:\n${request.prompt}\n\nTRUSTED_MAP_CONTEXT:\n${mapFacts}\n\nITERATION:${iteration}/${maxIterations}\nTRUSTED_FEEDBACK_FROM_PRIOR_ITERATION:\n${feedback}`;
     const images = options.getIterationImages ? await options.getIterationImages({ iteration, request, previousDraft: previous, trustedFeedback: feedback }) : [];
     const modelStarted = performance.now();
-    const response = await client.generate({ model, system: SYSTEM, user, reasoningEffort: REASONING_EFFORT, images, signal: options.signal });
+    const response = await client.generate({ model, system: SYSTEM, user, reasoningEffort, images, signal: options.signal });
     usageAdd(usage, response);
     toolCalls.push(tool('create_or_patch_draft', true, modelStarted, `iteration ${iteration}; prior=${previous ? hash(previous).slice(0, 12) : 'none'}`, `model=${response.model}; request=${response.requestId ? '[request-id]' : 'unavailable'}`));
     let draft: DirectNativeDraft | null = null;
@@ -270,13 +271,14 @@ export async function generateSimulationAgent(
           provider: 'simulation-agent', model, generatedAt, mapId: request.mapContext.mapId, mapHash: request.mapContext.xodrSha256,
           promptHash: hash(request.prompt), retrievedExampleIds: [], stages: [], repairAttempts: iteration - 1,
           implementation: 'iterative-simulation-agent',
-          agentDetails: { reasoningEffort: REASONING_EFFORT, maxIterations, stopReason: 'verified', iterations: traces },
+          agentDetails: { reasoningEffort, maxIterations, stopReason: 'verified', iterations: traces },
         },
       };
+      const agentDetails = candidate.provenance.agentDetails!;
       return {
         runId: `simulation-agent-run-${randomUUID()}`, provider: 'simulation-agent', model, intent: lastIntent, candidates: [candidate],
         metrics: { latencyMs: Math.round(performance.now() - started), inputTokens: usage.input, outputTokens: usage.output, totalTokens: usage.all, estimatedCostUsd: null, candidatesRequested: 1, candidatesReturned: 1 },
-        diagnostics: [], warnings: [],
+        diagnostics: [], warnings: [], agentDetails,
       };
     }
 
@@ -292,7 +294,12 @@ export async function generateSimulationAgent(
   return {
     runId: `simulation-agent-run-${randomUUID()}`, provider: 'simulation-agent', model, intent: lastIntent, candidates: [],
     metrics: { latencyMs: Math.round(performance.now() - started), inputTokens: usage.input, outputTokens: usage.output, totalTokens: usage.all, estimatedCostUsd: null, candidatesRequested: 1, candidatesReturned: 0 },
-    diagnostics: [{ severity: 'error', code: 'iteration_budget_exhausted', message: `No candidate passed schema, map binding, full simulation, and requested semantic checks within ${maxIterations} iterations.` }],
+    diagnostics: [
+      { severity: 'error', code: 'iteration_budget_exhausted', message: `No candidate passed schema, map binding, full simulation, and requested semantic checks within ${maxIterations} iterations.` },
+      ...traces.at(-1)?.toolCalls.filter((call) => !call.ok).map((call) => ({ severity: 'error' as const, code: call.name, message: call.outputSummary })) ?? [],
+      ...traces.at(-1)?.semanticChecks.filter((check) => !check.pass).map((check) => ({ severity: 'error' as const, code: check.id, message: check.evidence })) ?? [],
+    ],
     warnings: [`Simulation agent stopped at its deterministic ${maxIterations}-iteration budget.`],
+    agentDetails: { reasoningEffort, maxIterations, stopReason: 'iteration-budget-exhausted', iterations: traces },
   };
 }

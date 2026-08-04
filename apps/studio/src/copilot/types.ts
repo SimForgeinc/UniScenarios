@@ -78,7 +78,7 @@ export interface CopilotProvenance {
   readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent' | 'iterative-simulation-agent-vision';
   /** Sanitized agent evidence: tool outcomes and draft deltas, never hidden reasoning or secrets. */
   readonly agentDetails?: {
-    readonly reasoningEffort: 'medium';
+    readonly reasoningEffort: 'low' | 'medium' | 'high';
     readonly maxIterations: number;
     readonly stopReason: 'verified' | 'iteration-budget-exhausted' | 'unsupported-request';
     readonly visualGrounding?: { readonly imageInputSupported: boolean; readonly renderer: 'uniscenarios-deterministic-birds-eye-v1'; readonly imagesSent: number; readonly totalImageBytes: number; readonly imageSha256: readonly string[] };
@@ -175,6 +175,8 @@ export interface CopilotGenerationRequest {
   readonly model?: string;
   /** Iterative providers only; bounded to 1–4 by the server. */
   readonly maxAgentIterations?: number;
+  /** Iterative providers default to high; explicit for controlled comparisons. */
+  readonly agentReasoningEffort?: 'low' | 'medium' | 'high';
   /** Test-only deterministic path; production callers never set this. */
   readonly evaluationMode?: 'deterministic';
 }
@@ -188,6 +190,8 @@ export interface CopilotGenerationResult {
   readonly metrics: CopilotMetrics;
   readonly diagnostics: readonly CopilotDiagnostic[];
   readonly warnings: readonly string[];
+  /** Present for iterative providers, including failed runs with no candidate. */
+  readonly agentDetails?: CopilotProvenance['agentDetails'];
 }
 
 export interface CopilotProvider {

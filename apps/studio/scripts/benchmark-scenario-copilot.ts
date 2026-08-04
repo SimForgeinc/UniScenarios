@@ -50,6 +50,10 @@ interface BenchmarkRow {
   readonly semanticPass: boolean;
   readonly semanticAssertions: readonly SemanticAssertion[];
   readonly editablePass: boolean;
+  readonly convergenceIterations: number | null;
+  readonly relativeActionCount: number | null;
+  readonly relativeTriggerFireCount: number | null;
+  readonly relativeTimingPass: boolean | null;
 }
 
 class BenchmarkPhaseError extends Error {
@@ -202,6 +206,7 @@ async function runCase(
     mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
     simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
     semanticPass: false, semanticAssertions: [], editablePass: false,
+    convergenceIterations: null, relativeActionCount: null, relativeTriggerFireCount: null, relativeTimingPass: null,
   });
   let observed = base();
   let phase = 'provider-generation';
@@ -213,6 +218,7 @@ async function runCase(
       maxCandidates: 1,
       model,
       ...(providerName === 'simulation-agent' ? { maxAgentIterations: 4 } : {}),
+      ...(providerName === 'simulation-agent' ? { agentReasoningEffort: 'high' as const } : {}),
     } as unknown as CopilotGenerationRequest;
     const signal = AbortSignal.timeout(timeoutMs);
     const generated = await provider(request, { signal });
@@ -228,8 +234,9 @@ async function runCase(
       inputTokens: generated.metrics.inputTokens,
       outputTokens: generated.metrics.outputTokens,
       totalTokens: generated.metrics.totalTokens,
-      apiCalls: research.apiCalls ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
+      apiCalls: research.apiCalls ?? generated.agentDetails?.iterations.length ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
       repairCount,
+      convergenceIterations: generated.agentDetails?.iterations.length ?? null,
       scenicCompileMs: research.scenicCompileMs,
       scenicCompilePass: research.scenicCompilePass,
       scenicSampleMs: research.scenicSampleMs,
@@ -259,7 +266,11 @@ async function runCase(
     const simulationWallMs = Math.round(performance.now() - simulationStart);
     const simulationDurationS = simulated.trace.ticks.t.at(-1) ?? 0;
     const simulationPass = simulationDurationS >= 19.9;
-    observed = { ...observed, simulationPass, simulationDurationS, simulationWallMs };
+    const relativeIds = candidate.scenarioDoc.choreography.interactions.filter((item) => item.trigger.kind === 'when').map((item) => item.id);
+    const firedIds = new Set(simulated.trace.events.filter((event) => event.kind === 'trigger_fired').map((event) => event.interactionId));
+    const relativeTriggerFireCount = relativeIds.filter((id) => firedIds.has(id)).length;
+    const relativeTimingPass = relativeIds.length ? relativeTriggerFireCount === relativeIds.length : null;
+    observed = { ...observed, simulationPass, simulationDurationS, simulationWallMs, relativeActionCount: relativeIds.length, relativeTriggerFireCount, relativeTimingPass };
     if (!simulationPass) throw new BenchmarkPhaseError('simulation-incomplete', `Canonical simulation ended at ${simulationDurationS.toFixed(3)} seconds`);
     const semanticAssertions = evaluateCopilotSemantics(benchmarkCase.id, candidate.scenarioDoc);
     const semanticPass = semanticAssertions.every((assertion) => assertion.pass);
@@ -277,6 +288,10 @@ async function runCase(
       semanticPass,
       semanticAssertions,
       editablePass,
+      convergenceIterations: generated.agentDetails?.iterations.length ?? null,
+      relativeActionCount: relativeIds.length,
+      relativeTriggerFireCount,
+      relativeTimingPass,
     };
     if (benchmarkCase.expectedRejection) return { ...completed, outcome: 'unexpected-generation', failureCategory: 'unsupported-request-not-rejected', safeError: 'Provider materialized and simulated an unsupported request' };
     if (!editablePass) return { ...completed, outcome: 'failure', failureCategory: 'apply-editability', safeError: 'Generated document did not pass edit/undo probe' };
@@ -335,6 +350,7 @@ function toCsv(rows: readonly BenchmarkRow[]): string {
     'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'scenicCompileSampleMs', 'mapBindingPass', 'nativeValidationPass',
     'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
     'semanticPass', 'editablePass', 'safeError',
+    'convergenceIterations', 'relativeActionCount', 'relativeTriggerFireCount', 'relativeTimingPass',
   ];
   const quote = (value: unknown): string => `"${String(value ?? '').replaceAll('"', '""')}"`;
   return `${columns.map(quote).join(',')}\n${rows.map((row) => columns.map((column) => quote(row[column])).join(',')).join('\n')}\n`;
@@ -348,14 +364,16 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
     `- Model requested uniformly: \`${metadata.requestedApiModel}\``,
     `- Maps: ${metadata.mapIds.join(', ')}`,
     '- Success requires native map materialization, an editable ScenarioDoc, full 20-second canonical simulation, and every deterministic semantic assertion.',
-    '', '| Provider | Strict success | Full 20s | Semantic mismatch | Pipeline failure | Expected rejection | Median generation ms | Median total ms | Median simulation ms | Scenic compile+sample ms | API calls | Tokens |',
-    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
+    '', '| Provider | Strict success | Full 20s | Semantic mismatch | Pipeline failure | Expected rejection | Relative triggers fired | Median convergence iterations | Median generation ms | Median total ms | Median simulation ms | Scenic compile+sample ms | API calls | Tokens |',
+    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
   ];
   for (const provider of providers) {
     const selected = rows.filter((row) => row.provider === provider);
     const tokens = selected.reduce((sum, row) => sum + (row.totalTokens ?? 0), 0);
     const apiCalls = selected.reduce((sum, row) => sum + (row.apiCalls ?? 0), 0);
-    lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.simulationPass).length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${median(selected.map((row) => row.generationLatencyMs))} | ${median(selected.map((row) => row.totalLatencyMs))} | ${median(selected.map((row) => row.simulationWallMs))} | ${median(selected.map((row) => row.scenicCompileSampleMs))} | ${apiCalls || '—'} | ${tokens || '—'} |`);
+    const relativeTotal = selected.reduce((sum, row) => sum + (row.relativeActionCount ?? 0), 0);
+    const relativeFired = selected.reduce((sum, row) => sum + (row.relativeTriggerFireCount ?? 0), 0);
+    lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.simulationPass).length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${relativeFired}/${relativeTotal} | ${median(selected.map((row) => row.convergenceIterations))} | ${median(selected.map((row) => row.generationLatencyMs))} | ${median(selected.map((row) => row.totalLatencyMs))} | ${median(selected.map((row) => row.simulationWallMs))} | ${median(selected.map((row) => row.scenicCompileSampleMs))} | ${apiCalls || '—'} | ${tokens || '—'} |`);
   }
   lines.push('', '## Case outcomes', '', '| Case | ' + providers.join(' | ') + ' |', '|---|' + providers.map(() => '---').join('|') + '|');
   for (const benchmarkCase of COPILOT_EDGE_CASES.filter((item) => rows.some((row) => row.caseId === item.id))) {

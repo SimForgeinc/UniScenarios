@@ -70,6 +70,7 @@ export const DirectGenerationRequestSchema = z.strictObject({
   maxCandidates: z.number().int().min(1).max(5).default(1),
   model: z.string().min(1).max(200).optional(),
   maxAgentIterations: z.number().int().min(1).max(4).optional(),
+  agentReasoningEffort: z.enum(['low', 'medium', 'high']).optional(),
   evaluationMode: z.literal('deterministic').optional(),
 });
 
