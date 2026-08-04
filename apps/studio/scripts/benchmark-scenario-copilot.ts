@@ -1,0 +1,343 @@
+import { createHash } from 'node:crypto';
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadMap } from '@uniscenarios/cli';
+import { materializeMapBound } from '@uniscenarios/scenario-materializer';
+import { TemplateDocument, type ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
+import { buildFollowRoute, runSimulation, toSceneXZ, type LaneGraph } from '@uniscenarios/sim-engine';
+import { COPILOT_EDGE_CASES, evaluateCopilotSemantics, type CopilotBenchmarkCase, type SemanticAssertion } from '../server/copilot/benchmarkCases.js';
+import { generateDirectDraft } from '../server/copilot/directProvider.js';
+import { generateStagedScenario } from '../server/copilot/stagedProvider.js';
+import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
+
+type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic';
+type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
+
+interface BenchmarkRow {
+  readonly provider: ProviderName;
+  readonly caseId: string;
+  readonly caseSummary: string;
+  readonly mapId: string;
+  readonly requestedModel: string;
+  readonly actualModel: string | null;
+  readonly outcome: 'success' | 'semantic-mismatch' | 'expected-rejection' | 'unexpected-generation' | 'failure';
+  readonly failureCategory: string | null;
+  readonly safeError: string | null;
+  readonly generationLatencyMs: number | null;
+  readonly totalLatencyMs: number;
+  readonly inputTokens: number | null;
+  readonly outputTokens: number | null;
+  readonly totalTokens: number | null;
+  readonly apiCalls: number | null;
+  readonly repairCount: number | null;
+  readonly scenicCompileMs: number | null;
+  readonly scenicCompilePass: boolean | null;
+  readonly scenicSampleMs: number | null;
+  readonly scenicSamplePass: boolean | null;
+  readonly mapBindingPass: boolean;
+  readonly nativeValidationPass: boolean;
+  readonly simulationPass: boolean;
+  readonly simulationDurationS: number | null;
+  readonly simulationWallMs: number | null;
+  readonly simulationHash: string | null;
+  readonly actorCount: number | null;
+  readonly actionCount: number | null;
+  readonly semanticPass: boolean;
+  readonly semanticAssertions: readonly SemanticAssertion[];
+  readonly editablePass: boolean;
+}
+
+class BenchmarkPhaseError extends Error {
+  constructor(readonly phase: string, message: string) { super(message); }
+}
+
+const argv = new Map<string, string>();
+for (let index = 2; index < process.argv.length; index++) {
+  const key = process.argv[index]!;
+  if (key === '--') continue;
+  if (!key.startsWith('--')) throw new Error(`Unexpected benchmark argument: ${key}`);
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith('--')) throw new Error(`Benchmark argument ${key} requires a value`);
+  argv.set(key, value);
+  index++;
+}
+const requestedModel = argv.get('--model') || 'gpt-5.6-luna';
+const mapIds = (argv.get('--maps') || 'richmond-field-station').split(',').filter(Boolean);
+const providerNames = (argv.get('--providers') || 'staged-rag,direct-llm,upstream-chat2scenic').split(',').filter(Boolean) as ProviderName[];
+const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
+const outputDirectory = path.resolve(repositoryRoot, argv.get('--out') || `artifacts/research/scenario-copilot-benchmark-${new Date().toISOString().replace(/[:.]/gu, '')}`);
+const abortAfterMs = Number(argv.get('--timeout-ms') || 360_000);
+
+if (!process.env['OPENAI_API_KEY']) throw new Error('OPENAI_API_KEY must be injected by the server-side credential boundary');
+if (!Number.isFinite(abortAfterMs) || abortAfterMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
+
+const providers = await loadProviders(providerNames);
+const rows: BenchmarkRow[] = [];
+const startedAt = new Date().toISOString();
+for (const mapId of mapIds) {
+  const bundle = await loadMap(mapId);
+  const mapContext = buildMapContext(mapId, bundle.graph);
+  for (const providerName of providerNames) {
+    const provider = providers.get(providerName);
+    if (!provider) throw new Error(`Provider ${providerName} was not loaded`);
+    for (const benchmarkCase of COPILOT_EDGE_CASES) {
+      process.stdout.write(`[${providerName}] ${mapId}/${benchmarkCase.id} ... `);
+      const row = await runCase(providerName, provider, benchmarkCase, mapContext, bundle, requestedModel, abortAfterMs);
+      rows.push(row);
+      process.stdout.write(`${row.outcome}${row.safeError ? ` (${row.failureCategory})` : ''}\n`);
+    }
+  }
+}
+
+await mkdir(outputDirectory, { recursive: true });
+const metadata = {
+  schemaVersion: 1,
+  startedAt,
+  completedAt: new Date().toISOString(),
+  requestedDisplayName: '5.6 LUNA',
+  requestedApiModel: requestedModel,
+  providerNames,
+  mapIds,
+  cases: COPILOT_EDGE_CASES.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
+  rows,
+};
+await writeFile(path.join(outputDirectory, 'results.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
+await writeFile(path.join(outputDirectory, 'results.csv'), toCsv(rows), 'utf8');
+await writeFile(path.join(outputDirectory, 'evaluation.md'), renderReport(rows, metadata), 'utf8');
+console.log(`Benchmark evidence: ${outputDirectory}`);
+
+async function loadProviders(names: readonly ProviderName[]): Promise<Map<ProviderName, ProviderFn>> {
+  const out = new Map<ProviderName, ProviderFn>([
+    ['staged-rag', generateStagedScenario],
+    ['direct-llm', generateDirectDraft],
+  ]);
+  if (names.includes('upstream-chat2scenic')) {
+    // Kept dynamic so the harness remains independently testable while the
+    // pinned research adapter is installed or removed.
+    const modulePath = '../server/copilot/upstreamProvider.js';
+    const upstream = await import(modulePath) as { generateUpstreamChat2Scenic?: ProviderFn };
+    if (typeof upstream.generateUpstreamChat2Scenic !== 'function') throw new Error('Pinned upstream Chat2Scenic provider is not installed');
+    out.set('upstream-chat2scenic', upstream.generateUpstreamChat2Scenic);
+  }
+  return out;
+}
+
+function buildMapContext(mapId: string, graph: LaneGraph): CopilotMapContext {
+  const slots: CopilotPlacementSlot[] = [];
+  const acceptedPoints: { x: number; z: number }[] = [];
+  for (const rsl of graph.laneRsls()) {
+    const geometry = graph.geometry(rsl);
+    if (!geometry || geometry.lane.laneType !== 'driving') continue;
+    const built = buildFollowRoute(graph, rsl, [], 700);
+    if (!built.ok || built.route.lengthM < 260) continue;
+    const sample = built.route.poseAt(15);
+    const scene = toSceneXZ(sample.point);
+    if (acceptedPoints.some((point) => Math.hypot(point.x - scene.x, point.z - scene.z) < 25)) continue;
+    acceptedPoints.push(scene);
+    const [roadId, section, laneId] = sample.rsl!.split(':');
+    const safeSpeed = Math.max(8, Math.min(45, ((built.route.lengthM - 30) / 21) * 3.6));
+    slots.push({
+      id: `trusted-${slots.length + 1}`,
+      actorKinds: ['vehicle', 'pedestrian'],
+      catalogIds: [
+        'vehicle.sedan', 'vehicle.pickup', 'vehicle.van', 'vehicle.motorcycle', 'vehicle.bicycle',
+        'vehicle.bus', 'pedestrian.adult_walking', 'pedestrian.child_walking', 'pedestrian.adult_standing',
+      ],
+      pose: { x: scene.x, y: 0, z: scene.z, headingRad: sample.headingRad },
+      laneRef: { roadId: roadId!, section: Number(section), laneId: Number(laneId), s: sample.storageS, t: 0, headingOffsetRad: 0 },
+      routeLaneRsls: built.route.legs.map((leg) => leg.rsl),
+      availableDownstreamM: built.route.lengthM - 15,
+      recommendedSpeedKph: safeSpeed,
+      labels: [geometry.lane.isJunction ? 'junction' : 'corridor', `road-${roadId}`],
+    });
+    if (slots.length >= 24) break;
+  }
+  if (slots.length < 12) throw new Error(`${mapId} exposes only ${slots.length} well-separated benchmark placement slots`);
+  const points = slots.map((slot) => slot.pose);
+  return {
+    mapId,
+    mapName: graph.mapName || mapId,
+    xodrSha256: graph.topologyDigest || null,
+    laneCount: graph.laneRsls().length,
+    junctionLaneCount: graph.laneRsls().filter((rsl) => graph.geometry(rsl)?.lane.isJunction).length,
+    bounds: {
+      minX: Math.min(...points.map((point) => point.x)), minZ: Math.min(...points.map((point) => point.z)),
+      maxX: Math.max(...points.map((point) => point.x)), maxZ: Math.max(...points.map((point) => point.z)),
+    },
+    placementSlots: slots,
+  };
+}
+
+async function runCase(
+  providerName: ProviderName,
+  provider: ProviderFn,
+  benchmarkCase: CopilotBenchmarkCase,
+  mapContext: CopilotMapContext,
+  bundle: Awaited<ReturnType<typeof loadMap>>,
+  model: string,
+  timeoutMs: number,
+): Promise<BenchmarkRow> {
+  const wallStart = performance.now();
+  const base = (): Omit<BenchmarkRow, 'outcome' | 'failureCategory' | 'safeError'> => ({
+    provider: providerName, caseId: benchmarkCase.id, caseSummary: benchmarkCase.summary, mapId: mapContext.mapId,
+    requestedModel: model, actualModel: null, generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
+    inputTokens: null, outputTokens: null, totalTokens: null, apiCalls: null, repairCount: null,
+    scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null,
+    mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
+    simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
+    semanticPass: false, semanticAssertions: [], editablePass: false,
+  });
+  let phase = 'provider-generation';
+  try {
+    const request = {
+      providerId: providerName,
+      prompt: benchmarkCase.prompt,
+      mapContext,
+      maxCandidates: 1,
+      model,
+    } as unknown as CopilotGenerationRequest;
+    const signal = AbortSignal.timeout(timeoutMs);
+    const generated = await provider(request, { signal });
+    const candidate = generated.candidates[0];
+    const repairCount = candidate?.provenance.repairAttempts ?? 0;
+    const research = readResearchDetails(candidate);
+    const common = {
+      ...base(),
+      actualModel: generated.model,
+      generationLatencyMs: generated.metrics.latencyMs,
+      inputTokens: generated.metrics.inputTokens,
+      outputTokens: generated.metrics.outputTokens,
+      totalTokens: generated.metrics.totalTokens,
+      apiCalls: research.apiCalls ?? (generated.model.includes('deterministic') ? 0 : 1 + repairCount),
+      repairCount,
+      scenicCompileMs: research.scenicCompileMs,
+      scenicCompilePass: research.scenicCompilePass,
+      scenicSampleMs: research.scenicSampleMs,
+      scenicSamplePass: research.scenicSamplePass,
+    };
+    if (!candidate) {
+      if (benchmarkCase.expectedRejection) return { ...common, outcome: 'expected-rejection', failureCategory: 'expected-rejection', safeError: 'Provider returned no candidate for an unsupported request', totalLatencyMs: Math.round(performance.now() - wallStart) };
+      return { ...common, outcome: 'failure', failureCategory: 'no-candidate', safeError: 'Provider returned no candidate', totalLatencyMs: Math.round(performance.now() - wallStart) };
+    }
+    phase = 'schema-editability';
+    const editable = TemplateDocument.fromJSON(candidate.scenarioDoc);
+    const originalDescription = editable.data.meta.description;
+    const changed = editable.setMeta({ description: `${originalDescription} [benchmark edit probe]`.slice(0, 2_000) });
+    const undid = editable.undo();
+    const editablePass = changed && undid && editable.data.meta.description === originalDescription;
+    phase = 'map-binding';
+    const product = materializeMapBound(candidate.scenarioDoc, bundle, { drawIndex: -1 });
+    const mapBindingPass = product.input.actors.length === candidate.scenarioDoc.roles.length;
+    const nativeValidationPass = product.manifest.feasible;
+    if (!nativeValidationPass) throw new BenchmarkPhaseError('native-validation', `Materializer rejected candidate: ${product.manifest.issues.slice(0, 3).join('; ')}`);
+    phase = 'simulation';
+    const simulationStart = performance.now();
+    const simulated = runSimulation(product.input, { graph: bundle.graph, guards: 'collect' });
+    const simulationWallMs = Math.round(performance.now() - simulationStart);
+    const simulationDurationS = simulated.trace.ticks.t.at(-1) ?? 0;
+    const simulationPass = simulationDurationS >= 19.9;
+    if (!simulationPass) throw new BenchmarkPhaseError('simulation-incomplete', `Canonical simulation ended at ${simulationDurationS.toFixed(3)} seconds`);
+    const semanticAssertions = evaluateCopilotSemantics(benchmarkCase.id, candidate.scenarioDoc);
+    const semanticPass = semanticAssertions.every((assertion) => assertion.pass);
+    const completed = {
+      ...common,
+      totalLatencyMs: Math.round(performance.now() - wallStart),
+      mapBindingPass,
+      nativeValidationPass,
+      simulationPass,
+      simulationDurationS,
+      simulationWallMs,
+      simulationHash: traceDigest(simulated.trace),
+      actorCount: candidate.scenarioDoc.roles.length,
+      actionCount: candidate.scenarioDoc.choreography.interactions.length,
+      semanticPass,
+      semanticAssertions,
+      editablePass,
+    };
+    if (benchmarkCase.expectedRejection) return { ...completed, outcome: 'unexpected-generation', failureCategory: 'unsupported-request-not-rejected', safeError: 'Provider materialized and simulated an unsupported request' };
+    if (!editablePass) return { ...completed, outcome: 'failure', failureCategory: 'apply-editability', safeError: 'Generated document did not pass edit/undo probe' };
+    if (!semanticPass) return { ...completed, outcome: 'semantic-mismatch', failureCategory: 'semantic-constraints', safeError: failedAssertions(semanticAssertions) };
+    return { ...completed, outcome: 'success', failureCategory: null, safeError: null };
+  } catch (error) {
+    const failureCategory = error instanceof BenchmarkPhaseError ? error.phase : categorizeError(error, phase);
+    if (benchmarkCase.expectedRejection && phase === 'provider-generation') {
+      return { ...base(), outcome: 'expected-rejection', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+    }
+    return { ...base(), outcome: 'failure', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+  }
+}
+
+function readResearchDetails(candidate: CopilotGenerationResult['candidates'][number] | undefined): {
+  apiCalls: number | null; scenicCompileMs: number | null; scenicCompilePass: boolean | null; scenicSampleMs: number | null; scenicSamplePass: boolean | null;
+} {
+  const raw = (candidate as unknown as { researchDetails?: Record<string, unknown> } | undefined)?.researchDetails ?? {};
+  const compile = raw['scenicCompile'] as Record<string, unknown> | undefined;
+  const sample = raw['scenicSample'] as Record<string, unknown> | undefined;
+  return {
+    apiCalls: numberOrNull(raw['apiCalls']),
+    scenicCompileMs: numberOrNull(compile?.['durationMs']),
+    scenicCompilePass: booleanOrNull(compile?.['pass']),
+    scenicSampleMs: numberOrNull(sample?.['durationMs']),
+    scenicSamplePass: booleanOrNull(sample?.['pass']),
+  };
+}
+
+function numberOrNull(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }
+function booleanOrNull(value: unknown): boolean | null { return typeof value === 'boolean' ? value : null; }
+function failedAssertions(assertions: readonly SemanticAssertion[]): string { return assertions.filter((item) => !item.pass).map((item) => `${item.id}: ${item.evidence}`).join('; ').slice(0, 500); }
+function traceDigest(trace: unknown): string { return createHash('sha256').update(JSON.stringify(trace)).digest('hex'); }
+function safeError(error: unknown): string {
+  return (error instanceof Error ? error.message : String(error))
+    .replace(/sk-[A-Za-z0-9_-]+/gu, '[redacted]')
+    .replace(/req_[A-Za-z0-9_-]+/gu, '[request-id]')
+    .slice(0, 500);
+}
+function categorizeError(error: unknown, phase: string): string {
+  const message = safeError(error).toLowerCase();
+  if (message.includes('model') && (message.includes('not available') || message.includes('404'))) return 'model-unavailable';
+  if (message.includes('api key') || message.includes('401') || message.includes('credential')) return 'credential';
+  if (message.includes('timeout') || message.includes('aborted')) return 'timeout';
+  if (message.includes('json') || message.includes('schema') || message.includes('parse')) return 'provider-output-schema';
+  return phase;
+}
+
+function toCsv(rows: readonly BenchmarkRow[]): string {
+  const columns: (keyof BenchmarkRow)[] = [
+    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'outcome', 'failureCategory',
+    'generationLatencyMs', 'totalLatencyMs', 'inputTokens', 'outputTokens', 'totalTokens', 'apiCalls', 'repairCount',
+    'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'mapBindingPass', 'nativeValidationPass',
+    'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
+    'semanticPass', 'editablePass', 'safeError',
+  ];
+  const quote = (value: unknown): string => `"${String(value ?? '').replaceAll('"', '""')}"`;
+  return `${columns.map(quote).join(',')}\n${rows.map((row) => columns.map((column) => quote(row[column])).join(',')).join('\n')}\n`;
+}
+
+function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: string; completedAt: string; requestedApiModel: string; mapIds: readonly string[] }): string {
+  const providers = [...new Set(rows.map((row) => row.provider))];
+  const lines = [
+    '# Scenario Copilot edge-case evaluation', '',
+    `- Run: ${metadata.startedAt} to ${metadata.completedAt}`,
+    `- Model requested uniformly: \`${metadata.requestedApiModel}\``,
+    `- Maps: ${metadata.mapIds.join(', ')}`,
+    '- Success requires native map materialization, an editable ScenarioDoc, full 20-second canonical simulation, and every deterministic semantic assertion.',
+    '', '| Provider | Success | Semantic mismatch | Pipeline failure | Expected rejection | Median generation ms | Tokens |',
+    '|---|---:|---:|---:|---:|---:|---:|',
+  ];
+  for (const provider of providers) {
+    const selected = rows.filter((row) => row.provider === provider);
+    const latency = selected.map((row) => row.generationLatencyMs).filter((value): value is number => value !== null).sort((a, b) => a - b);
+    const tokens = selected.reduce((sum, row) => sum + (row.totalTokens ?? 0), 0);
+    lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${latency.length ? latency[Math.floor(latency.length / 2)] : '—'} | ${tokens || '—'} |`);
+  }
+  lines.push('', '## Case outcomes', '', '| Case | ' + providers.join(' | ') + ' |', '|---|' + providers.map(() => '---').join('|') + '|');
+  for (const benchmarkCase of COPILOT_EDGE_CASES) {
+    lines.push(`| ${benchmarkCase.summary} | ${providers.map((provider) => rows.find((row) => row.provider === provider && row.caseId === benchmarkCase.id)?.outcome ?? 'not run').join(' | ')} |`);
+  }
+  const failures = rows.filter((row) => row.outcome !== 'success').slice(0, 12);
+  lines.push('', '## Representative failures', '');
+  for (const row of failures) lines.push(`- **${row.provider} / ${row.caseSummary}:** ${row.failureCategory ?? row.outcome} — ${row.safeError ?? 'no safe diagnostic'}`);
+  lines.push('', 'Raw model responses and credentials are deliberately excluded. See `results.json` for executable assertion evidence and per-run metrics.', '');
+  return `${lines.join('\n')}\n`;
+}

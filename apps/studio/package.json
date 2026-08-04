@@ -5,6 +5,7 @@
   "license": "Apache-2.0",
   "type": "module",
   "scripts": {
+    "benchmark:copilot": "tsx scripts/benchmark-scenario-copilot.ts",
     "campaign:generate": "node scripts/generate-edge-campaign.mjs",
     "predev": "pnpm campaign:generate",
     "dev": "tsx server/studioDev.ts",
