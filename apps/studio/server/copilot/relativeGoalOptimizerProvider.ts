@@ -78,6 +78,14 @@ function desiredClearance(prompt: string): number | null {
   return match ? Number(match[1]) : /near.?miss/iu.test(prompt) ? .8 : null;
 }
 
+function controlLimitations(prompt: string): string[] {
+  const warnings: string[] = [];
+  if (/occlu|visibility|line.?of.?sight/iu.test(prompt)) warnings.push('Relative region/visibility/occlusion triggers are not yet in the optimizer draft schema; occluders remain authored semantic actors, and no visibility trigger is invented.');
+  if (/signal|traffic light/iu.test(prompt)) warnings.push('The optimizer cannot author map signal plans from its current trusted map context; signal-dependent goals may exhaust the evaluation budget.');
+  if (/region|geofence|area trigger/iu.test(prompt)) warnings.push('Region-entry triggers are not yet an allowlisted optimizer control; the provider will not silently replace them with a clock trigger.');
+  return warnings;
+}
+
 function score(item: OptimizerEvaluation, clearance: number | null): number {
   if (!item.schemaPass) return -1_000;
   if (!item.mapBindingPass) return -800;
@@ -140,6 +148,7 @@ export async function generateRelativeGoalOptimizer(
   const evaluations: OptimizerEvaluation[] = [];
   let winner: { draft: DirectNativeDraft; doc: CopilotCandidate['scenarioDoc'] } | null = null;
   const clearance = desiredClearance(request.prompt);
+  const limitations = controlLimitations(request.prompt);
 
   for (let index = 0; index < search.length; index++) {
     options.signal?.throwIfAborted();
@@ -186,7 +195,7 @@ export async function generateRelativeGoalOptimizer(
   if (!winner) return {
     runId: `relative-goal-run-${randomUUID()}`, provider: 'relative-goal-optimizer', model, intent, candidates: [], metrics: { ...metrics, candidatesReturned: 0 }, optimizerDetails, iterationTrace: publicTrace,
     diagnostics: [{ severity: 'error', code: 'optimizer_budget_exhausted', message: `No parameter set passed full simulation and requested goals in ${evaluations.length}/${budget} evaluations.` }],
-    warnings: ['The model was called once; additional model repair was deliberately disabled for this comparison.'],
+    warnings: ['The model was called once; additional model repair was deliberately disabled for this comparison.', ...limitations],
   };
   const generatedAt = (options.now?.() ?? new Date()).toISOString();
   const candidate: CopilotCandidate = {
@@ -198,5 +207,5 @@ export async function generateRelativeGoalOptimizer(
     },
   };
   options.onProgress?.({ stage: 'complete', message: `Relative goal verified after ${evaluations.length} deterministic evaluations`, completed: evaluations.length, total: evaluations.length });
-  return { runId: `relative-goal-run-${randomUUID()}`, provider: 'relative-goal-optimizer', model, intent, candidates: [candidate], metrics: { ...metrics, candidatesReturned: 1 }, diagnostics: [], warnings: [], optimizerDetails, iterationTrace: publicTrace };
+  return { runId: `relative-goal-run-${randomUUID()}`, provider: 'relative-goal-optimizer', model, intent, candidates: [candidate], metrics: { ...metrics, candidatesReturned: 1 }, diagnostics: [], warnings: limitations, optimizerDetails, iterationTrace: publicTrace };
 }
