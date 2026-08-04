@@ -235,7 +235,7 @@ async function runCase(
     const signal = AbortSignal.timeout(timeoutMs);
     const generated = await provider(request, { signal });
     const candidate = generated.candidates[0];
-    const repairCount = candidate?.provenance.repairAttempts ?? 0;
+    const repairCount = candidate?.provenance.repairAttempts ?? (generated.agentDetails ? Math.max(0, generated.agentDetails.iterations.length - 1) : 0);
     const research = readResearchDetails(candidate);
     const common = {
       ...base(),
@@ -262,7 +262,7 @@ async function runCase(
     observed = common;
     if (!candidate) {
       if (benchmarkCase.expectedRejection) return { ...common, outcome: 'expected-rejection', failureCategory: 'expected-rejection', safeError: 'Provider returned no candidate for an unsupported request', totalLatencyMs: Math.round(performance.now() - wallStart) };
-      return { ...common, outcome: 'failure', failureCategory: 'no-candidate', safeError: 'Provider returned no candidate', totalLatencyMs: Math.round(performance.now() - wallStart) };
+      return { ...common, outcome: 'failure', failureCategory: 'no-candidate', safeError: generated.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ').slice(0, 500) || 'Provider returned no candidate', totalLatencyMs: Math.round(performance.now() - wallStart) };
     }
     phase = 'schema-editability';
     const editable = TemplateDocument.fromJSON(candidate.scenarioDoc);
