@@ -38,7 +38,7 @@ function safe(value: unknown, limit = 1_500): string {
   return text.replace(/sk-[A-Za-z0-9_-]+/gu, '[redacted]').replace(/req_[A-Za-z0-9_-]+/gu, '[request-id]').slice(0, limit);
 }
 
-function contextSummary(request: CopilotGenerationRequest): string {
+export function contextSummary(request: CopilotGenerationRequest): string {
   return JSON.stringify({
     map: { id: request.mapContext.mapId, name: request.mapContext.mapName, lanes: request.mapContext.laneCount, junctionLanes: request.mapContext.junctionLaneCount },
     slots: request.mapContext.placementSlots.map((slot) => ({
@@ -74,7 +74,7 @@ function draftDiff(previous: DirectNativeDraft | null, current: DirectNativeDraf
   return changes.filter(Boolean).slice(0, 64);
 }
 
-function intentFromDraft(draft: DirectNativeDraft): CopilotIntent {
+export function intentFromDraft(draft: DirectNativeDraft): CopilotIntent {
   const actors = draft.actors.map((actor, index) => ({
     id: actor.id, role: (index === 0 ? 'ego' : 'adversary') as 'ego' | 'adversary',
     kind: actor.catalogId.startsWith('pedestrian.') ? 'pedestrian' as const : actor.catalogId.startsWith('vehicle.') ? 'vehicle' as const : 'prop' as const,
@@ -98,7 +98,7 @@ function fallbackIntent(prompt: string): CopilotIntent {
   };
 }
 
-function requestedChecks(prompt: string, doc: CopilotCandidate['scenarioDoc']): SemanticAssertion[] {
+export function requestedChecks(prompt: string, doc: CopilotCandidate['scenarioDoc']): SemanticAssertion[] {
   const exact = COPILOT_EDGE_CASES.find((item) => item.prompt.trim() === prompt.trim());
   if (exact) return evaluateCopilotSemantics(exact.id, doc);
   const lower = prompt.toLowerCase();
@@ -112,7 +112,7 @@ function requestedChecks(prompt: string, doc: CopilotCandidate['scenarioDoc']): 
   return checks.length ? checks : [{ id: 'native-executable-request', pass: true, evidence: 'No additional deterministic semantic predicate was inferred' }];
 }
 
-function impossible(prompt: string): boolean {
+export function impossible(prompt: string): boolean {
   const lower = prompt.toLowerCase();
   return /\b(teleport|flying car|fly through|drive through buildings|ten meters above the road)\b/u.test(lower);
 }

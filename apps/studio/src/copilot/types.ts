@@ -1,6 +1,6 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
-export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'verified-template-search';
+export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'verified-template-search' | 'relative-goal-optimizer';
 
 export type CopilotActorKind = 'vehicle' | 'pedestrian' | 'prop';
 
@@ -75,7 +75,7 @@ export interface CopilotProvenance {
   readonly retrievedExampleIds: readonly string[];
   readonly stages: readonly { readonly name: CopilotStage; readonly durationMs: number }[];
   readonly repairAttempts: number;
-  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent' | 'iterative-simulation-agent-vision' | 'verified-template-search';
+  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent' | 'iterative-simulation-agent-vision' | 'verified-template-search' | 'relative-goal-optimizer';
   /** Sanitized agent evidence: tool outcomes and draft deltas, never hidden reasoning or secrets. */
   readonly agentDetails?: {
     readonly reasoningEffort: 'low' | 'medium' | 'high';
@@ -122,6 +122,28 @@ export interface CopilotProvenance {
         };
       };
       readonly semanticChecks: readonly { readonly id: string; readonly pass: boolean; readonly evidence: string }[];
+    }[];
+  };
+  readonly optimizerDetails?: {
+    readonly reasoningEffort: 'high';
+    readonly llmCalls: 1;
+    readonly evaluationBudget: number;
+    readonly stopReason: 'verified' | 'evaluation-budget-exhausted' | 'unsupported-request';
+    readonly evaluations: readonly {
+      readonly index: number;
+      readonly draftHash: string;
+      readonly parameterChanges: readonly string[];
+      readonly score: number;
+      readonly schemaPass: boolean;
+      readonly mapBindingPass: boolean;
+      readonly simulationPass: boolean;
+      readonly simulationDurationS: number | null;
+      readonly simulationWallMs: number | null;
+      readonly semanticChecks: readonly { readonly id: string; readonly pass: boolean; readonly evidence: string }[];
+      readonly relativeTriggers: { readonly authored: number; readonly fired: number };
+      readonly closestApproach?: { readonly distanceM: number; readonly t: number; readonly pair: readonly [string, string] };
+      readonly collisions: number;
+      readonly diagnostic: string | null;
     }[];
   };
   readonly iterationTrace?: readonly { readonly iteration: number; readonly summary: string; readonly toolCalls: readonly { readonly name: string; readonly status: 'success' | 'failure' | 'skipped'; readonly summary: string }[]; readonly thumbnailDataUrl: string | null; readonly altText?: string; readonly legend?: readonly string[]; readonly provenance?: Record<string, unknown> }[];
@@ -178,6 +200,8 @@ export interface CopilotGenerationRequest {
   readonly maxAgentIterations?: number;
   /** Iterative providers default to high; explicit for controlled comparisons. */
   readonly agentReasoningEffort?: 'low' | 'medium' | 'high';
+  /** Deterministic optimizer only; bounded to 1–32 native simulations. */
+  readonly maxOptimizerEvaluations?: number;
   /** Test-only deterministic path; production callers never set this. */
   readonly evaluationMode?: 'deterministic';
 }
@@ -195,6 +219,7 @@ export interface CopilotGenerationResult {
   readonly agentDetails?: CopilotProvenance['agentDetails'];
   /** Sanitized public iteration evidence, including visuals for failed runs. */
   readonly iterationTrace?: CopilotProvenance['iterationTrace'];
+  readonly optimizerDetails?: CopilotProvenance['optimizerDetails'];
 }
 
 export interface CopilotProvider {

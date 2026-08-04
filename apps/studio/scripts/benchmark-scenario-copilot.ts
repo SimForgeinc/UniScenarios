@@ -11,9 +11,10 @@ import { generateDirectDraft } from '../server/copilot/directProvider.js';
 import { generateStagedScenario } from '../server/copilot/stagedProvider.js';
 import { generateSimulationAgent } from '../server/copilot/simulationAgentProvider.js';
 import { generateSimulationAgentVision } from '../server/copilot/simulationAgentVisionProvider.js';
+import { generateRelativeGoalOptimizer } from '../server/copilot/relativeGoalOptimizerProvider.js';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
-type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision';
+type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'relative-goal-optimizer';
 type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
 
 interface BenchmarkRow {
@@ -136,6 +137,7 @@ async function loadProviders(names: readonly ProviderName[]): Promise<Map<Provid
     ['direct-llm', generateDirectDraft],
     ['simulation-agent', generateSimulationAgent],
     ['simulation-agent-vision', generateSimulationAgentVision],
+    ['relative-goal-optimizer', generateRelativeGoalOptimizer],
   ]);
   if (names.includes('upstream-chat2scenic')) {
     // Kept dynamic so the harness remains independently testable while the
@@ -229,6 +231,7 @@ async function runCase(
       maxCandidates: 1,
       model,
       ...((providerName === 'simulation-agent' || providerName === 'simulation-agent-vision') ? { maxAgentIterations: 4 } : {}),
+      ...(providerName === 'relative-goal-optimizer' ? { maxOptimizerEvaluations: 24 } : {}),
       agentReasoningEffort: effort,
       ...(providerName === 'simulation-agent' ? { agentReasoningEffort: 'high' as const } : {}),
     } as unknown as CopilotGenerationRequest;
@@ -246,10 +249,10 @@ async function runCase(
       inputTokens: generated.metrics.inputTokens,
       outputTokens: generated.metrics.outputTokens,
       totalTokens: generated.metrics.totalTokens,
-      apiCalls: research.apiCalls ?? generated.agentDetails?.iterations.length ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
+      apiCalls: research.apiCalls ?? generated.agentDetails?.iterations.length ?? generated.optimizerDetails?.llmCalls ?? (providerName === 'staged-rag' ? 1 : generated.model.includes('deterministic') ? 0 : 1 + repairCount),
       repairCount,
-      convergenceIterations: generated.agentDetails?.iterations.length ?? null,
-      stopReason: generated.agentDetails?.stopReason ?? null,
+      convergenceIterations: generated.agentDetails?.iterations.length ?? generated.optimizerDetails?.evaluations.length ?? null,
+      stopReason: generated.agentDetails?.stopReason ?? generated.optimizerDetails?.stopReason ?? null,
       imagesSent: generated.agentDetails?.visualGrounding?.imagesSent ?? null,
       totalImageBytes: generated.agentDetails?.visualGrounding?.totalImageBytes ?? null,
       imageCostUsd: null,

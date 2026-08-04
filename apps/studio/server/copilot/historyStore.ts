@@ -106,7 +106,7 @@ function liveEntry(request: CopilotGenerationRequest, result: CopilotGenerationR
     scenicCompilePass: candidate?.provenance.researchDetails?.scenicCompiled ?? null,
     scenicSamplePass: candidate?.provenance.researchDetails?.scenicSampled ?? null,
     latencyMs: result.metrics.latencyMs, totalTokens: result.metrics.totalTokens,
-    apiCalls: candidate?.provenance.researchDetails?.apiCalls ?? 1, repairCount: candidate?.provenance.repairAttempts ?? null,
+    apiCalls: candidate?.provenance.researchDetails?.apiCalls ?? candidate?.provenance.optimizerDetails?.llmCalls ?? 1, repairCount: candidate?.provenance.repairAttempts ?? null,
     outcome: candidate ? 'generated' : 'failure', failureCategory: candidate ? null : 'generation',
     diagnostic: [...result.diagnostics, ...(candidate?.diagnostics ?? [])].map((item) => item.message).join('; ') || null,
     provenance: candidate ? { ...candidate.provenance } : { provider: result.provider, model: result.model },
@@ -135,8 +135,9 @@ function sanitizeIterationTrace(value: unknown): CopilotGenerationHistoryEntry['
   });
 }
 
-function isProvider(value: unknown): value is 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' {
-  return value === 'staged-rag' || value === 'direct-llm' || value === 'upstream-chat2scenic';
+function isProvider(value: unknown): value is CopilotGenerationHistoryEntry['provider'] {
+  return value === 'staged-rag' || value === 'direct-llm' || value === 'upstream-chat2scenic'
+    || value === 'simulation-agent' || value === 'simulation-agent-vision' || value === 'relative-goal-optimizer';
 }
 function boolOrNull(value: unknown): boolean | null { return typeof value === 'boolean' ? value : null; }
 function numberOrNull(value: unknown): number | null { return typeof value === 'number' && Number.isFinite(value) ? value : null; }

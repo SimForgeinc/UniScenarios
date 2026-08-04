@@ -120,6 +120,9 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" aria-pressed={provider === 'verified-template-search'} style={{ ...styles.provider, ...(provider === 'verified-template-search' ? styles.providerActive : {}) }} onClick={() => setProvider('verified-template-search')}>
         <strong>Verified template search</strong><small>Rank proven native patterns, then tune deterministically</small>
       </button>
+      <button type="button" aria-pressed={provider === 'relative-goal-optimizer'} style={{ ...styles.provider, ...(provider === 'relative-goal-optimizer' ? styles.providerActive : {}) }} onClick={() => setProvider('relative-goal-optimizer')}>
+        <strong>Relative goal optimizer</strong><small>1 intent call · bounded native parameter search</small>
+      </button>
     </div>
     <label style={styles.label} htmlFor="copilot-prompt">Describe the scenario</label>
     <textarea id="copilot-prompt" data-testid="scenario-copilot-prompt" style={styles.prompt} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} disabled={busy} />
@@ -127,7 +130,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     {progress ? <div role="status" style={styles.progress}><span>{progress.message}</span><span>{progress.completed}/{progress.total}</span></div> : null}
     {error ? <div role="alert" style={styles.error}>{error}</div> : null}
     {result ? <>
-      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : result.provider === 'simulation-agent' ? 'Simulation agent · no image' : result.provider === 'simulation-agent-vision' ? 'Simulation agent + 2D' : result.provider === 'verified-template-search' ? 'Verified template search' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
+      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : result.provider === 'simulation-agent' ? 'Simulation agent · no image' : result.provider === 'simulation-agent-vision' ? 'Simulation agent + 2D' : result.provider === 'verified-template-search' ? 'Verified template search' : result.provider === 'relative-goal-optimizer' ? 'Relative goal optimizer' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
       {result.warnings.map((warning) => <div key={warning} style={styles.warning}>{warning}</div>)}
       <details style={styles.intent} open>
         <summary><strong>Review structured intent</strong> · editable before regeneration</summary>
@@ -154,6 +157,15 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
                 <div>{iteration.draftDiff.join(' · ') || 'No typed draft delta'}</div>
                 <div>{iteration.toolCalls.map((call) => `${call.ok ? '✓' : '✕'} ${call.name}`).join(' · ')}</div>
                 {iteration.semanticChecks.filter((check) => !check.pass).map((check) => <div key={check.id} style={styles.invalid}>{check.id}: {check.evidence}</div>)}
+              </div>)}
+            </details> : null}
+            {candidate.provenance.optimizerDetails ? <details style={styles.agentEvidence}>
+              <summary>1 intent call · {candidate.provenance.optimizerDetails.evaluations.length}/{candidate.provenance.optimizerDetails.evaluationBudget} native evaluations · {candidate.provenance.optimizerDetails.stopReason}</summary>
+              {candidate.provenance.optimizerDetails.evaluations.slice(0, 12).map((evaluation) => <div key={evaluation.index} style={styles.agentIteration}>
+                <strong>Evaluation {evaluation.index}</strong> · score {evaluation.score} · {evaluation.simulationPass ? '20s simulation' : 'rejected'}
+                <div>{evaluation.parameterChanges.join(' · ')}</div>
+                <div>Relative triggers {evaluation.relativeTriggers.fired}/{evaluation.relativeTriggers.authored} · collisions {evaluation.collisions}</div>
+                {evaluation.diagnostic ? <div style={styles.invalid}>{evaluation.diagnostic}</div> : null}
               </div>)}
             </details> : null}
             <button type="button" data-testid="scenario-copilot-apply" style={styles.apply} disabled={!validation || validation === 'running' || !validation.valid} onClick={() => onApply(candidate)}>Apply & open in editor</button>
