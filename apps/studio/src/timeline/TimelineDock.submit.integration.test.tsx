@@ -64,6 +64,22 @@ describe('timeline action dialog submission', () => {
     expect(submitTimelineAction(document, { ...draft(pedestrianId!, 'walk'), triggerMode: 'ttc', triggerActorId: 'deleted-car', triggerThreshold: 2, triggerDeadline: 10, triggerIfNever: 'skip' })).toEqual({ ok: false, message: 'The trigger actor no longer exists. Choose another authored actor.' });
     document.dispose();
   });
+
+  it('persists near-miss intent as a typed route goal rather than baked scene points', async () => {
+    const { store } = memoryStore();
+    const document = await EditorDocument.open(MAPS[0]!, { store, autosaveMs: 60_000 });
+    const [pedestrianId] = document.add([{ id: 'walker', catalogId: 'pedestrian.adult_walking', x: 0, y: 0, z: 0, headingRad: 0 }]);
+    const [vehicleId] = document.add([{ id: 'car', catalogId: 'vehicle.sedan', x: 15, y: 0, z: 0, headingRad: Math.PI, routeLaneRsls: ['5:0:-3', '6:0:-3'], initialSpeedKph: 30 }]);
+    const result = submitTimelineAction(document, { ...draft(pedestrianId!, 'walk'), desiredOutcome: 'nearMiss', triggerMode: 'distance', triggerActorId: vehicleId, triggerThreshold: 10, triggerDeadline: 12, triggerIfNever: 'skip', nearMissClearanceM: .7, nearMissPass: 'front', nearMissMinSpeedMps: .8, nearMissMaxSpeedMps: 2.4 });
+    expect(result.ok).toBe(true);
+    expect(document.data.choreography.interactions[0]).toMatchObject({ actor: pedestrianId, verb: 'route', trigger: { kind: 'when', condition: { kind: 'distance', from: vehicleId, to: { role: pedestrianId }, valueM: 10 } }, target: { mode: 'nearMiss', target: vehicleId, clearanceM: .7, pass: 'front', minSpeedKph: 2.88, maxSpeedKph: 8.64, deadlineS: 12 } });
+    expect(document.data.invariants).toContainEqual({ id: 'near_miss_near_miss_walker_1', kind: 'near_miss', pedestrian: pedestrianId, target: vehicleId, clearanceRangeM: [.65, .75], essentiality: 'required' });
+    expect(JSON.stringify(document.data.choreography.interactions[0])).not.toContain('points');
+    expect(document.undo()).toBe(true);
+    expect(document.data.choreography.interactions).toHaveLength(0);
+    expect(document.data.invariants).toHaveLength(0);
+    document.dispose();
+  });
   it('adds Accelerate as one undoable action and publishes the preview revision synchronously', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);

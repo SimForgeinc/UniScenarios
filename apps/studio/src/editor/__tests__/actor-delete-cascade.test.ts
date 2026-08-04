@@ -31,6 +31,8 @@ describe('actor deletion graph transaction', () => {
       overrides: [{ path: 'roles#ambulance.initialSpeedKph', op: 'set', value: 25 }],
     });
     source.metricSubject = 'ambulance';
+    source.choreography.interactions.push({ id: 'near-miss-goal', actor: 'cross-traffic', trigger: { kind: 'when', condition: { kind: 'distance', from: 'ambulance', to: { role: 'cross-traffic' }, measure: 'euclidean', op: '<=', valueM: 12 }, byLatest: 12, ifNever: 'skip' }, verb: 'route', target: { mode: 'nearMiss', target: 'ambulance', clearanceM: .6, pass: 'auto', minSpeedKph: 2, maxSpeedKph: 9, deadlineS: 12 } });
+    source.invariants.push({ id: 'near-miss-clearance', kind: 'near_miss', pedestrian: 'cross-traffic', target: 'ambulance', clearanceRangeM: [.5, .7], essentiality: 'required' });
     document.importTemplate(source);
     const ambulance = document.data.roles.find((role) => role.id === 'ambulance')!;
     document.addActorSensor('ambulance', defaultDashCamera(ambulance.actor, 'ambulance-dash'));
@@ -42,6 +44,8 @@ describe('actor deletion graph transaction', () => {
     expect(document.data.choreography.interactions.some((interaction) => interaction.actor === 'ambulance')).toBe(false);
     expect(document.data.choreography.interactions.map((interaction) => interaction.id)).not.toContain('ambulance-exempt');
     expect(document.data.invariants.map((invariant) => invariant.id)).not.toContain('protected-yield-order');
+    expect(document.data.choreography.interactions.map((interaction) => interaction.id)).not.toContain('near-miss-goal');
+    expect(document.data.invariants.map((invariant) => invariant.id)).not.toContain('near-miss-clearance');
     expect(document.data.props.map((prop) => prop.id)).not.toContain('ambulance-load');
     expect(document.data.variants.map((variant) => variant.id)).not.toContain('ambulance-speed-variant');
     expect(document.data.metricSubject).toBeUndefined();

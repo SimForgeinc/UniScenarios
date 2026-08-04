@@ -26,6 +26,7 @@ import {
   type LaneRef,
   type RoleBinding,
   type Interaction,
+  type Invariant,
   type MapSignalPlan,
   type ActorSensor,
   type ScenarioTemplateV2,
@@ -268,11 +269,12 @@ function conditionReferencesMissingRole(condition: Record<string, unknown>, role
 function targetReferencesMissingRole(target: Interaction['target'], roles: ReadonlySet<string>): boolean {
   if (!isRecord(target)) return false;
   const candidate = target as unknown as Record<string, unknown>;
-  return typeof candidate.role === 'string' && !roles.has(candidate.role);
+  return (typeof candidate.role === 'string' && !roles.has(candidate.role))
+    || (candidate.mode === 'nearMiss' && typeof candidate.target === 'string' && !roles.has(candidate.target));
 }
 
 function invariantReferencesMissingRole(invariant: Record<string, unknown>, roles: ReadonlySet<string>): boolean {
-  for (const key of ['of', 'to', 'syncWith'] as const) {
+  for (const key of ['of', 'to', 'syncWith', 'pedestrian', 'target'] as const) {
     const value = invariant[key];
     if (typeof value === 'string' && !roles.has(value)) return true;
   }
@@ -659,6 +661,31 @@ export class EditorDocument {
   /** Add one semantic timeline interaction as an undoable/autosaved gesture. */
   addInteraction(interaction: Interaction): void {
     this.#transaction(() => { this.#doc.addInteraction(interaction); });
+  }
+
+  /** Commit a near-miss route goal and its required clearance rule as one gesture. */
+  addInteractionWithInvariant(interaction: Interaction, invariant: Invariant): void {
+    this.#transaction(() => {
+      this.#doc.addInteraction(interaction);
+      this.#doc.addInvariant(invariant);
+    });
+  }
+
+  replaceInteractionWithInvariant(id: string, interaction: Interaction, invariant: Invariant): void {
+    this.#transaction(() => {
+      this.#doc.replaceInteraction(id, interaction);
+      const existing = this.#doc.data.invariants.find((item) => item.id === invariant.id);
+      if (existing) this.#doc.replaceInvariant(existing.id, invariant);
+      else this.#doc.addInvariant(invariant);
+    });
+  }
+
+
+  replaceInteractionRemovingInvariant(id: string, interaction: Interaction, invariantId: string): void {
+    this.#transaction(() => {
+      this.#doc.replaceInteraction(id, interaction);
+      if (this.#doc.data.invariants.some((item) => item.id === invariantId)) this.#doc.removeInvariant(invariantId);
+    });
   }
 
   /** Replace one timeline interaction while retaining its stable identity. */

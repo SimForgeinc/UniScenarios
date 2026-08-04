@@ -513,7 +513,9 @@ function pedestrianRouteFromTemplate(
   const routeAction = interactions.find((item): item is Extract<Interaction, { verb: 'route' }> => item.verb === 'route');
   let planned: RoutePoint[] = [start];
   let invalidReason: string | undefined;
-  if (routeAction?.target.mode === 'lanePath') {
+  if (routeAction?.target.mode === 'nearMiss') {
+    invalidReason = 'Updating authoritative near-miss preview…';
+  } else if (routeAction?.target.mode === 'lanePath') {
     planned = [...resolvedRoutePoints({ kind: 'lanePath', lanes: [...routeAction.target.lanes] }, index)];
   } else if (routeAction?.target.mode === 'polyline' && role.initialRoute?.lanes.length) {
     const built = buildRoute(index.graph, { kind: 'lanePath', lanes: [...role.initialRoute.lanes] });

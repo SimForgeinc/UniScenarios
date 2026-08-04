@@ -2,6 +2,7 @@
 
 import { ScenarioOperationError } from './errors.js';
 import type { Interaction } from './schema/v2/interactions.js';
+import type { Invariant } from './schema/v2/invariants.js';
 import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
 import type { RoleBinding } from './schema/v2/roles.js';
 import type { ScenarioTemplateV2, TemplateMeta } from './schema/v2/template.js';
@@ -29,6 +30,8 @@ export type TemplateOp =
   | { type: 'replaceMapSignalPlan'; id: string; plan: MapSignalPlan }
   | { type: 'removeMapSignalPlan'; id: string }
   | { type: 'removeProp'; id: string }
+  | { type: 'addInvariant'; invariant: Invariant; index?: number }
+  | { type: 'replaceInvariant'; id: string; invariant: Invariant }
   | { type: 'removeInvariant'; id: string }
   | { type: 'removeVariant'; id: string }
   | { type: 'setMetricSubject'; roleId: string | null }
@@ -50,6 +53,8 @@ export function describeTemplateOp(op: TemplateOp): string {
     case 'replaceMapSignalPlan': return 'Edit traffic signal plan';
     case 'removeMapSignalPlan': return 'Delete traffic signal plan';
     case 'removeProp': return 'Delete prop';
+    case 'addInvariant': return 'Add rule';
+    case 'replaceInvariant': return 'Edit rule';
     case 'removeInvariant': return 'Delete rule';
     case 'removeVariant': return 'Delete variant';
     case 'setMetricSubject': return 'Set metric subject';
@@ -151,6 +156,16 @@ export function applyTemplateOp(draft: ScenarioTemplateV2, op: TemplateOp): void
     case 'removeProp':
       draft.props.splice(indexOf(draft.props, op.id, 'prop'), 1);
       return;
+    case 'addInvariant':
+      if (draft.invariants.some((item) => item.id === op.invariant.id)) throw new ScenarioOperationError(`invariant id "${op.invariant.id}" already exists`);
+      draft.invariants.splice(insertionIndex(op.index, draft.invariants.length), 0, op.invariant);
+      return;
+    case 'replaceInvariant': {
+      const at = indexOf(draft.invariants, op.id, 'invariant');
+      if (op.invariant.id !== op.id && draft.invariants.some((item) => item.id === op.invariant.id)) throw new ScenarioOperationError(`invariant id "${op.invariant.id}" already exists`);
+      draft.invariants[at] = op.invariant;
+      return;
+    }
     case 'removeInvariant':
       draft.invariants.splice(indexOf(draft.invariants, op.id, 'invariant'), 1);
       return;

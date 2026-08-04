@@ -6,6 +6,7 @@ import { AuthoredActorLimitError, ScenarioMigrationError, ScenarioOperationError
 import { MAX_AUTHORED_ACTORS, authoredActorCount } from './actor-limits.js';
 import { parseTemplate, serializeTemplate, deepFreeze } from './serialize.js';
 import type { Interaction } from './schema/v2/interactions.js';
+import type { Invariant } from './schema/v2/invariants.js';
 import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
 import type { RoleBinding } from './schema/v2/roles.js';
 import type { ActorSensor } from './schema/v2/sensors.js';
@@ -270,6 +271,11 @@ export class TemplateDocument {
   }
   removeMapSignalPlan(id: string): boolean { return this.apply({ type: 'removeMapSignalPlan', id }); }
   removeProp(id: string): boolean { return this.apply({ type: 'removeProp', id }); }
+  addInvariant(invariant: Invariant, index?: number): string {
+    this.apply(index === undefined ? { type: 'addInvariant', invariant } : { type: 'addInvariant', invariant, index });
+    return invariant.id;
+  }
+  replaceInvariant(id: string, invariant: Invariant): boolean { return this.apply({ type: 'replaceInvariant', id, invariant }); }
   removeInvariant(id: string): boolean { return this.apply({ type: 'removeInvariant', id }); }
   removeVariant(id: string): boolean { return this.apply({ type: 'removeVariant', id }); }
   setMetricSubject(roleId: string | null): boolean { return this.apply({ type: 'setMetricSubject', roleId }); }

@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import type { Interaction, MapSignalPlan, MapSignalPlanClip } from '@uniscenarios/scenario-model';
 import type { MapSignalCatalog } from '@uniscenarios/scenario-materializer';
+import { solvePedestrianNearMiss, type PedestrianNearMissResult, type NearMissPass } from '@uniscenarios/sim-engine';
 import type { EditorController, EditorState } from '../editor/controller';
 import type { EditorDocument } from '../editor/document';
+import { routesFromTemplate } from '../editor/routeOverlay';
 import type { StudioSessionApi } from '../session/useStudioSession';
 import { createMapSignalPlan, physicalSignalChoiceIndex, physicalSignalChoiceIssue, physicalSignalChoices } from '../signals/authoring';
 import { actionsForActor, definitionForInteraction, interactionForAction, type ActionDefinition } from './actions';
@@ -21,9 +23,9 @@ export function cameraActorForTimelineClick(surface: TimelineClickSurface, actor
 
 export interface TimelineDockProps { controller: EditorController | null; editorState: EditorState | null; session: StudioSessionApi; outcomes?: readonly TraceOutcomeMarker[]; achievedSpeeds?: Readonly<Record<string, TimelineSpeedSeries>>; rightInset?: number; drawerMode?: boolean; onActorInspect?: (actorId: string) => void; onActorDelete?: (actorId: string) => void; dashCameras?: readonly { id: string; label: string }[]; selectedDashCameraId?: string | null; onDashCameraChange?: (id: string) => void; onCameraPlay?: () => void; onPlayPause?: () => void; signalCatalog?: MapSignalCatalog | null; signalControlDigest?: string | null; selectedSignalHeadId?: string | null; selectedSignalJunctionId?: string | null; selectedSignalControllerId?: string | null; selectedSignalResolved?: boolean; }
 export type ActorRelativeTriggerMode = 'time' | 'distance' | 'ttc';
-export interface ActionEditorState { actorId: string; definitionId: string; sourceDefinitionId: string | null; time: number; duration: number; timingEditable: boolean; maneuverDuration: number; maneuverStyle: 'cautious' | 'normal' | 'assertive'; targetSpeed: number; editingId: string | null; triggerMode: ActorRelativeTriggerMode; triggerActorId: string; triggerThreshold: number; triggerDeadline: number; triggerIfNever: 'skip' | 'fire'; }
+export interface ActionEditorState { actorId: string; definitionId: string; sourceDefinitionId: string | null; time: number; duration: number; timingEditable: boolean; maneuverDuration: number; maneuverStyle: 'cautious' | 'normal' | 'assertive'; targetSpeed: number; editingId: string | null; triggerMode: ActorRelativeTriggerMode; triggerActorId: string; triggerThreshold: number; triggerDeadline: number; triggerIfNever: 'skip' | 'fire'; desiredOutcome: 'ordinary' | 'nearMiss'; nearMissClearanceM: number; nearMissPass: NearMissPass; nearMissMinSpeedMps: number; nearMissMaxSpeedMps: number; }
 export interface TimelineSignalDraft { planId: string; clipId: string; startS: number; endS: number; reference: MapSignalPlanClip['reference']; indication: MapSignalPlanClip['indication']; pendingPlan?: MapSignalPlan; }
-export type TimelineActionDraft = Omit<ActionEditorState, 'maneuverDuration' | 'maneuverStyle' | 'sourceDefinitionId' | 'timingEditable' | 'triggerMode' | 'triggerActorId' | 'triggerThreshold' | 'triggerDeadline' | 'triggerIfNever'> & {
+export type TimelineActionDraft = Omit<ActionEditorState, 'maneuverDuration' | 'maneuverStyle' | 'sourceDefinitionId' | 'timingEditable' | 'triggerMode' | 'triggerActorId' | 'triggerThreshold' | 'triggerDeadline' | 'triggerIfNever' | 'desiredOutcome' | 'nearMissClearanceM' | 'nearMissPass' | 'nearMissMinSpeedMps' | 'nearMissMaxSpeedMps'> & {
   maneuverDuration?: number;
   maneuverStyle?: 'cautious' | 'normal' | 'assertive';
   sourceDefinitionId?: string | null;
@@ -32,6 +34,11 @@ export type TimelineActionDraft = Omit<ActionEditorState, 'maneuverDuration' | '
   triggerThreshold?: number;
   triggerDeadline?: number;
   triggerIfNever?: 'skip' | 'fire';
+  desiredOutcome?: 'ordinary' | 'nearMiss';
+  nearMissClearanceM?: number;
+  nearMissPass?: NearMissPass;
+  nearMissMinSpeedMps?: number;
+  nearMissMaxSpeedMps?: number;
 };
 export type TimelineActionOutcome = 'pending' | 'executed' | 'missed';
 export function timelineActionOutcome(markers: readonly TraceOutcomeMarker[], interactionId: string): TimelineActionOutcome {
@@ -151,14 +158,36 @@ export function submitTimelineAction(
       if (!Number.isFinite(triggerThreshold) || triggerThreshold <= 0) return { ok: false, message: triggerMode === 'distance' ? 'Distance must be greater than 0 metres.' : 'TTC must be greater than 0 seconds.' };
       if (!Number.isFinite(triggerDeadline) || triggerDeadline < 0 || triggerDeadline > template.choreography.clipSeconds) return { ok: false, message: `Trigger deadline must be between 0 and ${template.choreography.clipSeconds} seconds.` };
     }
+    if (draft.desiredOutcome === 'nearMiss' && triggerMode === 'time') return { ok: false, message: 'A near miss must start from an actor-relative Distance or TTC trigger.' };
     let interaction = interactionForAction({ ...customized, durationS: canonicalDuration }, draft.actorId, canonicalTime, ordinal, maneuver);
     if (triggerMode === 'distance') interaction = { ...interaction, trigger: { kind: 'when', condition: { kind: 'distance', from: triggerActorId, to: { role: draft.actorId }, measure: 'euclidean', op: '<=', valueM: triggerThreshold }, byLatest: triggerDeadline, ifNever: triggerIfNever } } as Interaction;
     else if (triggerMode === 'ttc') interaction = { ...interaction, trigger: { kind: 'when', condition: { kind: 'ttc', of: triggerActorId, to: draft.actorId, op: '<=', valueS: triggerThreshold }, byLatest: triggerDeadline, ifNever: triggerIfNever } } as Interaction;
+    if (draft.desiredOutcome === 'nearMiss') interaction = {
+      id: draft.editingId ?? `near_miss_${draft.actorId}_${ordinal}`.replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 64),
+      actor: draft.actorId,
+      label: 'Cross for near miss',
+      trigger: interaction.trigger,
+      verb: 'route',
+      target: {
+        mode: 'nearMiss', target: triggerActorId,
+        clearanceM: draft.nearMissClearanceM ?? .5,
+        pass: draft.nearMissPass ?? 'auto',
+        minSpeedKph: Number(((draft.nearMissMinSpeedMps ?? .5) * 3.6).toFixed(3)),
+        maxSpeedKph: Number(((draft.nearMissMaxSpeedMps ?? 3) * 3.6).toFixed(3)),
+        deadlineS: triggerDeadline,
+      },
+    } as Interaction;
     const usedIds = new Set(template.choreography.interactions.map((item) => item.id));
     while (!draft.editingId && usedIds.has(interaction.id)) {
       interaction = interactionForAction({ ...customized, durationS: canonicalDuration }, draft.actorId, canonicalTime, ++ordinal, maneuver);
     }
     if (existing) {
+      const existingNearMiss = existing.verb === 'route' && existing.target.mode === 'nearMiss';
+      if (draft.desiredOutcome === 'nearMiss') {
+        interaction = { ...interaction, id: existing.id } as Interaction;
+      } else if (existingNearMiss) {
+        interaction = { ...interaction, id: existing.id, trigger: existing.trigger } as Interaction;
+      } else {
       const originalDefinition = definitionForInteraction(existing, role.actor.class, role.actor.catalogId);
       const actionChanged = definition.id !== (draft.sourceDefinitionId ?? originalDefinition?.id ?? definition.id);
       if (!timingEditable) {
@@ -170,6 +199,7 @@ export function submitTimelineAction(
       } else {
         interaction = { ...interaction, id: existing.id } as Interaction;
       }
+      }
     }
     const currentGroup = buildTimelineGroups(template).find((item) => item.actorId === draft.actorId);
     if (!currentGroup) return { ok: false, message: 'The timeline could not find this actor.' };
@@ -177,13 +207,20 @@ export function submitTimelineAction(
       interaction,
       actorId: draft.actorId,
       track: 'actions',
-      resource: customized.resource,
+      resource: draft.desiredOutcome === 'nearMiss' ? 'topology' : customized.resource,
       anchorTime: canonicalTime,
       endTime: Math.min(template.choreography.clipSeconds, roundTimelineSeconds(canonicalTime + canonicalDuration)),
       unresolved: false,
     };
     const conflict = conflictingAction(candidate, currentGroup.tracks.actions, draft.editingId ?? undefined);
-    if (draft.editingId) document.replaceInteraction(draft.editingId, interaction);
+    const invariantId = `near_miss_${interaction.id}`.slice(0, 64);
+    if (draft.desiredOutcome === 'nearMiss') {
+      const clearance = draft.nearMissClearanceM ?? .5;
+      const invariant = { id: invariantId, kind: 'near_miss' as const, pedestrian: draft.actorId, target: triggerActorId, clearanceRangeM: [Math.max(.01, Number((clearance - .05).toFixed(3))), Number((clearance + .05).toFixed(3))] as [number, number], essentiality: 'required' as const };
+      if (draft.editingId) document.replaceInteractionWithInvariant(draft.editingId, interaction, invariant);
+      else document.addInteractionWithInvariant(interaction, invariant);
+    } else if (draft.editingId && template.invariants.some((item) => item.id === invariantId)) document.replaceInteractionRemovingInvariant(draft.editingId, interaction, invariantId);
+    else if (draft.editingId) document.replaceInteraction(draft.editingId, interaction);
     else document.addInteraction(interaction);
     return { ok: true, interaction, ...(conflict ? { warning: `${customized.group} overlaps “${conflict.interaction.label ?? conflict.interaction.id}”. Both clips remain visible; runtime validation will report the shared ${customized.resource} resource.` } : {}) };
   } catch (reason) {
@@ -254,6 +291,11 @@ export function actionEditorStateForItem(item: TimelineItem, group: TimelineActo
       : Number(definition.target.valueKph ?? 30),
     editingId: item.interaction.id,
     ...actorRelativeTriggerState(item.interaction),
+    desiredOutcome: item.interaction.verb === 'route' && item.interaction.target.mode === 'nearMiss' ? 'nearMiss' : 'ordinary',
+    nearMissClearanceM: item.interaction.verb === 'route' && item.interaction.target.mode === 'nearMiss' ? Number(item.interaction.target.clearanceM) : .5,
+    nearMissPass: item.interaction.verb === 'route' && item.interaction.target.mode === 'nearMiss' ? item.interaction.target.pass : 'auto',
+    nearMissMinSpeedMps: item.interaction.verb === 'route' && item.interaction.target.mode === 'nearMiss' ? Number(item.interaction.target.minSpeedKph) / 3.6 : .8,
+    nearMissMaxSpeedMps: item.interaction.verb === 'route' && item.interaction.target.mode === 'nearMiss' ? Number(item.interaction.target.maxSpeedKph) / 3.6 : 2.2,
   };
 }
 
@@ -262,6 +304,40 @@ function actorRelativeTriggerState(interaction: Interaction): Pick<ActionEditorS
   if (trigger.kind === 'when' && trigger.condition.kind === 'distance' && 'role' in trigger.condition.to) return { triggerMode: 'distance', triggerActorId: trigger.condition.from, triggerThreshold: Number(trigger.condition.valueM), triggerDeadline: Number(trigger.byLatest ?? 20), triggerIfNever: trigger.ifNever };
   if (trigger.kind === 'when' && trigger.condition.kind === 'ttc') return { triggerMode: 'ttc', triggerActorId: trigger.condition.of, triggerThreshold: Number(trigger.condition.valueS), triggerDeadline: Number(trigger.byLatest ?? 20), triggerIfNever: trigger.ifNever };
   return { triggerMode: 'time', triggerActorId: '', triggerThreshold: 12, triggerDeadline: 20, triggerIfNever: 'skip' };
+}
+
+export function nearMissPreviewForEditor(
+  state: ActionEditorState,
+  controller: EditorController,
+): PedestrianNearMissResult | null {
+  if (state.desiredOutcome !== 'nearMiss') return null;
+  const pedestrian = controller.doc.actors.find((actor) => actor.id === state.actorId);
+  const target = controller.doc.actors.find((actor) => actor.id === state.triggerActorId);
+  if (!pedestrian || !target) return { ok: false, diagnostic: { code: 'near_miss_invalid_trajectory', message: 'Choose an existing authored target actor.' } };
+  const targetPath = routesFromTemplate(controller.doc.data, controller.laneIndex).find((route) => route.actorId === target.id)?.planned ?? [];
+  if (targetPath.length < 2) return { ok: false, diagnostic: { code: 'near_miss_invalid_trajectory', message: 'The target actor needs a projected movement path.' } };
+  const speedMps = Math.max(.1, (target.initialSpeedKph ?? 30) / 3.6);
+  let t = 0;
+  const targetTrajectory = targetPath.map((point, index) => {
+    if (index > 0) t += Math.hypot(point.x - targetPath[index - 1]!.x, point.z - targetPath[index - 1]!.z) / speedMps;
+    return { t, x: point.x, z: point.z };
+  });
+  const deadline = Math.max(state.time + .1, state.triggerDeadline);
+  if (targetTrajectory.at(-1)!.t < deadline) targetTrajectory.push({ ...targetTrajectory.at(-1)!, t: deadline });
+  return solvePedestrianNearMiss({
+    pedestrianId: pedestrian.id,
+    targetId: target.id,
+    pedestrianStart: { x: pedestrian.x, z: pedestrian.z },
+    pedestrianDims: pedestrian.dims,
+    targetTrajectory,
+    targetDims: target.dims,
+    triggerTimeS: state.time,
+    deadlineS: deadline,
+    clearanceM: state.nearMissClearanceM,
+    pass: state.nearMissPass,
+    minSpeedMps: state.nearMissMinSpeedMps,
+    maxSpeedMps: state.nearMissMaxSpeedMps,
+  });
 }
 
 export function TimelineDock({ controller, editorState, session, outcomes = [], rightInset = 16, drawerMode = false, onActorInspect, onActorDelete, dashCameras = [], selectedDashCameraId = null, onDashCameraChange, onCameraPlay, onPlayPause, signalCatalog = null, signalControlDigest = null, selectedSignalHeadId = null, selectedSignalJunctionId = null, selectedSignalControllerId = null, selectedSignalResolved = true }: TimelineDockProps): JSX.Element {
@@ -274,6 +350,7 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
     return buildTimelineGroups({ ...template, choreography: { ...template.choreography, interactions: template.choreography.interactions.map((item) => item.id === interaction.id ? interactionWithTimelineRange(item, clipPreview.range) : item) } }, clipPreview.lanes);
   }, [clipPreview, template]);
   const signalGroups = useMemo(() => template ? buildMapSignalTimelineGroups(template) : [], [template]); const signalChoices = useMemo(() => signalCatalog && selectedSignalHeadId ? physicalSignalChoices(signalCatalog, selectedSignalHeadId) : [], [signalCatalog, selectedSignalHeadId]); const readonly = session.state.mode !== 'authoring';
+  const nearMissPreview = useMemo(() => editor && controller ? nearMissPreviewForEditor(editor, controller) : null, [controller, editor, editorState]);
   const selectedSignalBindingIssue = selectedSignalHeadId
     ? !selectedSignalResolved
       ? 'exact controller ownership is unavailable'
@@ -287,7 +364,7 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
   }, [selectedSignalControllerId, selectedSignalHeadId, selectedSignalJunctionId, signalChoices]);
   useEffect(() => { if (readonly) { setEditor(null); setSignalEditor(null); setNotice(null); setClipPreview(null); } }, [readonly]);
   const groupFor = (actorId: string) => groups.find((group) => group.actorId === actorId);
-  const openNew = (actorId: string, time = session.state.time): void => { const group = groupFor(actorId); if (!group || readonly) return; const choices = actionsForActor(group.actorClass, group.catalogId); if (!choices.length) return; const firstTarget = template?.roles.find((role) => role.id !== actorId)?.id ?? ''; setEditor({ actorId, definitionId: choices[0]!.id, sourceDefinitionId: null, time: clamp(time, 0, duration), duration: choices[0]!.durationS, timingEditable: true, maneuverDuration: choices[0]!.durationS, maneuverStyle: 'normal', targetSpeed: Number(choices[0]!.target.valueKph ?? 30), editingId: null, triggerMode: 'time', triggerActorId: firstTarget, triggerThreshold: 12, triggerDeadline: duration, triggerIfNever: 'skip' }); setSelectedInteraction(null); setNotice(null); };
+  const openNew = (actorId: string, time = session.state.time): void => { const group = groupFor(actorId); if (!group || readonly) return; const choices = actionsForActor(group.actorClass, group.catalogId); if (!choices.length) return; const firstTarget = template?.roles.find((role) => role.id !== actorId)?.id ?? ''; setEditor({ actorId, definitionId: choices[0]!.id, sourceDefinitionId: null, time: clamp(time, 0, duration), duration: choices[0]!.durationS, timingEditable: true, maneuverDuration: choices[0]!.durationS, maneuverStyle: 'normal', targetSpeed: Number(choices[0]!.target.valueKph ?? 30), editingId: null, triggerMode: 'time', triggerActorId: firstTarget, triggerThreshold: 12, triggerDeadline: duration, triggerIfNever: 'skip', desiredOutcome: 'ordinary', nearMissClearanceM: .5, nearMissPass: 'auto', nearMissMinSpeedMps: .8, nearMissMaxSpeedMps: 2.2 }); setSelectedInteraction(null); setNotice(null); };
   const selectItem = (item: TimelineItem): void => { const group = groupFor(item.actorId); if (!group) return; const state = actionEditorStateForItem(item, group); if (!state) return; setSelectedInteraction(item.interaction.id); setEditor(state); controller?.setSelection([item.actorId]); };
   const saveEditor = (): void => {
     if (!editor) { setNotice('The action dialog lost its draft. Close it and try again.'); return; }
@@ -361,12 +438,12 @@ export function TimelineDock({ controller, editorState, session, outcomes = [], 
         {groups.flatMap((group) => { const icon = timelineActorIcon(group.actorClass, group.catalogId); const selected = inspectedActor === group.actorId || editorState?.selection.includes(group.actorId); return group.lanes.map((lane) => <div key={`${group.actorId}:lane:${lane.index}`} style={{ ...styles.track, ...(lane.index === 0 ? styles.identityTrack : null) }} data-actor-id={group.actorId} data-lane-index={lane.index} onDoubleClick={(event) => { const bounds = event.currentTarget.getBoundingClientRect(); openNew(group.actorId, ((event.clientX - bounds.left) / bounds.width) * duration); }} data-testid={lane.index === 0 ? `timeline-${group.actorId}-actions` : `timeline-${group.actorId}-actions-${lane.index + 1}`}>{lane.index === 0 ? <div style={{ ...styles.identitySticker, ...styles.actorSticker, ...(selected ? styles.actorSelected : null) }} data-placement="top-right" data-testid={`timeline-actor-sticker-${group.actorId}`}><button type="button" style={styles.actorLabel} onClick={(event) => { event.stopPropagation(); setInspectedActor(group.actorId); onActorInspect?.(group.actorId); }} aria-label={`Select and frame ${group.displayLabel}`} data-testid={`timeline-actor-${group.actorId}`}><span role="img" aria-label={`${icon.label} icon`} data-icon-kind={icon.kind}>{icon.glyph}</span><span style={styles.actorName}>{group.displayLabel}</span></button>{!readonly ? <button type="button" style={styles.stickerButton} aria-label={`Delete ${group.displayLabel}`} data-testid={`timeline-delete-actor-${group.actorId}`} onClick={(event) => { event.stopPropagation(); deleteActor(group.actorId); }}>🗑</button> : null}{!group.compact ? <button type="button" style={styles.stickerButton} disabled={readonly} onClick={(event) => { event.stopPropagation(); openNew(group.actorId); }} aria-label={`Add action for ${group.displayLabel}`} data-testid={`timeline-add-${group.actorId}-actions`}>＋</button> : null}</div> : null}{lane.items.map((item) => <TimelineClip key={item.interaction.id} item={item} duration={duration} lane={lane.index} laneCount={group.lanes.length} identityLane={lane.index === 0} readonly={readonly} selected={selectedInteraction === item.interaction.id} outcome={timelineActionOutcome(outcomes, item.interaction.id)} onSelect={() => selectItem(item)} onPreview={(range, targetLane) => setClipPreview({ interactionId: item.interaction.id, range, lanes: timelineLanePreferencesForDrop(group.lanes, item.interaction.id, range, targetLane, timelineLanePreferences(template?.extensions)) })} onCancelPreview={() => setClipPreview(null)} onCommit={(range, targetLane) => commitClipEdit(item, range, timelineLanePreferencesForDrop(group.lanes, item.interaction.id, range, targetLane, timelineLanePreferences(template?.extensions)))} />)}{outcomes.filter((marker) => marker.actorId === group.actorId).map((marker, index) => <span key={`${marker.kind}:${index}`} style={{ ...styles.outcome, ...(lane.index === 0 ? styles.identityOutcome : null), left: `${marker.time / duration * 100}%` }} />)}</div>); })}
         <div style={{ ...styles.playhead, left: `${session.state.time / duration * 100}%` }} />
       </div></div> : null}
-    {editor ? <ActionEditor state={editor} group={groupFor(editor.actorId)!} actorChoices={(template?.roles ?? []).filter((role) => role.id !== editor.actorId).map((role) => ({ id: role.id, label: role.label ?? role.id }))} readOnly={readonly} rightInset={rightInset} onChange={setEditor} onSave={saveEditor} onDelete={editor.editingId ? () => { controller?.doc.removeInteraction(editor.editingId!); setEditor(null); setSelectedInteraction(null); } : undefined} onClose={() => setEditor(null)} /> : null}
+    {editor ? <ActionEditor state={editor} group={groupFor(editor.actorId)!} actorChoices={(template?.roles ?? []).filter((role) => role.id !== editor.actorId).map((role) => ({ id: role.id, label: role.label ?? role.id }))} nearMissPreview={nearMissPreview} readOnly={readonly} rightInset={rightInset} onChange={setEditor} onSave={saveEditor} onDelete={editor.editingId ? () => { controller?.doc.removeInteraction(editor.editingId!); setEditor(null); setSelectedInteraction(null); } : undefined} onClose={() => setEditor(null)} /> : null}
     {signalEditor ? <SignalClipEditor state={signalEditor} readOnly={readonly} rightInset={rightInset} onChange={setSignalEditor} onSave={saveSignalEditor} onDelete={() => { const plan = template?.mapSignalPlans.find((item) => item.id === signalEditor.planId); if (plan?.clips.some((clip) => clip.id === signalEditor.clipId)) deleteSignalClip(plan, signalEditor.clipId); else { setSignalEditor(null); setSelectedSignalClip(null); } }} onClose={() => setSignalEditor(null)} /> : null}
   </section>;
 }
 
-export function ActionEditor({ state, group, actorChoices = [], readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; actorChoices?: readonly { id: string; label: string }[]; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element {
+export function ActionEditor({ state, group, actorChoices = [], nearMissPreview = null, readOnly, rightInset, onChange, onSave, onDelete, onClose }: { state: ActionEditorState; group: TimelineActorGroup; actorChoices?: readonly { id: string; label: string }[]; nearMissPreview?: PedestrianNearMissResult | null; readOnly: boolean; rightInset: number; onChange: (state: ActionEditorState) => void; onSave: () => void; onDelete?: () => void; onClose: () => void }): JSX.Element {
   const choices = actionsForActor(group.actorClass, group.catalogId);
   const selected = choices.find((item) => item.id === state.definitionId) ?? choices[0]!;
   const grouped = [...new Set(choices.map((item) => item.group))];
@@ -375,6 +452,7 @@ export function ActionEditor({ state, group, actorChoices = [], readOnly, rightI
     <div style={styles.editorHeader}><div><strong>Action</strong><div style={styles.editorContext}>{group.displayLabel}</div></div><button type="button" onClick={onClose} style={styles.close} aria-label="Close">×</button></div>
     <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, maneuverDuration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
+      {group.actorClass === 'pedestrian' ? <fieldset><legend>Desired outcome</legend><label style={styles.field}><span>Movement</span><select value={state.desiredOutcome} onChange={(event) => onChange({ ...state, desiredOutcome: event.target.value as ActionEditorState['desiredOutcome'] })} data-testid="pedestrian-desired-outcome"><option value="ordinary">Ordinary walk</option><option value="nearMiss">Cross for near miss</option></select></label>{state.desiredOutcome === 'nearMiss' ? <><label style={styles.field}><span>Target</span><select value={state.triggerActorId} onChange={(event) => onChange({ ...state, triggerActorId: event.target.value })}>{actorChoices.map((actor) => <option key={actor.id} value={actor.id}>{actor.label}</option>)}</select></label><label style={styles.field}><span>Clearance</span><span><input type="number" min={.1} step={.1} value={state.nearMissClearanceM} onChange={(event) => onChange({ ...state, nearMissClearanceM: Number(event.target.value) })} /> m</span></label><label style={styles.field}><span>Pass</span><select value={state.nearMissPass} onChange={(event) => onChange({ ...state, nearMissPass: event.target.value as NearMissPass })}><option value="auto">Automatic</option><option value="front">In front</option><option value="behind">Behind</option></select></label><label style={styles.field}><span>Walk speed</span><span><input aria-label="Minimum pedestrian speed" type="number" min={.2} max={4} step={.1} value={state.nearMissMinSpeedMps} onChange={(event) => onChange({ ...state, nearMissMinSpeedMps: Number(event.target.value) })} />–<input aria-label="Maximum pedestrian speed" type="number" min={.2} max={4} step={.1} value={state.nearMissMaxSpeedMps} onChange={(event) => onChange({ ...state, nearMissMaxSpeedMps: Number(event.target.value) })} /> m/s</span></label>{nearMissPreview?.ok ? <div role="status" data-testid="near-miss-feasibility">Predicted clearance {nearMissPreview.solution.predictedClearanceM.toFixed(2)} m · time gap {nearMissPreview.solution.predictedTimeGapS.toFixed(2)} s · {nearMissPreview.solution.speedMps.toFixed(2)} m/s</div> : nearMissPreview ? <div role="alert" data-testid="near-miss-diagnostic">{nearMissPreview.diagnostic.message}</div> : null}</> : null}</fieldset> : null}
       {selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}
       <fieldset style={styles.triggerGroup}><legend>Trigger</legend><label style={styles.field}><span>Start when</span><select value={state.triggerMode} onChange={(event) => onChange({ ...state, triggerMode: event.target.value as ActorRelativeTriggerMode, triggerThreshold: event.target.value === 'ttc' ? 2 : 12 })} disabled={readOnly} data-testid="actor-relative-trigger-mode"><option value="time">Timeline reaches time</option><option value="distance">Actor is within distance</option><option value="ttc">Time to collision is below</option></select></label>
       {state.triggerMode !== 'time' ? <><label style={styles.field}><span>Authored actor</span><select value={state.triggerActorId} onChange={(event) => onChange({ ...state, triggerActorId: event.target.value })} disabled={readOnly || actorChoices.length === 0} data-testid="actor-relative-trigger-actor">{actorChoices.length ? actorChoices.map((actor) => <option key={actor.id} value={actor.id}>{actor.label}</option>) : <option value="">No other authored actors</option>}</select></label><label style={styles.field}><span>{state.triggerMode === 'distance' ? 'Distance' : 'TTC'}</span><span><input type="number" min={.1} step={.1} value={state.triggerThreshold} onChange={(event) => onChange({ ...state, triggerThreshold: Number(event.target.value) })} data-testid="actor-relative-trigger-threshold" /> {state.triggerMode === 'distance' ? 'm' : 's'}</span></label><label style={styles.field}><span>Deadline</span><span><input type="number" min={0} max={20} step={.1} value={state.triggerDeadline} onChange={(event) => onChange({ ...state, triggerDeadline: Number(event.target.value) })} data-testid="actor-relative-trigger-deadline" /> s</span></label><label style={styles.field}><span>If never</span><select value={state.triggerIfNever} onChange={(event) => onChange({ ...state, triggerIfNever: event.target.value as 'skip' | 'fire' })}><option value="skip">Skip safely</option><option value="fire">Start at deadline</option></select></label></> : null}</fieldset>
