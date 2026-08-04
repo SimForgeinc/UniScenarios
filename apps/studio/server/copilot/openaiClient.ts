@@ -54,7 +54,7 @@ export async function generateJsonText(input: {
 export function configuredOpenAI(): { apiKey: string | null; requestedModel: string; fallbackModel: string | null } {
   return {
     apiKey: process.env['OPENAI_API_KEY']?.trim() || null,
-    requestedModel: process.env['UNISCENARIOS_COPILOT_MODEL']?.trim() || '5.6 LUNA',
+    requestedModel: process.env['UNISCENARIOS_COPILOT_MODEL']?.trim() || 'gpt-5.6-luna',
     fallbackModel: process.env['UNISCENARIOS_COPILOT_FALLBACK_MODEL']?.trim() || null,
   };
 }

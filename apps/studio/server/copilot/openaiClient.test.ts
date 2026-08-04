@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CopilotGenerationRequest } from '../../src/copilot/types.js';
-import { generateJsonText } from './openaiClient.js';
+import { configuredOpenAI, generateJsonText } from './openaiClient.js';
 import { generateStagedScenario } from './stagedProvider.js';
 
 afterEach(() => {
@@ -9,6 +9,11 @@ afterEach(() => {
 });
 
 describe('staged OpenAI structured response boundary', () => {
+  it('uses the exact API model id by default', () => {
+    vi.stubEnv('UNISCENARIOS_COPILOT_MODEL', '');
+    expect(configuredOpenAI().requestedModel).toBe('gpt-5.6-luna');
+  });
+
   it('sends a strict json_schema payload instead of the fragile json_object request', async () => {
     let payload: Record<string, unknown> | undefined;
     const fetchImpl: typeof fetch = async (_input, init) => {

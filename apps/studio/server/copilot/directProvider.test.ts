@@ -113,10 +113,10 @@ describe('direct native Scenario Copilot provider', () => {
       validDraft,
     ];
     const client: DirectOpenAIClient = {
-      verifyModel: async (model) => model === '5.6 LUNA',
+      verifyModel: async (model) => model === 'gpt-5.6-luna',
       generate: async ({ model }) => ({ text: responses.shift()!, model, usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 } }),
     };
-    const result = await generateDirectDraft(request({ model: '5.6 LUNA' }), { client });
+    const result = await generateDirectDraft(request({ model: 'gpt-5.6-luna' }), { client });
     expect(result.candidates).toHaveLength(1);
     expect(result.metrics).toMatchObject({ inputTokens: 20, outputTokens: 10, totalTokens: 30 });
     expect(result.candidates[0]!.provenance.repairAttempts).toBe(1);
@@ -135,7 +135,7 @@ describe('direct native Scenario Copilot provider', () => {
     const priorFallback = process.env['OPENAI_SCENARIO_FALLBACK_MODEL'];
     delete process.env['OPENAI_SCENARIO_FALLBACK_MODEL'];
     const client: DirectOpenAIClient = { verifyModel: async () => false, generate: async () => { throw new Error('unreachable'); } };
-    await expect(generateDirectDraft(request({ model: '5.6 LUNA' }), { client })).rejects.toThrow(/not available/u);
+    await expect(generateDirectDraft(request({ model: 'gpt-5.6-luna' }), { client })).rejects.toThrow(/not available/u);
     if (priorFallback) process.env['OPENAI_SCENARIO_FALLBACK_MODEL'] = priorFallback;
   });
 });

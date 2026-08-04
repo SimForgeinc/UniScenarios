@@ -12,7 +12,7 @@ import { compileDirectDraft, directDraftRepairFeedback } from './directCompiler.
 import { createOpenAIResponsesClient, resolveDirectModel, type DirectOpenAIClient, type DirectModelResponse } from './directOpenAI.js';
 import { DirectGenerationRequestSchema, DirectNativeDraftSchema, type DirectNativeDraft } from './directTypes.js';
 
-const REQUESTED_MODEL = '5.6 LUNA';
+const REQUESTED_MODEL = 'gpt-5.6-luna';
 
 function promptHash(prompt: string): string { return createHash('sha256').update(prompt).digest('hex'); }
 
