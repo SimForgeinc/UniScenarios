@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadMap } from '@uniscenarios/cli';
@@ -72,14 +72,18 @@ const benchmarkCases = COPILOT_EDGE_CASES.filter((item) => selectedCaseIds.has(i
 if (benchmarkCases.length !== selectedCaseIds.size) throw new Error('One or more --cases ids are unknown');
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const outputDirectory = path.resolve(repositoryRoot, argv.get('--out') || `artifacts/research/scenario-copilot-benchmark-${new Date().toISOString().replace(/[:.]/gu, '')}`);
+const seedResultsPath = argv.get('--seed-results') ? path.resolve(repositoryRoot, argv.get('--seed-results')!) : null;
 const abortAfterMs = Number(argv.get('--timeout-ms') || 360_000);
 
 if (!process.env['OPENAI_API_KEY']) throw new Error('OPENAI_API_KEY must be injected by the server-side credential boundary');
 if (!Number.isFinite(abortAfterMs) || abortAfterMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
 
 const providers = await loadProviders(providerNames);
-const rows: BenchmarkRow[] = [];
-const startedAt = new Date().toISOString();
+const seed = seedResultsPath ? JSON.parse(await readFile(seedResultsPath, 'utf8')) as { startedAt?: string; requestedApiModel?: string; mapIds?: string[]; rows?: BenchmarkRow[] } : null;
+if (seed?.requestedApiModel && seed.requestedApiModel !== requestedModel) throw new Error('Seed results used a different API model');
+if (seed?.mapIds && seed.mapIds.join(',') !== mapIds.join(',')) throw new Error('Seed results used different maps');
+const rows: BenchmarkRow[] = [...(seed?.rows ?? [])];
+const startedAt = seed?.startedAt ?? new Date().toISOString();
 for (const mapId of mapIds) {
   const bundle = await loadMap(mapId);
   const mapContext = buildMapContext(mapId, bundle.graph);
@@ -102,7 +106,7 @@ const metadata = {
   completedAt: new Date().toISOString(),
   requestedDisplayName: '5.6 LUNA',
   requestedApiModel: requestedModel,
-  providerNames,
+  providerNames: [...new Set(rows.map((row) => row.provider))],
   mapIds,
   cases: benchmarkCases.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
   rows,
@@ -243,7 +247,7 @@ async function runCase(
     const mapBindingPass = product.input.actors.length === candidate.scenarioDoc.roles.length;
     const nativeValidationPass = product.manifest.feasible;
     observed = { ...common, mapBindingPass, nativeValidationPass, editablePass, actorCount: candidate.scenarioDoc.roles.length, actionCount: candidate.scenarioDoc.choreography.interactions.length };
-    if (!nativeValidationPass) throw new BenchmarkPhaseError('native-validation', `Materializer rejected candidate: ${product.manifest.issues.slice(0, 3).join('; ')}`);
+    if (!nativeValidationPass) throw new BenchmarkPhaseError('native-validation', `Materializer rejected candidate: ${JSON.stringify(product.manifest.issues.slice(0, 3))}`);
     phase = 'simulation';
     const simulationStart = performance.now();
     const simulated = runSimulation(product.input, { graph: bundle.graph, guards: 'collect' });
