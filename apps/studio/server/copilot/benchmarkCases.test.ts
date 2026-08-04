@@ -1,6 +1,6 @@
 import { TemplateDocument } from '@uniscenarios/scenario-model';
 import { describe, expect, it } from 'vitest';
-import { evaluateCopilotSemantics } from './benchmarkCases.js';
+import { COPILOT_EDGE_CASES, evaluateCopilotSemantics } from './benchmarkCases.js';
 
 function fixture() {
   return TemplateDocument.fromJSON({
@@ -28,5 +28,10 @@ describe('Scenario Copilot benchmark semantic assertions', () => {
     expect(evaluateCopilotSemantics('pedestrian-near-miss', doc).every((item) => item.pass)).toBe(false);
     expect(evaluateCopilotSemantics('unsupported-impossible', doc)[0]?.pass).toBe(false);
   });
-});
 
+  it('keeps the frozen twenty-case corpus executable and includes both negative controls', () => {
+    expect(COPILOT_EDGE_CASES).toHaveLength(20);
+    expect(COPILOT_EDGE_CASES.filter((item) => item.expectedRejection).map((item) => item.id)).toEqual(['unsupported-impossible', 'contradictory-constraints']);
+    for (const item of COPILOT_EDGE_CASES) expect(() => evaluateCopilotSemantics(item.id, fixture())).not.toThrow();
+  });
+});
