@@ -1,7 +1,9 @@
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { loadMap } from '@uniscenarios/cli';
 import { materializeMapBound } from '@uniscenarios/scenario-materializer';
 import { TemplateDocument, type ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
@@ -13,6 +15,7 @@ import { generateSimulationAgent } from '../server/copilot/simulationAgentProvid
 import { generateSimulationAgentVision } from '../server/copilot/simulationAgentVisionProvider.js';
 import { generateRelativeGoalOptimizer } from '../server/copilot/relativeGoalOptimizerProvider.js';
 import { generateVerifiedTemplateSearch } from '../server/copilot/verifiedTemplateSearchProvider.js';
+import { renderBirdEye } from '../server/copilot/birdsEyeRenderer.js';
 import type { CopilotCandidate, CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
 type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'relative-goal-optimizer' | 'verified-template-search';
@@ -26,7 +29,8 @@ interface BenchmarkRow {
   readonly requestedModel: string;
   readonly actualModel: string | null;
   readonly modelFallback: boolean;
-  readonly reasoningEffort: 'low' | 'medium' | 'high';
+  readonly reasoningEffort: 'low' | 'medium' | 'high' | null;
+  readonly seed: number | null;
   readonly providerWarnings: readonly string[];
   readonly outcome: 'success' | 'semantic-mismatch' | 'expected-rejection' | 'unexpected-generation' | 'failure';
   readonly failureCategory: string | null;
@@ -68,16 +72,21 @@ interface BenchmarkRow {
 interface SavedBenchmarkResult {
   readonly format: 'uniscenarios-copilot-saved-result-v1';
   readonly hash: string;
+  readonly status: 'draft-only' | 'simulated' | 'failed-before-draft';
   readonly mapId: string;
   readonly mapHash: string | null;
-  readonly scenarioSchemaVersion: number;
-  readonly intent: CopilotGenerationResult['intent'];
-  readonly candidate: CopilotCandidate;
+  readonly scenarioSchemaVersion: number | null;
+  readonly intent: CopilotGenerationResult['intent'] | null;
+  readonly candidate: CopilotCandidate | null;
   readonly canonicalTraceSummary: {
     readonly traceHash: string; readonly tickCount: number; readonly durationS: number; readonly actorIds: readonly string[];
     readonly eventCounts: Record<string, number>;
     readonly events: readonly { readonly t: number; readonly kind: string; readonly actorId?: string; readonly interactionId?: string }[];
-  };
+  } | null;
+  /** Gzipped canonical SimTrace JSON; the SHA-256 above is over the uncompressed JSON. */
+  readonly canonicalTraceGzipBase64: string | null;
+  readonly birdEye: { readonly dataUrl: string; readonly sha256: string; readonly width: number; readonly height: number; readonly altText: string; readonly legend: readonly string[] } | null;
+  readonly failure: { readonly phase: string; readonly category: string; readonly message: string } | null;
   readonly generatedScenic: null;
 }
 
@@ -107,17 +116,27 @@ if (benchmarkCases.length !== selectedCaseIds.size) throw new Error('One or more
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const outputDirectory = path.resolve(repositoryRoot, argv.get('--out') || `artifacts/research/scenario-copilot-benchmark-${new Date().toISOString().replace(/[:.]/gu, '')}`);
 const seedResultsPath = argv.get('--seed-results') ? path.resolve(repositoryRoot, argv.get('--seed-results')!) : null;
+const resume = argv.get('--resume') === 'true';
+const artifactKind = argv.get('--artifact-kind') || 'benchmark';
+const rerunOf = argv.get('--rerun-of') || null;
+const evaluationMode = argv.get('--evaluation-mode') === 'deterministic' ? 'deterministic' as const : undefined;
 const abortAfterMs = Number(argv.get('--timeout-ms') || 360_000);
 
 if (!process.env['OPENAI_API_KEY']) throw new Error('OPENAI_API_KEY must be injected by the server-side credential boundary');
 if (!Number.isFinite(abortAfterMs) || abortAfterMs < 1_000) throw new Error('--timeout-ms must be at least 1000');
 
+await mkdir(outputDirectory, { recursive: true });
+const partialPath = path.join(outputDirectory, 'results.partial.json');
+const resumePath = resume ? await firstReadable([path.join(outputDirectory, 'results.json'), partialPath]) : null;
 const providers = await loadProviders(providerNames);
-const seed = seedResultsPath ? JSON.parse(await readFile(seedResultsPath, 'utf8')) as { startedAt?: string; requestedApiModel?: string; mapIds?: string[]; rows?: BenchmarkRow[] } : null;
+const seedPath = seedResultsPath ?? resumePath;
+const seed = seedPath ? JSON.parse(await readFile(seedPath, 'utf8')) as { startedAt?: string; requestedApiModel?: string; reasoningEffort?: string | null; mapIds?: string[]; rows?: BenchmarkRow[] } : null;
 if (seed?.requestedApiModel && seed.requestedApiModel !== requestedModel) throw new Error('Seed results used a different API model');
 if (seed?.mapIds && seed.mapIds.join(',') !== mapIds.join(',')) throw new Error('Seed results used different maps');
+if (seed && (seed.reasoningEffort ?? null) !== reasoningEffort) throw new Error('Seed results used a different reasoning effort');
 const rows: BenchmarkRow[] = [...(seed?.rows ?? [])];
 const startedAt = seed?.startedAt ?? new Date().toISOString();
+const completedKeys = new Set(rows.map(rowKey));
 for (const mapId of mapIds) {
   const bundle = await loadMap(mapId);
   const mapContext = buildMapContext(mapId, bundle.graph);
@@ -125,27 +144,19 @@ for (const mapId of mapIds) {
     const provider = providers.get(providerName);
     if (!provider) throw new Error(`Provider ${providerName} was not loaded`);
     for (const benchmarkCase of benchmarkCases) {
+      const key = rowKey({ provider: providerName, mapId, caseId: benchmarkCase.id });
+      if (completedKeys.has(key)) { process.stdout.write(`[${providerName}] ${mapId}/${benchmarkCase.id} ... resumed\n`); continue; }
       process.stdout.write(`[${providerName}] ${mapId}/${benchmarkCase.id} ... `);
       const row = await runCase(providerName, provider, benchmarkCase, mapContext, bundle, requestedModel, reasoningEffort, abortAfterMs);
       rows.push(row);
+      completedKeys.add(key);
+      await writeAtomicJson(partialPath, buildMetadata(rows, null));
       process.stdout.write(`${row.outcome}${row.safeError ? ` (${row.failureCategory})` : ''}\n`);
     }
   }
 }
 
-await mkdir(outputDirectory, { recursive: true });
-const metadata = {
-  schemaVersion: 2,
-  startedAt,
-  completedAt: new Date().toISOString(),
-  requestedDisplayName: requestedModel,
-  requestedApiModel: requestedModel,
-  reasoningEffort,
-  providerNames: [...new Set(rows.map((row) => row.provider))],
-  mapIds,
-  cases: benchmarkCases.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
-  rows,
-};
+const metadata = buildMetadata(rows, new Date().toISOString());
 await writeFile(path.join(outputDirectory, 'results.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
 await writeFile(path.join(outputDirectory, 'results.csv'), toCsv(rows), 'utf8');
 await writeFile(path.join(outputDirectory, 'evaluation.md'), renderReport(rows, metadata), 'utf8');
@@ -227,13 +238,13 @@ async function runCase(
   mapContext: CopilotMapContext,
   bundle: Awaited<ReturnType<typeof loadMap>>,
   model: string,
-  effort: 'low' | 'medium' | 'high',
+  effort: 'low' | 'medium' | 'high' | null,
   timeoutMs: number,
 ): Promise<BenchmarkRow> {
   const wallStart = performance.now();
   const base = (): Omit<BenchmarkRow, 'outcome' | 'failureCategory' | 'safeError'> => ({
     provider: providerName, caseId: benchmarkCase.id, caseSummary: benchmarkCase.summary, mapId: mapContext.mapId,
-    requestedModel: model, actualModel: null, modelFallback: false, reasoningEffort: effort, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
+    requestedModel: model, actualModel: null, modelFallback: false, reasoningEffort: effort, seed: providerName === 'upstream-chat2scenic' ? 20260803 : null, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
     inputTokens: null, outputTokens: null, totalTokens: null, apiCalls: null, repairCount: null,
     scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null, scenicCompileSampleMs: null,
     mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
@@ -243,6 +254,8 @@ async function runCase(
     stopReason: null, imagesSent: null, totalImageBytes: null, imageCostUsd: null, savedResult: null,
   });
   let observed = base();
+  let generatedForEvidence: CopilotGenerationResult | null = null;
+  let candidateForEvidence: CopilotCandidate | null = null;
   let phase = 'provider-generation';
   try {
     const request = {
@@ -251,14 +264,16 @@ async function runCase(
       mapContext,
       maxCandidates: 1,
       model,
+      ...(evaluationMode ? { evaluationMode } : {}),
       ...((providerName === 'simulation-agent' || providerName === 'simulation-agent-vision') ? { maxAgentIterations: 4 } : {}),
       ...(providerName === 'relative-goal-optimizer' ? { maxOptimizerEvaluations: 24 } : {}),
-      agentReasoningEffort: effort,
-      ...(providerName === 'simulation-agent' ? { agentReasoningEffort: 'high' as const } : {}),
+      ...(effort ? { agentReasoningEffort: effort } : {}),
     } as unknown as CopilotGenerationRequest;
     const signal = AbortSignal.timeout(timeoutMs);
     const generated = await provider(request, { signal });
+    generatedForEvidence = generated;
     const candidate = generated.candidates[0];
+    candidateForEvidence = candidate ?? null;
     const repairCount = candidate?.provenance.repairAttempts ?? (generated.agentDetails ? Math.max(0, generated.agentDetails.iterations.length - 1) : 0);
     const research = readResearchDetails(candidate);
     const common = {
@@ -285,8 +300,11 @@ async function runCase(
     };
     observed = common;
     if (!candidate) {
-      if (benchmarkCase.expectedRejection) return { ...common, outcome: 'expected-rejection', failureCategory: 'expected-rejection', safeError: 'Provider returned no candidate for an unsupported request', totalLatencyMs: Math.round(performance.now() - wallStart) };
-      return { ...common, outcome: 'failure', failureCategory: 'no-candidate', safeError: generated.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ').slice(0, 500) || 'Provider returned no candidate', totalLatencyMs: Math.round(performance.now() - wallStart) };
+      const message = generated.diagnostics.map((item) => `${item.code}: ${item.message}`).join('; ').slice(0, 500) || 'Provider returned no candidate';
+      const category = benchmarkCase.expectedRejection ? 'expected-rejection' : 'no-candidate';
+      const savedResult = createSavedResult(generated, null, mapContext, null, { phase, category, message });
+      if (benchmarkCase.expectedRejection) return { ...common, savedResult, outcome: 'expected-rejection', failureCategory: category, safeError: message, totalLatencyMs: Math.round(performance.now() - wallStart) };
+      return { ...common, savedResult, outcome: 'failure', failureCategory: category, safeError: message, totalLatencyMs: Math.round(performance.now() - wallStart) };
     }
     phase = 'schema-editability';
     const editable = TemplateDocument.fromJSON(candidate.scenarioDoc);
@@ -332,7 +350,7 @@ async function runCase(
       relativeActionCount: relativeIds.length,
       relativeTriggerFireCount,
       relativeTimingPass,
-      savedResult: createSavedResult(generated, candidate, mapContext, simulated.trace),
+      savedResult: createSavedResult(generated, candidate, mapContext, simulated.trace, null),
     };
     if (benchmarkCase.expectedRejection) return { ...completed, outcome: 'unexpected-generation', failureCategory: 'unsupported-request-not-rejected', safeError: 'Provider materialized and simulated an unsupported request' };
     if (!editablePass) return { ...completed, outcome: 'failure', failureCategory: 'apply-editability', safeError: 'Generated document did not pass edit/undo probe' };
@@ -340,10 +358,11 @@ async function runCase(
     return { ...completed, outcome: 'success', failureCategory: null, safeError: null };
   } catch (error) {
     const failureCategory = error instanceof BenchmarkPhaseError ? error.phase : categorizeError(error, phase);
+    const savedResult = createSavedResult(generatedForEvidence, candidateForEvidence, mapContext, null, { phase, category: failureCategory, message: safeError(error) });
     if (benchmarkCase.expectedRejection && phase === 'provider-generation') {
-      return { ...observed, outcome: 'expected-rejection', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+      return { ...observed, savedResult, outcome: 'expected-rejection', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
     }
-    return { ...observed, outcome: 'failure', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
+    return { ...observed, savedResult, outcome: 'failure', failureCategory, safeError: safeError(error), totalLatencyMs: Math.round(performance.now() - wallStart) };
   }
 }
 
@@ -370,33 +389,43 @@ function booleanOrNull(value: unknown): boolean | null { return typeof value ===
 function failedAssertions(assertions: readonly SemanticAssertion[]): string { return assertions.filter((item) => !item.pass).map((item) => `${item.id}: ${item.evidence}`).join('; ').slice(0, 500); }
 function traceDigest(trace: unknown): string { return createHash('sha256').update(JSON.stringify(trace)).digest('hex'); }
 function createSavedResult(
-  generated: CopilotGenerationResult,
-  candidate: CopilotCandidate,
+  generated: CopilotGenerationResult | null,
+  candidate: CopilotCandidate | null,
   mapContext: CopilotMapContext,
-  trace: { ticks: { t: readonly number[]; actors: Record<string, unknown> }; events: readonly Record<string, unknown>[] },
-): SavedBenchmarkResult | null {
+  trace: { ticks: { t: readonly number[]; actors: Record<string, unknown> }; events: readonly Record<string, unknown>[] } | null,
+  failure: SavedBenchmarkResult['failure'],
+): SavedBenchmarkResult {
   const eventCounts: Record<string, number> = {};
-  for (const event of trace.events) {
+  for (const event of trace?.events ?? []) {
     const kind = typeof event['kind'] === 'string' ? event['kind'] : 'unknown';
     eventCounts[kind] = (eventCounts[kind] ?? 0) + 1;
   }
-  const safeCandidate: CopilotCandidate = {
+  const safeCandidate: CopilotCandidate | null = candidate ? {
     ...candidate,
     diagnostics: candidate.diagnostics.filter((item) => item.code !== 'openai_request'),
     provenance: { ...candidate.provenance, agentDetails: candidate.provenance.agentDetails ? {
       ...candidate.provenance.agentDetails,
       iterations: candidate.provenance.agentDetails.iterations.map(({ requestId: _requestId, ...iteration }) => iteration),
     } : undefined },
-  };
-  const traceHash = traceDigest(trace);
+  } : null;
+  const traceJson = trace ? JSON.stringify(trace) : null;
+  const traceHash = traceJson ? createHash('sha256').update(traceJson).digest('hex') : null;
+  let birdEye: SavedBenchmarkResult['birdEye'] = null;
+  if (candidate) {
+    try {
+      const rendered = renderBirdEye({ mapId: mapContext.mapId, scenarioDoc: candidate.scenarioDoc, trace: trace as Parameters<typeof renderBirdEye>[0]['trace'], iteration: 1, width: 640, height: 640 });
+      birdEye = { dataUrl: rendered.dataUrl, sha256: rendered.sha256, width: rendered.width, height: rendered.height, altText: rendered.altText, legend: rendered.legend };
+    } catch { /* A render failure must not discard the executable draft. */ }
+  }
   const withoutHash = {
     format: 'uniscenarios-copilot-saved-result-v1' as const,
+    status: trace ? 'simulated' as const : candidate ? 'draft-only' as const : 'failed-before-draft' as const,
     mapId: mapContext.mapId,
     mapHash: mapContext.xodrSha256,
-    scenarioSchemaVersion: candidate.scenarioDoc.schemaVersion,
-    intent: generated.intent,
+    scenarioSchemaVersion: candidate ? candidate.scenarioDoc.scenarioVersion : null,
+    intent: generated?.intent ?? candidate?.intent ?? null,
     candidate: safeCandidate,
-    canonicalTraceSummary: {
+    canonicalTraceSummary: trace && traceHash ? {
       traceHash,
       tickCount: trace.ticks.t.length,
       durationS: trace.ticks.t.at(-1) ?? 0,
@@ -406,14 +435,20 @@ function createSavedResult(
         if (typeof event['kind'] !== 'string' || typeof event['t'] !== 'number') return [];
         return [{ t: event['t'], kind: event['kind'], ...(typeof event['actorId'] === 'string' ? { actorId: event['actorId'] } : {}), ...(typeof event['interactionId'] === 'string' ? { interactionId: event['interactionId'] } : {}) }];
       }),
-    },
+    } : null,
+    canonicalTraceGzipBase64: traceJson ? gzipSync(Buffer.from(traceJson)).toString('base64') : null,
+    birdEye,
+    failure,
     // Upstream Scenic source is not currently returned across the provider
     // boundary. Never reconstruct it or label a derived program as original.
     generatedScenic: null,
   };
   const hash = createHash('sha256').update(JSON.stringify(withoutHash)).digest('hex');
   const saved: SavedBenchmarkResult = { ...withoutHash, hash };
-  return Buffer.byteLength(JSON.stringify(saved), 'utf8') <= MAX_SAVED_RESULT_BYTES ? saved : null;
+  if (Buffer.byteLength(JSON.stringify(saved), 'utf8') > MAX_SAVED_RESULT_BYTES) {
+    return { ...saved, canonicalTraceGzipBase64: null, birdEye: null, hash: createHash('sha256').update(JSON.stringify({ ...withoutHash, canonicalTraceGzipBase64: null, birdEye: null })).digest('hex') };
+  }
+  return saved;
 }
 function safeError(error: unknown): string {
   return (error instanceof Error ? error.message : String(error))
@@ -432,7 +467,7 @@ function categorizeError(error: unknown, phase: string): string {
 
 function toCsv(rows: readonly BenchmarkRow[]): string {
   const columns: (keyof BenchmarkRow)[] = [
-    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'reasoningEffort', 'outcome', 'failureCategory',
+    'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'reasoningEffort', 'seed', 'outcome', 'failureCategory',
     'generationLatencyMs', 'totalLatencyMs', 'inputTokens', 'outputTokens', 'totalTokens', 'apiCalls', 'repairCount',
     'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'scenicCompileSampleMs', 'mapBindingPass', 'nativeValidationPass',
     'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
@@ -444,13 +479,13 @@ function toCsv(rows: readonly BenchmarkRow[]): string {
   return `${columns.map(quote).join(',')}\n${rows.map((row) => columns.map((column) => quote(row[column])).join(',')).join('\n')}\n`;
 }
 
-function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: string; completedAt: string; requestedApiModel: string; reasoningEffort: string; mapIds: readonly string[] }): string {
+function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: string; completedAt: string | null; requestedApiModel: string; reasoningEffort: string | null; mapIds: readonly string[] }): string {
   const providers = [...new Set(rows.map((row) => row.provider))];
   const lines = [
     '# Scenario Copilot edge-case evaluation', '',
     `- Run: ${metadata.startedAt} to ${metadata.completedAt}`,
     `- Model requested uniformly: \`${metadata.requestedApiModel}\``,
-    `- Reasoning effort: \`${metadata.reasoningEffort}\``,
+    `- Reasoning effort: \`${metadata.reasoningEffort ?? 'provider default (omitted)'}\``,
     `- Maps: ${metadata.mapIds.join(', ')}`,
     '- Success requires native map materialization, an editable ScenarioDoc, full 20-second canonical simulation, and every deterministic semantic assertion.',
     '', '| Provider | Strict success | Full 20s | Semantic mismatch | Pipeline failure | Expected rejection | Relative triggers fired | Median convergence iterations | Median generation ms | Median total ms | Median simulation ms | Scenic compile+sample ms | API calls | Tokens |',
@@ -475,9 +510,37 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
   return `${lines.join('\n')}\n`;
 }
 
-function parseEffort(value: string): 'low' | 'medium' | 'high' {
+function parseEffort(value: string): 'low' | 'medium' | 'high' | null {
+  if (value === 'default' || value === 'omitted') return null;
   if (value === 'low' || value === 'medium' || value === 'high') return value;
-  throw new Error('--effort must be low, medium, or high');
+  throw new Error('--effort must be default, low, medium, or high');
+}
+
+function rowKey(row: Pick<BenchmarkRow, 'provider' | 'mapId' | 'caseId'>): string { return `${row.provider}:${row.mapId}:${row.caseId}`; }
+async function firstReadable(paths: readonly string[]): Promise<string | null> {
+  for (const candidate of paths) { try { await readFile(candidate, 'utf8'); return candidate; } catch { /* continue */ } }
+  return null;
+}
+async function writeAtomicJson(target: string, value: unknown): Promise<void> {
+  const temp = `${target}.${process.pid}.tmp`; await writeFile(temp, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+  const { rename } = await import('node:fs/promises'); await rename(temp, target);
+}
+function buildMetadata(rowsValue: readonly BenchmarkRow[], completedAt: string | null) {
+  return {
+    schemaVersion: 3, artifactKind, rerunOf, startedAt, completedAt,
+    sourceCommit: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8' }).trim(),
+    requestedDisplayName: requestedModel, requestedApiModel: requestedModel, reasoningEffort, evaluationMode: evaluationMode ?? 'live',
+    exactDifferencesFromOriginal: artifactKind === 'inspection-rerun' ? [
+      'This is a newly generated inspection rerun, not recovery of the original model outputs.',
+      'The original prompt corpus, Richmond map, provider adapters, gpt-5.6-luna request, and omitted reasoning-effort setting are retained.',
+      'Calls may run concurrently across providers; recorded per-run latency is retained but is not used for historical method-performance conclusions.',
+      'Saved native drafts, compressed canonical traces, and deterministic bird-eye thumbnails were added for no-model-call inspection.',
+      `The implementation commit is ${execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8' }).trim()}; the original benchmark predated this rerun.`,
+    ] : [],
+    providerNames: [...new Set(rowsValue.map((row) => row.provider))], mapIds,
+    cases: benchmarkCases.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
+    rows: rowsValue,
+  };
 }
 
 function median(values: readonly (number | null)[]): number | '—' {
