@@ -21,11 +21,11 @@ describe.skipIf(!HAS_RICHMOND)('verified template search', () => {
       slots.push({ id: `slot-${slots.length}`, actorKinds: ['vehicle', 'pedestrian'], catalogIds: ['vehicle.sedan', 'vehicle.pickup', 'vehicle.van', 'vehicle.bus', 'vehicle.bicycle', 'pedestrian.adult_walking', 'pedestrian.child_walking'], pose: { x: scene.x, y: 0, z: scene.z, headingRad: pose.headingRad }, laneRef: { roadId: roadId!, section: Number(section), laneId: Number(laneId), s: pose.storageS, t: 0, headingOffsetRad: 0 }, routeLaneRsls: built.route.legs.map((leg) => leg.rsl), availableDownstreamM: built.route.lengthM - 15, recommendedSpeedKph: 25, labels: ['corridor'] });
       if (slots.length >= 4) break;
     }
-    const ranker: TemplateRanker = { rank: async () => ({ value: { templateId: 'mechanism-lead-brake', intentSummary: 'Lead car braking', semanticGoals: ['lead stops'] }, inputTokens: 5, outputTokens: 3, totalTokens: 8 }) };
+    const ranker: TemplateRanker = { rank: async () => ({ value: { templateId: 'ec-stalled-vehicle', intentSummary: 'Lead car braking', semanticGoals: ['lead stops'] }, inputTokens: 5, outputTokens: 3, totalTokens: 8 }) };
     const request: CopilotGenerationRequest = { providerId: 'verified-template-search', prompt: 'Create a 20 second scenario with an ego sedan following a lead car. At 6 seconds the lead car brakes hard to a complete stop while the ego continues approaching.', mapContext: { mapId: 'richmond-field-station', mapName: 'Richmond', xodrSha256: bundle.graph.topologyDigest, laneCount: bundle.graph.laneRsls().length, junctionLaneCount: 0, bounds: { minX: -1000, minZ: -1000, maxX: 1000, maxZ: 1000 }, placementSlots: slots }, model: 'gpt-5.6-luna', agentReasoningEffort: 'high' };
     const result = await generateVerifiedTemplateSearch(request, { ranker });
     expect(result.candidates).toHaveLength(1);
-    expect(result.candidates[0]!.provenance.templateSearchDetails).toMatchObject({ sourceTemplateId: 'mechanism-lead-brake', searchBudget: 24 });
+    expect(result.candidates[0]!.provenance.templateSearchDetails).toMatchObject({ sourceTemplateId: 'ec-stalled-vehicle', searchBudget: 24 });
     expect(result.candidates[0]!.scenarioDoc.roles).toHaveLength(2);
     expect(result.candidates[0]!.scenarioDoc.choreography.interactions.some((item) => item.verb === 'speed')).toBe(true);
   });

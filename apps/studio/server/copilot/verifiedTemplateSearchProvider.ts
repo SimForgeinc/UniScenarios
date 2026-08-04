@@ -22,26 +22,22 @@ const DEFINITIONS: readonly Omit<VerifiedTemplate, 'sha256' | 'validationDigest'
   { id: 'ec-cyclist-occlusion', source: 'examples/edge-cases/05-cyclist-occlusion-conflict', archetype: 'occluded-vru', tags: ['cyclist', 'bicycle', 'bus', 'occlusion', 'lateral'] },
   { id: 'ec-protected-left', source: 'examples/edge-cases/07-protected-left-red-runner', archetype: 'opposing-turn', tags: ['left turn', 'opposing', 'signal', 'intersection'] },
   { id: 'ec-zipper-merge', source: 'examples/edge-cases/08-zipper-merge-lane-closure', archetype: 'lateral-merge', tags: ['merge', 'lane change', 'gap', 'cut in'] },
-  { id: 'ec-stalled-vehicle', source: 'examples/edge-cases/09-stalled-vehicle-beyond-sight', archetype: 'blocked-lane', tags: ['stopped', 'blocked lane', 'van', 'brake'] },
+  { id: 'ec-stalled-vehicle', source: 'examples/edge-cases/09-stalled-vehicle-beyond-sight', archetype: 'lead-brake', tags: ['lead', 'following', 'stopped', 'blocked lane', 'van', 'hard brake'] },
+  { id: 'ec-roadside-stop', source: 'examples/edge-cases/02-police-roadside-stop', archetype: 'blocked-lane', tags: ['stopped', 'blocked lane', 'roadside', 'yield'] },
   { id: 'ec-double-crosswalk', source: 'examples/edge-cases/11-double-threat-crosswalk', archetype: 'vru-conflict', tags: ['pedestrian', 'crosswalk', 'near miss', 'distance', 'ttc'] },
   { id: 'ec-gridlock', source: 'examples/edge-cases/12-fire-engine-gridlock-escape', archetype: 'multi-actor', tags: ['emergency', 'yield', 'multi actor', 'intersection'] },
-  { id: 'mechanism-lead-brake', source: 'examples/mechanisms/corridor/lead-hard-brake.template.json', archetype: 'lead-brake', tags: ['lead', 'following', 'hard brake', 'stop'] },
-  { id: 'mechanism-cut-in', source: 'examples/mechanisms/corridor/cut-in-brake.template.json', archetype: 'lateral-merge', tags: ['cut in', 'adjacent lane', 'lane change', 'brake'] },
-  { id: 'mechanism-opposing-turn', source: 'examples/mechanisms/remaining/opposing-turn-encroachment.template.json', archetype: 'opposing-turn', tags: ['opposing', 'turn', 'encroachment'] },
 ];
 
 function verifiedLibrary(): VerifiedTemplate[] {
   return DEFINITIONS.flatMap((definition) => {
     const directory = path.resolve(ROOT, definition.source);
-    const templatePath = definition.source.endsWith('.json') ? directory : path.join(directory, 'scenario.template.json');
-    const validationPath = definition.source.endsWith('.json') ? null : path.join(directory, 'validation.json');
-    if (!existsSync(templatePath)) return [];
+    const templatePath = path.join(directory, 'scenario.template.json');
+    const validationPath = path.join(directory, 'validation.json');
+    if (!existsSync(templatePath) || !existsSync(validationPath)) return [];
     const template = readFileSync(templatePath);
-    const validation = validationPath && existsSync(validationPath) ? readFileSync(validationPath) : Buffer.from('mechanism-template-owned-by-uniscenarios');
-    if (validationPath) {
-      const parsed = JSON.parse(validation.toString('utf8')) as { acceptance?: { ok?: boolean } };
-      if (parsed.acceptance?.ok !== true) return [];
-    }
+    const validation = readFileSync(validationPath);
+    const parsed = JSON.parse(validation.toString('utf8')) as { acceptance?: { ok?: boolean } };
+    if (parsed.acceptance?.ok !== true) return [];
     return [{ ...definition, sha256: createHash('sha256').update(template).digest('hex'), validationDigest: createHash('sha256').update(validation).digest('hex') }];
   });
 }
@@ -121,4 +117,3 @@ function createOpenAITemplateRanker(): TemplateRanker {
     return { value: JSON.parse(text) as TemplateRankResult, inputTokens: payload.usage?.input_tokens ?? 0, outputTokens: payload.usage?.output_tokens ?? 0, totalTokens: payload.usage?.total_tokens ?? 0 };
   } };
 }
-
