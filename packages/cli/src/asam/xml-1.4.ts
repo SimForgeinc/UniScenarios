@@ -1180,7 +1180,7 @@ export function exportOpenScenarioXml14(
     ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, value]) => `<Property name="uniscenarios.provenance.${xml(key)}" value="${xml(String(value))}"/>`,
     ),
-    ...(options.nearMissCriteria ?? input.nearMissCriteria.map((criterion) => ({ ...criterion }))).flatMap((criterion, index) => {
+    ...(options.nearMissCriteria ?? input.nearMissCriteria?.map((criterion) => ({ ...criterion })) ?? []).flatMap((criterion, index) => {
       const prefix = `uniscenarios.nearMiss.${index}`;
       return [
         `<Property name="${prefix}.pedestrian" value="${xml(criterion.pedestrianId)}"/>`,
@@ -1249,7 +1249,7 @@ export function exportOpenScenarioXml14(
     intent: capabilities.report.intent,
     capabilityReport: capabilities.report,
     warnings: mergeAsamWarnings(resolved.warnings, capabilities.warnings, [
-      ...((options.nearMissCriteria?.length || input.nearMissCriteria.length) ? [{
+      ...((options.nearMissCriteria?.length || input.nearMissCriteria?.length) ? [{
         code: 'near_miss_criterion_metadata',
         path: 'FileHeader.Properties',
         reason: 'OSC 1.4 preserves the executable condition and pedestrian trajectory; exact OBB-clearance acceptance remains UniScenarios metadata and must be re-evaluated from the simulator trace',

@@ -38,6 +38,7 @@ import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from './stat
 import type { StaticColliderDiagnostics } from './staticMapColliders';
 import { initialLiveTickBudget, planLiveRefill } from './liveSimulationPlan';
 import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from './mapRuntime';
+import { runCanonicalPreview } from './canonicalPreview';
 
 export interface ScenarioWorkerMap {
   id: string;
@@ -570,16 +571,14 @@ function simulateForRequest(
   staticColliders: Parameters<typeof runSimulation>[1]['staticColliders'],
   operation: ScenarioWorkerRequest['operation'],
 ): SimResult {
-  if (operation !== 'materialize') {
-    return runSimulation(input, { graph, guards: 'throw', staticColliders });
-  }
-  const session = createFixedStepSimulation(input, { graph, guards: 'throw', staticColliders });
-  // Authoring needs the warmed t=0 world, not a speculative 20-second trace.
-  // The same concrete input is handed to the live worker when Play is pressed.
-  const progress = session.advance(Math.round(input.warmupSeconds / input.dt) + 1);
-  preparedLiveSessions.clear();
-  preparedLiveSessions.set(contentHash(input), session);
-  return { trace: progress.trace, issues: progress.issues, arrival: progress.arrival };
+  if (operation !== 'materialize') return runSimulation(input, { graph, guards: 'throw', staticColliders });
+  const key = contentHash(input);
+  // Authoring and Play share this exact full-duration fixed-step result. This
+  // removes the former t=0 + heuristic future-path split: trigger decisions,
+  // route gates, signals, collisions and action timing have one authority.
+  const result = runCanonicalPreview(input, graph, staticColliders);
+  preparedLiveSessions.delete(key);
+  return result;
 }
 
 function applyRequestedAmbientPopulation(

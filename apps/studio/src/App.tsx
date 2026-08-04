@@ -13,7 +13,7 @@ import { WorkspaceHeader } from './editor/EditorChrome';
 import { EditorToolRail, shouldShowEditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from './editor/EditorToolRail';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
-import { PlaybackLoadError, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
+import { PlaybackLoadError, canonicalPreviewIdentity, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
 import { galleryCameraChoice } from './playback/controller';
 import {
   physicsForActor,
@@ -492,30 +492,17 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     if (!routeParity.ok) {
       throw new Error(`Playback route plan does not match the projected route for: ${routeParity.mismatches.join(', ')}. Rebuild the preview before Play.`);
     }
-    const finalRecordedTime = bundle.trace.ticks.t.at(-1) ?? 0;
-    if (finalRecordedTime >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2) {
-      // A completed live trace is immutable cache data and replays instantly.
+    const previewIdentity = canonicalPreviewIdentity(bundle);
+    if (previewIdentity.complete && previewIdentity.hashBound) {
+      // The full canonical authoring preview is the immutable playback result;
+      // Play never invokes a second resolver/simulation for this revision.
       livePlayback.current = null;
       setAuthoredPlayback(bundle);
       return;
     }
-    // Start the canonical fixed-step engine from the exact visible population.
-    // Only a small lead is recorded before playback becomes visible.
-    const entry = ambientPreviewCache.current.current;
-    const run = runtimeWorker.current!.start(bundle, map);
-    throwIfPreparationAborted(signal);
-    livePlayback.current = run;
-    setAuthoredPlayback(run.bundle);
-    void run.completion.then((completed) => {
-      if (!entry || ambientPreviewCache.current.current?.value !== bundle) return;
-      const token = ambientPreviewCache.current.begin();
-      if (!compiledWorldMatchesRevision(editorController.doc, entry.revision)) return;
-      ambientPreviewCache.current.commit(token, { ...entry, value: completed });
-    }).catch((reason: unknown) => {
-      if ((reason as { name?: string } | null)?.name !== 'AbortError') {
-        setAmbientTrafficError(reason instanceof Error ? reason.message : String(reason));
-      }
-    });
+    throw new Error(previewIdentity.hashBound
+      ? 'The native scenario preview is still updating. Press Play when its full trajectory is ready.'
+      : 'The scenario changed after its native preview was compiled. Wait for the updated preview before Play.');
   }, [ambientTrafficProvider, editorController, map, materializedAmbientProfile]);
   const cancelAuthoredPlayback = useCallback(() => {
     runtimeWorker.current?.cancel();

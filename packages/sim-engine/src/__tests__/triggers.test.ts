@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { runSimulation } from '../sim/engine.js';
+import { buildLaneGraph } from '../map/lane-graph.js';
 import { hasLineOfSight, buildOccluders } from '../sim/visibility.js';
 import { LANE_LEFT, LANE_RIGHT, scenario, syntheticGraph, vehicle } from './fixtures/scenarios.js';
 
@@ -105,6 +106,66 @@ describe('actor-relative trigger boundaries', () => {
     }), { graph, guards: 'collect' });
     expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'undefined-ttc')).toBe(false);
     expect(trace.metrics.triggerNeverFired).toContain('undefined-ttc');
+  });
+});
+
+describe('route commitment timing', () => {
+  const branchGraph = buildLaneGraph({
+    schemaVersion: 1,
+    mapName: 'branch',
+    source: { xodrSha256: 'branch' },
+    gates: [],
+    junctions: {},
+    lanes: {
+      approach: {
+        rsl: 'approach', roadId: 1, section: 0, laneId: -1, laneType: 'driving', isJunction: false, junctionId: null,
+        predecessors: [], successors: ['straight', 'turn'], speedLimitKph: 50, representativeWidthM: 3.5,
+        widthSamples: [{ s: 0, widthM: 3.5 }, { s: 20, widthM: 3.5 }],
+        adjacentLanes: { left: { side: 'left', laneRsl: null, sameDirection: false, permissionIds: [] }, right: { side: 'right', laneRsl: null, sameDirection: false, permissionIds: [] } },
+        laneChangePermissions: [], polyline: [{ x: 0, y: 0 }, { x: 20, y: 0 }],
+      },
+      straight: {
+        rsl: 'straight', roadId: 2, section: 0, laneId: -1, laneType: 'driving', isJunction: false, junctionId: null,
+        predecessors: ['approach'], successors: [], speedLimitKph: 50, representativeWidthM: 3.5,
+        widthSamples: [{ s: 0, widthM: 3.5 }, { s: 40, widthM: 3.5 }],
+        adjacentLanes: { left: { side: 'left', laneRsl: null, sameDirection: false, permissionIds: [] }, right: { side: 'right', laneRsl: null, sameDirection: false, permissionIds: [] } },
+        laneChangePermissions: [], polyline: [{ x: 20, y: 0 }, { x: 60, y: 0 }],
+      },
+      turn: {
+        rsl: 'turn', roadId: 3, section: 0, laneId: -1, laneType: 'driving', isJunction: false, junctionId: null,
+        predecessors: ['approach'], successors: [], speedLimitKph: 50, representativeWidthM: 3.5,
+        widthSamples: [{ s: 0, widthM: 3.5 }, { s: 40, widthM: 3.5 }],
+        adjacentLanes: { left: { side: 'left', laneRsl: null, sameDirection: false, permissionIds: [] }, right: { side: 'right', laneRsl: null, sameDirection: false, permissionIds: [] } },
+        laneChangePermissions: [], polyline: [{ x: 20, y: 0 }, { x: 20, y: 40 }],
+      },
+    },
+  });
+
+  function routedTurn(at: number) {
+    const actor = vehicle(branchGraph, { id: 'ego', rsl: 'approach', s: 0, speedMps: 10, cruiseSpeedMps: 10 });
+    actor.behavior.route = { kind: 'lanePath', lanes: ['approach', 'straight'] };
+    return scenario(branchGraph, {
+      clipSeconds: 5,
+      warmupSeconds: 0,
+      actors: [actor],
+      interactions: [{ id: 'turn', actorId: 'ego', trigger: { kind: 'at', t: at }, verb: 'route', target: { kind: 'lanePath', lanes: ['approach', 'turn'] } }],
+    });
+  }
+
+  it('waits for the shared approach instead of changing a future turn immediately', () => {
+    const { trace } = runSimulation(routedTurn(0), { graph: branchGraph, guards: 'collect' });
+    const fired = trace.events.find((event) => event.kind === 'trigger_fired' && event.interactionId === 'turn');
+    expect(fired?.t).toBeGreaterThan(0);
+    expect(fired?.t).toBeLessThan(2);
+  });
+
+  it('skips a late future turn after the actor has passed its commitment point', () => {
+    const { trace } = runSimulation(routedTurn(3), { graph: branchGraph, guards: 'collect' });
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: 'trigger_skipped', interactionId: 'turn', reason: 'route_commit_missed',
+    }));
+    expect(trace.events.some((event) => event.kind === 'trigger_fired' && event.interactionId === 'turn')).toBe(false);
+    expect(trace.metrics.triggerNeverFired).toContain('turn');
   });
 });
 

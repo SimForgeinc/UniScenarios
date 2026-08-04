@@ -79,7 +79,7 @@ function fieldHasMaterialValue(input: SimScenarioInput, path: keyof SimScenarioI
     case 'props': return input.props.length > 0;
     case 'occluders': return input.occluders.length > 0;
     case 'occlusionPairs': return input.occlusionPairs.length > 0;
-    case 'nearMissCriteria': return input.nearMissCriteria.length > 0;
+    case 'nearMissCriteria': return (input.nearMissCriteria?.length ?? 0) > 0;
     default: return true;
   }
 }

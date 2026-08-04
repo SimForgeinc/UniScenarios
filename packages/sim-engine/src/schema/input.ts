@@ -750,7 +750,9 @@ export const simScenarioInputSchema = z
     props: z.array(staticPropSchema).default([]),
     occluders: z.array(occluderSchema).default([]),
     occlusionPairs: z.array(occlusionPairSchema).default([]),
-    nearMissCriteria: z.array(nearMissCriterionSchema).default([]),
+    // Optional (rather than default []) so parsing historical immutable inputs
+    // does not alter their content hash.
+    nearMissCriteria: z.array(nearMissCriterionSchema).optional(),
   })
   .superRefine((doc, ctx) => {
     const actorIds = new Set<string>();
@@ -792,8 +794,8 @@ export const simScenarioInputSchema = z
     if (doc.metricSubject !== undefined && !actorIds.has(doc.metricSubject)) {
       ctx.addIssue({ code: 'custom', path: ['metricSubject'], message: 'unknown actor' });
     }
-    for (let i = 0; i < doc.nearMissCriteria.length; i++) {
-      const criterion = doc.nearMissCriteria[i]!;
+    for (let i = 0; i < (doc.nearMissCriteria?.length ?? 0); i++) {
+      const criterion = doc.nearMissCriteria![i]!;
       if (!actorIds.has(criterion.pedestrianId) || !actorIds.has(criterion.targetId)) {
         ctx.addIssue({ code: 'custom', path: ['nearMissCriteria', i], message: 'near-miss criterion references an unknown actor' });
       }
@@ -944,7 +946,7 @@ export function normalizeSimScenarioInput(input: SimScenarioInput): SimScenarioI
         a.target.localeCompare(b.target) ||
         (a.occluderId ?? '').localeCompare(b.occluderId ?? ''),
     ),
-    nearMissCriteria: [...input.nearMissCriteria].sort((a, b) => a.interactionId.localeCompare(b.interactionId)),
+    ...(input.nearMissCriteria ? { nearMissCriteria: [...input.nearMissCriteria].sort((a, b) => a.interactionId.localeCompare(b.interactionId)) } : {}),
   };
 }
 

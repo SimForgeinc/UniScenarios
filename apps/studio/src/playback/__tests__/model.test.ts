@@ -9,6 +9,8 @@ import {
 } from '@uniscenarios/sim-engine';
 import {
   PlaybackLoadError,
+  canonicalPreviewIdentity,
+  canonicalPreviewParity,
   defaultCatalogIdForActorKind,
   evaluatePlaybackSignalHeadStates,
   parsePlaybackPair,
@@ -194,6 +196,16 @@ function message(action: () => unknown): string {
 }
 
 describe('UniScenarios concrete playback import', () => {
+  it('identifies an immutable full-duration preview and requires exact trace parity', () => {
+    const fixture = pair();
+    const bundle = parsePlaybackPair(fixture.instance, fixture.trace);
+    const identity = canonicalPreviewIdentity(bundle);
+    expect(identity).toMatchObject({ contractVersion: 1, complete: true, hashBound: true, samples: 2 });
+    expect(canonicalPreviewParity(bundle, bundle)).toMatchObject({ ok: true });
+    const changed = structuredClone(bundle);
+    (changed.trace.ticks.actors.ego!.x as number[])[1] = 99;
+    expect(canonicalPreviewParity(bundle, changed)).toMatchObject({ ok: false });
+  });
   it.each([1, 2, 3])('accepts legacy trace format v%s without lateral offsets as lane-centred', (traceVersion) => {
     const fixture = pair();
     (fixture.trace.header as { traceVersion: number }).traceVersion = traceVersion;

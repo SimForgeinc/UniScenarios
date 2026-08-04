@@ -1021,10 +1021,19 @@ class Simulation {
       // immediate re-route when the clip begins. Hold it until the actor is on
       // the final shared approach leg; if that never occurs inside the clip it
       // is missed below instead of executing later.
-      const routeReady = tr.interaction.verb !== 'route'
-        || !window
-        || this.routeCommitReady(tr.interaction);
-      if (!verdict.fire || !routeReady) continue;
+      const routeCommit = tr.interaction.verb !== 'route'
+        ? 'ready' as const
+        : this.routeCommitStatus(tr.interaction);
+      if (verdict.fire && routeCommit === 'missed') {
+        tr.status = 'skipped';
+        this.events.push({
+          t, kind: 'trigger_skipped', interactionId: tr.interaction.id,
+          actorId: tr.interaction.actorId, reason: 'route_commit_missed',
+        });
+        this.metrics.triggerNeverFired.push(tr.interaction.id);
+        continue;
+      }
+      if (!verdict.fire || routeCommit !== 'ready') continue;
       const targetActor = this.byId.get(tr.interaction.actorId);
       // A material crash disables every command capable of moving or
       // respawning the body, but evidence-only state changes (lights, horn,
@@ -1062,16 +1071,25 @@ class Simulation {
 
   /** Whether a route action has reached the junction where its target path
    * diverges from the actor's current path. Identical paths are ready now. */
-  private routeCommitReady(it: Interaction & { verb: 'route' }): boolean {
+  private routeCommitStatus(it: Interaction & { verb: 'route' }): 'wait' | 'ready' | 'missed' {
     const actor = this.byId.get(it.actorId);
-    if (!actor || actor.route.isFreeform || it.target.kind !== 'lanePath') return true;
+    if (!actor || actor.route.isFreeform || it.target.kind !== 'lanePath') return 'ready';
     const target = buildRoute(this.graph, it.target);
-    if (!target.ok || target.route.isFreeform) return true;
+    if (!target.ok || target.route.isFreeform) return 'ready';
     const currentIndex = actor.route.legIndexAt(actor.routeS);
     const currentRsl = actor.route.legs[currentIndex]?.rsl;
-    if (!currentRsl) return true;
+    if (!currentRsl) return 'ready';
     const targetIndex = target.route.legs.findIndex((leg) => leg.rsl === currentRsl);
-    if (targetIndex < 0) return true;
+    if (targetIndex < 0) {
+      // If these routes once shared an approach, the actor has already taken
+      // the old branch. Applying now would project/teleport it onto a future
+      // path and make a late timeline edit rewrite the past.
+      const targetLanes = new Set(target.route.legs.map((leg) => leg.rsl));
+      const passedSharedApproach = actor.route.legs
+        .slice(0, currentIndex)
+        .some((leg) => targetLanes.has(leg.rsl));
+      return passedSharedApproach ? 'missed' : 'ready';
+    }
     let shared = 0;
     while (
       actor.route.legs[currentIndex + shared]?.rsl
@@ -1080,11 +1098,12 @@ class Simulation {
     if (shared === 0 || (
       currentIndex + shared >= actor.route.legs.length
       && targetIndex + shared >= target.route.legs.length
-    )) return true;
+    )) return 'ready';
     const lastShared = actor.route.legs[currentIndex + shared - 1]!;
     const commitS = lastShared.sStart + lastShared.lengthM;
+    if (actor.routeS > commitS + 1e-6) return 'missed';
     const lookaheadM = clamp(actor.speedMps * 1.5, 5, 20);
-    return actor.routeS >= commitS - lookaheadM;
+    return actor.routeS >= commitS - lookaheadM ? 'ready' : 'wait';
   }
 
   private evaluateUntil(t: number, collisions: ReadonlySet<string>): void {

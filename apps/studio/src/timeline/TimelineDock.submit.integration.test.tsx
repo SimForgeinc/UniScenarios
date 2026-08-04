@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ScenarioNotFoundError, type Interaction, type TemplateFileStore, type Trigger } from '@uniscenarios/scenario-model';
 import { EditorDocument } from '../editor/document';
-import { LaneIndex } from '../editor/laneIndex';
-import { routesFromTemplate } from '../editor/routeOverlay';
 import { MAPS } from '../maps';
 import { buildTimelineGroups, interactionWithTimelineRange, TIMELINE_LAYOUT_EXTENSION_KEY, timelineLayoutExtension } from './model';
 import { ActionEditor, actionEditorStateForItem, submitTimelineAction, type TimelineActionDraft } from './TimelineDock';
@@ -40,17 +38,6 @@ function draft(actorId: string, definitionId: string, time = 2): TimelineActionD
   return { actorId, definitionId, time, duration: definitionId === 'turn_left' ? 2 : 1, targetSpeed: 30, maneuverDuration: 3, maneuverStyle: 'normal', editingId: null };
 }
 
-function laneIndex(): LaneIndex {
-  return LaneIndex.build({
-    mapName: 'timeline-submit',
-    lanes: {
-      '5:0:-3': { roadId: 5, section: 0, laneId: -3, laneType: 'driving', successors: ['6:0:-3', '7:0:-3'], polyline: [{ x: 0, y: 0 }, { x: 10, y: 0 }] },
-      '6:0:-3': { roadId: 6, section: 0, laneId: -3, laneType: 'driving', predecessors: ['5:0:-3'], polyline: [{ x: 10, y: 0 }, { x: 20, y: 0 }] },
-      '7:0:-3': { roadId: 7, section: 0, laneId: -3, laneType: 'driving', predecessors: ['5:0:-3'], polyline: [{ x: 10, y: 0 }, { x: 10, y: 10 }] },
-    },
-  });
-}
-
 describe('timeline action dialog submission', () => {
   it('authors distance and TTC triggers against another authored actor and rejects stale/self targets', async () => {
     const { store } = memoryStore();
@@ -80,7 +67,7 @@ describe('timeline action dialog submission', () => {
     expect(document.data.invariants).toHaveLength(0);
     document.dispose();
   });
-  it('adds Accelerate as one undoable action and publishes the preview revision synchronously', async () => {
+  it('adds Accelerate as one undoable action and publishes the document revision synchronously', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);
     const before = document.revision;
@@ -96,13 +83,12 @@ describe('timeline action dialog submission', () => {
       { actor: actorId, label: 'Accelerate', verb: 'speed', target: { mode: 'delta', deltaKph: 10 } },
     ]);
     expect(buildTimelineGroups(document.data)[0]!.lanes[0]!.items).toHaveLength(1);
-    expect(routesFromTemplate(document.data, laneIndex())[0]!.markers.some((marker) => marker.kind === 'speed-change')).toBe(true);
     expect(document.undo()).toBe(true);
     expect(document.data.choreography.interactions).toHaveLength(0);
     document.dispose();
   });
 
-  it('adds Turn left in a parallel lane and exposes its route marker in the same cycle', async () => {
+  it('adds Turn left in a parallel lane without synthesizing behavioral preview state', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);
     expect(submitTimelineAction(document, draft(actorId, 'accelerate')).ok).toBe(true);
@@ -123,7 +109,6 @@ describe('timeline action dialog submission', () => {
     });
     expect(group.lanes).toHaveLength(2);
     expect(group.lanes.map((lane) => lane.items[0]!.interaction.label).sort()).toEqual(['Accelerate', 'Turn left']);
-    expect(routesFromTemplate(document.data, laneIndex())[0]!.markers.some((marker) => marker.kind === 'turn-left')).toBe(true);
     document.dispose();
   });
 

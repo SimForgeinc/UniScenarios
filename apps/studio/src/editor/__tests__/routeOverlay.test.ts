@@ -91,7 +91,7 @@ describe('vehicle route overlays', () => {
     expect(route.actual).not.toEqual(route.planned);
   });
 
-  it('keeps the authored projected line stable when Play contributes an actual trace', () => {
+  it('shows no behavioral trajectory while the canonical trace is incomplete', () => {
     const template = {
       roles: [{
         id: 'ego', kind: 'scene_absolute', actor: { class: 'car', static: false },
@@ -103,10 +103,23 @@ describe('vehicle route overlays', () => {
     const trace = {
       ticks: { t: [0, 1], actors: { ego: { x: [0, 5], z: [0, 0], present: [1, 1] } } }, events: [],
     } as unknown as SceneTrace;
-    const beforePlay = routesForAuthoringPreview(template, index(), input()).find((route) => route.actorId === 'ego')!;
-    const duringPlay = authoringRoutes(template, index(), input(), trace).find((route) => route.actorId === 'ego')!;
-    expect(duringPlay.planned).toEqual(beforePlay.planned);
-    expect(duringPlay.actual).toEqual([{ x: 0, z: 0 }, { x: 5, z: 0 }]);
+    expect(routesForAuthoringPreview(template, index(), input())).toEqual([]);
+    expect(authoringRoutes(template, index(), input(), trace)).toEqual([]);
+  });
+
+  it('uses a completed canonical preview trace as the authored future path', () => {
+    const template = {
+      roles: [{ id: 'ego', kind: 'scene_absolute', actor: { class: 'car', static: false }, laneRef: { roadId: '1', section: 0, laneId: -1, s: 0 }, initialRoute: { mode: 'lanePath', lanes: ['1:0:-1', '2:0:-1'] } }],
+      choreography: { clipSeconds: 5, interactions: [] },
+    } as unknown as ScenarioTemplateV2;
+    const exact = [{ x: 0, z: 0 }, { x: 3, z: 1 }, { x: 7, z: 4 }];
+    const trace = {
+      header: { clipSeconds: 5 },
+      ticks: { t: [0, 2.5, 5], actors: { ego: { x: exact.map((p) => p.x), z: exact.map((p) => p.z), present: [1, 1, 1] } } }, events: [],
+    } as unknown as SceneTrace;
+    const route = authoringRoutes(template, index(), input(), trace).find((candidate) => candidate.actorId === 'ego')!;
+    expect(route.planned).toEqual(exact);
+    expect(route.actual).toEqual(exact);
   });
 
   it('fails closed when compiled Play input changes a persisted route plan or explicit maneuver', () => {
@@ -139,7 +152,7 @@ describe('vehicle route overlays', () => {
     expect(routeExecutionParity(template, changed)).toMatchObject({ ok: false, mismatches: ['ego'] });
   });
 
-  it('uses the current authored timeline route while retaining warmed ambient routes', () => {
+  it('does not fall back to authored or warmed route geometry without a complete trace', () => {
     const template = {
       roles: [{ id: 'ego', actor: { class: 'car', static: false } }],
       choreography: {
@@ -149,10 +162,7 @@ describe('vehicle route overlays', () => {
         }],
       },
     } as unknown as ScenarioTemplateV2;
-    const routes = routesForAuthoringPreview(template, index(), input());
-    expect(routes.map((route) => route.actorId)).toEqual(['ambient-1', 'ego']);
-    expect(routes.find((route) => route.actorId === 'ego')!.planned[0]).toEqual({ x: 30, z: 0 });
-    expect(routes.find((route) => route.actorId === 'ego')!.planned.at(-1)).toEqual({ x: 20, z: 0 });
+    expect(routesForAuthoringPreview(template, index(), input())).toEqual([]);
   });
 
   it('creates world-length dashes and stable actor colors', () => {

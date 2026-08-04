@@ -106,6 +106,46 @@ export interface PlaybackBundle {
   readonly openScenario?: OpenScenarioSnapshot;
 }
 
+/** Versioned identity for the one canonical full-duration preview/play result. */
+export interface CanonicalPreviewIdentity {
+  readonly contractVersion: 1;
+  readonly inputHash: string;
+  readonly traceInputHash: string;
+  readonly traceHash: string;
+  readonly engineVersion: string;
+  readonly traceVersion: number;
+  readonly samples: number;
+  readonly endTimeS: number;
+  readonly complete: boolean;
+  readonly hashBound: boolean;
+}
+
+export function canonicalPreviewIdentity(bundle: Pick<PlaybackBundle, 'instance' | 'trace'>): CanonicalPreviewIdentity {
+  const endTimeS = bundle.trace.ticks.t.at(-1) ?? 0;
+  const inputHash = contentHash(bundle.instance.input);
+  return {
+    contractVersion: 1,
+    inputHash,
+    traceInputHash: bundle.trace.header.inputHash,
+    traceHash: contentHash(bundle.trace),
+    engineVersion: bundle.trace.header.engineVersion,
+    traceVersion: bundle.trace.header.traceVersion,
+    samples: bundle.trace.ticks.t.length,
+    endTimeS,
+    complete: endTimeS >= bundle.instance.input.clipSeconds - bundle.instance.input.dt / 2,
+    hashBound: bundle.trace.header.inputHash === inputHash,
+  };
+}
+
+export function canonicalPreviewParity(
+  preview: Pick<PlaybackBundle, 'instance' | 'trace'>,
+  playback: Pick<PlaybackBundle, 'instance' | 'trace'>,
+): { readonly ok: boolean; readonly preview: CanonicalPreviewIdentity; readonly playback: CanonicalPreviewIdentity } {
+  const a = canonicalPreviewIdentity(preview);
+  const b = canonicalPreviewIdentity(playback);
+  return { ok: a.complete && b.complete && a.hashBound && b.hashBound && a.inputHash === b.inputHash && a.traceHash === b.traceHash, preview: a, playback: b };
+}
+
 export interface PlaybackSignal {
   readonly id: string;
   readonly headIds: readonly string[];
