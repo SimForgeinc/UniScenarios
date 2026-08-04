@@ -173,6 +173,12 @@ export { axisOf } from './sim/state.js';
 /* ------------------------------------------------------------------ solves */
 export { solveArrival, applyArrivalSolution, resolveArrivalTriggers, ARRIVAL_TOLERANCE_M } from './solve/arrival.js';
 export type { ArrivalSolution } from './solve/arrival.js';
+export { solvePedestrianNearMiss } from './solve/pedestrian-near-miss.js';
+export type { PedestrianNearMissRequest, PedestrianNearMissResult, PedestrianNearMissSolution, PedestrianNearMissDiagnostic, PedestrianNearMissIssueCode, NearMissPass, TimedTrajectoryPoint } from './solve/pedestrian-near-miss.js';
+export { resolvePedestrianProjection } from './solve/pedestrian-projection.js';
+export type { PedestrianProjection, PedestrianProjectionMovement, PedestrianProjectionSegment, PedestrianProjectionSegmentKind } from './solve/pedestrian-projection.js';
+export { verifyNearMissOutcome } from './trace/near-miss.js';
+export type { NearMissVerification } from './trace/near-miss.js';
 export { checkFeasibility, COMFORT_DECEL_MPS2, HARD_DECEL_MPS2 } from './solve/guards.js';
 export { actionAwareRunwayNeedM, nominalRun, nominalRunwayNeedM } from './solve/nominal.js';
 export type { NominalActor, NominalProbe } from './solve/nominal.js';

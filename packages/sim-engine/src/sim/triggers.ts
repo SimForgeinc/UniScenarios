@@ -71,20 +71,25 @@ export function evaluateCondition(ctx: ConditionContext, cond: Condition): boole
       const a = actor(ctx, cond.a);
       const b = actor(ctx, cond.b);
       if (!a || !b) return false;
+      const threshold = cond.cmp === 'lte'
+        ? Math.max(0, cond.value - (cond.hysteresis ?? 0))
+        : cond.value + (cond.hysteresis ?? 0);
       if (cond.mode === 'euclidean') {
-        return compare(cond.cmp, readPair(a, b).gapM, cond.value);
+        return compare(cond.cmp, readPair(a, b).gapM, threshold);
       }
       const gap = alongRouteGapM(a, b);
       if (gap === null) return false;
-      return compare(cond.cmp, Math.abs(gap), cond.value);
+      return compare(cond.cmp, Math.abs(gap), threshold);
     }
     case 'ttc': {
       const a = actor(ctx, cond.a);
       const b = actor(ctx, cond.b);
       if (!a || !b) return false;
       const ttc = readPair(a, b).ttcS;
-      // `gte` against an infinite TTC is true; `lte` is not.
-      if (!Number.isFinite(ttc)) return cond.cmp === 'gte';
+      // Missing, parallel and diverging trajectories have no collision time.
+      // Fail closed for both comparison directions: "TTC >= N" must not turn
+      // an undefined/infinite TTC into an actor command.
+      if (!Number.isFinite(ttc)) return false;
       return compare(cond.cmp, ttc, cond.value);
     }
     case 'headway': {

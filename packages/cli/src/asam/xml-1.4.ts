@@ -464,7 +464,9 @@ function leafCondition(resolved: ResolvedAsamScenario, condition: Condition): Le
     case 'distance':
       return {
         triggeringActor: actor(condition.a),
-        xml: `<RelativeDistanceCondition entityRef="${xml(actor(condition.b))}" relativeDistanceType="${condition.mode === 'euclidean' ? 'euclidianDistance' : 'longitudinal'}" freespace="false" rule="${mapRule(condition.cmp)}" value="${finite(condition.value)}" coordinateSystem="${condition.mode === 'euclidean' ? 'entity' : 'road'}"/>`,
+        // OSC has rising-edge conditions but no distance dead-band. Export the
+        // exact deterministic entry threshold used by the native engine.
+        xml: `<RelativeDistanceCondition entityRef="${xml(actor(condition.b))}" relativeDistanceType="${condition.mode === 'euclidean' ? 'euclidianDistance' : 'longitudinal'}" freespace="false" rule="${mapRule(condition.cmp)}" value="${finite(condition.cmp === 'lte' ? Math.max(0, condition.value - (condition.hysteresis ?? 0)) : condition.value + (condition.hysteresis ?? 0))}" coordinateSystem="${condition.mode === 'euclidean' ? 'entity' : 'road'}"/>`,
       };
     case 'ttc':
       return {

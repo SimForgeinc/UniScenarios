@@ -2645,6 +2645,9 @@ class Materializer {
             mode: condition.measure,
             cmp: CMP[condition.op] as 'lte' | 'gte',
             value: Math.max(0, evalNum(condition.valueM, scope, `${path}.valueM`)),
+            ...(condition.hysteresisM === undefined ? {} : {
+              hysteresis: Math.max(0, evalNum(condition.hysteresisM, scope, `${path}.hysteresisM`)),
+            }),
           };
         }
         // Distance to a fixed place is `reaches` with an explicit radius.

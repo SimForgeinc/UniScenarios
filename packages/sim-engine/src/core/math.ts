@@ -127,6 +127,17 @@ export function obbOverlap(a: Obb, b: Obb): boolean {
   return true;
 }
 
+/** Exact minimum surface separation between two ground-plane OBBs. */
+export function obbSeparation(a: Obb, b: Obb): number {
+  if (obbOverlap(a, b)) return 0;
+  const ac = obbCorners(a);
+  const bc = obbCorners(b);
+  let best2 = Infinity;
+  for (const p of ac) for (let i = 0; i < 4; i++) best2 = Math.min(best2, pointSegment(p, bc[i]!, bc[(i + 1) % 4]!).d2);
+  for (const p of bc) for (let i = 0; i < 4; i++) best2 = Math.min(best2, pointSegment(p, ac[i]!, ac[(i + 1) % 4]!).d2);
+  return Math.sqrt(best2);
+}
+
 /** Squared distance from a point to a segment, plus the clamped parameter. */
 export function pointSegment(p: Vec2, a: Vec2, b: Vec2): { t: number; d2: number; closest: Vec2 } {
   const dx = b.x - a.x;

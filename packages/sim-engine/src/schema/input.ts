@@ -316,7 +316,7 @@ const cmp = z.enum(['lte', 'gte']);
  * a generated scenario can never be ambiguous about which side fires.
  */
 export type Condition =
-  | { kind: 'distance'; a: string; b: string; mode: 'alongLane' | 'euclidean'; cmp: 'lte' | 'gte'; value: number }
+  | { kind: 'distance'; a: string; b: string; mode: 'alongLane' | 'euclidean'; cmp: 'lte' | 'gte'; value: number; hysteresis?: number }
   | { kind: 'ttc'; a: string; b: string; cmp: 'lte' | 'gte'; value: number }
   | { kind: 'headway'; a: string; b: string; cmp: 'lte' | 'gte'; value: number }
   | { kind: 'reaches'; actorId: string; region: Region }
@@ -342,6 +342,7 @@ const leafConditionSchema = z.discriminatedUnion('kind', [
     mode: z.enum(['alongLane', 'euclidean']),
     cmp,
     value: nonNeg,
+    hysteresis: nonNeg.optional(),
   }),
   z.object({ kind: z.literal('ttc'), a: idSchema, b: idSchema, cmp, value: nonNeg }),
   z.object({ kind: z.literal('headway'), a: idSchema, b: idSchema, cmp, value: nonNeg }),

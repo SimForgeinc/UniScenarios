@@ -91,6 +91,13 @@ export const DistanceConditionSchema = z.strictObject({
   measure: z.enum(['alongLane', 'euclidean']).default('alongLane'),
   op: CompareOpSchema,
   valueM: NumberOrExprSchema,
+  /**
+   * Optional dead-band around the threshold. A proximity trigger enters only
+   * after crossing `valueM - hysteresisM` (`<=`) or `valueM + hysteresisM`
+   * (`>=`). This prevents placement/float jitter at the boundary from choosing
+   * a different trigger tick in preview and playback.
+   */
+  hysteresisM: NumberOrExprSchema.optional(),
 });
 
 /** Time to collision between two actors. The critical band is 1.2–2.5 s. */
