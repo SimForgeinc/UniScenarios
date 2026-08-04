@@ -22,26 +22,41 @@ export function WorldLoadingOverlay({ viewer, mapLabel, editorReady, error }: {
   editorReady: boolean;
   error: string | null;
 }): JSX.Element | null {
-  const [roadVisible, setRoadVisible] = useState(() => viewer?.getStats().roadVisible ?? false);
+  const [stream, setStream] = useState(() => {
+    const stats = viewer?.getStats();
+    return {
+      roadVisible: stats?.roadVisible ?? false,
+      background: (stats?.loading ?? 0) + (stats?.queued ?? 0) + (stats?.uploading ?? 0),
+      error: stats?.streamingError ?? null,
+    };
+  });
 
   useEffect(() => {
     if (!viewer) {
-      setRoadVisible(false);
+      setStream({ roadVisible: false, background: 0, error: null });
       return;
     }
-    const initial = viewer.getStats().roadVisible;
-    setRoadVisible(initial);
-    if (initial) return;
-    const interval = window.setInterval(() => {
-      const visible = viewer.getStats().roadVisible;
-      setRoadVisible(visible);
-      if (visible) window.clearInterval(interval);
-    }, 150);
+    const refresh = (): void => {
+      const stats = viewer.getStats();
+      setStream({
+        roadVisible: stats.roadVisible,
+        background: stats.loading + stats.queued + stats.uploading,
+        error: stats.streamingError,
+      });
+    };
+    refresh();
+    const interval = window.setInterval(refresh, 150);
     return () => window.clearInterval(interval);
   }, [viewer]);
 
-  const stage = worldLoadingStage({ viewerReady: viewer !== null, roadVisible, editorReady, error });
-  if (stage === 'ready') return null;
+  const combinedError = error ?? stream.error;
+  const stage = worldLoadingStage({ viewerReady: viewer !== null, roadVisible: stream.roadVisible, editorReady, error: combinedError });
+  if (stage === 'ready') {
+    if (stream.background === 0) return null;
+    return <div style={styles.backgroundStatus} role="status" aria-live="polite" data-testid="world-background-streaming" data-stage="background">
+      World ready · loading {stream.background} detail {stream.background === 1 ? 'item' : 'items'}
+    </div>;
+  }
 
   const copy = stage === 'renderer'
     ? { title: `Opening ${mapLabel}`, detail: 'Starting the world renderer', progress: 18 }
@@ -49,7 +64,7 @@ export function WorldLoadingOverlay({ viewer, mapLabel, editorReady, error }: {
       ? { title: `Loading ${mapLabel}`, detail: 'Streaming the road surface and 3D world', progress: 56 }
       : stage === 'editor'
         ? { title: 'Preparing the editor', detail: 'Building roads, lanes, and placement tools', progress: 86 }
-        : { title: 'World could not finish loading', detail: error ?? 'Unknown loading error', progress: 100 };
+        : { title: 'World could not finish loading', detail: combinedError ?? 'Unknown loading error', progress: 100 };
 
   return (
     <div
@@ -79,6 +94,11 @@ export function WorldLoadingOverlay({ viewer, mapLabel, editorReady, error }: {
 }
 
 const styles: Record<string, CSSProperties> = {
+  backgroundStatus: {
+    position: 'absolute', right: 14, bottom: 14, zIndex: 34, pointerEvents: 'none',
+    border: '1px solid rgba(142,157,177,.22)', borderRadius: 6,
+    background: 'rgba(19,23,29,.88)', color: '#aeb8c6', padding: '6px 9px', fontSize: 10,
+  },
   scrim: {
     position: 'absolute',
     inset: 0,

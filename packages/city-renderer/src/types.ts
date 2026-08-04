@@ -218,6 +218,8 @@ export interface CityViewerStats {
   roadsOnlyFidelity: boolean;
   /** Road/ground geometry is resident and its layer is visible. */
   roadVisible: boolean;
+  /** Latest map/preset streaming failure, including asynchronous mode switches. */
+  streamingError: string | null;
   /** Browser UI loop frequency; deliberately not the simulation engine throughput. */
   uiTicksPerSecond: number;
   /** Runtime semantic material classification and shader-application telemetry. */

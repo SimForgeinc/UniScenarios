@@ -49,14 +49,6 @@ export function PerformancePanel({ viewer, overlays = null, actorCount = 0, defa
     if (!viewer) return;
     const detected = viewer.getRendererCapability();
     setCapability(detected);
-    // Roads Only is already the lightest software-rendering preset. Preserve a
-    // first-run or saved Roads Only choice instead of "falling back" to the
-    // heavier Ultra Low city stream.
-    if (detected.software && preference.runtime.renderScene && !preference.runtime.roadsOnly) {
-      const next = preferenceForPreset('ultra-low-3d');
-      setPreference(next);
-      saveQualityPreference(next);
-    }
   }, [viewer]);
 
   const persist = (next: QualityPreference): void => {
@@ -171,7 +163,7 @@ export function PerformancePanel({ viewer, overlays = null, actorCount = 0, defa
             </div>
           ) : null}
           {capability ? <div style={capability.software ? styles.warning : styles.liveNote}>
-            {capability.software ? `Software WebGL detected (${capability.renderer}); Ultra Low 3D was selected automatically.` : `Renderer: ${capability.renderer}`}
+            {capability.software ? `Software WebGL detected (${capability.renderer}). Roads Only is recommended; your selected preset is preserved.` : `Renderer: ${capability.renderer}`}
           </div> : null}
           {preference.runtime.renderScene ? <>
           <Range label="Viewport scale" value={preference.live.maxPixelRatio} min={0.5} max={2.5} step={0.25} onChange={(v) => custom('maxPixelRatio', v)} />

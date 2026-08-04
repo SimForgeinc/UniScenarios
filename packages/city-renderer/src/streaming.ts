@@ -37,6 +37,10 @@ interface Entry {
   /** Wanted LOD index, or -1 when the tile should not be resident at all. */
   desired: number;
   loading: { index: number; controller: AbortController } | null;
+  /** Decoded/uploading/compiling LOD. Prevents duplicate fetches before swap-in. */
+  preparing: number | null;
+  /** The current desired LOD cannot fit without evicting another desired LOD. */
+  budgetBlocked: boolean;
   failures: number;
   /** Pixels of error we would win by loading `desired`. */
   gain: number;
@@ -90,8 +94,12 @@ export interface TileStreamLayerOptions {
   pinCoarsest: boolean;
   /** Infrastructure such as the single road/ground asset must load even when its conservative estimate exceeds the quality budget. */
   essentialCoarsest?: boolean;
+  /** Every LOD is required (used by progressive road fidelity, not optional city detail). */
+  essentialAll?: boolean;
   /** Return false to keep a tile unloaded entirely (vegetation range limit). */
   want?: (def: StreamTileDef, distance: number) => boolean;
+  /** Dynamic upper LOD bound for runtime fidelity modes. */
+  maxDesiredIndex?: (def: StreamTileDef) => number;
   /** Called after a new LOD becomes the displayed one. */
   onDisplay?: (def: StreamTileDef, asset: PreparedAsset, index: number) => void;
   /** Called every frame for the displayed asset (vegetation density LOD). */
@@ -142,6 +150,8 @@ export class TileStreamLayer {
         displayed: -1,
         desired: 0,
         loading: null,
+        preparing: null,
+        budgetBlocked: false,
         failures: 0,
         gain: Infinity,
         distance: Infinity,
@@ -163,6 +173,11 @@ export class TileStreamLayer {
     return this.bootstrapped;
   }
 
+  /** Retry optional detail after the caller changes the shared memory budget. */
+  clearBudgetBlocks(): void {
+    for (const entry of this.entries.values()) entry.budgetBlocked = false;
+  }
+
   stats(): LayerStats {
     let residentTiles = 0;
     let residentAssets = 0;
@@ -172,7 +187,7 @@ export class TileStreamLayer {
       if (entry.resident.size > 0) residentTiles++;
       residentAssets += entry.resident.size;
       if (entry.loading) loading++;
-      else if (entry.desired > this.finestResident(entry)) queued++;
+      else if (entry.preparing === null && !entry.budgetBlocked && entry.desired > this.finestResident(entry)) queued++;
     }
     return {
       residentTiles,
@@ -201,6 +216,7 @@ export class TileStreamLayer {
     let bootstrapped = true;
     for (const entry of this.entries.values()) {
       const distance = Math.max(1e-3, entry.def.box.distanceToPoint(cameraPos));
+      const previousDistance = entry.distance;
       entry.distance = distance;
       const lods = entry.def.lods;
 
@@ -217,13 +233,20 @@ export class TileStreamLayer {
         }
         // A single asset that would eat most of the budget is never worth it:
         // one LOD0 tile in this dataset can be ~900 MB of RGBA.
-        const cap = this.opts.memory.maxAssetBytes();
-        while (desired > 0) {
-          const candidate = lods[desired];
-          if (!candidate || estimateLodBytes(candidate) <= cap) break;
-          desired--;
+        if (!this.opts.essentialAll) {
+          const cap = this.opts.memory.maxAssetBytes();
+          while (desired > 0) {
+            const candidate = lods[desired];
+            if (!candidate || estimateLodBytes(candidate) <= cap) break;
+            desired--;
+          }
         }
+        if (this.opts.maxDesiredIndex) desired = Math.min(desired, this.opts.maxDesiredIndex(entry.def));
         if (!this.bootstrapped) desired = 0;
+      }
+      if (desired !== entry.desired
+        || (Number.isFinite(previousDistance) && Math.abs(distance - previousDistance) > Math.max(10, previousDistance * 0.2))) {
+        entry.budgetBlocked = false;
       }
       entry.desired = desired;
 
@@ -260,7 +283,7 @@ export class TileStreamLayer {
 
     const wanted: Entry[] = [];
     for (const entry of this.entries.values()) {
-      if (entry.loading || entry.desired < 0) continue;
+      if (entry.loading || entry.preparing !== null || entry.budgetBlocked || entry.desired < 0) continue;
       if (entry.desired <= this.finestResident(entry)) continue;
       if (entry.resident.has(entry.desired)) continue;
       wanted.push(entry);
@@ -280,8 +303,12 @@ export class TileStreamLayer {
     const lod = entry.def.lods[index];
     if (!lod) return false;
     const estimate = estimateLodBytes(lod);
-    const essential = this.opts.essentialCoarsest === true && index === 0;
-    if (!essential && !this.opts.memory.admit(estimate, entry.distance)) return false;
+    const essential = this.opts.essentialAll === true
+      || (this.opts.essentialCoarsest === true && index === 0);
+    if (!essential && !this.opts.memory.admit(estimate, entry.distance)) {
+      entry.budgetBlocked = true;
+      return false;
+    }
     this.pending += estimate;
     const controller = new AbortController();
     const generation = this.generation;
@@ -296,6 +323,7 @@ export class TileStreamLayer {
           disposeResources(asset.resources);
           return;
         }
+        entry.preparing = index;
         this.pending += asset.bytes;
         this.uploadQueue.push({ entry, index, asset });
       })
@@ -352,6 +380,7 @@ export class TileStreamLayer {
       .then((): void => {
         this.compiling.delete(asset);
         this.pending -= asset.bytes;
+        if (entry.preparing === index) entry.preparing = null;
         if (this.disposed) {
           asset.dispose?.();
           disposeResources(asset.resources);
@@ -383,6 +412,8 @@ export class TileStreamLayer {
     for (const entry of this.entries.values()) {
       entry.loading?.controller.abort();
       entry.loading = null;
+      entry.preparing = null;
+      entry.budgetBlocked = false;
       for (const asset of entry.resident.values()) {
         this.group.remove(asset.object);
         asset.dispose?.();
@@ -448,6 +479,10 @@ export class TileStreamLayer {
     for (const entry of this.entries.values()) {
       for (const [index, asset] of entry.resident) {
         if (index === 0 && this.opts.pinCoarsest) continue; // never evicted
+        // Evicting the exact asset this stationary view still wants creates an
+        // endless fetch -> upload -> eviction loop. Refuse the new admission
+        // instead; a camera/quality change will make it eligible later.
+        if (index === entry.desired) continue;
         const unwanted = entry.desired < 0 ? 100 : index > entry.desired ? 5 : 1;
         out.push({
           layer: this,
@@ -485,6 +520,7 @@ export class TileStreamLayer {
     this.disposed = true;
     for (const entry of this.entries.values()) {
       entry.loading?.controller.abort();
+      entry.preparing = null;
       for (const asset of entry.resident.values()) {
         this.group.remove(asset.object);
         asset.dispose?.();

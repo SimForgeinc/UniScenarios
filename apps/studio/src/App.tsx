@@ -195,6 +195,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   const [session, setSession] = useState<{ viewer: CityViewer; mapId: string } | null>(null);
   const [overlays, setOverlays] = useState<MapOverlayHandle | null>(null);
   const [overlayError, setOverlayError] = useState<string | null>(null);
+  const [worldRenderError, setWorldRenderError] = useState<string | null>(null);
   const [benchRunning, setBenchRunning] = useState(false);
   const [playbackBundle, setPlaybackBundle] = useState<PlaybackBundle | null>(null);
   const [campaignPlaybackTitle, setCampaignPlaybackTitle] = useState<string | null>(null);
@@ -274,6 +275,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
 
 
   const onReady = useCallback((next: CityViewer) => {
+    setWorldRenderError(null);
     setSession({ viewer: next, mapId: pendingMapId.current });
   }, []);
 
@@ -283,6 +285,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       hasNavigatedMaps.current = true;
       rememberMapId(next.id);
       setOverlayError(null);
+      setWorldRenderError(null);
       setMapId(next.id);
     },
     [],
@@ -1274,13 +1277,14 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
         manifestUrl={map.manifest}
         options={optionsRef.current}
         onReady={onReady}
+        onError={(error) => setWorldRenderError(error instanceof Error ? error.message : String(error))}
         style={styles.canvas}
       />
       {!mapWorkspaceOpen ? <WorldLoadingOverlay
         viewer={viewer}
         mapLabel={map.label}
         editorReady={state !== null}
-        error={editorError}
+        error={worldRenderError ?? editorError}
       /> : null}
       {shouldShowEditorToolRail(authoringEnabled, mapWorkspaceOpen) ? <EditorToolRail
         controller={editorController}

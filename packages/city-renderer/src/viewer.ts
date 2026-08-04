@@ -201,6 +201,10 @@ export class CityViewer {
   private readonly variantLoads = { original: 0, 'geometry-only': 0, 'roads-only': 0, ktx2: 0 };
   private variantFallbacks = 0;
   private assetVariantReloadGeneration = 0;
+  private streamingError: string | null = null;
+  private mapLoadActive = false;
+  private presetTransitions = 0;
+  private auxiliaryLoads = 0;
 
   private phaseSnapshot(): FramePhaseStats {
     return {
@@ -293,12 +297,15 @@ export class CityViewer {
   // ---------------------------------------------------------------- loading
 
   async loadMap(manifestUrl: string): Promise<void> {
+    this.mapLoadActive = true;
     try {
       await this.loadMapInner(manifestUrl);
     } catch (err) {
       // dispose() aborts every in-flight request; that is not a failure.
       if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
       throw err;
+    } finally {
+      this.mapLoadActive = false;
     }
   }
 
@@ -331,7 +338,10 @@ export class CityViewer {
 
     const visualResourcesPromise = this.ultraLowFidelity ? Promise.resolve() : this.ensureVisualResources();
     if (this.sun) this.sun.visible = !this.ultraLowFidelity;
-    const vegetationPromise = this.roadsOnlyFidelity
+    // A zero vegetation distance is the preset-level contract for Minimal and
+    // Ultra Low. Do not download every instance sidecar merely to hide the
+    // resulting layer after the React settings effect runs.
+    const vegetationPromise = this.roadsOnlyFidelity || this.options.vegetationMaxDistance <= 0
       ? Promise.resolve()
       : this.loadVegetationInstances(manifest);
 
@@ -339,7 +349,7 @@ export class CityViewer {
     this.createCityLayer(manifest);
     await vegetationPromise;
     if (this.disposed) return;
-    if (!this.roadsOnlyFidelity) this.createVegetationLayer(manifest);
+    if (!this.roadsOnlyFidelity && this.options.vegetationMaxDistance > 0) this.createVegetationLayer(manifest);
 
     await visualResourcesPromise;
   }
@@ -552,6 +562,23 @@ export class CityViewer {
     }
   }
 
+  /** Parse a manifest-resolved derivative without running variant selection twice. */
+  private async parseResolvedAsset(
+    file: string,
+    signal: AbortSignal,
+    variant: 'geometry-only' | 'roads-only' | 'ktx2',
+  ) {
+    const declaredKtxPath = this.variantManifest?.variants.ktx2?.runtime?.ktx2TranscoderPath ?? '';
+    const ktx2TranscoderPath = this.options.ktx2TranscoderPath
+      || (declaredKtxPath ? resolveUrl(this.assetBase, declaredKtxPath) : '');
+    const loader = getGLTFLoader(this.renderer, ktx2TranscoderPath);
+    const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, file), signal);
+    const parsed = await loader.parseAsync(buffer, '');
+    this.variantLoads[variant]++;
+    this.canvas.dataset.assetVariant = variant;
+    return parsed;
+  }
+
   /** Shared per-asset preparation: static matrices, bounds, anisotropy. */
   private prepareTree(root: Object3D): void {
     const maxAnisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
@@ -578,18 +605,40 @@ export class CityViewer {
   private createRoadLayer(manifest: CityManifest): void {
     const road = manifest.staticLayers?.find((layer) => layer.id === 'road');
     if (!road) return;
-    const def: StreamTileDef = {
-      id: 'road',
-      box: this.sceneBox.clone(),
-      lods: [
-        {
+    const geometryBootstrap = selectAssetVariant(this.variantManifest, road.file, 'geometry-only', {
+      ultraLow: false, roadsOnly: false, ktx2Ready: false,
+    });
+    const geometryVariantFile = geometryBootstrap?.variant === 'geometry-only'
+      ? this.variantManifest?.variants['geometry-only']?.files[road.file]
+      : undefined;
+    const progressiveRoad = geometryBootstrap?.variant === 'geometry-only' && geometryVariantFile
+      ? [{
+          // A texture-free, geometry-identical road is the usable bootstrap.
+          // Its deliberately huge error makes the source road the desired
+          // refinement as soon as the bootstrap is visible.
+          level: -1,
+          file: geometryBootstrap.file,
+          triangles: road.triangles,
+          fileSize: geometryVariantFile.bytes,
+          geometricError: Number.MAX_SAFE_INTEGER,
+        }, {
           level: 0,
           file: road.file,
           triangles: road.triangles,
           fileSize: road.fileSize,
           geometricError: 0,
-        },
-      ],
+        }]
+      : [{
+          level: 0,
+          file: road.file,
+          triangles: road.triangles,
+          fileSize: road.fileSize,
+          geometricError: 0,
+        }];
+    const def: StreamTileDef = {
+      id: 'road',
+      box: this.sceneBox.clone(),
+      lods: progressiveRoad,
     };
     this.roadLayer = new TileStreamLayer({
       name: 'road-layer',
@@ -600,8 +649,12 @@ export class CityViewer {
       memory: this.memory,
       pinCoarsest: true,
       essentialCoarsest: true,
+      essentialAll: true,
+      maxDesiredIndex: () => this.ultraLowFidelity ? 0 : progressiveRoad.length - 1,
       build: async (tileDef, lod, signal) => {
-        const gltf = await this.parseAsset(lod.file, signal);
+        const gltf = lod.level === -1 && !this.ultraLowFidelity
+          ? await this.parseResolvedAsset(lod.file, signal, 'geometry-only')
+          : await this.parseAsset(road.file, signal);
         const root = gltf.scene;
         root.name = tileDef.id;
         this.prepareTree(root);
@@ -929,7 +982,7 @@ export class CityViewer {
       residentBytes: this.residentBytes(),
       pendingBytes: this.totalBytes() - this.residentBytes(),
       byteBudget: this.options.byteBudget,
-      loading: sum((s) => s.loading),
+      loading: sum((s) => s.loading) + Number(this.mapLoadActive) + this.presetTransitions + this.auxiliaryLoads,
       queued: sum((s) => s.queued),
       uploading: sum((s) => s.uploading),
       jsHeapMB: jsHeapMB(),
@@ -938,6 +991,7 @@ export class CityViewer {
       ultraLowFidelity: this.ultraLowFidelity,
       roadsOnlyFidelity: this.roadsOnlyFidelity,
       roadVisible: this.roadReady && this.roadGroup.visible,
+      streamingError: this.streamingError,
       uiTicksPerSecond: this.fps,
       surfaceMaterials: this.surfaceMaterials.report(),
       assetVariants: { manifest: Boolean(this.variantManifest), loaded: { ...this.variantLoads }, fallbacks: this.variantFallbacks },
@@ -1032,6 +1086,7 @@ export class CityViewer {
     if (!ultraChanged && !roadsChanged) return;
     this.ultraLowFidelity = enabled;
     this.roadsOnlyFidelity = roadsOnly;
+    this.streamingError = null;
     if (ultraChanged && enabled) {
       this.simplifyTree(this.cityGroup, 'city');
       this.simplifyTree(this.roadGroup, 'road');
@@ -1058,7 +1113,7 @@ export class CityViewer {
       if (!this.visualResourcesStarted) {
         void this.ensureVisualResources().then(() => {
           if (!this.disposed && !this.ultraLowFidelity && this.variantManifest?.variants['geometry-only']) {
-            void this.reloadAssetVariant();
+            void this.runPresetTransition(() => this.reloadAssetVariant());
           }
         });
         // The pending visual-resource callback performs the variant reload.
@@ -1068,10 +1123,27 @@ export class CityViewer {
     }
     this.applyRoadsOnlyMode();
     if (ultraChanged && this.variantManifest?.variants['geometry-only']) {
-      void this.reloadAssetVariant();
+      void this.runPresetTransition(() => this.reloadAssetVariant());
     } else if (roadsChanged) {
-      void this.reloadRoadsOnlyLayers();
+      void this.runPresetTransition(() => this.reloadRoadsOnlyLayers());
     }
+  }
+
+  private async runPresetTransition(operation: () => Promise<void>): Promise<void> {
+    this.presetTransitions++;
+    try {
+      await operation();
+    } catch (error) {
+      this.recordStreamingError(error);
+    } finally {
+      this.presetTransitions = Math.max(0, this.presetTransitions - 1);
+    }
+  }
+
+  private recordStreamingError(error: unknown): void {
+    if (this.disposed || (error as { name?: string } | null)?.name === 'AbortError') return;
+    this.streamingError = error instanceof Error ? error.message : String(error);
+    console.error('[city-renderer] preset transition failed', error);
   }
 
   private applyRoadsOnlyMode(): void {
@@ -1088,11 +1160,17 @@ export class CityViewer {
   }
 
   private async ensureVegetationLayer(): Promise<void> {
-    if (this.vegLayer || !this.manifest || this.roadsOnlyFidelity || this.disposed) return;
-    await this.loadVegetationInstances(this.manifest);
-    if (this.vegLayer || this.roadsOnlyFidelity || this.disposed) return;
-    this.createVegetationLayer(this.manifest);
-    this.lastStreamUpdate = 0;
+    if (this.vegLayer || !this.manifest || this.roadsOnlyFidelity || this.disposed
+      || this.options.vegetationMaxDistance <= 0) return;
+    this.auxiliaryLoads++;
+    try {
+      await this.loadVegetationInstances(this.manifest);
+      if (this.vegLayer || this.roadsOnlyFidelity || this.disposed) return;
+      this.createVegetationLayer(this.manifest);
+      this.lastStreamUpdate = 0;
+    } finally {
+      this.auxiliaryLoads = Math.max(0, this.auxiliaryLoads - 1);
+    }
   }
 
   private applyRoadsOnlyVisibility(root: Object3D): void {
@@ -1199,6 +1277,8 @@ export class CityViewer {
       100,
       10000,
     );
+    const previousByteBudget = this.options.byteBudget;
+    const previousVegetationDistance = this.options.vegetationMaxDistance;
     this.options.byteBudget = finite(next.byteBudget, this.options.byteBudget, 256e6, 4e9);
     this.options.uploadBudgetMs = finite(
       next.uploadBudgetMs,
@@ -1219,6 +1299,14 @@ export class CityViewer {
       2000,
     );
     this.options.exposure = finite(next.exposure, this.options.exposure, 0.1, 4);
+    if (this.options.byteBudget !== previousByteBudget) {
+      this.roadLayer?.clearBudgetBlocks();
+      this.cityLayer?.clearBudgetBlocks();
+      this.vegLayer?.clearBudgetBlocks();
+    }
+    if (previousVegetationDistance <= 0 && this.options.vegetationMaxDistance > 0) {
+      void this.ensureVegetationLayer();
+    }
     this.renderer.toneMappingExposure = this.options.exposure;
     this.resize();
     this.camera.getWorldPosition(_cameraPos);

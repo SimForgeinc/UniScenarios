@@ -11,6 +11,59 @@ const emptyAsset = (): PreparedAsset => ({
 });
 
 describe('essential streaming assets', () => {
+  it('does not refetch a decoded asset while it waits for upload and shader compilation', async () => {
+    let resolveBuild!: (asset: PreparedAsset) => void;
+    const build = vi.fn(() => new Promise<PreparedAsset>((resolve) => { resolveBuild = resolve; }));
+    const layer = new TileStreamLayer({
+      name: 'deduplicated-layer',
+      renderer: { compileAsync: async () => undefined } as never,
+      scene: new Scene(),
+      defs: [{
+        id: 'tile', box: new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+        lods: [{ level: 0, file: 'tile.glb', triangles: 1, fileSize: 1, geometricError: 0 }],
+      }],
+      build, maxConcurrent: 2,
+      memory: { admit: () => true, maxAssetBytes: () => 100 },
+      pinCoarsest: true,
+    });
+
+    layer.update(new Vector3(), 1, 9999);
+    expect(build).toHaveBeenCalledOnce();
+    resolveBuild(emptyAsset());
+    await Promise.resolve();
+    // Before the queued asset has reached the scene, repeated render ticks must
+    // not issue the same request again.
+    layer.update(new Vector3(), 1, 9999);
+    layer.update(new Vector3(), 1, 9999);
+    expect(build).toHaveBeenCalledOnce();
+    layer.pumpUploads(performance.now() + 100, { remaining: 1 }, {} as never);
+    await layer.whenCompilationIdle();
+    expect(build).toHaveBeenCalledOnce();
+    layer.dispose();
+  });
+
+  it('does not report an unaffordable optional LOD as endlessly queued', () => {
+    const build = vi.fn(async () => emptyAsset());
+    const layer = new TileStreamLayer({
+      name: 'budget-bounded-layer',
+      renderer: { compileAsync: async () => undefined } as never,
+      scene: new Scene(),
+      defs: [{
+        id: 'tile', box: new Box3(new Vector3(-1, -1, -1), new Vector3(1, 1, 1)),
+        lods: [{ level: 0, file: 'tile.glb', triangles: 1, fileSize: 1000, geometricError: 0 }],
+      }],
+      build, maxConcurrent: 1,
+      memory: { admit: () => false, maxAssetBytes: () => 100 },
+      pinCoarsest: false,
+    });
+
+    layer.update(new Vector3(), 1, 9999);
+    layer.update(new Vector3(), 1, 9999);
+    expect(build).not.toHaveBeenCalled();
+    expect(layer.stats().queued).toBe(0);
+    layer.dispose();
+  });
+
   it('starts the pinned road/ground load even when the optional-detail budget refuses it', async () => {
     const build = vi.fn(async () => emptyAsset());
     const layer = new TileStreamLayer({
