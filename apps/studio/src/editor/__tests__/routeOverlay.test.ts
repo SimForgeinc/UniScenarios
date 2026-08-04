@@ -3,7 +3,7 @@ import { Color, type LineBasicMaterial, type LineSegments, type Points, type Poi
 import { parseSimScenarioInput, type SceneTrace } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { LaneIndex } from '../laneIndex';
-import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, routesFromTemplate, timeAnnotationsFromTrace, VehicleRouteOverlayRenderer } from '../routeOverlay';
+import { authoringRoutes, dashedSegments, dottedPoints, resolvedRoutePoints, routeColor, routeExecutionParity, routesForAuthoringPreview, routesFromSimulation, routesFromTemplate, ROUTE_OVERLAY_CLEARANCE_M, timeAnnotationsFromTrace, VehicleRouteOverlayRenderer } from '../routeOverlay';
 
 function index(): LaneIndex {
   return LaneIndex.build({
@@ -265,20 +265,46 @@ describe('vehicle route overlays', () => {
     expect(renderer.group.children).toHaveLength(4);
     const arrows = renderer.group.getObjectByName('planned-route-arrows') as LineSegments<import('three').BufferGeometry, LineBasicMaterial>;
     const dots = renderer.group.getObjectByName('planned-route-dots') as Points<import('three').BufferGeometry, PointsMaterial>;
-    expect(arrows.material.depthTest).toBe(false);
-    expect(dots.material.depthTest).toBe(false);
+    expect(arrows.material.depthTest).toBe(true);
+    expect(dots.material.depthTest).toBe(true);
     renderer.dispose();
     expect(renderer.group.children).toHaveLength(0);
   });
 
-  it('samples terrain elevation and renders guides above occluding road geometry', () => {
+  it('drapes guides a centimetre-scale clearance over sloped terrain with normal depth occlusion', () => {
     const renderer = new VehicleRouteOverlayRenderer((x, z) => 17 + x * .01 + z * .02);
     renderer.sync(routesFromSimulation(input(), index()), { showAmbient: false, showActual: false, selectedActorIds: new Set(['ego']) });
     const dots = renderer.group.getObjectByName('planned-route-dots') as Points<import('three').BufferGeometry, PointsMaterial>;
     const positions = dots.geometry.getAttribute('position');
-    expect(positions.getY(0)).toBeCloseTo(17.38);
+    expect(positions.getY(0)).toBeCloseTo(17 + ROUTE_OVERLAY_CLEARANCE_M.selected);
     expect(dots.material.depthWrite).toBe(false);
-    expect(dots.material.depthTest).toBe(false);
+    expect(dots.material.depthTest).toBe(true);
+    renderer.dispose();
+  });
+
+  it('keeps the selected canonical path attached to varying road height without changing trace coordinates', () => {
+    const trace = {
+      header: { clipSeconds: 2 },
+      ticks: { t: [0, 1, 2], actors: { ego: { x: [0, 2, 4], z: [0, 1, 2], present: [1, 1, 1] } } },
+      events: [],
+    } as unknown as SceneTrace;
+    const route = routesFromSimulation(input(), index(), trace).find((item) => item.actorId === 'ego')!;
+    const canonicalBefore = JSON.stringify(route.canonicalSpans);
+    const renderer = new VehicleRouteOverlayRenderer((x, z) => 3 + x * .2 + z * .1);
+    renderer.sync([route], {
+      showAmbient: false, showActual: false, selectedActorIds: new Set(['ego']), primarySelectedActorId: 'ego',
+    });
+    const gold = renderer.group.getObjectByName('selected-route-gold') as LineSegments<import('three').BufferGeometry, LineBasicMaterial>;
+    const positions = gold.geometry.getAttribute('position');
+    expect(positions.getY(0)).toBeCloseTo(3 + ROUTE_OVERLAY_CLEARANCE_M.selected);
+    expect(positions.getY(1)).toBeCloseTo(3 + 2 * .2 + 1 * .1 + ROUTE_OVERLAY_CLEARANCE_M.selected);
+    expect(gold.material.depthTest).toBe(true);
+    expect(gold.material.depthWrite).toBe(false);
+    // Bridges/buildings now occlude the line through the ordinary depth buffer;
+    // renderOrder only orders the transparent overlay after opaque pavement.
+    expect(gold.renderOrder).toBe(29);
+    expect(JSON.stringify(route.canonicalSpans)).toBe(canonicalBefore);
+    expect(route.timeAnnotations?.map((item) => item.label)).toEqual(['0s', '1s', '2s']);
     renderer.dispose();
   });
 
