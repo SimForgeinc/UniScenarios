@@ -4,7 +4,7 @@ import type { CityViewer } from '@uniscenarios/city-renderer';
 import { MemoryStorage, WebTemplateFileStore } from '@uniscenarios/scenario-model';
 import type { CatalogId } from '@uniscenarios/prop-catalog';
 import { MAPS } from '../../maps';
-import { EditorController } from '../controller';
+import { EditorController, isRoadBoundMotorVehicle } from '../controller';
 import { EditorDocument } from '../document';
 import { LaneIndex } from '../laneIndex';
 
@@ -16,8 +16,15 @@ interface ControllerInternals {
   onPointerUp: (event: PointerEvent) => void;
   onPointerCancel: (event: PointerEvent) => void;
   onKeyDown: (event: KeyboardEvent) => void;
-  computeGhostPose: (catalogId: CatalogId, ground: Vector3) => { headingRad: number };
-  preview: Map<string, { x: number; headingRad: number; routeLaneRsls?: readonly string[] | null }>;
+  computeGhostPose: (catalogId: CatalogId, ground: Vector3) => {
+    x: number; z: number; headingRad: number; valid: boolean;
+    laneRef: { roadId: string; laneId: number; s: number; t: number } | null;
+  };
+  preview: Map<string, {
+    x: number; headingRad: number;
+    laneRef?: { roadId: string; laneId: number; s: number; t: number } | null;
+    routeLaneRsls?: readonly string[] | null;
+  }>;
   selection: string[];
   publish: () => void;
   ghost: { setValid: (valid: boolean) => void };
@@ -62,6 +69,10 @@ async function fixture(actors: Array<{
     '1:0:-1': {
       roadId: 1, section: 0, laneId: -1, laneType: 'driving',
       polyline: [{ x: 0, y: 0 }, { x: 400, y: 0 }],
+    },
+    '1:0:1': {
+      roadId: 1, section: 0, laneId: 1, laneType: 'driving',
+      polyline: [{ x: 0, y: 4 }, { x: 400, y: 4 }],
     },
   } });
   const captures = new Set<number>();
@@ -208,6 +219,78 @@ describe('direct authored-actor manipulation', () => {
     internals.onPointerUp(pointer(canvas, 100));
     expect(document.actor('ego')).toMatchObject({ x: 100, laneRef: { s: 100 }, routeLaneRsls: ['1:0:-1'] });
     controller.dispose(); document.dispose();
+  });
+
+  it('snaps a held motor vehicle to the nearest semantic lane and its travel yaw', async () => {
+    const { controller, document, internals, canvas } = await fixture([
+      { id: 'ego', catalogId: 'vehicle.sedan', x: 10, z: 0, lane: true },
+    ]);
+    internals.onPointerDown(pointer(canvas, 10));
+    internals.onPointerMove(pointer(canvas, 80, 4));
+    const preview = internals.preview.get('ego');
+    expect(preview).toMatchObject({ x: 80, laneRef: { roadId: '1', laneId: 1, t: 0 } });
+    expect(preview?.headingRad).toBeCloseTo(Math.PI, 6);
+    internals.publish();
+    expect(controller.state.snapped).toBe(true);
+    expect(controller.state.laneLabel).toContain('lane 1');
+    expect(controller.state.hint).toContain('snapped to');
+    internals.onPointerUp(pointer(canvas, 80, 4));
+    expect(document.actor('ego')).toMatchObject({ x: 80, z: -4, laneRef: { laneId: 1, t: 0 } });
+    expect(document.actor('ego')?.headingRad).toBeCloseTo(Math.PI, 6);
+    controller.dispose(); document.dispose();
+  });
+
+  it('shows an invalid off-road vehicle ghost and restores the exact pose on release', async () => {
+    const { controller, document, internals, canvas } = await fixture([
+      { id: 'ego', catalogId: 'vehicle.sedan', x: 10, z: 0, lane: true },
+    ]);
+    const before = document.actor('ego');
+    const revision = document.revision;
+    internals.onPointerDown(pointer(canvas, 10));
+    internals.onPointerMove(pointer(canvas, 90, 100, { altKey: true }));
+    internals.publish();
+    expect(controller.state.valid).toBe(false);
+    expect(controller.state.snapped).toBe(false);
+    expect(controller.state.hint).toContain('release cancels move');
+    internals.onPointerUp(pointer(canvas, 90, 100, { altKey: true }));
+    expect(document.revision).toBe(revision);
+    expect(document.actor('ego')).toEqual(before);
+    controller.dispose(); document.dispose();
+  });
+});
+
+describe('mandatory motor-vehicle road placement', () => {
+  it('uses one semantic snap for palette placement and cannot be bypassed with Alt', async () => {
+    const { controller, document, internals, canvas } = await fixture([]);
+    controller.togglePlacement('vehicle.sedan');
+    internals.onPointerMove(pointer(canvas, 60, 4));
+    internals.publish();
+    expect(controller.state).toMatchObject({ snapped: true, valid: true });
+    expect(controller.state.laneLabel).toContain('lane 1');
+    internals.onPointerDown(pointer(canvas, 60, 4));
+    internals.onPointerUp(pointer(canvas, 60, 4));
+    expect(document.actors[0]).toMatchObject({ x: 60, z: -4, laneRef: { laneId: 1, t: 0 } });
+    expect(document.actors[0]?.headingRad).toBeCloseTo(Math.PI, 6);
+
+    internals.onPointerMove(pointer(canvas, 60, 100, { altKey: true }));
+    internals.publish();
+    expect(controller.state).toMatchObject({ snapped: false, valid: false });
+    internals.onPointerDown(pointer(canvas, 60, 100, { altKey: true }));
+    internals.onPointerUp(pointer(canvas, 60, 100, { altKey: true }));
+    expect(document.actors).toHaveLength(1);
+    controller.dispose(); document.dispose();
+  });
+
+  it('classifies roadway motor actors without forcing pedestrian/VRU props onto driving lanes', () => {
+    expect(isRoadBoundMotorVehicle('vehicle.sedan')).toBe(true);
+    expect(isRoadBoundMotorVehicle('vehicle.pickup')).toBe(true);
+    expect(isRoadBoundMotorVehicle('vehicle.box_truck')).toBe(true);
+    expect(isRoadBoundMotorVehicle('vehicle.bus')).toBe(true);
+    expect(isRoadBoundMotorVehicle('vehicle.motorcycle')).toBe(true);
+    expect(isRoadBoundMotorVehicle('vehicle.bicycle')).toBe(false);
+    expect(isRoadBoundMotorVehicle('vehicle.mobility_scooter')).toBe(false);
+    expect(isRoadBoundMotorVehicle('pedestrian.adult_standing')).toBe(false);
+    expect(isRoadBoundMotorVehicle('construction.traffic_cone')).toBe(false);
   });
 });
 

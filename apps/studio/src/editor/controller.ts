@@ -74,7 +74,7 @@ export interface EditorState {
   readonly selection: readonly string[];
   /** Catalog id currently being placed. */
   readonly placing: CatalogId | null;
-  /** Lane snapping is active for the current ghost (vehicles, no ⌥). */
+  /** Lane snapping is active for the current ghost or directly moved actor. */
   readonly snapped: boolean;
   /** Lateral nudge inside the lane, metres, positive to the left. */
   readonly lateral: number;
@@ -141,6 +141,15 @@ interface GhostPose {
   laneLabel: string | null;
   valid: boolean;
   reason: string | null;
+}
+
+interface VehicleSnapOptions {
+  /** Explicit authoring offset retained within the selected lane. */
+  lateralM?: number;
+  /** Select the nearest genuinely opposing travel lane (palette Tab action). */
+  opposingToHeadingRad?: number;
+  /** Heading used only by the red invalid ghost when no lane is nearby. */
+  fallbackHeadingRad?: number;
 }
 
 export interface EditorControllerOptions {
@@ -539,6 +548,10 @@ export class EditorController {
       this.flash('select something first');
       return;
     }
+    if (this.selection.some((id) => this.doc.actor(id)?.kind === 'vehicle')) {
+      this.flash('Vehicles follow lane travel direction and cannot be freely rotated');
+      return;
+    }
     const point = this.lastGroundPoint;
     if (!point) return;
     this.cancelModal();
@@ -583,10 +596,36 @@ export class EditorController {
     if (!actor) return;
     const x = patch.x ?? actor.x;
     const z = patch.z ?? actor.z;
-    const headingRad =
+    const requestedHeadingRad =
       patch.headingDeg === undefined
         ? actor.headingRad
         : normalizeHeading((patch.headingDeg * Math.PI) / 180);
+    if (isRoadBoundMotorVehicle(actor.catalogId)) {
+      const snapped = this.snapMotorVehicle(actor.catalogId, new Vector3(x, actor.y, z), {
+        lateralM: actor.laneRef?.t ?? 0,
+        fallbackHeadingRad: actor.headingRad,
+      });
+      if (!snapped.valid || !snapped.laneRef) {
+        this.flash(snapped.reason ?? 'No driving lane nearby — move cancelled');
+        return;
+      }
+      const route = this.routeForLaneMutation(actor, snapped.laneRef);
+      if (!route) {
+        this.flash('No usable route from that road position — move cancelled');
+        return;
+      }
+      this.doc.update([{
+        id,
+        x: snapped.x,
+        y: snapped.y,
+        z: snapped.z,
+        headingRad: snapped.headingRad,
+        laneRef: snapped.laneRef,
+        routeLaneRsls: route,
+      }]);
+      return;
+    }
+    const headingRad = requestedHeadingRad;
     const update: ActorUpdate = { id, x, z, y: this.groundY(x, z, actor.y), headingRad };
 
     if (actor.laneRef) {
@@ -626,7 +665,12 @@ export class EditorController {
     const s = Math.min(lane.length, Math.max(0, patch.s ?? actor.laneRef.s));
     const t = patch.t ?? actor.laneRef.t;
     const pose = this.laneIndex.poseAt(lane, s, t);
-    const anchor = { ...actor.laneRef, s, t };
+    const anchor = {
+      ...actor.laneRef,
+      s,
+      t,
+      ...(isRoadBoundMotorVehicle(actor.catalogId) ? { headingOffsetRad: 0 } : {}),
+    };
     const route = this.routeForLaneMutation(actor, anchor);
     if (!route) {
       this.flash('No usable route from that lane station — move cancelled');
@@ -638,7 +682,7 @@ export class EditorController {
         x: pose.x,
         z: pose.z,
         y: this.groundY(pose.x, pose.z, actor.y),
-        headingRad: normalizeHeading(pose.headingRad + actor.laneRef.headingOffsetRad),
+        headingRad: normalizeHeading(pose.headingRad + anchor.headingOffsetRad),
         laneRef: anchor,
         routeLaneRsls: route,
       },
@@ -1025,53 +1069,42 @@ export class EditorController {
   private computeGhostPose(catalogId: CatalogId, ground: Vector3): GhostPose {
     const kind = actorKindFor(catalogId);
     const dims = getEntry(catalogId).dims;
-    const wantsLane = kind === 'vehicle' && !this.altDown;
+    const requiresLane = isRoadBoundMotorVehicle(catalogId);
+    // Preserve the existing opt-in driving-lane behavior for VRUs and other
+    // mobile catalog actors, while motor vehicles can never bypass it.
+    const wantsLane = kind === 'vehicle' && (requiresLane || !this.altDown);
 
     if (wantsLane) {
-      let hit = this.laneIndex.nearest(ground.x, ground.z, SNAP_RADIUS_M);
-      if (hit && this.flipped) {
-        hit = this.laneIndex.nearestOpposing(ground.x, ground.z, hit.headingRad, SNAP_RADIUS_M) ?? hit;
-      }
-      if (!hit) {
+      const nearest = this.laneIndex.nearest(ground.x, ground.z, SNAP_RADIUS_M);
+      const snapped = this.snapMotorVehicle(catalogId, ground, {
+        lateralM: this.lateral,
+        ...(this.flipped && nearest ? { opposingToHeadingRad: nearest.headingRad } : {}),
+        fallbackHeadingRad: this.freeHeading,
+      });
+      if (!snapped.laneRef) {
         return {
-          x: ground.x,
-          y: ground.y,
-          z: ground.z,
-          headingRad: this.freeHeading,
-          laneRef: null,
-          laneLabel: null,
-          valid: false,
-          reason: 'no driving lane within 30 m — hold ⌥ to place anyway',
+          ...snapped,
+          reason: requiresLane
+            ? 'no valid driving lane within 30 m — vehicle must be placed on a road'
+            : 'no driving lane within 30 m — hold ⌥ for free placement',
         };
       }
-      const limit = this.laneIndex.lateralLimit(hit.lane, dims.w);
-      const t = Math.max(-limit, Math.min(limit, this.lateral));
-      this.lateral = t;
-      const pose = this.laneIndex.poseAt(hit.lane, hit.s, t);
-      const y = this.groundY(pose.x, pose.z, ground.y);
+      this.lateral = snapped.laneRef.t;
       const blocker = this.overlap({
-        x: pose.x,
-        z: pose.z,
+        x: snapped.x,
+        z: snapped.z,
         length: dims.l,
         width: dims.w,
-        headingRad: pose.headingRad,
+        headingRad: snapped.headingRad,
       });
       return {
-        x: pose.x,
-        y,
-        z: pose.z,
-        headingRad: pose.headingRad,
-        laneRef: {
-          roadId: hit.lane.roadId,
-          section: hit.lane.section,
-          laneId: hit.lane.laneId,
-          s: hit.s,
-          t,
-          headingOffsetRad: 0,
-        },
-        laneLabel: laneLabel(hit.lane, hit.s, t),
+        ...snapped,
         valid: !blocker,
-        reason: blocker ? `overlaps ${describe(blocker)} — hold ⌥ to place anyway` : null,
+        reason: blocker
+          ? requiresLane
+            ? `overlaps ${describe(blocker)} — choose another road position`
+            : `overlaps ${describe(blocker)} — hold ⌥ to place anyway`
+          : null,
       };
     }
 
@@ -1096,11 +1129,61 @@ export class EditorController {
     };
   }
 
+  /**
+   * The single semantic-road snap used by palette placement, direct movement,
+   * keyboard movement and numeric pose edits. It never inspects render meshes,
+   * so every graphics preset resolves the same lane, pose and travel yaw.
+   */
+  private snapMotorVehicle(catalogId: CatalogId, ground: Vector3, options: VehicleSnapOptions = {}): GhostPose {
+    let hit = this.laneIndex.nearest(ground.x, ground.z, SNAP_RADIUS_M);
+    if (hit && options.opposingToHeadingRad !== undefined) {
+      hit = this.laneIndex.nearestOpposing(
+        ground.x,
+        ground.z,
+        options.opposingToHeadingRad,
+        SNAP_RADIUS_M,
+      ) ?? hit;
+    }
+    if (!hit) {
+      return {
+        x: ground.x,
+        y: ground.y,
+        z: ground.z,
+        headingRad: options.fallbackHeadingRad ?? 0,
+        laneRef: null,
+        laneLabel: null,
+        valid: false,
+        reason: 'no valid driving lane within 30 m',
+      };
+    }
+    const limit = this.laneIndex.lateralLimit(hit.lane, getEntry(catalogId).dims.w);
+    const t = Math.max(-limit, Math.min(limit, options.lateralM ?? 0));
+    const pose = this.laneIndex.poseAt(hit.lane, hit.s, t);
+    return {
+      x: pose.x,
+      y: this.groundY(pose.x, pose.z, ground.y),
+      z: pose.z,
+      headingRad: pose.headingRad === 0 ? 0 : pose.headingRad,
+      laneRef: {
+        roadId: hit.lane.roadId,
+        section: hit.lane.section,
+        laneId: hit.lane.laneId,
+        s: hit.s,
+        t,
+        headingOffsetRad: 0,
+      },
+      laneLabel: laneLabel(hit.lane, hit.s, t),
+      valid: true,
+      reason: null,
+    };
+  }
+
   private commitPlacement(altClick: boolean): void {
     const pose = this.ghostPose;
     const catalogId = this.placing;
     if (!pose || !catalogId) return;
-    if (!pose.valid && !altClick) {
+    const requiresLane = isRoadBoundMotorVehicle(catalogId);
+    if (!pose.valid && (requiresLane || !altClick)) {
       this.flash(pose.reason ?? 'cannot place here');
       return;
     }
@@ -1159,8 +1242,6 @@ export class EditorController {
     if (!ground) return;
     const dx = ground.x - session.start.x;
     const dz = ground.z - session.start.z;
-    const breakAnchor = this.altDown;
-    if (breakAnchor) session.broke = true;
     session.valid = true;
     session.reason = null;
 
@@ -1168,6 +1249,41 @@ export class EditorController {
     for (const actor of session.origin.values()) {
       const targetX = actor.x + dx;
       const targetZ = actor.z + dz;
+      if (isRoadBoundMotorVehicle(actor.catalogId)) {
+        const snapped = this.snapMotorVehicle(actor.catalogId, new Vector3(targetX, actor.y, targetZ), {
+          lateralM: actor.laneRef?.t ?? 0,
+          fallbackHeadingRad: actor.headingRad,
+        });
+        if (!snapped.valid || !snapped.laneRef) {
+          session.valid = false;
+          session.reason = snapped.reason ?? 'No valid driving lane nearby';
+          this.preview.set(actor.id, {
+            x: snapped.x,
+            y: snapped.y,
+            z: snapped.z,
+            headingRad: snapped.headingRad,
+            laneRef: null,
+            routeLaneRsls: null,
+          });
+          continue;
+        }
+        const route = this.routeForLaneMutation(actor, snapped.laneRef);
+        if (!route) {
+          session.valid = false;
+          session.reason = 'No usable route from that road position';
+        }
+        this.preview.set(actor.id, {
+          x: snapped.x,
+          y: snapped.y,
+          z: snapped.z,
+          headingRad: snapped.headingRad,
+          laneRef: snapped.laneRef,
+          ...(route ? { routeLaneRsls: route } : { routeLaneRsls: null }),
+        });
+        continue;
+      }
+      const breakAnchor = this.altDown;
+      if (breakAnchor && actor.laneRef) session.broke = true;
       const lane = !breakAnchor && actor.laneRef ? this.laneFor(actor.laneRef) : null;
       if (lane && actor.laneRef) {
         // Anchored: the drag slides along the lane, it does not leave the road
@@ -1224,7 +1340,7 @@ export class EditorController {
         routeLaneRsls: breakAnchor && actor.laneRef ? null : undefined,
       });
     }
-    if (session.direct) {
+    {
       const movingIds = new Set(session.origin.keys());
       for (const [id, actor] of session.origin) {
         const patch = this.preview.get(id);
@@ -1240,10 +1356,12 @@ export class EditorController {
           session.valid = false;
           session.reason = `Overlaps ${describe(blocker)}`;
         }
-        this.ghost.show(actor.catalogId);
-        this.ghost.setPose(patch.x, patch.y, patch.z, patch.headingRad);
-        this.ghost.setValid(session.valid);
-        break;
+        if (session.direct) {
+          this.ghost.show(actor.catalogId);
+          this.ghost.setPose(patch.x, patch.y, patch.z, patch.headingRad);
+          this.ghost.setValid(session.valid);
+          break;
+        }
       }
     }
     this.syncScene();
@@ -1286,7 +1404,7 @@ export class EditorController {
   }
 
   private commitModal(): void {
-    if (this.grab?.direct && !this.grab.valid) {
+    if (this.grab && !this.grab.valid) {
       this.flash(this.grab.reason ?? 'Move cancelled — choose a valid position');
       return;
     }
@@ -1531,6 +1649,11 @@ export class EditorController {
     const laneLabel =
       this.mode === 'placing'
         ? this.ghostPose?.laneLabel ?? null
+        : this.mode === 'grab' && selectedRecord
+          ? (() => {
+              const anchor = this.preview.get(selectedRecord.id)?.laneRef;
+              return anchor ? anchorLabel(anchor) : null;
+            })()
         : selectedRecord?.laneRef
           ? anchorLabel(selectedRecord.laneRef)
           : null;
@@ -1555,10 +1678,12 @@ export class EditorController {
       }),
       selection: this.selection,
       placing: this.placing,
-      snapped: this.ghostPose?.laneRef != null,
+      snapped: this.mode === 'grab' && selectedRecord
+        ? this.preview.get(selectedRecord.id)?.laneRef != null
+        : this.ghostPose?.laneRef != null,
       lateral: this.lateral,
       flipped: this.flipped,
-      valid: this.ghostPose?.valid ?? true,
+      valid: this.mode === 'grab' ? this.grab?.valid ?? true : this.ghostPose?.valid ?? true,
       hint: this.buildHint(),
       message: this.message,
       rotationDeg:
@@ -1576,6 +1701,11 @@ export class EditorController {
       case 'placing': {
         const kind: ActorKind = this.placing ? actorKindFor(this.placing) : 'prop';
         if (kind === 'vehicle') {
+          if (this.placing && isRoadBoundMotorVehicle(this.placing)) {
+            return this.ghostPose?.laneRef
+              ? `snapped to ${this.ghostPose.laneLabel ?? 'driving lane'} · click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · right-click cancel`
+              : 'no driving lane nearby · move onto a road · right-click cancel';
+          }
           return this.ghostPose?.laneRef
             ? `click place · Tab opposite lane · scroll offset ${this.lateral.toFixed(2)} m · ⌥ free · right-click cancel`
             : 'free placement (⌥) · click place · drag set heading · right-click cancel';
@@ -1585,6 +1715,12 @@ export class EditorController {
       case 'grab': {
         if (this.grab?.direct) {
           const rotatable = [...this.grab.origin.values()].every((actor) => actor.kind !== 'vehicle');
+          const roadVehicle = [...this.grab.origin.values()].some((actor) => isRoadBoundMotorVehicle(actor.catalogId));
+          if (roadVehicle) {
+            return this.grab.valid
+              ? `snapped to ${laneLabelFromPreview(this.preview, this.grab.origin) ?? 'driving lane'} · release confirm · Esc cancel`
+              : `${this.grab.reason ?? 'no valid driving lane'} · release cancels move · Esc cancel`;
+          }
           return rotatable
             ? 'move · Q / E rotate 5° · release confirm · Esc cancel'
             : 'move · release confirm · Esc cancel';
@@ -1611,6 +1747,17 @@ function anchorLabel(anchor: LaneAnchor): string {
   return `road ${anchor.roadId} · lane ${anchor.laneId} · s ${anchor.s.toFixed(1)} m${offset}`;
 }
 
+function laneLabelFromPreview(
+  preview: ReadonlyMap<string, PosePatch>,
+  origin: ReadonlyMap<string, ActorRecord>,
+): string | null {
+  for (const id of origin.keys()) {
+    const anchor = preview.get(id)?.laneRef;
+    if (anchor) return anchorLabel(anchor);
+  }
+  return null;
+}
+
 function describe(actor: { catalogId: CatalogId }): string {
   try {
     return getEntry(actor.catalogId).label.toLowerCase();
@@ -1627,6 +1774,11 @@ export function defaultDrivingSpeedKph(catalogId: CatalogId): number | null {
   // devices are already excluded by the roadway requirement above.
   if (catalogId === 'vehicle.bicycle') return null;
   return DEFAULT_AUTHORED_VEHICLE_SPEED_KPH;
+}
+
+/** Motor-road actors share the editor's mandatory semantic lane contract. */
+export function isRoadBoundMotorVehicle(catalogId: CatalogId): boolean {
+  return defaultDrivingSpeedKph(catalogId) !== null;
 }
 
 /** Stable catalog choice: save/reopen never rerolls an actor's appearance. */
