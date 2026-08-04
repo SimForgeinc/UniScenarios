@@ -67,6 +67,9 @@ for (let index = 2; index < process.argv.length; index++) {
 const requestedModel = argv.get('--model') || 'gpt-5.6-luna';
 const mapIds = (argv.get('--maps') || 'richmond-field-station').split(',').filter(Boolean);
 const providerNames = (argv.get('--providers') || 'staged-rag,direct-llm,upstream-chat2scenic').split(',').filter(Boolean) as ProviderName[];
+const selectedCaseIds = new Set((argv.get('--cases') || COPILOT_EDGE_CASES.map((item) => item.id).join(',')).split(',').filter(Boolean));
+const benchmarkCases = COPILOT_EDGE_CASES.filter((item) => selectedCaseIds.has(item.id));
+if (benchmarkCases.length !== selectedCaseIds.size) throw new Error('One or more --cases ids are unknown');
 const repositoryRoot = fileURLToPath(new URL('../../../', import.meta.url));
 const outputDirectory = path.resolve(repositoryRoot, argv.get('--out') || `artifacts/research/scenario-copilot-benchmark-${new Date().toISOString().replace(/[:.]/gu, '')}`);
 const abortAfterMs = Number(argv.get('--timeout-ms') || 360_000);
@@ -83,7 +86,7 @@ for (const mapId of mapIds) {
   for (const providerName of providerNames) {
     const provider = providers.get(providerName);
     if (!provider) throw new Error(`Provider ${providerName} was not loaded`);
-    for (const benchmarkCase of COPILOT_EDGE_CASES) {
+    for (const benchmarkCase of benchmarkCases) {
       process.stdout.write(`[${providerName}] ${mapId}/${benchmarkCase.id} ... `);
       const row = await runCase(providerName, provider, benchmarkCase, mapContext, bundle, requestedModel, abortAfterMs);
       rows.push(row);
@@ -101,7 +104,7 @@ const metadata = {
   requestedApiModel: requestedModel,
   providerNames,
   mapIds,
-  cases: COPILOT_EDGE_CASES.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
+  cases: benchmarkCases.map(({ id, summary, expectedRejection }) => ({ id, summary, expectedRejection: Boolean(expectedRejection) })),
   rows,
 };
 await writeFile(path.join(outputDirectory, 'results.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
@@ -130,7 +133,10 @@ function buildMapContext(mapId: string, graph: LaneGraph): CopilotMapContext {
   const acceptedPoints: { x: number; z: number }[] = [];
   for (const rsl of graph.laneRsls()) {
     const geometry = graph.geometry(rsl);
-    if (!geometry || geometry.lane.laneType !== 'driving') continue;
+    // Keep the 15 m spawn inside the first route leg. If it spills onto a
+    // successor, laneRef and the lanePath's first leg describe different
+    // lanes and the benchmark would be measuring its own fixture bug.
+    if (!geometry || geometry.lane.laneType !== 'driving' || geometry.lengthM < 45) continue;
     const built = buildFollowRoute(graph, rsl, [], 700);
     if (!built.ok || built.route.lengthM < 260) continue;
     const sample = built.route.poseAt(15);
@@ -340,7 +346,7 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
     lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${latency.length ? latency[Math.floor(latency.length / 2)] : '—'} | ${tokens || '—'} |`);
   }
   lines.push('', '## Case outcomes', '', '| Case | ' + providers.join(' | ') + ' |', '|---|' + providers.map(() => '---').join('|') + '|');
-  for (const benchmarkCase of COPILOT_EDGE_CASES) {
+  for (const benchmarkCase of COPILOT_EDGE_CASES.filter((item) => rows.some((row) => row.caseId === item.id))) {
     lines.push(`| ${benchmarkCase.summary} | ${providers.map((provider) => rows.find((row) => row.provider === provider && row.caseId === benchmarkCase.id)?.outcome ?? 'not run').join(' | ')} |`);
   }
   const failures = rows.filter((row) => row.outcome !== 'success').slice(0, 12);
