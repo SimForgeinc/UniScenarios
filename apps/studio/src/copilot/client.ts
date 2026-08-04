@@ -1,4 +1,5 @@
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotProgress } from './types';
+import type { CopilotGenerationHistoryResponse } from './historyTypes';
 
 export async function generateScenarioCandidates(
   request: CopilotGenerationRequest,
@@ -34,4 +35,22 @@ export async function generateScenarioCandidates(
   }
   if (!result) throw new Error('Scenario Copilot ended without a result.');
   return result;
+}
+
+export async function fetchCopilotHistory(signal?: AbortSignal): Promise<CopilotGenerationHistoryResponse> {
+  const response = await fetch('/api/scenario-copilot/history', { signal, headers: { accept: 'application/json' } });
+  if (!response.ok) throw new Error(`Could not load generation history (${response.status}).`);
+  return response.json() as Promise<CopilotGenerationHistoryResponse>;
+}
+
+export async function clearLiveCopilotHistory(): Promise<void> {
+  const response = await fetch('/api/scenario-copilot/history/live', { method: 'DELETE' });
+  if (!response.ok) throw new Error(`Could not clear live history (${response.status}).`);
+}
+
+export async function updateLiveCopilotValidation(runId: string, candidateId: string, validation: { valid: boolean; message: string; actorCount: number; durationS: number }): Promise<void> {
+  await fetch('/api/scenario-copilot/history/validation', {
+    method: 'POST', headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ runId, candidateId, validation }),
+  });
 }

@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { buildCopilotMapContext } from './mapContext';
-import { generateScenarioCandidates } from './client';
+import { generateScenarioCandidates, updateLiveCopilotValidation } from './client';
+import { CopilotComparisonView } from './CopilotComparisonView';
+import type { CopilotGenerationHistoryEntry } from './historyTypes';
 import type { CopilotCandidate, CopilotGenerationResult, CopilotIntent, CopilotProgress, CopilotProviderId } from './types';
 import type { EditorController } from '../editor/controller';
 import type { MapEntry } from '../maps';
@@ -26,6 +28,7 @@ const STARTER = 'A sedan approaches a pedestrian who emerges from behind a stopp
 
 export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onClose }: ScenarioCopilotPanelProps): JSX.Element {
   const [provider, setProvider] = useState<CopilotProviderId>('staged-rag');
+  const [view, setView] = useState<'generate' | 'comparison'>('generate');
   const [prompt, setPrompt] = useState(STARTER);
   const [progress, setProgress] = useState<CopilotProgress | null>(null);
   const [result, setResult] = useState<CopilotGenerationResult | null>(null);
@@ -33,20 +36,23 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [validations, setValidations] = useState<Record<string, CandidateValidation | 'running'>>({});
+  const [rerunNotice, setRerunNotice] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const mapContext = useMemo(() => buildCopilotMapContext(map, controller.laneIndex), [controller, map]);
 
   useEffect(() => () => abortRef.current?.abort(), []);
 
-  const generate = async (confirmedIntent?: CopilotIntent): Promise<void> => {
+  const generate = async (confirmedIntent?: CopilotIntent, override?: { provider: CopilotProviderId; prompt: string }): Promise<void> => {
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
     setBusy(true); setError(null); setResult(null); setValidations({});
     try {
+      const chosenProvider = override?.provider ?? provider;
+      const chosenPrompt = override?.prompt ?? prompt;
       const generated = await generateScenarioCandidates({
-        providerId: provider,
-        prompt,
+        providerId: chosenProvider,
+        prompt: chosenPrompt,
         mapContext,
         currentScenario: controller.doc.data,
         maxCandidates: 2,
@@ -59,11 +65,18 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
         setValidations((current) => ({ ...current, [candidate.id]: 'running' }));
         const validation = await onValidate(candidate).catch((reason: unknown) => ({ valid: false, message: reason instanceof Error ? reason.message : String(reason), actorCount: 0, durationS: 0 }));
         setValidations((current) => ({ ...current, [candidate.id]: validation }));
+        void updateLiveCopilotValidation(generated.runId, candidate.id, validation);
       }
     } catch (reason) {
       if (!abort.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
       setBusy(false);
     }
+  };
+
+  const rerunHistory = (entry: CopilotGenerationHistoryEntry): void => {
+    setProvider(entry.provider); setPrompt(entry.prompt); setView('generate');
+    setRerunNotice(`New evaluation run of “${entry.caseTitle}” with ${entry.provider}. Results may differ from the historical benchmark.`);
+    void generate(undefined, { provider: entry.provider, prompt: entry.prompt });
   };
 
   const regenerateIntent = (): void => {
@@ -81,6 +94,12 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" style={styles.close} onClick={onClose} aria-label="Close Scenario Copilot">×</button>
     </header>
     <div style={styles.mapLock}><span>◉</span><div><strong>{map.label}</strong><small>{mapContext.laneCount} driving lanes · {mapContext.placementSlots.length} bounded placement slots</small></div><span style={styles.lock}>Locked</span></div>
+    <nav style={styles.tabs} aria-label="Scenario Copilot views">
+      <button type="button" data-testid="copilot-generate-tab" aria-current={view === 'generate' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'generate' ? styles.tabActive : {}) }} onClick={() => setView('generate')}>Create</button>
+      <button type="button" data-testid="copilot-comparison-tab" aria-current={view === 'comparison' ? 'page' : undefined} style={{ ...styles.tab, ...(view === 'comparison' ? styles.tabActive : {}) }} onClick={() => setView('comparison')}>All generations</button>
+    </nav>
+    {view === 'comparison' ? <CopilotComparisonView onRerun={rerunHistory} onApply={onApply} /> : <>
+    {rerunNotice ? <div style={styles.rerunNotice}>{rerunNotice}<button type="button" aria-label="Dismiss re-run notice" onClick={() => setRerunNotice(null)}>×</button></div> : null}
     <label style={styles.label}>Generation approach</label>
     <div style={styles.providers}>
       <button type="button" aria-pressed={provider === 'staged-rag'} style={{ ...styles.provider, ...(provider === 'staged-rag' ? styles.providerActive : {}) }} onClick={() => setProvider('staged-rag')}>
@@ -124,6 +143,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
         })}
       </div>
     </> : null}
+    </>}
     <footer style={styles.caveat}>Structured + retrieval is the clean-room implementation. Upstream Chat2Scenic runs a separately attributed, pinned CC BY-NC 4.0 research adapter; it is not part of the production browser bundle and must not be used commercially.</footer>
   </section>;
 }
@@ -134,6 +154,7 @@ const styles: Record<string, CSSProperties> = {
   eyebrow: { color: '#f28b36', fontSize: 11, letterSpacing: 1.5, fontWeight: 800 }, heading: { margin: '3px 0 0', fontSize: 24 },
   close: { border: 0, background: 'transparent', color: '#aeb6c3', fontSize: 27, cursor: 'pointer' },
   mapLock: { display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center', padding: 11, border: '1px solid #3e596c', borderRadius: 9, background: '#152630' },
+  tabs: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 5, padding: 4, background: '#15191e', borderRadius: 8 }, tab: { padding: 8, border: 0, borderRadius: 6, background: 'transparent', color: '#9ca8b6', fontWeight: 750, cursor: 'pointer' }, tabActive: { color: '#fff', background: '#343b45' }, rerunNotice: { display: 'flex', justifyContent: 'space-between', gap: 8, padding: 9, borderRadius: 7, background: '#2b301c', color: '#f4d77c', fontSize: 11 },
   lock: { color: '#77d9ff', fontSize: 12, fontWeight: 800 },
   label: { fontSize: 12, color: '#b7c0cc', fontWeight: 750 }, providers: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 },
   provider: { color: '#dbe2eb', textAlign: 'left', padding: 10, display: 'flex', flexDirection: 'column', gap: 4, background: '#20242a', borderWidth: 1, borderStyle: 'solid', borderColor: '#3b414b', borderRadius: 8, cursor: 'pointer' },

@@ -3,6 +3,7 @@ import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotProgress
 import { configuredOpenAI } from './openaiClient.js';
 import { CopilotMapContextSchema } from './directTypes.js';
 import { generateStagedScenario } from './stagedProvider.js';
+import { CopilotHistoryStore } from './historyStore.js';
 
 export type CopilotServerProvider = (
   request: CopilotGenerationRequest,
@@ -15,6 +16,7 @@ export interface CopilotHandlerOptions {
 }
 
 export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}) {
+  const history = new CopilotHistoryStore();
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     const rawPath = (req.url ?? '/').split('?')[0];
     const path = rawPath.startsWith('/api/scenario-copilot')
@@ -33,6 +35,24 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
         ],
         executionBoundary: 'server-only',
       });
+      return;
+    }
+    if (req.method === 'GET' && path === '/history') {
+      json(res, 200, history.list());
+      return;
+    }
+    if (req.method === 'DELETE' && path === '/history/live') {
+      history.clearLive();
+      json(res, 200, { cleared: true });
+      return;
+    }
+    if (req.method === 'POST' && path === '/history/validation') {
+      try {
+        const body = await readBody(req) as { runId?: unknown; candidateId?: unknown; validation?: unknown };
+        const validation = parseValidation(body.validation);
+        if (typeof body.runId !== 'string' || typeof body.candidateId !== 'string') throw new Error('A run and candidate are required.');
+        json(res, history.updateValidation(body.runId, body.candidateId, validation) ? 200 : 404, { updated: true });
+      } catch (error) { json(res, 400, { error: safeError(error) }); }
       return;
     }
     if (req.method !== 'POST' || (path !== '/' && path !== '/generate')) {
@@ -55,6 +75,7 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
       res.setHeader('x-content-type-options', 'nosniff');
       const write = (value: unknown): void => { if (!res.writableEnded) res.write(`${JSON.stringify(value)}\n`); };
       const result = await provider(request, { signal: abort.signal, onProgress: (progress) => write({ type: 'progress', progress }) });
+      history.record(request, result);
       write({ type: 'result', result });
       res.end();
     } catch (error) {
@@ -65,6 +86,17 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
         res.end();
       }
     }
+  };
+}
+
+function parseValidation(value: unknown): { valid: boolean; message: string; actorCount: number; durationS: number } {
+  if (!value || typeof value !== 'object') throw new Error('Validation result is required.');
+  const candidate = value as Record<string, unknown>;
+  if (typeof candidate.valid !== 'boolean' || typeof candidate.message !== 'string') throw new Error('Invalid validation result.');
+  return {
+    valid: candidate.valid, message: candidate.message.slice(0, 500),
+    actorCount: typeof candidate.actorCount === 'number' ? candidate.actorCount : 0,
+    durationS: typeof candidate.durationS === 'number' ? candidate.durationS : 0,
   };
 }
 
