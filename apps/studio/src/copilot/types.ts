@@ -11,6 +11,8 @@ export interface CopilotPlacementSlot {
   readonly pose: { readonly x: number; readonly y: number; readonly z: number; readonly headingRad: number };
   readonly laneRef?: { readonly roadId: string; readonly section: number; readonly laneId: number; readonly s: number; readonly t: number; readonly headingOffsetRad: number };
   readonly routeLaneRsls?: readonly string[];
+  /** Exact route runway from this spawn, used to bound generated speed. */
+  readonly availableDownstreamM?: number;
   readonly recommendedSpeedKph?: number;
   readonly labels: readonly string[];
 }

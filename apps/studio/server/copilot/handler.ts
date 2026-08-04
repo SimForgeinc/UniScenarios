@@ -14,7 +14,10 @@ export interface CopilotHandlerOptions {
 
 export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    const path = (req.url ?? '/').split('?')[0];
+    const rawPath = (req.url ?? '/').split('?')[0];
+    const path = rawPath.startsWith('/api/scenario-copilot')
+      ? rawPath.slice('/api/scenario-copilot'.length) || '/'
+      : rawPath;
     if (req.method === 'GET' && (path === '/' || path === '/capabilities')) {
       const config = configuredOpenAI();
       json(res, 200, {

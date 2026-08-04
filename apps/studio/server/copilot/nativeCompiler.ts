@@ -94,7 +94,9 @@ export function compileNativeCandidate(
         : actor.catalogId.includes('bicycle') ? 'bicycle'
           : actor.catalogId.includes('bus') ? 'bus'
             : actor.catalogId.includes('van') ? 'van' : actor.catalogId.includes('pickup') ? 'truck' : 'car';
-    const speed = actor.role === 'context' ? 0 : actor.initialSpeedKph ?? slot.recommendedSpeedKph ?? 25;
+    const requestedSpeed = actor.initialSpeedKph ?? slot.recommendedSpeedKph ?? 25;
+    const runwaySpeed = slot.availableDownstreamM === undefined ? requestedSpeed : Math.max(1, ((slot.availableDownstreamM - 12) / 21) * 3.6);
+    const speed = actor.role === 'context' ? 0 : Math.min(requestedSpeed, runwaySpeed);
     return {
       id: actor.id,
       kind: 'scene_absolute' as const,
@@ -116,8 +118,8 @@ export function compileNativeCandidate(
   });
   const interactions = actors.flatMap((actor, index) => {
     if (actor.role === 'context') return [];
-    const targetSpeed = actor.role === 'ego' ? actor.initialSpeedKph ?? 28
-      : actor.kind === 'pedestrian' ? 6 : actor.initialSpeedKph ?? 22;
+    const runwayBoundSpeed = Number(roles[index]?.initialSpeedKph ?? actor.initialSpeedKph ?? 20);
+    const targetSpeed = actor.kind === 'pedestrian' ? Math.min(6, runwayBoundSpeed) : runwayBoundSpeed;
     return [{
       id: `${actor.id}-generated-speed`,
       actor: actor.id,

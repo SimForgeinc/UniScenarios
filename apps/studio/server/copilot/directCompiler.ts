@@ -91,7 +91,7 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
         pose: { position: { x: slot.pose.x, y: slot.pose.y, z: slot.pose.z }, headingRad: slot.pose.headingRad },
         ...(slot.laneRef ? { laneRef: slot.laneRef } : {}),
         ...(slot.routeLaneRsls ? { initialRoute: { mode: 'lanePath' as const, lanes: slot.routeLaneRsls } } : {}),
-        initialSpeedKph: expectedSlotKind(actor.catalogId) === 'prop' ? 0 : actor.initialSpeedKph,
+        initialSpeedKph: expectedSlotKind(actor.catalogId) === 'prop' ? 0 : Math.min(actor.initialSpeedKph, slot.recommendedSpeedKph ?? actor.initialSpeedKph),
         essentiality: 'required' as const,
         extensions: { 'studio.copilot.placementSlotId': slot.id },
       };
@@ -101,7 +101,7 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
     mapSignalPlans: [],
     choreography: {
       clipSeconds: durationS,
-      warmupSeconds: 5,
+      warmupSeconds: 1,
       interactions: draft.actions.map((action) => ({
         id: action.id,
         actor: action.actorId,

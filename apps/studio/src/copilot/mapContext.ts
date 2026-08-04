@@ -25,6 +25,7 @@ export function buildCopilotMapContext(map: MapEntry, lanes: LaneIndex): Copilot
         requiredDownstreamM: Math.max(90, (speed / 3.6) * 21 + 10),
       });
       if (!route.ok) continue;
+      const safeSpeed = Math.max(5, Math.min(speed, ((route.downstreamM - 12) / 21) * 3.6));
       slots.push({
         id: `slot-${slots.length + 1}`,
         actorKinds: ['vehicle', 'pedestrian'],
@@ -39,7 +40,8 @@ export function buildCopilotMapContext(map: MapEntry, lanes: LaneIndex): Copilot
           headingOffsetRad: 0,
         },
         routeLaneRsls: route.lanes,
-        recommendedSpeedKph: speed,
+        availableDownstreamM: route.downstreamM,
+        recommendedSpeedKph: safeSpeed,
         labels: [lane.isJunction ? 'junction' : 'corridor', lane.forward ? 'with-s' : 'against-s', `road-${lane.roadId}`],
       });
     }
