@@ -11,6 +11,7 @@ export type CopilotServerProvider = (
 
 export interface CopilotHandlerOptions {
   readonly directProvider?: CopilotServerProvider;
+  readonly upstreamProvider?: CopilotServerProvider;
 }
 
 export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}) {
@@ -25,7 +26,11 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
         credentialConfigured: config.apiKey !== null,
         requestedModel: config.requestedModel,
         fallbackConfigured: config.fallbackModel !== null,
-        providers: options.directProvider ? ['staged-rag', 'direct-llm'] : ['staged-rag'],
+        providers: [
+          'staged-rag',
+          ...(options.directProvider ? ['direct-llm'] : []),
+          ...(options.upstreamProvider ? ['upstream-chat2scenic'] : []),
+        ],
         executionBoundary: 'server-only',
       });
       return;
@@ -35,7 +40,12 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
       return;
     }
     const abort = new AbortController();
-    req.once('close', () => abort.abort());
+    // IncomingMessage `close` also fires after a normally-completed request
+    // body on recent Node versions. Aborting there makes any provider slower
+    // than the body upload fail immediately. Only an actually aborted request
+    // or a response socket closed before completion cancels generation.
+    req.once('aborted', () => abort.abort());
+    res.once('close', () => { if (!res.writableEnded) abort.abort(); });
     try {
       const request = parseRequest(await readBody(req));
       const provider = providerFor(request.providerId, options);
@@ -61,7 +71,8 @@ export function createScenarioCopilotHandler(options: CopilotHandlerOptions = {}
 function providerFor(id: CopilotProviderId, options: CopilotHandlerOptions): CopilotServerProvider {
   if (id === 'staged-rag') return generateStagedScenario;
   if (id === 'direct-llm' && options.directProvider) return options.directProvider;
-  throw new Error('The direct native provider is not installed in this build.');
+  if (id === 'upstream-chat2scenic' && options.upstreamProvider) return options.upstreamProvider;
+  throw new Error(`Scenario Copilot provider "${id}" is not installed in this build.`);
 }
 
 async function readBody(req: IncomingMessage): Promise<unknown> {
@@ -79,7 +90,7 @@ async function readBody(req: IncomingMessage): Promise<unknown> {
 function parseRequest(value: unknown): CopilotGenerationRequest {
   if (!value || typeof value !== 'object') throw new Error('Scenario Copilot request must be an object.');
   const input = value as Partial<CopilotGenerationRequest>;
-  if (input.providerId !== 'staged-rag' && input.providerId !== 'direct-llm') throw new Error('Unknown Scenario Copilot provider.');
+  if (input.providerId !== 'staged-rag' && input.providerId !== 'direct-llm' && input.providerId !== 'upstream-chat2scenic') throw new Error('Unknown Scenario Copilot provider.');
   if (typeof input.prompt !== 'string' || input.prompt.trim().length < 8 || input.prompt.length > 4_000) throw new Error('Describe the scenario in 8–4,000 characters.');
   if (!input.mapContext) throw new Error('A current-map context is required.');
   const mapContext = CopilotMapContextSchema.parse(input.mapContext);

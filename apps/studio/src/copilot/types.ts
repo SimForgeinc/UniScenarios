@@ -1,6 +1,6 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
-export type CopilotProviderId = 'staged-rag' | 'direct-llm';
+export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic';
 
 export type CopilotActorKind = 'vehicle' | 'pedestrian' | 'prop';
 
@@ -75,7 +75,22 @@ export interface CopilotProvenance {
   readonly retrievedExampleIds: readonly string[];
   readonly stages: readonly { readonly name: CopilotStage; readonly durationMs: number }[];
   readonly repairAttempts: number;
-  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native';
+  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter';
+  /** Research-only evidence. Never interpreted by the browser as executable code. */
+  readonly researchDetails?: {
+    readonly upstreamSha: string;
+    readonly upstreamLicense: 'CC-BY-NC-4.0';
+    readonly apiCalls: number;
+    readonly scenicVersion: string | null;
+    readonly scenicCompiled: boolean;
+    readonly scenicSampled: boolean;
+    readonly scenicIterations: number | null;
+    readonly scenicCompileSampleMs: number | null;
+    readonly generatedComponentCount: number;
+    readonly ragMode: 'milvus' | 'prompt-examples-substitute';
+    readonly unsupportedSemantics: readonly string[];
+    readonly deviations: readonly string[];
+  };
 }
 
 export interface CopilotCandidate {

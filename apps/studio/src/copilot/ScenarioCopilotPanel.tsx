@@ -89,6 +89,9 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" aria-pressed={provider === 'direct-llm'} style={{ ...styles.provider, ...(provider === 'direct-llm' ? styles.providerActive : {}) }} onClick={() => setProvider('direct-llm')}>
         <strong>Direct native draft</strong><small>One model call into our typed format</small>
       </button>
+      <button type="button" aria-pressed={provider === 'upstream-chat2scenic'} style={{ ...styles.provider, ...(provider === 'upstream-chat2scenic' ? styles.providerActive : {}) }} onClick={() => setProvider('upstream-chat2scenic')}>
+        <strong>Upstream Chat2Scenic</strong><small>Research · CC BY-NC · Scenic compile/sample</small>
+      </button>
     </div>
     <label style={styles.label} htmlFor="copilot-prompt">Describe the scenario</label>
     <textarea id="copilot-prompt" data-testid="scenario-copilot-prompt" style={styles.prompt} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} disabled={busy} />
@@ -96,7 +99,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     {progress ? <div role="status" style={styles.progress}><span>{progress.message}</span><span>{progress.completed}/{progress.total}</span></div> : null}
     {error ? <div role="alert" style={styles.error}>{error}</div> : null}
     {result ? <>
-      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : 'Direct native draft'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
+      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
       {result.warnings.map((warning) => <div key={warning} style={styles.warning}>{warning}</div>)}
       <details style={styles.intent} open>
         <summary><strong>Review structured intent</strong> · editable before regeneration</summary>
@@ -113,12 +116,15 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
               {validation === 'running' || !validation ? 'Running canonical simulation…' : validation.message}
             </div>
             <div style={styles.provenance}>Map {candidate.provenance.mapId} · examples {candidate.provenance.retrievedExampleIds.join(', ') || 'none'} · {candidate.provenance.implementation}</div>
+            {candidate.provenance.researchDetails ? <div style={styles.researchEvidence}>
+              Scenic {candidate.provenance.researchDetails.scenicVersion ?? 'unavailable'} · compiled {candidate.provenance.researchDetails.scenicCompiled ? 'yes' : 'no'} · sampled {candidate.provenance.researchDetails.scenicSampled ? 'yes' : 'no'} · {candidate.provenance.researchDetails.apiCalls} model calls
+            </div> : null}
             <button type="button" data-testid="scenario-copilot-apply" style={styles.apply} disabled={!validation || validation === 'running' || !validation.valid} onClick={() => onApply(candidate)}>Apply & open in editor</button>
           </article>;
         })}
       </div>
     </> : null}
-    <footer style={styles.caveat}>Clean-room adaptation. It preserves structured interpretation, owned-example retrieval, component stages, repair, map binding, and provenance without copying the CC BY-NC repository’s code, prompts, or data.</footer>
+    <footer style={styles.caveat}>Structured + retrieval is the clean-room implementation. Upstream Chat2Scenic runs a separately attributed, pinned CC BY-NC 4.0 research adapter; it is not part of the production browser bundle and must not be used commercially.</footer>
   </section>;
 }
 
@@ -129,8 +135,8 @@ const styles: Record<string, CSSProperties> = {
   close: { border: 0, background: 'transparent', color: '#aeb6c3', fontSize: 27, cursor: 'pointer' },
   mapLock: { display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center', padding: 11, border: '1px solid #3e596c', borderRadius: 9, background: '#152630' },
   lock: { color: '#77d9ff', fontSize: 12, fontWeight: 800 },
-  label: { fontSize: 12, color: '#b7c0cc', fontWeight: 750 }, providers: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 },
-  provider: { color: '#dbe2eb', textAlign: 'left', padding: 10, display: 'flex', flexDirection: 'column', gap: 4, background: '#20242a', border: '1px solid #3b414b', borderRadius: 8, cursor: 'pointer' },
+  label: { fontSize: 12, color: '#b7c0cc', fontWeight: 750 }, providers: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 },
+  provider: { color: '#dbe2eb', textAlign: 'left', padding: 10, display: 'flex', flexDirection: 'column', gap: 4, background: '#20242a', borderWidth: 1, borderStyle: 'solid', borderColor: '#3b414b', borderRadius: 8, cursor: 'pointer' },
   providerActive: { borderColor: '#f28b36', background: '#2d261f' }, prompt: { minHeight: 108, resize: 'vertical', borderRadius: 8, padding: 11, color: '#f4f6f8', background: '#15181d', border: '1px solid #424954', font: 'inherit' },
   generate: { padding: '11px 14px', border: 0, borderRadius: 8, background: '#f27f2b', color: '#11151a', fontWeight: 850, cursor: 'pointer' },
   progress: { display: 'flex', justifyContent: 'space-between', color: '#9de5ff', background: '#132630', padding: 9, borderRadius: 7, fontSize: 12 },
@@ -141,5 +147,6 @@ const styles: Record<string, CSSProperties> = {
   candidates: { display: 'grid', gap: 10 }, card: { padding: 12, border: '1px solid #3d4650', borderRadius: 9, background: '#20242a' }, cardTitle: { display: 'flex', justifyContent: 'space-between', gap: 8 },
   validating: { color: '#8edfff', fontSize: 12 }, valid: { color: '#79e2a3', fontSize: 12 }, invalid: { color: '#ff9d9d', fontSize: 12 },
   provenance: { marginTop: 8, color: '#8e98a6', fontSize: 10, overflowWrap: 'anywhere' }, apply: { marginTop: 10, width: '100%', padding: 9, border: 0, borderRadius: 7, background: '#2d8f55', color: '#effff5', fontWeight: 800, cursor: 'pointer' },
+  researchEvidence: { marginTop: 7, padding: 7, borderRadius: 6, color: '#f8d38b', background: '#342b1d', fontSize: 10 },
   caveat: { color: '#7f8997', fontSize: 10, lineHeight: 1.45, borderTop: '1px solid #303640', paddingTop: 10 },
 };

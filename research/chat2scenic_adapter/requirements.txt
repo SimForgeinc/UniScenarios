@@ -1,0 +1,2 @@
+# Upstream paper/repository evaluation version.
+scenic==3.1.0
