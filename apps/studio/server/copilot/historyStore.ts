@@ -10,12 +10,16 @@ interface BenchmarkArtifact {
   completedAt?: string;
   rows?: BenchmarkRow[];
   artifactId?: string;
+  artifactKind?: string;
+  rerunOf?: string | null;
+  sourceCommit?: string;
 }
 
 interface BenchmarkRow {
   provider?: string; caseId?: string; caseSummary?: string; mapId?: string;
   requestedModel?: string; actualModel?: string; generationLatencyMs?: number;
   reasoningEffort?: string;
+  seed?: number | null;
   totalTokens?: number; apiCalls?: number; repairCount?: number; actorCount?: number;
   actionCount?: number; semanticPass?: boolean; semanticAssertions?: Array<{ id: string; pass: boolean; evidence: string }>;
   mapBindingPass?: boolean; nativeValidationPass?: boolean; simulationPass?: boolean; simulationDurationS?: number;
@@ -109,7 +113,7 @@ function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistory
       requestedModel: row.requestedModel ?? null, actualModel: row.actualModel ?? null, mapId: row.savedResult?.mapId ?? row.mapId ?? 'not recorded',
       reasoningEffort: parseEffort(row.reasoningEffort), artifactId: artifact.artifactId ?? null,
       mapHash: row.savedResult?.mapHash ?? null, scenarioSchemaVersion: numberOrNull(row.savedResult?.scenarioSchemaVersion),
-      savedDraftStatus: row.savedResult?.candidate ? 'original' as const : 'not-recorded' as const, savedResultHash: row.savedResult?.hash ?? null, seed: null,
+      savedDraftStatus: row.savedResult?.candidate ? 'original' as const : 'not-recorded' as const, savedResultHash: row.savedResult?.hash ?? null, seed: numberOrNull(row.seed),
       generatedAt: artifact.startedAt ?? null, intent: isIntent(row.savedResult?.intent) ? row.savedResult.intent : null, candidate: row.savedResult?.candidate ?? null,
       actorCount: numberOrNull(row.actorCount), actionCount: numberOrNull(row.actionCount), triggerSummary: null,
       semanticPass: boolOrNull(row.semanticPass), semanticAssertions: row.semanticAssertions ?? null,
@@ -120,10 +124,10 @@ function benchmarkEntries(artifact: BenchmarkArtifact): CopilotGenerationHistory
       latencyMs: numberOrNull(row.generationLatencyMs), totalTokens: numberOrNull(row.totalTokens), apiCalls: numberOrNull(row.apiCalls), repairCount: numberOrNull(row.repairCount),
       outcome: row.outcome ?? null, failureCategory: row.failureCategory ?? null,
       diagnostic: row.safeError ?? row.providerWarnings?.join('; ') ?? null,
-      provenance: { artifact: artifact.artifactId ?? 'unknown-results.json', benchmarkStartedAt: artifact.startedAt ?? null, savedResultHash: row.savedResult?.hash ?? null },
+      provenance: { artifact: artifact.artifactId ?? 'unknown-results.json', artifactKind: artifact.artifactKind ?? 'legacy-benchmark', rerunOf: artifact.rerunOf ?? null, sourceCommit: artifact.sourceCommit ?? null, benchmarkStartedAt: artifact.startedAt ?? null, savedResultHash: row.savedResult?.hash ?? null },
       generatedScenic: row.savedResult?.generatedScenic ?? null, directTypedDraft: row.savedResult?.candidate ? { intent: row.savedResult.intent ?? null, scenarioDoc: row.savedResult.candidate.scenarioDoc } : null,
       iterationTrace: row.savedResult?.birdEye?.dataUrl ? sanitizeIterationTrace([{
-        iteration: 1, summary: 'Saved deterministic bird-eye evidence from the original benchmark result.', toolCalls: [],
+        iteration: 1, summary: 'Saved deterministic bird-eye evidence from this exact recorded generation.', toolCalls: [],
         thumbnailDataUrl: row.savedResult.birdEye.dataUrl, altText: row.savedResult.birdEye.altText,
         legend: row.savedResult.birdEye.legend, provenance: { sha256: row.savedResult.birdEye.sha256, width: row.savedResult.birdEye.width, height: row.savedResult.birdEye.height },
       }]) : null,
