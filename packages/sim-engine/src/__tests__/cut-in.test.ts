@@ -165,7 +165,9 @@ describe('cut-in composition', () => {
     const { trace, issues } = runSimulation(input, { graph, guards: 'collect' });
     const track = trace.ticks.actors.challenger!;
     expect(issues.filter((issue) => issue.severity === 'error')).toEqual([]);
-    expect(Math.max(...track.y)).toBeGreaterThan(-3);
+    // The incursion must be material before it is reversed. Do not count the
+    // former pre-command centreline hunting as lane-change displacement.
+    expect(Math.max(...track.y)).toBeGreaterThan(-3.1);
     const completed = trace.events.find((event) => event.kind === 'interaction_completed' && event.interactionId === 'abort-to-source')!;
     expect(completed).toMatchObject({ finalLateralOffsetM: 0 });
     expect(track.laneRsl.at(-1)).toBe(LANE_RIGHT);

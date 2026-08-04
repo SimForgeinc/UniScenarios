@@ -1853,11 +1853,28 @@ class Simulation {
       const dynamicTargetAcceleration = dynamicTargetSpeed < Math.abs(a.speedMps) - 0.05
         ? Math.min(accel, (dynamicTargetSpeed - Math.abs(a.speedMps)) / 0.35)
         : accel;
+      const shortSteeringLookaheadM = dynamicProfile
+        ? Math.max(dynamicProfile.wheelbaseM * 0.85, Math.abs(a.speedMps) * 0.25)
+        : Math.max(5, Math.abs(a.speedMps) * 0.8);
+      // Tiny alternating headings in tessellated lane centrelines must not be
+      // amplified into left/right steering. On a geometrically straight
+      // horizon, use a longer pure-pursuit chord; retain the short horizon as
+      // soon as a material bend is ahead so turn tracking is unchanged.
+      const headingAtRouteS = a.route.poseAt(a.routeS).headingRad;
+      const curvatureHorizonM = Math.max(10, Math.abs(a.speedMps));
+      let maxHeadingChangeAheadRad = 0;
+      for (let sampleM = 2.5; sampleM <= curvatureHorizonM + 1e-9; sampleM += 2.5) {
+        const sampleHeading = a.route.poseAt(Math.min(a.route.lengthM, a.routeS + sampleM)).headingRad;
+        maxHeadingChangeAheadRad = Math.max(
+          maxHeadingChangeAheadRad,
+          Math.abs(angleDelta(headingAtRouteS, sampleHeading)),
+        );
+      }
       const steeringLookaheadM = a.latCmd
         ? Math.max(5, Math.abs(a.speedMps) * 0.8)
-        : dynamicProfile
-          ? Math.max(dynamicProfile.wheelbaseM * 0.85, Math.abs(a.speedMps) * 0.25)
-          : Math.max(5, Math.abs(a.speedMps) * 0.8);
+        : maxHeadingChangeAheadRad < 3 * Math.PI / 180
+          ? Math.max(4, Math.abs(a.speedMps) * 0.5, shortSteeringLookaheadM)
+          : shortSteeringLookaheadM;
       const previewS = Math.min(
         a.route.lengthM,
         a.routeS + steeringLookaheadM,
@@ -1882,13 +1899,14 @@ class Simulation {
             rate: plan.lateralReferenceRate,
             accel: plan.lateralReferenceAccel,
           };
-      // Dynamic-v1 owns the physical body. The choreography layer supplies a
-      // composite route + authored offset reference at now and at the steering
-      // horizon; it never rewrites the measured offset as a planning shortcut.
-      // Unit-error feedback expresses the same future reference in the body's
-      // measured frame. It applies identically with and without an active clip.
+      // Dynamic-v1 owns the physical body. Pure pursuit already measures the
+      // body's ordinary cross-track error from its world position to this
+      // future route reference. Mirroring an idle target across the centreline
+      // applies that correction twice and makes short/narrow actors hunt from
+      // side to side. An active authored lateral transition still needs its
+      // explicit schedule-tracking feedback to meet the commanded duration.
       const measuredTrackingErrorM = a.lateralOffsetM - a.lateralReferenceOffsetM;
-      const trackingPreviewOffset = previewLateralReference.offset - measuredTrackingErrorM;
+      const trackingPreviewOffset = previewLateralReference.offset - (a.latCmd ? measuredTrackingErrorM : 0);
       const result = this.motionBackend.step(a.id, {
         motionDirection: isReverseMotion(a) ? -1 : 1,
         targetSpeedMps: dynamicTargetSpeed,
