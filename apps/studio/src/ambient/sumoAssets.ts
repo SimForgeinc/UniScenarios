@@ -53,11 +53,13 @@ export async function loadSumoAssets(
   fetcher: typeof fetch = fetch,
   focus: SumoDemandFocus | null = null,
   acceleratedSignalCycles = false,
+  signal?: AbortSignal,
 ): Promise<LoadedSumoAssets> {
+  const request = (input: RequestInfo | URL) => fetcher(input, signal ? { signal } : undefined);
   const [mapResponse, runtimeResponse, wasmResponse] = await Promise.all([
-    fetcher(map.sumoManifest),
-    fetcher(SUMO_RUNTIME_MANIFEST_URL),
-    fetcher(SUMO_RUNTIME_WASM_URL),
+    request(map.sumoManifest),
+    request(SUMO_RUNTIME_MANIFEST_URL),
+    request(SUMO_RUNTIME_WASM_URL),
   ]);
   if (!mapResponse.ok) throw new Error(`SUMO is unavailable for ${map.label} (map sidecar ${mapResponse.status})`);
   if (!runtimeResponse.ok) throw new Error(`SUMO runtime is unavailable (${runtimeResponse.status})`);
@@ -68,7 +70,7 @@ export async function loadSumoAssets(
   validateSumoRuntimeManifest(runtime);
   const wasmBinary = validateSumoRuntimeBinary(await wasmResponse.arrayBuffer(), runtime);
   const manifestUrl = new URL(map.sumoManifest, globalThis.location?.href ?? 'http://localhost/');
-  const networkResponse = await fetcher(new URL(manifest.networkFile, manifestUrl).toString());
+  const networkResponse = await request(new URL(manifest.networkFile, manifestUrl).toString());
   if (!networkResponse.ok) throw new Error(`SUMO network is unavailable for ${map.label} (${networkResponse.status})`);
   const rawNetwork = await networkResponse.arrayBuffer();
   if (rawNetwork.byteLength === 0) throw new Error(`SUMO network is empty for ${map.label}`);

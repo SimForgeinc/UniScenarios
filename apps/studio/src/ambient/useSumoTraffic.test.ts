@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { buildSumoCatchUpRequests, classifySumoTimelineStep, externalTrafficActors, isCurrentSumoGeneration, shouldResetSumoForModeTransition, trafficMetrics } from './useSumoTraffic';
+import { resolveAmbientTrafficProfile } from '@uniscenarios/sim-engine';
+import { buildSumoCatchUpRequests, classifySumoTimelineStep, externalTrafficActors, isCurrentSumoGeneration, isSumoTrafficBootstrapReady, shouldResetSumoForModeTransition, trafficMetrics } from './useSumoTraffic';
 
 function packed(actors: readonly { id: number; x: number; z: number; speed: number; acceleration: number }[]): ArrayBuffer {
   const result = new ArrayBuffer(actors.length * 32);
@@ -16,6 +17,20 @@ function packed(actors: readonly { id: number; x: number; z: number; speed: numb
 }
 
 describe('SUMO live product metrics', () => {
+  it('starts only after every first-launch dependency is ready, independently of signal acceleration', () => {
+    const profile = resolveAmbientTrafficProfile({ version: 1, preset: 'city', seed: 'fresh' });
+    const renderer = {} as Parameters<typeof isSumoTrafficBootstrapReady>[0]['renderer'];
+    const sampleHeight = () => 0;
+    const ready = { enabled: true, profile, renderer, sampleHeight };
+    expect(isSumoTrafficBootstrapReady(ready)).toBe(true);
+    expect(isSumoTrafficBootstrapReady({ ...ready, enabled: false })).toBe(false);
+    expect(isSumoTrafficBootstrapReady({ ...ready, renderer: null })).toBe(false);
+    expect(isSumoTrafficBootstrapReady({ ...ready, sampleHeight: null })).toBe(false);
+    expect(isSumoTrafficBootstrapReady({
+      ...ready,
+      profile: resolveAmbientTrafficProfile({ version: 1, preset: 'off', seed: 'fresh' }),
+    })).toBe(false);
+  });
   it('keeps authored proxies in provider-neutral scene x/z coordinates', () => {
     const source = {
       id: 'actor', kind: 'car', x: 552.19, z: -1582.44, headingRad: 0,

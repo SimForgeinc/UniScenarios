@@ -15,6 +15,7 @@
     "render:review": "node scripts/review-scenario-evidence.mjs",
     "trace:render": "node scripts/render-trace.mjs",
     "verify:naming": "node scripts/verify-repository-naming.mjs",
+    "verify:fresh-sumo": "node scripts/verify-fresh-launch-sumo.mjs",
     "maps:derivatives": "node scripts/build-map-derivatives.mjs",
     "maps:derivatives:smoke": "node scripts/smoke-map-derivative-toolchain.mjs"
   },

@@ -88,4 +88,28 @@ describe('SUMO browser assets', () => {
     }) as typeof fetch;
     await expect(loadSumoAssets(map, profile, fetcher)).rejects.toThrow('map sidecar 404');
   });
+
+  it('aborts every in-flight first-launch asset request when readiness is revoked', async () => {
+    const map = {
+      id: 'test-map', label: 'Test map', locality: '', manifest: '', xodr: '', lanePolygons: '', signals: '',
+      topology: '', derivedTopology: '', locations: '', sumoManifest: '/sumo-network-manifest.json',
+    };
+    const profile = resolveAmbientTrafficProfile({ version: 1, preset: 'city', seed: 'fixed' });
+    const requested: string[] = [];
+    const aborted: string[] = [];
+    const fetcher = ((input: RequestInfo | URL, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      const url = String(input);
+      requested.push(url);
+      init?.signal?.addEventListener('abort', () => {
+        aborted.push(url);
+        reject(new DOMException('aborted', 'AbortError'));
+      }, { once: true });
+    })) as typeof fetch;
+    const controller = new AbortController();
+    const pending = loadSumoAssets(map, profile, fetcher, null, false, controller.signal);
+    controller.abort();
+    await expect(pending).rejects.toMatchObject({ name: 'AbortError' });
+    expect(requested).toHaveLength(3);
+    expect(aborted).toEqual(requested);
+  });
 });

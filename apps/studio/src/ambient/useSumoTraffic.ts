@@ -33,6 +33,15 @@ export interface UseSumoTrafficOptions {
   readonly acceleratedSignalCycles: boolean;
 }
 
+export function isSumoTrafficBootstrapReady(
+  options: Pick<UseSumoTrafficOptions, 'enabled' | 'profile' | 'renderer' | 'sampleHeight'>,
+): boolean {
+  return options.enabled
+    && options.profile.preset !== 'off'
+    && Boolean(options.renderer)
+    && Boolean(options.sampleHeight);
+}
+
 /**
  * Owns browser SUMO independently of the authored timeline. The renderer layer
  * survives playback layer swaps, while every authored road user is mirrored as
@@ -73,12 +82,13 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
   }, [options.focus, options.mode, options.onFallback, options.renderer, options.sampleHeight, options.time]);
 
   useEffect(() => {
-    if (!options.enabled || !options.renderer || !options.sampleHeight || options.profile.preset === 'off') {
+    if (!isSumoTrafficBootstrapReady(options)) {
       options.renderer?.clearLayer('sumo-traffic');
       setStatus(DISABLED_SUMO_STATUS);
       return;
     }
     let cancelled = false;
+    const assetsAbort = new AbortController();
     const provider = new SumoWasmTrafficProvider(SUMO_RUNTIME_MODULE_URL);
     const active: SumoTrafficRun = {
       provider,
@@ -104,7 +114,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     };
     run.current = active;
     setStatus({ phase: 'loading', actorCount: 0, reason: 'loading runtime and map assets' });
-    void loadSumoAssets(options.map, options.profile, fetch, options.focus, active.appliedAcceleratedSignalCycles).then(async ({
+    void loadSumoAssets(options.map, options.profile, fetch, options.focus, active.appliedAcceleratedSignalCycles, assetsAbort.signal).then(async ({
       payload,
       runtime,
       demand,
@@ -179,7 +189,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
         reconfigureSignalCycles(active, active.requestedAcceleratedSignalCycles);
       }
     }).catch((reason: unknown) => {
-      if (cancelled) return;
+      if (cancelled || assetsAbort.signal.aborted || (reason as { name?: string } | null)?.name === 'AbortError') return;
       const message = reason instanceof Error ? reason.message : String(reason);
       options.renderer?.clearLayer('sumo-traffic');
       setStatus({ phase: 'fallback', actorCount: 0, reason: message });
@@ -187,6 +197,7 @@ export function useSumoTraffic(options: UseSumoTrafficOptions): SumoTrafficStatu
     });
     return () => {
       cancelled = true;
+      assetsAbort.abort();
       active.disposed = true;
       active.generation += 1;
       if (run.current === active) run.current = null;
