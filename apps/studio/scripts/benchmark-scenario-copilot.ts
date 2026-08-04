@@ -37,6 +37,7 @@ interface BenchmarkRow {
   readonly scenicCompilePass: boolean | null;
   readonly scenicSampleMs: number | null;
   readonly scenicSamplePass: boolean | null;
+  readonly scenicCompileSampleMs: number | null;
   readonly mapBindingPass: boolean;
   readonly nativeValidationPass: boolean;
   readonly simulationPass: boolean;
@@ -195,7 +196,7 @@ async function runCase(
     provider: providerName, caseId: benchmarkCase.id, caseSummary: benchmarkCase.summary, mapId: mapContext.mapId,
     requestedModel: model, actualModel: null, modelFallback: false, providerWarnings: [], generationLatencyMs: null, totalLatencyMs: Math.round(performance.now() - wallStart),
     inputTokens: null, outputTokens: null, totalTokens: null, apiCalls: null, repairCount: null,
-    scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null,
+    scenicCompileMs: null, scenicCompilePass: null, scenicSampleMs: null, scenicSamplePass: null, scenicCompileSampleMs: null,
     mapBindingPass: false, nativeValidationPass: false, simulationPass: false, simulationDurationS: null,
     simulationWallMs: null, simulationHash: null, actorCount: null, actionCount: null,
     semanticPass: false, semanticAssertions: [], editablePass: false,
@@ -230,6 +231,7 @@ async function runCase(
       scenicCompilePass: research.scenicCompilePass,
       scenicSampleMs: research.scenicSampleMs,
       scenicSamplePass: research.scenicSamplePass,
+      scenicCompileSampleMs: research.scenicCompileSampleMs,
     };
     observed = common;
     if (!candidate) {
@@ -287,17 +289,20 @@ async function runCase(
 }
 
 function readResearchDetails(candidate: CopilotGenerationResult['candidates'][number] | undefined): {
-  apiCalls: number | null; scenicCompileMs: number | null; scenicCompilePass: boolean | null; scenicSampleMs: number | null; scenicSamplePass: boolean | null;
+  apiCalls: number | null; scenicCompileMs: number | null; scenicCompilePass: boolean | null; scenicSampleMs: number | null; scenicSamplePass: boolean | null; scenicCompileSampleMs: number | null;
 } {
-  const raw = (candidate as unknown as { researchDetails?: Record<string, unknown> } | undefined)?.researchDetails ?? {};
+  const looseCandidate = candidate as unknown as { researchDetails?: Record<string, unknown>; provenance?: { researchDetails?: Record<string, unknown> } } | undefined;
+  const raw = looseCandidate?.researchDetails ?? looseCandidate?.provenance?.researchDetails ?? {};
   const compile = raw['scenicCompile'] as Record<string, unknown> | undefined;
   const sample = raw['scenicSample'] as Record<string, unknown> | undefined;
+  const sharedDuration = numberOrNull(raw['scenicCompileSampleMs']);
   return {
     apiCalls: numberOrNull(raw['apiCalls']),
     scenicCompileMs: numberOrNull(compile?.['durationMs']),
-    scenicCompilePass: booleanOrNull(compile?.['pass']),
+    scenicCompilePass: booleanOrNull(compile?.['pass']) ?? booleanOrNull(raw['scenicCompiled']),
     scenicSampleMs: numberOrNull(sample?.['durationMs']),
-    scenicSamplePass: booleanOrNull(sample?.['pass']),
+    scenicSamplePass: booleanOrNull(sample?.['pass']) ?? booleanOrNull(raw['scenicSampled']),
+    scenicCompileSampleMs: sharedDuration,
   };
 }
 
@@ -324,7 +329,7 @@ function toCsv(rows: readonly BenchmarkRow[]): string {
   const columns: (keyof BenchmarkRow)[] = [
     'provider', 'caseId', 'caseSummary', 'mapId', 'requestedModel', 'actualModel', 'modelFallback', 'outcome', 'failureCategory',
     'generationLatencyMs', 'totalLatencyMs', 'inputTokens', 'outputTokens', 'totalTokens', 'apiCalls', 'repairCount',
-    'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'mapBindingPass', 'nativeValidationPass',
+    'scenicCompileMs', 'scenicCompilePass', 'scenicSampleMs', 'scenicSamplePass', 'scenicCompileSampleMs', 'mapBindingPass', 'nativeValidationPass',
     'simulationPass', 'simulationDurationS', 'simulationWallMs', 'simulationHash', 'actorCount', 'actionCount',
     'semanticPass', 'editablePass', 'safeError',
   ];
@@ -340,14 +345,14 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
     `- Model requested uniformly: \`${metadata.requestedApiModel}\``,
     `- Maps: ${metadata.mapIds.join(', ')}`,
     '- Success requires native map materialization, an editable ScenarioDoc, full 20-second canonical simulation, and every deterministic semantic assertion.',
-    '', '| Provider | Success | Semantic mismatch | Pipeline failure | Expected rejection | Median generation ms | Tokens |',
-    '|---|---:|---:|---:|---:|---:|---:|',
+    '', '| Provider | Strict success | Full 20s | Semantic mismatch | Pipeline failure | Expected rejection | Median generation ms | Median total ms | Median simulation ms | Scenic compile+sample ms | API calls | Tokens |',
+    '|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|',
   ];
   for (const provider of providers) {
     const selected = rows.filter((row) => row.provider === provider);
-    const latency = selected.map((row) => row.generationLatencyMs).filter((value): value is number => value !== null).sort((a, b) => a - b);
     const tokens = selected.reduce((sum, row) => sum + (row.totalTokens ?? 0), 0);
-    lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${latency.length ? latency[Math.floor(latency.length / 2)] : '—'} | ${tokens || '—'} |`);
+    const apiCalls = selected.reduce((sum, row) => sum + (row.apiCalls ?? 0), 0);
+    lines.push(`| ${provider} | ${selected.filter((row) => row.outcome === 'success').length}/${selected.length} | ${selected.filter((row) => row.simulationPass).length}/${selected.length} | ${selected.filter((row) => row.outcome === 'semantic-mismatch' || row.outcome === 'unexpected-generation').length} | ${selected.filter((row) => row.outcome === 'failure').length} | ${selected.filter((row) => row.outcome === 'expected-rejection').length} | ${median(selected.map((row) => row.generationLatencyMs))} | ${median(selected.map((row) => row.totalLatencyMs))} | ${median(selected.map((row) => row.simulationWallMs))} | ${median(selected.map((row) => row.scenicCompileSampleMs))} | ${apiCalls || '—'} | ${tokens || '—'} |`);
   }
   lines.push('', '## Case outcomes', '', '| Case | ' + providers.join(' | ') + ' |', '|---|' + providers.map(() => '---').join('|') + '|');
   for (const benchmarkCase of COPILOT_EDGE_CASES.filter((item) => rows.some((row) => row.caseId === item.id))) {
@@ -358,4 +363,11 @@ function renderReport(rows: readonly BenchmarkRow[], metadata: { startedAt: stri
   for (const row of failures) lines.push(`- **${row.provider} / ${row.caseSummary}:** ${row.failureCategory ?? row.outcome} — ${row.safeError ?? 'no safe diagnostic'}`);
   lines.push('', 'Raw model responses and credentials are deliberately excluded. See `results.json` for executable assertion evidence and per-run metrics.', '');
   return `${lines.join('\n')}\n`;
+}
+
+function median(values: readonly (number | null)[]): number | '—' {
+  const finite = values.filter((value): value is number => value !== null && Number.isFinite(value)).sort((a, b) => a - b);
+  if (!finite.length) return '—';
+  const middle = Math.floor(finite.length / 2);
+  return finite.length % 2 ? finite[middle]! : Math.round((finite[middle - 1]! + finite[middle]!) / 2);
 }
