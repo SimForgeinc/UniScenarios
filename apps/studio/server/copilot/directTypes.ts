@@ -32,11 +32,17 @@ export const DirectMapContextSchema = CopilotMapContextSchema;
 export const DirectActionDraftSchema = z.strictObject({
   id: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
   actorId: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/),
-  kind: z.enum(['speed', 'changeLane', 'laneOffset']),
+  kind: z.enum(['speed', 'changeLane', 'laneOffset', 'route', 'nearMiss']),
   startS: z.number().min(0).max(120),
   durationS: z.number().min(0.1).max(120),
   value: z.number(),
   label: z.string().max(200),
+  targetActorId: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).nullable().default(null),
+  clearanceM: z.number().min(0.1).max(10).nullable().default(null),
+  triggerMode: z.enum(['at', 'distance', 'ttc']).default('at'),
+  triggerActorId: z.string().regex(/^[A-Za-z][A-Za-z0-9_-]{0,63}$/).nullable().default(null),
+  triggerThreshold: z.number().min(0.05).max(500).nullable().default(null),
+  triggerDeadlineS: z.number().min(0).max(20).nullable().default(null),
 });
 
 export const DirectActorDraftSchema = z.strictObject({
@@ -45,6 +51,7 @@ export const DirectActorDraftSchema = z.strictObject({
   catalogId: z.string().min(1).max(200),
   slotId: z.string().min(1).max(160),
   initialSpeedKph: z.number().min(0).max(160),
+  static: z.boolean().default(false),
 });
 
 export const DirectNativeDraftSchema = z.strictObject({
@@ -58,10 +65,11 @@ export const DirectNativeDraftSchema = z.strictObject({
 export const DirectGenerationRequestSchema = z.strictObject({
   prompt: z.string().min(3).max(12_000),
   mapContext: DirectMapContextSchema,
-  providerId: z.literal('direct-llm'),
+  providerId: z.enum(['direct-llm', 'simulation-agent']),
   currentScenario: z.unknown().optional(),
   maxCandidates: z.number().int().min(1).max(5).default(1),
   model: z.string().min(1).max(200).optional(),
+  maxAgentIterations: z.number().int().min(1).max(4).optional(),
   evaluationMode: z.literal('deterministic').optional(),
 });
 

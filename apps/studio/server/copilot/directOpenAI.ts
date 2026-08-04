@@ -13,6 +13,10 @@ export interface DirectOpenAIClient {
     readonly model: string;
     readonly system: string;
     readonly user: string;
+    /** Explicit reasoning budget. Agent providers must set this rather than relying on model defaults. */
+    readonly reasoningEffort?: 'low' | 'medium' | 'high';
+    /** Optional trusted screenshot inputs; data URLs are created server-side and never contain credentials. */
+    readonly images?: readonly { readonly dataUrl: string; readonly detail?: 'low' | 'high' | 'auto' }[];
     readonly signal?: AbortSignal;
   }): Promise<DirectModelResponse>;
 }
@@ -28,13 +32,14 @@ const DRAFT_JSON_SCHEMA = {
       type: 'array', minItems: 1, maxItems: 32,
       items: {
         type: 'object', additionalProperties: false,
-        required: ['id', 'label', 'catalogId', 'slotId', 'initialSpeedKph'],
+        required: ['id', 'label', 'catalogId', 'slotId', 'initialSpeedKph', 'static'],
         properties: {
           id: { type: 'string', pattern: '^[A-Za-z][A-Za-z0-9_-]{0,63}$' },
           label: { type: 'string', minLength: 1, maxLength: 200 },
           catalogId: { type: 'string', minLength: 1, maxLength: 200 },
           slotId: { type: 'string', minLength: 1, maxLength: 160 },
           initialSpeedKph: { type: 'number', minimum: 0, maximum: 160 },
+          static: { type: 'boolean' },
         },
       },
     },
@@ -42,15 +47,21 @@ const DRAFT_JSON_SCHEMA = {
       type: 'array', maxItems: 128,
       items: {
         type: 'object', additionalProperties: false,
-        required: ['id', 'actorId', 'kind', 'startS', 'durationS', 'value', 'label'],
+        required: ['id', 'actorId', 'kind', 'startS', 'durationS', 'value', 'label', 'targetActorId', 'clearanceM', 'triggerMode', 'triggerActorId', 'triggerThreshold', 'triggerDeadlineS'],
         properties: {
           id: { type: 'string', pattern: '^[A-Za-z][A-Za-z0-9_-]{0,63}$' },
           actorId: { type: 'string', pattern: '^[A-Za-z][A-Za-z0-9_-]{0,63}$' },
-          kind: { type: 'string', enum: ['speed', 'changeLane', 'laneOffset'] },
+          kind: { type: 'string', enum: ['speed', 'changeLane', 'laneOffset', 'route', 'nearMiss'] },
           startS: { type: 'number', minimum: 0, maximum: 20 },
           durationS: { type: 'number', minimum: 0.1, maximum: 20 },
           value: { type: 'number' },
           label: { type: 'string', maxLength: 200 },
+          targetActorId: { type: ['string', 'null'], maxLength: 64 },
+          clearanceM: { type: ['number', 'null'], minimum: 0.1, maximum: 10 },
+          triggerMode: { type: 'string', enum: ['at', 'distance', 'ttc'] },
+          triggerActorId: { type: ['string', 'null'], maxLength: 64 },
+          triggerThreshold: { type: ['number', 'null'], minimum: 0.05, maximum: 500 },
+          triggerDeadlineS: { type: ['number', 'null'], minimum: 0, maximum: 20 },
         },
       },
     },
@@ -98,16 +109,20 @@ export function createOpenAIResponsesClient(options: {
       if (!response.ok) throw new Error(`OpenAI model-access probe failed (${response.status})`);
       return true;
     },
-    async generate({ model, system, user, signal }) {
+    async generate({ model, system, user, reasoningEffort, images = [], signal }) {
       const response = await request(`${baseUrl}/responses`, {
         method: 'POST', headers, signal,
         body: JSON.stringify({
           model,
           input: [
             { role: 'system', content: [{ type: 'input_text', text: system }] },
-            { role: 'user', content: [{ type: 'input_text', text: user }] },
+            { role: 'user', content: [
+              { type: 'input_text', text: user },
+              ...images.map((image) => ({ type: 'input_image', image_url: image.dataUrl, detail: image.detail ?? 'auto' })),
+            ] },
           ],
           text: { format: { type: 'json_schema', name: 'uniscenarios_native_draft', strict: true, schema: DRAFT_JSON_SCHEMA } },
+          ...(reasoningEffort ? { reasoning: { effort: reasoningEffort } } : {}),
           max_output_tokens: 8_000,
         }),
       });

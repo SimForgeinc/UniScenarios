@@ -111,6 +111,9 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
       <button type="button" aria-pressed={provider === 'upstream-chat2scenic'} style={{ ...styles.provider, ...(provider === 'upstream-chat2scenic' ? styles.providerActive : {}) }} onClick={() => setProvider('upstream-chat2scenic')}>
         <strong>Upstream Chat2Scenic</strong><small>Research · CC BY-NC · Scenic compile/sample</small>
       </button>
+      <button type="button" aria-pressed={provider === 'simulation-agent'} style={{ ...styles.provider, ...(provider === 'simulation-agent' ? styles.providerActive : {}) }} onClick={() => setProvider('simulation-agent')}>
+        <strong>Simulation agent</strong><small>Medium effort · up to 4 simulate-and-repair loops</small>
+      </button>
     </div>
     <label style={styles.label} htmlFor="copilot-prompt">Describe the scenario</label>
     <textarea id="copilot-prompt" data-testid="scenario-copilot-prompt" style={styles.prompt} value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} disabled={busy} />
@@ -118,7 +121,7 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
     {progress ? <div role="status" style={styles.progress}><span>{progress.message}</span><span>{progress.completed}/{progress.total}</span></div> : null}
     {error ? <div role="alert" style={styles.error}>{error}</div> : null}
     {result ? <>
-      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
+      <div style={styles.runMeta}><strong>{result.provider === 'staged-rag' ? 'Structured + retrieval' : result.provider === 'direct-llm' ? 'Direct native draft' : result.provider === 'simulation-agent' ? 'Simulation agent · no image' : 'Upstream Chat2Scenic · research'}</strong><span>{result.model}</span><span>{(result.metrics.latencyMs / 1000).toFixed(1)} s</span></div>
       {result.warnings.map((warning) => <div key={warning} style={styles.warning}>{warning}</div>)}
       <details style={styles.intent} open>
         <summary><strong>Review structured intent</strong> · editable before regeneration</summary>
@@ -138,6 +141,15 @@ export function ScenarioCopilotPanel({ controller, map, onValidate, onApply, onC
             {candidate.provenance.researchDetails ? <div style={styles.researchEvidence}>
               Scenic {candidate.provenance.researchDetails.scenicVersion ?? 'unavailable'} · compiled {candidate.provenance.researchDetails.scenicCompiled ? 'yes' : 'no'} · sampled {candidate.provenance.researchDetails.scenicSampled ? 'yes' : 'no'} · {candidate.provenance.researchDetails.apiCalls} model calls
             </div> : null}
+            {candidate.provenance.agentDetails ? <details style={styles.agentEvidence}>
+              <summary>{candidate.provenance.agentDetails.iterations.length} agent iteration(s) · {candidate.provenance.agentDetails.reasoningEffort} effort · {candidate.provenance.agentDetails.stopReason}</summary>
+              {candidate.provenance.agentDetails.iterations.map((iteration) => <div key={iteration.iteration} style={styles.agentIteration}>
+                <strong>Iteration {iteration.iteration}</strong> · {(iteration.durationMs / 1000).toFixed(1)}s · {iteration.totalTokens.toLocaleString()} tokens
+                <div>{iteration.draftDiff.join(' · ') || 'No typed draft delta'}</div>
+                <div>{iteration.toolCalls.map((call) => `${call.ok ? '✓' : '✕'} ${call.name}`).join(' · ')}</div>
+                {iteration.semanticChecks.filter((check) => !check.pass).map((check) => <div key={check.id} style={styles.invalid}>{check.id}: {check.evidence}</div>)}
+              </div>)}
+            </details> : null}
             <button type="button" data-testid="scenario-copilot-apply" style={styles.apply} disabled={!validation || validation === 'running' || !validation.valid} onClick={() => onApply(candidate)}>Apply & open in editor</button>
           </article>;
         })}
@@ -169,5 +181,7 @@ const styles: Record<string, CSSProperties> = {
   validating: { color: '#8edfff', fontSize: 12 }, valid: { color: '#79e2a3', fontSize: 12 }, invalid: { color: '#ff9d9d', fontSize: 12 },
   provenance: { marginTop: 8, color: '#8e98a6', fontSize: 10, overflowWrap: 'anywhere' }, apply: { marginTop: 10, width: '100%', padding: 9, border: 0, borderRadius: 7, background: '#2d8f55', color: '#effff5', fontWeight: 800, cursor: 'pointer' },
   researchEvidence: { marginTop: 7, padding: 7, borderRadius: 6, color: '#f8d38b', background: '#342b1d', fontSize: 10 },
+  agentEvidence: { marginTop: 7, padding: 7, borderRadius: 6, color: '#bfe9ff', background: '#172a34', fontSize: 10 },
+  agentIteration: { marginTop: 6, paddingTop: 6, borderTop: '1px solid #315064', lineHeight: 1.5 },
   caveat: { color: '#7f8997', fontSize: 10, lineHeight: 1.45, borderTop: '1px solid #303640', paddingTop: 10 },
 };

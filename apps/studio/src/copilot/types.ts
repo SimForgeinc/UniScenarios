@@ -1,6 +1,6 @@
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
-export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic';
+export type CopilotProviderId = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent';
 
 export type CopilotActorKind = 'vehicle' | 'pedestrian' | 'prop';
 
@@ -75,7 +75,54 @@ export interface CopilotProvenance {
   readonly retrievedExampleIds: readonly string[];
   readonly stages: readonly { readonly name: CopilotStage; readonly durationMs: number }[];
   readonly repairAttempts: number;
-  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter';
+  readonly implementation: 'clean-room-chat2scenic-inspired' | 'direct-native' | 'upstream-chat2scenic-research-adapter' | 'iterative-simulation-agent';
+  /** Sanitized agent evidence: tool outcomes and draft deltas, never hidden reasoning or secrets. */
+  readonly agentDetails?: {
+    readonly reasoningEffort: 'medium';
+    readonly maxIterations: number;
+    readonly stopReason: 'verified' | 'iteration-budget-exhausted' | 'unsupported-request';
+    readonly iterations: readonly {
+      readonly iteration: number;
+      readonly durationMs: number;
+      readonly inputTokens: number;
+      readonly outputTokens: number;
+      readonly totalTokens: number;
+      readonly requestId?: string;
+      readonly draftHash: string | null;
+      readonly draftDiff: readonly string[];
+      readonly toolCalls: readonly {
+        readonly name: 'inspect_context' | 'create_or_patch_draft' | 'validate_schema' | 'bind_current_map' | 'simulate_canonical_20s' | 'check_requested_semantics';
+        readonly ok: boolean;
+        readonly durationMs: number;
+        readonly inputSummary: string;
+        readonly outputSummary: string;
+      }[];
+      readonly diagnostics: readonly CopilotDiagnostic[];
+      readonly simulation?: {
+        readonly durationS: number;
+        readonly wallMs: number;
+        readonly traceHash: string;
+        readonly actorCount: number;
+        readonly actionCount: number;
+        readonly feedbackMetrics?: {
+          readonly eventTimeline: readonly { readonly t: number; readonly kind: string; readonly actorId?: string; readonly interactionId?: string }[];
+          readonly actorStarts: readonly { readonly actorId: string; readonly t: number }[];
+          readonly closestApproaches: readonly { readonly pair: readonly [string, string]; readonly distanceM: number; readonly t: number }[];
+          readonly minTtc: { readonly valueS: number; readonly t: number; readonly pair: readonly [string, string] } | null;
+          readonly minPathTtc: { readonly valueS: number; readonly t: number; readonly pair: readonly [string, string] } | null;
+          readonly minPet: { readonly valueS: number; readonly t: number; readonly pair: readonly [string, string] } | null;
+          readonly collisions: readonly { readonly t: number; readonly a: string; readonly b: string }[];
+          readonly routeProgress: readonly { readonly actorId: string; readonly progressM: number; readonly remainingRunwayM: number | null }[];
+          readonly maxLaneDeviation: readonly { readonly actorId: string; readonly absoluteM: number }[];
+          readonly signalStates: readonly { readonly signalId: string; readonly phases: readonly string[] }[];
+          readonly triggerNeverFired: readonly string[];
+          readonly occlusion: readonly { readonly observer: string; readonly target: string; readonly status: string; readonly revealToConflictS: number | null }[];
+          readonly unavailable: readonly string[];
+        };
+      };
+      readonly semanticChecks: readonly { readonly id: string; readonly pass: boolean; readonly evidence: string }[];
+    }[];
+  };
   /** Research-only evidence. Never interpreted by the browser as executable code. */
   readonly researchDetails?: {
     readonly upstreamSha: string;
@@ -124,6 +171,8 @@ export interface CopilotGenerationRequest {
   readonly confirmedIntent?: CopilotIntent;
   readonly maxCandidates?: number;
   readonly model?: string;
+  /** Iterative providers only; bounded to 1–4 by the server. */
+  readonly maxAgentIterations?: number;
   /** Test-only deterministic path; production callers never set this. */
   readonly evaluationMode?: 'deterministic';
 }

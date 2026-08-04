@@ -9,9 +9,10 @@ import { buildFollowRoute, runSimulation, toSceneXZ, type LaneGraph } from '@uni
 import { COPILOT_EDGE_CASES, evaluateCopilotSemantics, type CopilotBenchmarkCase, type SemanticAssertion } from '../server/copilot/benchmarkCases.js';
 import { generateDirectDraft } from '../server/copilot/directProvider.js';
 import { generateStagedScenario } from '../server/copilot/stagedProvider.js';
+import { generateSimulationAgent } from '../server/copilot/simulationAgentProvider.js';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
-type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic';
+type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent';
 type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
 
 interface BenchmarkRow {
@@ -121,6 +122,7 @@ async function loadProviders(names: readonly ProviderName[]): Promise<Map<Provid
   const out = new Map<ProviderName, ProviderFn>([
     ['staged-rag', generateStagedScenario],
     ['direct-llm', generateDirectDraft],
+    ['simulation-agent', generateSimulationAgent],
   ]);
   if (names.includes('upstream-chat2scenic')) {
     // Kept dynamic so the harness remains independently testable while the
@@ -210,6 +212,7 @@ async function runCase(
       mapContext,
       maxCandidates: 1,
       model,
+      ...(providerName === 'simulation-agent' ? { maxAgentIterations: 4 } : {}),
     } as unknown as CopilotGenerationRequest;
     const signal = AbortSignal.timeout(timeoutMs);
     const generated = await provider(request, { signal });

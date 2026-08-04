@@ -58,6 +58,15 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
     if (action.kind === 'speed' && (action.value < 0 || action.value > 160)) throw new Error(`action ${action.id} speed is outside 0–160 kph`);
     if (action.kind === 'changeLane' && ![-1, 1].includes(action.value)) throw new Error(`action ${action.id} lane delta must be -1 or 1`);
     if (action.kind === 'laneOffset' && (action.value < -1 || action.value > 1)) throw new Error(`action ${action.id} lane offset must be within -1..1`);
+    if (action.kind === 'nearMiss' && (!action.targetActorId || action.targetActorId === action.actorId || !actorIds.has(action.targetActorId))) {
+      throw new Error(`near-miss action ${action.id} requires a different existing target actor`);
+    }
+    if (action.triggerMode !== 'at' && (!action.triggerActorId || action.triggerActorId === action.actorId || !actorIds.has(action.triggerActorId))) {
+      throw new Error(`relative action ${action.id} requires a different existing trigger actor`);
+    }
+    if (action.triggerMode !== 'at' && (action.triggerThreshold === null || action.triggerDeadlineS === null)) {
+      throw new Error(`relative action ${action.id} requires a trigger threshold and deadline`);
+    }
   }
 
   const timestamp = now.toISOString();
@@ -85,13 +94,13 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
           class: actorClass(actor.catalogId),
           catalogId: actor.catalogId,
           dims: { length: entry.dims.l, width: entry.dims.w, height: entry.dims.h },
-          static: expectedSlotKind(actor.catalogId) === 'prop',
+          static: expectedSlotKind(actor.catalogId) === 'prop' || actor.static,
           sensors: [],
         },
         pose: { position: { x: slot.pose.x, y: slot.pose.y, z: slot.pose.z }, headingRad: slot.pose.headingRad },
         ...(slot.laneRef ? { laneRef: slot.laneRef } : {}),
         ...(slot.routeLaneRsls ? { initialRoute: { mode: 'lanePath' as const, lanes: slot.routeLaneRsls } } : {}),
-        initialSpeedKph: expectedSlotKind(actor.catalogId) === 'prop' ? 0 : Math.min(actor.initialSpeedKph, slot.recommendedSpeedKph ?? actor.initialSpeedKph),
+        initialSpeedKph: expectedSlotKind(actor.catalogId) === 'prop' || actor.static ? 0 : Math.min(actor.initialSpeedKph, slot.recommendedSpeedKph ?? actor.initialSpeedKph),
         essentiality: 'required' as const,
         extensions: { 'studio.copilot.placementSlotId': slot.id },
       };
@@ -102,13 +111,23 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
     choreography: {
       clipSeconds: durationS,
       warmupSeconds: 1,
-      interactions: draft.actions.map((action) => ({
-        id: action.id,
-        actor: action.actorId,
-        trigger: { kind: 'at' as const, t: action.startS },
-        until: { kind: 'at' as const, t: action.startS + action.durationS },
-        label: action.label,
-        ...(action.kind === 'speed' ? {
+      interactions: draft.actions.map((action) => {
+        const trigger = action.triggerMode === 'distance' ? {
+          kind: 'when' as const,
+          condition: { kind: 'distance' as const, from: action.triggerActorId!, to: { role: action.actorId }, measure: 'euclidean' as const, op: '<=' as const, valueM: action.triggerThreshold! },
+          byLatest: action.triggerDeadlineS!, ifNever: 'skip' as const,
+        } : action.triggerMode === 'ttc' ? {
+          kind: 'when' as const,
+          condition: { kind: 'ttc' as const, of: action.triggerActorId!, to: action.actorId, op: '<=' as const, valueS: action.triggerThreshold! },
+          byLatest: action.triggerDeadlineS!, ifNever: 'skip' as const,
+        } : { kind: 'at' as const, t: action.startS };
+        return {
+          id: action.id,
+          actor: action.actorId,
+          trigger,
+          ...(action.triggerMode === 'at' ? { until: { kind: 'at' as const, t: action.startS + action.durationS } } : {}),
+          label: action.label,
+          ...(action.kind === 'speed' ? {
           verb: 'speed' as const,
           target: action.value === 0 ? { mode: 'stop' as const } : { mode: 'absolute' as const, valueKph: action.value },
           dynamics: { shape: 'linear' as const, constraint: 'time' as const, value: action.durationS },
@@ -118,14 +137,29 @@ export function compileDirectDraft(rawDraft: unknown, rawMapContext: unknown, no
           dynamics: { shape: 'sinusoidal' as const, constraint: 'time' as const, value: action.durationS },
           maneuverDurationS: action.durationS,
           maneuverStyle: 'normal' as const,
-        } : {
+        } : action.kind === 'laneOffset' ? {
           verb: 'laneOffset' as const,
           target: { tFrac: action.value, reference: 'lane_center' as const },
           dynamics: { shape: 'sinusoidal' as const, constraint: 'time' as const, value: action.durationS },
           maneuverDurationS: action.durationS,
           maneuverStyle: 'normal' as const,
-        }),
-      })),
+        } : action.kind === 'route' ? {
+          verb: 'route' as const,
+          target: { mode: 'lanePath' as const, lanes: slots.get(draft.actors.find((actor) => actor.id === action.actorId)!.slotId)!.routeLaneRsls! },
+        } : {
+          verb: 'route' as const,
+          target: {
+            mode: 'nearMiss' as const,
+            target: action.targetActorId!,
+            clearanceM: action.clearanceM ?? .8,
+            pass: 'auto' as const,
+            minSpeedKph: 2,
+            maxSpeedKph: 12,
+            deadlineS: Math.min(durationS, action.startS + action.durationS),
+          },
+          }),
+        };
+      }),
     },
     invariants: [],
     variants: [],

@@ -70,7 +70,7 @@ function deterministicDraft(request: CopilotGenerationRequest): DirectNativeDraf
     reasoningSummary: 'Deterministic evaluation draft bound to a trusted current-map slot.',
     actors: [{
       id: 'ego', label: 'Generated car', slotId: vehicle.id,
-      catalogId: vehicle.catalogIds![0]!, initialSpeedKph: vehicle.recommendedSpeedKph ?? 25,
+      catalogId: vehicle.catalogIds![0]!, initialSpeedKph: vehicle.recommendedSpeedKph ?? 25, static: false,
     }],
     actions: [],
   };
