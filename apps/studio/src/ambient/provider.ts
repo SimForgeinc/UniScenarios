@@ -1,11 +1,16 @@
-export type AmbientTrafficProviderId = 'native' | 'sumo';
+export type AmbientTrafficProviderId = 'off' | 'native' | 'sumo';
 
-export const AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY = 'studio.presentation.ambientTrafficProvider.v1';
+/** Execution-bearing provider choice. Unlike camera/layout presentation state, this changes the world. */
+export const AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY = 'studio.ambientTraffic.provider.v1';
+/** Read-only migration path for scenarios saved before provider choice became execution-bearing. */
+export const LEGACY_AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY = 'studio.presentation.ambientTrafficProvider.v1';
 
 export function ambientTrafficProviderFromExtensions(
   extensions: Readonly<Record<string, unknown>> | undefined,
 ): AmbientTrafficProviderId {
-  return extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY] === 'native' ? 'native' : 'sumo';
+  const value = extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY]
+    ?? extensions?.[LEGACY_AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY];
+  return value === 'off' || value === 'native' || value === 'sumo' ? value : 'sumo';
 }
 
 /**

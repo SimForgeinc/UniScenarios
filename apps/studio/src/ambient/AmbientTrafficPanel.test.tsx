@@ -72,4 +72,22 @@ describe('AmbientTrafficPanel', () => {
     />);
     expect(on.match(/<input[^>]*data-testid="ambient-traffic-accelerated-signal-cycles"[^>]*>/)?.[0]).toContain('checked');
   });
+
+  it('offers an accessible engine-level Off state and disables density controls', () => {
+    const markup = renderToStaticMarkup(<AmbientTrafficPanel
+      profile={defaultAmbientTrafficProfile()}
+      provenance={null}
+      provider="off"
+      onChange={vi.fn()}
+      defaultOpen
+    />);
+    expect(markup).toContain('<option value="off" selected="">Off</option>');
+    expect(markup).toContain('role="status"');
+    expect(markup).toContain('aria-live="polite"');
+    expect(markup).toContain('Ambient traffic off');
+    expect(markup.match(/<select[^>]*data-testid="ambient-traffic-preset"[^>]*>/)?.[0]).toContain('disabled');
+    expect(markup.match(/<input[^>]*data-testid="ambient-traffic-seed"[^>]*>/)?.[0]).toContain('disabled');
+    expect(markup).not.toContain('ambient-traffic-accelerated-signal-cycles');
+    expect(markup).not.toContain('sumo-traffic-status');
+  });
 });

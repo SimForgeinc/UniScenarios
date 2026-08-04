@@ -455,10 +455,10 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     playbackBundle !== null,
   );
   const materializedAmbientProfile = useMemo(
-    () => sumoOwnsSignalStates
+    () => ambientTrafficProvider === 'off' || sumoOwnsSignalStates
       ? resolveAmbientTrafficProfile({ version: 1, preset: 'off', seed: ambientTrafficProfile.seed })
       : ambientTrafficProfile,
-    [ambientTrafficProfile, sumoOwnsSignalStates],
+    [ambientTrafficProfile, ambientTrafficProvider, sumoOwnsSignalStates],
   );
   const prepareAuthoredPlayback = useCallback(async (signal: AbortSignal) => {
     throwIfPreparationAborted(signal);
@@ -598,10 +598,21 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_EXTENSION_KEY, profile);
   }, [editorController]);
   const changeAmbientTrafficProvider = useCallback((provider: AmbientTrafficProviderId) => {
+    overlays?.clearSignalStates();
     setAmbientTrafficProvider(provider);
     setSumoFallbackReason(null);
-    editorController?.doc.setPresentationExtension(AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY, provider);
-  }, [editorController]);
+    editorController?.doc.setAmbientTrafficExtension(AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY, provider);
+    if (provider === 'off') {
+      runtimeWorker.current?.cancel();
+      ambientPreviewCache.current.begin();
+      ambientPreparation.current = null;
+      setAmbientPreviewState(null);
+      setAmbientPreviewBusy(false);
+      setAmbientTrafficError(null);
+      editorController?.renderer.clearLayer('ambient-preview');
+      editorController?.renderer.clearLayer('sumo-traffic');
+    }
+  }, [editorController, overlays]);
   const changeAcceleratedSignalCycles = useCallback((enabled: boolean) => {
     // Do not leave the old program's last colors visible while SUMO resets.
     overlays?.clearSignalStates();
@@ -618,8 +629,9 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   // the previously open map or saved scenario into the next document.
   const authoredAmbientValue = editorController?.doc.data.extensions?.[AMBIENT_TRAFFIC_EXTENSION_KEY];
   const authoredAmbientHash = contentHash(authoredAmbientValue ?? null);
-  const authoredAmbientProviderValue = editorController?.doc.data.extensions?.[AMBIENT_TRAFFIC_PROVIDER_EXTENSION_KEY];
-  const authoredAmbientProviderHash = contentHash(authoredAmbientProviderValue ?? null);
+  const authoredAmbientProvider = ambientTrafficProviderFromExtensions(editorController?.doc.data.extensions);
+  const authoredAmbientProviderHash = contentHash(authoredAmbientProvider);
+  const ambientTrafficProviderHydrated = ambientTrafficProvider === authoredAmbientProvider;
   const authoredAcceleratedSignalCyclesValue = editorController?.doc.data.extensions?.[ACCELERATED_SIGNAL_CYCLES_EXTENSION_KEY];
   const authoredAcceleratedSignalCyclesHash = contentHash(authoredAcceleratedSignalCyclesValue ?? null);
   // Camera/sensor/presentation edits do not change the physical traffic world.
@@ -642,10 +654,9 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     setAmbientTrafficProfile((current) => contentHash(current) === contentHash(next) ? current : next);
   }, [editorController, authoredAmbientHash]);
   useEffect(() => {
-    const next = ambientTrafficProviderFromExtensions(editorController?.doc.data.extensions);
-    setAmbientTrafficProvider(next);
+    setAmbientTrafficProvider(authoredAmbientProvider);
     setSumoFallbackReason(null);
-  }, [editorController, authoredAmbientProviderHash]);
+  }, [authoredAmbientProvider, authoredAmbientProviderHash, editorController]);
   useEffect(() => {
     const next = ambientSignalCycleSettingsFromExtensions(editorController?.doc.data.extensions).acceleratedSignalCycles;
     if (acceleratedSignalCycles !== next) overlays?.clearSignalStates();
@@ -657,7 +668,15 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
   // Authored edits rematerialize against the existing generated actors; only a
   // map/profile/mix/seed change creates a new traffic population.
   useEffect(() => {
-    if (!editorController || playbackBundle) {
+    if (!editorController || playbackBundle || !ambientTrafficProviderHydrated || ambientTrafficProvider === 'off') {
+      if (ambientTrafficProvider === 'off') {
+        runtimeWorker.current?.cancel();
+        ambientPreviewCache.current.begin();
+        ambientPreparation.current = null;
+        setAmbientPreviewState(null);
+        setAmbientTrafficError(null);
+        editorController?.renderer.clearLayer('ambient-preview');
+      }
       setAmbientPreviewBusy(false);
       return;
     }
@@ -719,7 +738,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     ).finally(() => {
       if (ambientPreparation.current?.promise === promise) ambientPreparation.current = null;
     });
-  }, [ambientPreviewSourceHash, campaignSource, editorController, map, materializedAmbientProfile, playbackBundle, state?.revision]);
+  }, [ambientPreviewSourceHash, ambientTrafficProvider, ambientTrafficProviderHydrated, campaignSource, editorController, map, materializedAmbientProfile, playbackBundle, state?.revision]);
 
   useEffect(() => () => runtimeWorker.current?.dispose(), []);
   const runAmbientRobustness = useCallback(() => {
@@ -935,7 +954,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     // An authored controller plan is authoritative. Until the WASM bridge can
     // accept live tlLogic overrides, native ambient traffic owns that world so
     // SUMO cannot render or obey a contradictory independent signal cycle.
-    enabled: sumoOwnsSignalStates,
+    enabled: ambientTrafficProviderHydrated && sumoOwnsSignalStates,
     map,
     profile: ambientTrafficProfile,
     renderer: editorController?.renderer,
@@ -1335,7 +1354,7 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
       {!mapWorkspaceOpen && auxiliaryTool === 'ambient' && authoringEnabled ? (
         <AmbientTrafficPopover
           profile={ambientTrafficProfile}
-          provenance={ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic ?? null}
+          provenance={ambientTrafficProvider === 'off' ? null : ambientPreview?.ambientTraffic ?? authoredPlayback?.ambientTraffic ?? null}
           provider={ambientTrafficProvider}
           onProviderChange={changeAmbientTrafficProvider}
           acceleratedSignalCycles={acceleratedSignalCycles}

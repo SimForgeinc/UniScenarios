@@ -43,6 +43,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
   }, [promotionActorId, provenance]);
   const promotionActor = provenance?.actors.find((actor) => actor.id === promotionActorId);
   const promotion = promotionActor ? ambientPromotionCapability(promotionActor.routeLaneRsls) : null;
+  const engineOff = provider === 'off';
 
   const updateCustom = (patch: Partial<ResolvedAmbientTrafficProfile>): void => {
     onChange({ ...profile, ...patch, preset: 'custom' });
@@ -76,10 +77,15 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             style={styles.select}
             data-testid="ambient-traffic-provider"
           >
+            <option value="off">Off</option>
             <option value="native">Native</option>
             <option value="sumo">SUMO (Experimental)</option>
           </select>
         </label>
+        {engineOff ? <div style={styles.status} role="status" aria-live="polite" data-testid="ambient-traffic-off-status">
+          <strong>Ambient traffic off</strong>
+          <div>No background vehicles or traffic engine are running.</div>
+        </div> : null}
         {provider === 'sumo' && sumoStatus ? <div style={sumoStatus.phase === 'fallback' ? styles.error : styles.status} data-testid="sumo-traffic-status">
           <strong>{sumoStatus.phase === 'fallback' ? 'Native fallback' : `SUMO ${sumoStatus.phase}`}</strong>
           {sumoStatus.reason ? ` · ${sumoStatus.reason}` : null}
@@ -113,7 +119,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             onChange={(event) => onChange(profileForPreset(event.target.value as AmbientTrafficPreset, profile))}
             style={styles.select}
             data-testid="ambient-traffic-preset"
-            disabled={busy}
+            disabled={busy || engineOff}
           >
             {PRESETS.map((preset) => <option key={preset.id} value={preset.id}>{preset.label}</option>)}
           </select>
@@ -135,7 +141,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
               }}
               style={styles.input}
               data-testid="ambient-traffic-seed"
-              disabled={busy}
+              disabled={busy || engineOff}
             />
             <button
               type="button"
@@ -143,7 +149,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
               onClick={() => onChange({ ...profile, seed: nextAmbientSeed(profile.seed) })}
               data-testid="ambient-traffic-regenerate"
               title="Generate another deterministic traffic population"
-              disabled={busy}
+              disabled={busy || engineOff}
             >↻</button>
           </span>
         </label>
@@ -154,7 +160,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             value={profile.densityVehiclesPerKm}
             min={0} max={80} step={1}
             testId="ambient-traffic-density"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(densityVehiclesPerKm) => updateCustom({ densityVehiclesPerKm })}
           />
           <Range
@@ -162,7 +168,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             value={profile.maxActors}
             min={0} max={128} step={1}
             testId="ambient-traffic-max-actors"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(maxActors) => updateCustom({ maxActors })}
           />
           <Range
@@ -171,7 +177,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             min={0} max={1} step={0.05}
             display={`${Math.round(profile.aggressiveness * 100)}%`}
             testId="ambient-traffic-aggression"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(aggressiveness) => updateCustom({ aggressiveness })}
           />
           <Range
@@ -180,7 +186,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             min={0} max={0.8} step={0.05}
             display={`±${Math.round(profile.speedVariance * 100)}%`}
             testId="ambient-traffic-speed-variance"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(speedVariance) => updateCustom({ speedVariance })}
           />
           <Range
@@ -189,7 +195,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             min={0} max={Math.max(0, 1 - profile.pedestrianShare)} step={0.01}
             display={`${Math.round(profile.cyclistShare * 100)}%`}
             testId="ambient-traffic-cyclist-share"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(cyclistShare) => updateCustom({ cyclistShare })}
           />
           <Range
@@ -198,7 +204,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
             min={0} max={Math.max(0, 1 - profile.cyclistShare)} step={0.01}
             display={`${Math.round(profile.pedestrianShare * 100)}%`}
             testId="ambient-traffic-pedestrian-share"
-            disabled={busy}
+            disabled={busy || engineOff}
             onChange={(pedestrianShare) => updateCustom({ pedestrianShare })}
           />
         </div> : null}
@@ -249,7 +255,7 @@ export function AmbientTrafficPanel({ profile, provenance, busy = false, error =
         <button
           type="button"
           style={styles.action}
-          disabled={busy}
+          disabled={busy || engineOff}
           onClick={() => onChange(defaultAmbientProfileForReset(profile))}
           data-testid="ambient-traffic-reset"
         >Reset to City</button>
