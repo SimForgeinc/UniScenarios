@@ -14,6 +14,13 @@ import { DirectGenerationRequestSchema, DirectNativeDraftSchema, type DirectNati
 
 const REQUESTED_MODEL = 'gpt-5.6-luna';
 
+function requestedReasoningEffort(): 'low' | 'medium' | 'high' | undefined {
+  const value = process.env['OPENAI_SCENARIO_REASONING_EFFORT']?.trim();
+  if (!value) return undefined;
+  if (value === 'low' || value === 'medium' || value === 'high') return value;
+  throw new Error(`OPENAI_SCENARIO_REASONING_EFFORT must be low, medium, or high (received ${value})`);
+}
+
 function promptHash(prompt: string): string { return createHash('sha256').update(prompt).digest('hex'); }
 
 function compactMapContext(request: CopilotGenerationRequest): string {
@@ -125,6 +132,7 @@ export async function generateDirectDraft(
   let actualModel = request.model ?? process.env['OPENAI_SCENARIO_MODEL'] ?? REQUESTED_MODEL;
   let substituted = false;
   const generatedAt = now().toISOString();
+  const reasoningEffort = requestedReasoningEffort();
   let client: DirectOpenAIClient | undefined;
 
   progress('interpreting', 'Reading the prompt and current map slots', 0, count);
@@ -148,7 +156,7 @@ export async function generateDirectDraft(
       draft = deterministicDraft(request);
     } else {
       const user = `USER_REQUEST:\n${request.prompt}\n\nMAP_CONTEXT:\n${compactMapContext(request)}\n\nCandidate ${index + 1} of ${count}; make it materially distinct when possible.`;
-      const initial = await client!.generate({ model: actualModel, system: SYSTEM, user, signal: options.signal });
+      const initial = await client!.generate({ model: actualModel, system: SYSTEM, user, reasoningEffort, signal: options.signal });
       addUsage(usage, initial);
       requestId = initial.requestId;
       try {
@@ -161,6 +169,7 @@ export async function generateDirectDraft(
           model: actualModel,
           system: SYSTEM,
           user: `${user}\n\nPREVIOUS_DRAFT:\n${initial.text.slice(0, 30_000)}\n\n${directDraftRepairFeedback(error)}`,
+          reasoningEffort,
           signal: options.signal,
         });
         addUsage(usage, repair);
