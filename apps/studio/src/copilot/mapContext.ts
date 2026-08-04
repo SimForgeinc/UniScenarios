@@ -29,7 +29,10 @@ export function buildCopilotMapContext(map: MapEntry, lanes: LaneIndex): Copilot
       slots.push({
         id: `slot-${slots.length + 1}`,
         actorKinds: ['vehicle', 'pedestrian'],
-        catalogIds: ['vehicle.sedan', 'vehicle.pickup', 'vehicle.van', 'vehicle.motorcycle', 'vehicle.bicycle', 'pedestrian.adult_walking'],
+        catalogIds: [
+          'vehicle.sedan', 'vehicle.pickup', 'vehicle.van', 'vehicle.bus', 'vehicle.ambulance',
+          'vehicle.motorcycle', 'vehicle.bicycle', 'pedestrian.adult_walking', 'pedestrian.child_walking',
+        ],
         pose: { x: pose.x, y: 0, z: pose.z, headingRad: pose.headingRad },
         laneRef: {
           roadId: lane.roadId,
