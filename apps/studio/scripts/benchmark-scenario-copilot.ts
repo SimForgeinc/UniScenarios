@@ -12,9 +12,10 @@ import { generateStagedScenario } from '../server/copilot/stagedProvider.js';
 import { generateSimulationAgent } from '../server/copilot/simulationAgentProvider.js';
 import { generateSimulationAgentVision } from '../server/copilot/simulationAgentVisionProvider.js';
 import { generateRelativeGoalOptimizer } from '../server/copilot/relativeGoalOptimizerProvider.js';
+import { generateVerifiedTemplateSearch } from '../server/copilot/verifiedTemplateSearchProvider.js';
 import type { CopilotGenerationRequest, CopilotGenerationResult, CopilotMapContext, CopilotPlacementSlot } from '../src/copilot/types.js';
 
-type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'relative-goal-optimizer';
+type ProviderName = 'staged-rag' | 'direct-llm' | 'upstream-chat2scenic' | 'simulation-agent' | 'simulation-agent-vision' | 'relative-goal-optimizer' | 'verified-template-search';
 type ProviderFn = (request: CopilotGenerationRequest, options?: { signal?: AbortSignal }) => Promise<CopilotGenerationResult>;
 
 interface BenchmarkRow {
@@ -138,6 +139,7 @@ async function loadProviders(names: readonly ProviderName[]): Promise<Map<Provid
     ['simulation-agent', generateSimulationAgent],
     ['simulation-agent-vision', generateSimulationAgentVision],
     ['relative-goal-optimizer', generateRelativeGoalOptimizer],
+    ['verified-template-search', generateVerifiedTemplateSearch],
   ]);
   if (names.includes('upstream-chat2scenic')) {
     // Kept dynamic so the harness remains independently testable while the
