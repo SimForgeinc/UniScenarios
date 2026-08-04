@@ -298,9 +298,9 @@ function readResearchDetails(candidate: CopilotGenerationResult['candidates'][nu
   const sharedDuration = numberOrNull(raw['scenicCompileSampleMs']);
   return {
     apiCalls: numberOrNull(raw['apiCalls']),
-    scenicCompileMs: numberOrNull(compile?.['durationMs']),
+    scenicCompileMs: numberOrNull(compile?.['durationMs']) ?? numberOrNull(raw['scenicCompileMs']),
     scenicCompilePass: booleanOrNull(compile?.['pass']) ?? booleanOrNull(raw['scenicCompiled']),
-    scenicSampleMs: numberOrNull(sample?.['durationMs']),
+    scenicSampleMs: numberOrNull(sample?.['durationMs']) ?? numberOrNull(raw['scenicSampleMs']),
     scenicSamplePass: booleanOrNull(sample?.['pass']) ?? booleanOrNull(raw['scenicSampled']),
     scenicCompileSampleMs: sharedDuration,
   };

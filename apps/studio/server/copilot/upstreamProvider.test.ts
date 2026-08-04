@@ -36,7 +36,7 @@ describe('upstream Chat2Scenic research provider', () => {
       compileSample: async (program) => {
         source = program;
         return {
-          scenicVersion: '3.1.0', compiled: true, sampled: true, iterations: 1, durationMs: 4,
+          scenicVersion: '3.1.0', compiled: true, sampled: true, iterations: 1, durationMs: 4, compileMs: 3, sampleMs: 1,
           objects: [{ index: 0, x: 10, y: 20, headingRad: Math.PI / 2, type: 'Car' }],
         };
       },

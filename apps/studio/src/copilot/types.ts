@@ -86,6 +86,8 @@ export interface CopilotProvenance {
     readonly scenicSampled: boolean;
     readonly scenicIterations: number | null;
     readonly scenicCompileSampleMs: number | null;
+    readonly scenicCompileMs: number | null;
+    readonly scenicSampleMs: number | null;
     readonly generatedComponentCount: number;
     readonly ragMode: 'milvus' | 'prompt-examples-substitute';
     readonly unsupportedSemantics: readonly string[];

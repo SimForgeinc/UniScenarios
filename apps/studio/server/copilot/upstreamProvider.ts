@@ -43,6 +43,8 @@ interface ScenicEvidence {
   readonly sampled: boolean;
   readonly iterations?: number;
   readonly durationMs?: number;
+  readonly compileMs?: number;
+  readonly sampleMs?: number;
   readonly objects?: readonly { readonly index: number; readonly x: number; readonly y: number; readonly headingRad: number; readonly type: string }[];
   readonly error?: string;
 }
@@ -367,6 +369,7 @@ export async function generateUpstreamChat2Scenic(
         upstreamSha: UPSTREAM_SHA, upstreamLicense: 'CC-BY-NC-4.0', apiCalls,
         scenicVersion: evidence.scenicVersion ?? null, scenicCompiled: evidence.compiled, scenicSampled: evidence.sampled,
         scenicIterations: evidence.iterations ?? null, scenicCompileSampleMs: evidence.durationMs ?? null,
+        scenicCompileMs: evidence.compileMs ?? null, scenicSampleMs: evidence.sampleMs ?? null,
         generatedComponentCount: generatedComponents.length,
         ragMode: 'prompt-examples-substitute', unsupportedSemantics: unsupported,
         deviations: [

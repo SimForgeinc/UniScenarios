@@ -45,8 +45,12 @@ def main() -> int:
     with tempfile.TemporaryDirectory(prefix="uniscenarios-scenic-") as directory:
         path = Path(directory) / "candidate.scenic"
         path.write_text(source, encoding="utf-8")
+        compile_started = time.perf_counter()
         scenario = scenarioFromFile(str(path), mode2D=True)
+        compile_ms = round((time.perf_counter() - compile_started) * 1000)
+        sample_started = time.perf_counter()
         scene, iterations = scenario.generate(maxIterations=200)
+        sample_ms = round((time.perf_counter() - sample_started) * 1000)
     objects = []
     for index, obj in enumerate(scene.objects):
         position = obj.position
@@ -62,6 +66,8 @@ def main() -> int:
         "compiled": True,
         "sampled": True,
         "iterations": int(iterations),
+        "compileMs": compile_ms,
+        "sampleMs": sample_ms,
         "objects": objects,
         "durationMs": round((time.perf_counter() - started) * 1000),
     }, sys.stdout, separators=(",", ":"))
