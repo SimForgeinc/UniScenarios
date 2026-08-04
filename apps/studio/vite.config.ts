@@ -54,5 +54,5 @@ export default defineConfig({
   // without dedupe vite ends up with two module instances (three warns, and
   // instanceof checks across the boundary would break).
   resolve: { dedupe: ['three'] },
-  server: { port: 5199, proxy: { '/api/local-openscenario': 'http://127.0.0.1:5201' } },
+  server: { port: 5199, proxy: { '/api/local-openscenario': 'http://127.0.0.1:5201', '/api/scenario-copilot': 'http://127.0.0.1:5202' } },
 });

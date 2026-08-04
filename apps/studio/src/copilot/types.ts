@@ -98,6 +98,8 @@ export interface CopilotGenerationRequest {
   readonly prompt: string;
   readonly mapContext: CopilotMapContext;
   readonly currentScenario?: ScenarioTemplateV2;
+  /** User-reviewed structured intent. Staged generation must honor this verbatim after normalization. */
+  readonly confirmedIntent?: CopilotIntent;
   readonly maxCandidates?: number;
   readonly model?: string;
   /** Test-only deterministic path; production callers never set this. */

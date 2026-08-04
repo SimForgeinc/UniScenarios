@@ -15,7 +15,7 @@ const FAVORITES_KEY = 'uniscenarios.studio.catalog-favorites.v1';
 const RECENTS_KEY = 'uniscenarios.studio.catalog-recents.v1';
 const MAX_RECENTS = 8;
 
-export type ViewportTool = 'select' | 'rotate' | 'add' | 'ambient' | 'camera' | 'saved' | 'variations' | 'measure';
+export type ViewportTool = 'select' | 'rotate' | 'add' | 'ambient' | 'camera' | 'saved' | 'variations' | 'copilot' | 'measure';
 export type CatalogFilter = 'all' | 'vehicle' | 'pedestrian' | 'prop' | 'favorite' | 'recent';
 
 /**
@@ -65,6 +65,7 @@ const TOOLS: readonly ToolDefinition[] = [
   { id: 'camera', label: 'Camera', glyph: '▣' },
   { id: 'saved', label: 'Scenario Gallery', glyph: '▦' },
   { id: 'variations', label: 'Find variations', glyph: '⎇' },
+  { id: 'copilot', label: 'Scenario Copilot', glyph: '✦' },
   { id: 'measure', label: 'Measure', glyph: '⌇' },
 ] as const;
 

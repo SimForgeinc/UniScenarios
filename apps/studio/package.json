@@ -7,7 +7,9 @@
   "scripts": {
     "campaign:generate": "node scripts/generate-edge-campaign.mjs",
     "predev": "pnpm campaign:generate",
-    "dev": "vite",
+    "dev": "tsx server/studioDev.ts",
+    "dev:ui": "vite",
+    "dev:copilot": "tsx server/localScenarioCopilotServer.ts",
     "dev:runner": "tsx server/localOpenScenarioServer.ts",
     "prebuild": "pnpm campaign:generate",
     "build": "tsc -b && vite build",

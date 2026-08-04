@@ -109,6 +109,7 @@ import {
 import { StudioSignalSelectionModel } from './signalSelection';
 import type { SignalReferenceSelection } from '@uniscenarios/scenario-materializer';
 import { WorldLoadingOverlay } from './WorldLoadingOverlay';
+import { ScenarioCopilotPanel, type CandidateValidation, type CopilotCandidate } from './copilot';
 
 /** Dev knobs: ?debugShadow=1&sse=300&budgetMB=1500&exposure=1.1&assetVariant=original&map=yale-street */
 function optionsFromUrl(quality: QualityPreference): CityViewerOptions {
@@ -1245,6 +1246,25 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
     return diagnostic.bytes;
   }, [editorController, map, viewSettings.controls]);
 
+  const validateCopilotCandidate = useCallback(async (candidate: CopilotCandidate): Promise<CandidateValidation> => {
+    const bundle = await runtimeWorker.current!.prepare(candidate.scenarioDoc, map, materializedAmbientProfile);
+    const times = bundle.trace.ticks.t;
+    const durationS = times.length > 1 ? (times[times.length - 1] ?? 0) - (times[0] ?? 0) : 0;
+    const actorCount = Object.keys(bundle.trace.ticks.actors).length;
+    if (actorCount < candidate.scenarioDoc.roles.filter((role) => role.essentiality !== 'cosmetic').length) {
+      return { valid: false, message: `Canonical simulation returned ${actorCount} actors for ${candidate.scenarioDoc.roles.length} authored roles.`, actorCount, durationS };
+    }
+    return { valid: true, message: `Canonical simulation passed · ${actorCount} actors · ${durationS.toFixed(1)} s`, actorCount, durationS };
+  }, [map, materializedAmbientProfile]);
+
+  const applyCopilotCandidate = useCallback((candidate: CopilotCandidate): void => {
+    if (!editorController) return;
+    editorController.doc.importTemplate(candidate.scenarioDoc, { saveName: candidate.title });
+    editorController.setSelection(candidate.scenarioDoc.roles.map((role) => role.id));
+    setAuxiliaryTool(null);
+    setActorDetailsId(null);
+  }, [editorController]);
+
   return (
     <div style={styles.root}>
       <WorkspaceHeader
@@ -1430,6 +1450,14 @@ function StudioApp({ initialQuality }: { initialQuality: QualityPreference }): J
                 setAuxiliaryTool(null);
                 selectMap(targetMap);
               }}
+              onClose={() => setAuxiliaryTool(null)}
+            />
+          ) : auxiliaryTool === 'copilot' && editorController ? (
+            <ScenarioCopilotPanel
+              controller={editorController}
+              map={map}
+              onValidate={validateCopilotCandidate}
+              onApply={applyCopilotCandidate}
               onClose={() => setAuxiliaryTool(null)}
             />
           ) : auxiliaryTool === 'measure' ? (
