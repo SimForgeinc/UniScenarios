@@ -20,7 +20,12 @@ for (const child of children) {
     if (Array.isArray(data.rows)) artifacts.push({ id: `${child.name}/results.json`, data });
   } catch { /* Incomplete experiment: represented by the registry, not fabricated as a result. */ }
 }
-const rows = artifacts.flatMap(({ id, data }) => (data.rows ?? []).map((row) => ({ ...row, artifactId: id, reasoningEffort: row.reasoningEffort ?? data.reasoningEffort ?? 'default-or-unrecorded' })));
+const rows = artifacts.flatMap(({ id, data }) => (data.rows ?? []).map((row) => {
+  // Original drafts, traces and screenshots remain in the per-run source
+  // artifacts. The combined table is intentionally concise and metric-only.
+  const { savedResult: _savedResult, ...summaryRow } = row as Row & { savedResult?: unknown };
+  return { ...summaryRow, artifactId: id, reasoningEffort: row.reasoningEffort ?? data.reasoningEffort ?? 'default-or-unrecorded' };
+}));
 const summaries = [...group(rows, (row) => `${row.provider}|${row.actualModel ?? row.requestedModel}|${row.reasoningEffort}`)].map(([key, selected]) => {
   const [provider, model, effort] = key.split('|');
   const strictSuccess = selected.filter((row) => row.outcome === 'success').length;
@@ -68,8 +73,16 @@ function sum(values: readonly (number | null | undefined)[]): number { return va
 function median(values: readonly (number | null)[]): number | null { const sorted = values.filter((value): value is number => value !== null && Number.isFinite(value)).sort((a, b) => a - b); if (!sorted.length) return null; const mid = Math.floor(sorted.length / 2); return sorted.length % 2 ? sorted[mid]! : Math.round((sorted[mid - 1]! + sorted[mid]!) / 2); }
 function toCsv(values: readonly Record<string, unknown>[]): string { const columns = [...new Set(values.flatMap((row) => Object.keys(row)))]; const quote = (value: unknown): string => `"${String(value ?? '').replaceAll('"', '""')}"`; return `${columns.map(quote).join(',')}\n${values.map((row) => columns.map((column) => quote(typeof row[column] === 'object' ? JSON.stringify(row[column]) : row[column])).join(',')).join('\n')}\n`; }
 function report(values: readonly Record<string, unknown>[], fixedControls: readonly string[], artifactIds: readonly string[]): string {
-  const lines = ['# Scenario Copilot controlled high-effort matrix', '', '## Controls', '', ...fixedControls.map((item) => `- ${item}`), '', '## Capability and efficiency', '', '| Method | Model | Runs | Strict success | Correct rejects | False accepts | Full sim | Calls | Tokens | Tokens / strict success | Median generation |', '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|'];
-  for (const value of values) lines.push(`| ${value['provider']} | ${value['model']} | ${value['runs']} | ${value['strictSuccess']} | ${value['correctRejections']} | ${value['falseAcceptances']} | ${value['fullSimulation']} | ${value['calls']} | ${value['tokens']} | ${value['tokensPerStrictSuccess'] ?? '—'} | ${value['medianGenerationMs']} ms |`);
+  const raw = [...values].sort((a, b) => Number(b['strictSuccess']) - Number(a['strictSuccess']) || Number(a['falseAcceptances']) - Number(b['falseAcceptances']))[0];
+  const safe = values.filter((item) => Number(item['falseAcceptances']) === 0).sort((a, b) => Number(b['faithfulOutcomes']) - Number(a['faithfulOutcomes']) || Number(a['tokens']) - Number(b['tokens']))[0];
+  const efficient = values.filter((item) => Number(item['strictSuccess']) > 0).sort((a, b) => Number(a['tokensPerStrictSuccess']) - Number(b['tokensPerStrictSuccess']))[0];
+  const lines = ['# Scenario Copilot controlled high-effort matrix', '', '## Findings', '',
+    `- **Highest positive-case coverage:** ${raw?.['provider']} with ${raw?.['model']} (${raw?.['strictSuccess']}/20), but it falsely accepted ${raw?.['falseAcceptances']} negative controls.`,
+    `- **Best safety-conscious result:** ${safe?.['provider']} with ${safe?.['model']} (${safe?.['strictSuccess']} positive cases + ${safe?.['correctRejections']} correct rejections; zero false accepts).`,
+    `- **Lowest tokens per strict success:** ${efficient?.['provider']} with ${efficient?.['model']} (${efficient?.['tokensPerStrictSuccess']} tokens), with only ${efficient?.['strictSuccess']}/20 positive cases; this is not the capability winner.`,
+    '- Direct-model comparison: Luna led raw coverage by one case; Terra was substantially faster and used fewer tokens. Terra became the overall safety-conscious winner when paired with iterative simulator feedback.',
+    '', '## Controls', '', ...fixedControls.map((item) => `- ${item}`), '', '## Capability and efficiency', '', '| Method | Model | Runs | Strict success | Correct rejects | False accepts | Full sim | Calls | Tokens | Tokens / strict success | Latency / strict success | Median generation |', '|---|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|'];
+  for (const value of values) lines.push(`| ${value['provider']} | ${value['model']} | ${value['runs']} | ${value['strictSuccess']} | ${value['correctRejections']} | ${value['falseAcceptances']} | ${value['fullSimulation']} | ${value['calls']} | ${value['tokens']} | ${value['tokensPerStrictSuccess'] ?? '—'} | ${value['totalLatencyPerStrictSuccessMs'] ?? '—'} ms | ${value['medianGenerationMs']} ms |`);
   lines.push('', '## Caveats', '', '- A single generation was run per case and condition; stochastic variance is not estimated.', '- Direct high-effort model baselines are comparable to one another. Older default-effort results are displayed separately and are not pooled into this matrix.', '- Image cost is unknown unless the provider reports it; encoded image bytes are recorded instead.', '- Passing structural semantic assertions does not prove visual realism or regulatory correctness.', '', '## Source artifacts', '', ...artifactIds.map((item) => `- \`${item}\``), '');
   return `${lines.join('\n')}\n`;
 }
