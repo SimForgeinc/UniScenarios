@@ -4,8 +4,10 @@
   "evidence": "/tmp/judge-a1/batch-summary.json: 19/19 accepted cells have findings==[]; 9/9 rejected have >=1 finding"
  },
  "claim_preferred_violations_are_free": {
-  "verified": false,
-  "note": "not testable in my data: the only preferred violation (ego-decel-budget, achieved 9.934 vs 6.5) came bundled with an independent hard finding `physically_unavoidable` (\"ego needed 9.93 m/s^2, above the 7.85 m/s^2 friction ceiling\"), which rejects on its own. Operative rule is \"any finding rejects\"; exceeding the decel budget emits its own finding regardless of essentiality."
+  "verified": true,
+  "resolvedBy": "authoring lane, 552-cell denominator: 66 ACCEPTED cells carry violated `preferred` invariants (path_ttc out of range, near_miss clearance 7.8 m, one `collision occurred` on a preferred near_miss). Essentiality demotion genuinely does not emit invariant_violated.",
+  "boundaryCondition": "my n=1 counter-case: demotion silences the INVARIANT, not the PHYSICS. ego-decel-budget demoted to preferred but achieved 9.934 m/s^2 -> independent hard finding `physically_unavoidable` (\"above the 7.85 m/s^2 friction ceiling\") rejected it anyway. Do not plan on a free overshoot of a physical limit.",
+  "note": "my earlier \"NOT SUPPORTED\" was underpowered (n=1) and is withdrawn."
  },
  "map_feature_availability": {
   "yale-street": {
