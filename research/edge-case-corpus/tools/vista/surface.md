@@ -342,3 +342,18 @@ actor that needed it.
 14. **The event must be visible for long enough to be seen.** If the whole interaction occupies the
     last half-second of the clip, nothing can verify it. Aim for the conflict to develop over 2-5 s,
     somewhere in the middle of the clip, with the ego still driving afterwards.
+
+15. **Getting another road user to actually enter the ego's lane is the hardest thing to author, and
+    it is the single most common way a scenario fails to be what it claims.** Measured across a run:
+    `challenger_enters_ego_path` was the missing requirement 18-30 times, more than every other cause
+    combined. Two specific errors account for much of it:
+      - **`laneOffset` in a pose is a LANE INDEX, not a lateral nudge.** `laneOffset: -1` puts the
+        actor in the lane to the RIGHT of the reference lane; it does NOT move it toward the ego.
+        To bring an actor into the ego's lane, the final route point must be `laneOffset: 0` with
+        `tFrac` at or near 0 - the centre of the ego's own lane.
+      - **`tFrac` is a fraction of lane width, so `tFrac: 0.8` is still inside the neighbouring lane.**
+        Measured, the challengers that failed came to 2.0-2.6 m of the ego's path and stopped there,
+        which is one lane over. Ending an incursion at `tFrac` 0.65-0.85 does not cross the line.
+    So: make the incursion end at `laneOffset: 0, tFrac: 0`, start it early enough to complete during
+    the clip, and give the movement a `dynamics` duration short enough to finish before the conflict.
+    An incursion that is still in progress when the clip ends did not happen.
