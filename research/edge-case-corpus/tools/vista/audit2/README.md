@@ -59,3 +59,8 @@ the specific measurement that settles it. `FALSE-POSITIVES.json` -- the template
   meant to improve on; the first world-fixed view was 114 m across and I misread a moving
   pedestrian as stationary from it.
 - I raised a concern that Q2 was inflated by one-tick freezes, measured it, and withdrew it.
+
+## Update after the parent shipped corrections (commit b468960)
+`REPORT-5-CORRECTION-AND-DECISION.md` supersedes parts of REPORT-4. It contains two corrections to
+this audit's OWN instruments, a re-scoring of the current `hybrid.py`, and the answer to the
+AND-vs-veto decision plus a measured way to recover recall at zero cost.

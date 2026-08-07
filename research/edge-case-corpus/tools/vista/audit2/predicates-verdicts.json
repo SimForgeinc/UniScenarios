@@ -267,7 +267,7 @@
  },
  "B:c15-protest": {
   "verdict": "present",
-  "reason": "pedestrian(pedestrian); enters the ego corridor from outside: pedestrian came from 6.715 m outside the corridor to 0.001 m at t=6.28",
+  "reason": "pedestrian(pedestrian); enters the ego corridor from outside: pedestrian came from 3.629 m outside the corridor to 0.001 m at t=6.28",
   "nCoreTrue": 2,
   "nCoreFalse": 0,
   "nCoreAbstain": 0
@@ -372,7 +372,7 @@
  },
  "B:c2g-static-object-lane-shift": {
   "verdict": "abstain",
-  "reason": "the trajectory settles some but not all core predicates -- send this one to the vision critic: ABSTAIN -- 1/2 decisively fail and none decisively passes; the trajectory does not settle this",
+  "reason": "the trajectory settles some but not all core predicates -- send this one to the vision critic: ABSTAIN -- 0/2 decisively fail and none decisively passes; the trajectory does not settle this",
   "nCoreTrue": 2,
   "nCoreFalse": 0,
   "nCoreAbstain": 1

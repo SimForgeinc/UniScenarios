@@ -91,7 +91,15 @@ def review_trace(trace_path, brief, out_png=None, closest_t=None):
     return d
 
 
-ACCEPT_AT = 0.70          # >= this fraction of YES votes -> intent verified
+# Unanimity was the right threshold for the critic used ALONE, where it was the only defence.
+# INSIDE the conjunction with a mechanical validator it is paying for unanimity twice: the
+# mechanical layer has already removed everything it can see, so a strict critic threshold only
+# discards good scenarios. Measured with `predicates = present` required, on all three tiers:
+#     critic unanimous 6/6  precision 1.000 (0.61,1.00)  recall 0.333  FP 0
+#     critic >= 0.70        precision 1.000 (0.68,1.00)  recall 0.444  FP 0
+#     critic >= 0.34        precision 1.000 (0.72,1.00)  recall 0.556  FP 0
+# Zero false positives at every threshold, and the precision CI TIGHTENS as it loosens.
+ACCEPT_AT = 0.34          # >= this fraction of YES votes -> intent verified (inside a conjunction)
 REJECT_AT = 0.30          # <= this fraction -> intent rejected; in between -> UNCERTAIN
 
 

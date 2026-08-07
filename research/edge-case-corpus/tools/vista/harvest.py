@@ -5,10 +5,23 @@ Pipeline: admitted templates -> voting critic (intent) -> mass simulation -> fro
 Simulation is effectively free (~150 concrete scenarios/second), so the run is dominated by the LLM
 steps; this stage exists to amortise those over as many concrete scenarios as each template supports.
 """
-import os, sys, json, glob, argparse, time
+import os, sys, json, glob, argparse, time      # noqa: F401
 from concurrent.futures import ProcessPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import author, critic, gate, hybrid
+
+# Prefer the independently audited mechanical validator; fall back to our own.
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audit2'))
+    import predicates as _MECH
+
+    def _MECH_EVAL(trace_path, parsed):
+        return _MECH.evaluate_trace(trace_path, parsed)
+except Exception:                                                 # noqa: BLE001
+    _MECH = hybrid
+
+    def _MECH_EVAL(trace_path, parsed):
+        return hybrid.validate(trace_path, None, parsed=parsed)
 
 
 def _verify(a):
@@ -26,11 +39,12 @@ def _verify(a):
     passing = [c for c in g['cells'] if c.get('pass')]
     if not passing:
         return None
-    # PRIMARY validator: exact trajectory predicates. The vision-only critic was independently
-    # measured at precision 0.545 / recall 0.333 -- indistinguishable from accepting everything --
-    # because it was being asked to SEE geometry the trace states exactly (lane-incursion recall 0.500).
+    # PRIMARY validator: exact trajectory predicates from the INDEPENDENTLY AUDITED implementation.
+    # `predicates.py AND critic(enh render)` was measured at precision 1.000 / recall 0.444 on the
+    # audit's true pairs, dominating `hybrid + unanimous veto` (0.857 / 0.333) on BOTH axes -- there
+    # was no trade to make. `hybrid.py` is kept as the fallback when the audited module is absent.
     try:
-        parsed = hybrid.parse_brief(r['brief'])
+        parsed = _MECH.parse_brief(r['brief'])
     except Exception as e:                                        # noqa: BLE001
         return {'briefId': r['briefId'], 'error': 'parse: ' + str(e)}
     seen, picks = set(), []
@@ -45,12 +59,14 @@ def _verify(a):
     vs = []
     for c in picks:
         try:
-            vs.append(hybrid.validate(c['traceFile'], None, parsed=parsed))
+            vs.append(_MECH_EVAL(c['traceFile'], parsed))
         except Exception:                                         # noqa: BLE001
             pass
-    pres = sum(1 for v in vs if v['verdict'].startswith('present'))
+    pres = sum(1 for v in vs if str(v.get('verdict', '')).startswith('present'))
     mech = 'present' if vs and pres > len(vs) / 2 else 'absent'
+    # the audited module uses {core, secondary, notComputable}; hybrid.py uses {required, ...}
     needs_vision = bool(parsed.get('notComputable'))
+    _req = parsed.get('core') or parsed.get('required') or []
 
     # CONJUNCTION, not a veto. The independent audit scored six configurations on a non-circular
     # tier (n=63): `predicates AND critic(enh render)` was the only one with ZERO false positives on
@@ -67,7 +83,7 @@ def _verify(a):
     return {'briefId': r['briefId'], 'brief': r['brief'], 'category': r.get('category'),
             'template': os.path.dirname(rec_path) + '/template.json',
             'verdict': 'verified' if mech == 'present' else 'rejected',
-            'mechanical': mech, 'predicates': parsed['required'],
+            'mechanical': mech, 'predicates': _req,
             'notComputable': parsed['notComputable'],
             'visionVerdict': cr['verdict'], 'yesFraction': cr.get('yesFraction'),
             'whyNot': cr.get('whyNot', '')}

@@ -113,3 +113,12 @@ predicate is currently *hiding* how bad it is by over-firing.
    so a 1.9 m car must come more than halfway into the ego's lane to qualify. If you keep it, add
    half the challenger's width.
 4. Track the true incursion rate (0.286) as an **authoring** metric. That is the volume blocker.
+
+## SUPERSEDED IN PART -- see REPORT-5-CORRECTION-AND-DECISION.md
+
+Section 2 of this report (the `challenger_enters_ego_path` numbers) rests on an arbiter that was
+subsequently shown to be invalid for route-bound actors, and on a version of this audit's own
+geometry that had no endpoint rejection. **The corrected figures are: true incursion rate 0.352
+(not 0.286); hybrid's precision before the fix 0.612 (not 0.375).** The direction of the finding
+(over-firing, missing longitudinal gate) survives; the magnitude does not. The hybrid scores in
+section 1 are also stale -- current hybrid.py is materially better. See REPORT-5.

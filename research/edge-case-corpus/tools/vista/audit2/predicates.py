@@ -218,6 +218,17 @@ def _p2s(P, Q):
 
 
 def _dist_to_polyline(px, py, X, Y):
+    """Distance from points to the ego's travelled path, with ENDPOINT REJECTION.
+
+    Returns (distance, interior_mask). `interior` is False where the nearest point is clamped to
+    the very start or end of the polyline -- there the distance is LONGITUDINAL (the body is off
+    the end of the ego's route), not lateral, and must not be read as a lane offset.
+
+    This was a real bug in the first version of this audit: the ego's path only spans where the ego
+    has been, so a tailgater behind the start point measured a 26-33 m 'lateral excursion' while
+    its own lane offset never moved 0.5 m. It is the same missing-longitudinal-gate error this
+    audit diagnosed in hybrid.motion.
+    """
     A = np.stack([X[:-1], Y[:-1]], -1)
     B = np.stack([X[1:], Y[1:]], -1)
     d = B - A
@@ -226,7 +237,13 @@ def _dist_to_polyline(px, py, X, Y):
     w = P[:, None, :] - A[None]
     t = np.clip((w * d[None]).sum(-1) / np.maximum(dd[None], 1e-12), 0, 1)
     proj = A[None] + t[..., None] * d[None]
-    return np.linalg.norm(P[:, None, :] - proj, axis=-1).min(1)
+    dist = np.linalg.norm(P[:, None, :] - proj, axis=-1)
+    j = dist.argmin(1)
+    k = np.arange(len(px))
+    nseg = len(A)
+    tb = t[k, j]
+    interior = ~(((j == 0) & (tb <= 1e-6)) | ((j == nseg - 1) & (tb >= 1 - 1e-6)))
+    return dist[k, j], interior
 
 
 def _smooth_decel(t, v, window_s=SMOOTH_WINDOW_S):
@@ -343,11 +360,15 @@ def trace_facts(trace_path_or_obj, corridor_half_w=CORRIDOR_HALF_W_M):
             F['bodies'][aid] = b
             continue
 
-        lat = _dist_to_polyline(ax[apr], ay[apr], EX, EY)
+        lat_all, interior = _dist_to_polyline(ax[apr], ay[apr], EX, EY)
         halfw = corridor_half_w + aw_ / 2.0
         b['corridorHalfWidthM'] = round(halfw, 3)
-        b['minLateralOffsetM'] = round(float(lat.min()), 3)
-        inside = lat <= halfw
+        b['fracInteriorSamples'] = round(float(interior.mean()), 3)
+        # ONLY interior samples are lateral measurements; the rest are longitudinal artifacts
+        lat = lat_all[interior]
+        tsi = ts[apr][interior]
+        b['minLateralOffsetM'] = round(float(lat.min()), 3) if len(lat) else None
+        inside = lat <= halfw if len(lat) else np.zeros(0, bool)
         b['everInsideCorridor'] = bool(inside.any())
         b['entryExcursionM'] = None
         b['tEntersCorridor'] = None
@@ -355,7 +376,7 @@ def trace_facts(trace_path_or_obj, corridor_half_w=CORRIDOR_HALF_W_M):
             first = int(np.argmax(inside))
             if first > 0:
                 b['entryExcursionM'] = round(float(lat[:first].max()), 3)
-                b['tEntersCorridor'] = float(ts[apr][first])
+                b['tEntersCorridor'] = float(tsi[first])
 
         idx = np.where(co)[0]
         fx = ((ax[idx] - ex[idx]) * np.cos(ehd[idx]) + (ay[idx] - ey[idx]) * np.sin(ehd[idx]))

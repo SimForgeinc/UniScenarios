@@ -357,3 +357,27 @@ actor that needed it.
     So: make the incursion end at `laneOffset: 0, tFrac: 0`, start it early enough to complete during
     the clip, and give the movement a `dynamics` duration short enough to finish before the conflict.
     An incursion that is still in progress when the clip ends did not happen.
+
+16. **Use `changeLane` for a lane incursion. It is the primitive built for exactly this, and it is
+    almost never used.** Measured across every generated-brief template: 1,176 interactions, of which
+    `set` 658, `speed` 250, `route` 217, `laneOffset` 26 and **`changeLane` only 12 (1%)**. Authors
+    hand-roll a `route` polyline instead, and that is why the single most common reason a scenario
+    fails to be what it claims is that the challenger never actually entered the ego's lane.
+
+    `changeLane` target has three modes, and the third is the one you want:
+      `{mode:"relative", dk:-1|+1}`   one lane to the right / left of where the actor is now
+      `{mode:"absolute", k:<index>}`  a specific same-direction lane index
+      **`{mode:"toRole", role:"ego"}`  change into the lane THAT ACTOR is in** — site-independent,
+        and it cannot miss by a lane the way a hand-computed `tFrac` can
+
+    `dynamics` is REQUIRED on it. `{shape:"linear", constraint:"rate", value:<m/s>}` is the standard
+    lateral-velocity parameterisation for a cut-in: **0.3 m/s is a lazy drift, 1.5 m/s is an abrupt
+    chop**. You may also set `maneuverDurationS` to fix how long the move takes in physical time.
+
+    So a cut-in is:
+      `{verb:"changeLane", actor:"challenger", trigger:{kind:"arrival", ...},
+        target:{mode:"toRole", role:"ego"},
+        dynamics:{shape:"linear", constraint:"rate", value:1.2}}`
+    and a drift/encroachment that does NOT complete a lane change is `laneOffset` with a `tFrac`
+    beyond the lane edge — remembering that `tFrac` is a fraction of lane width, so 0.8 is still
+    inside the actor's own lane and only |tFrac| > 1 crosses the line.
