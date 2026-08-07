@@ -74,8 +74,22 @@ def review_trace(trace_path, brief, out_png=None, closest_t=None):
     return d
 
 
-def review_cells(cells, brief, limit=3, log=None):
-    """Review up to `limit` cells, spread across distinct sites. Majority verdict wins."""
+ACCEPT_AT = 0.70          # >= this fraction of YES votes -> intent verified
+REJECT_AT = 0.30          # <= this fraction -> intent rejected; in between -> UNCERTAIN
+
+
+def review_cells(cells, brief, limit=2, reps=3, log=None, workers=6):
+    """Review `limit` distinct sites, `reps` times each, and pool the votes.
+
+    A SINGLE critic call is not a reliable instrument: measured test-retest stability on identical
+    images is 11/14 = 0.786, and with one call per site 36.7% of judgements came out 1-1 ties that
+    were then silently resolved as "reject". Self-consistency voting over reps x sites removes most of
+    that, and anything still near the fence is reported as UNCERTAIN rather than forced to a verdict.
+    Uncertain scenarios are cheap to discard when the goal is volume, and dangerous to keep when the
+    goal is training data.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+
     seen, picks = set(), []
     for c in cells:
         if not c.get('traceFile'):
@@ -87,22 +101,39 @@ def review_cells(cells, brief, limit=3, log=None):
         picks.append(c)
         if len(picks) >= limit:
             break
-    reviews = []
-    for c in picks:
-        r = review_trace(c['traceFile'], brief, closest_t=c.get('closestT'))
-        r['mapId'], r['siteId'] = c.get('mapId'), c.get('siteId')
-        reviews.append(r)
-        if log:
-            log(f"      critic {c.get('mapId','?')[:18]}: intent={r.get('intentRealised')} "
-                f"conflict={r.get('isGenuineConflict')} {str(r.get('whyNot',''))[:90]}")
-    good = [r for r in reviews if r.get('intentRealised') is True]
+
+    jobs = [(c, k) for c in picks for k in range(reps)]
+
+    def _one(j):
+        c, k = j
+        png = os.path.splitext(c['traceFile'])[0] + f'.critic{k}.png'
+        r = review_trace(c['traceFile'], brief, out_png=png, closest_t=c.get('closestT'))
+        r['mapId'], r['siteId'], r['rep'] = c.get('mapId'), c.get('siteId'), k
+        return r
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        reviews = list(ex.map(_one, jobs))
+
+    votes = [r.get('intentRealised') for r in reviews if r.get('intentRealised') is not None]
+    yes = sum(1 for v in votes if v is True)
+    frac = yes / len(votes) if votes else 0.0
+    verdict = 'verified' if frac >= ACCEPT_AT else ('rejected' if frac <= REJECT_AT else 'uncertain')
     bad = [r for r in reviews if r.get('intentRealised') is False]
+    good = [r for r in reviews if r.get('intentRealised') is True]
+    conflict_votes = [r.get('isGenuineConflict') for r in reviews if r.get('isGenuineConflict') is not None]
+
+    if log:
+        log(f"      critic: {yes}/{len(votes)} yes over {len(picks)} sites x {reps} reps "
+            f"-> {verdict.upper()}")
     return {
-        'n': len(reviews),
-        'nIntentRealised': len(good),
-        'nIntentMissing': len(bad),
-        'intentRealised': len(good) > len(bad),          # majority
-        'genuineConflict': sum(1 for r in reviews if r.get('isGenuineConflict') is True) > len(reviews) / 2,
+        'n': len(votes), 'nSites': len(picks), 'reps': reps,
+        'nIntentRealised': yes, 'nIntentMissing': len(votes) - yes,
+        'yesFraction': round(frac, 3), 'verdict': verdict,
+        'intentRealised': verdict == 'verified',
+        'uncertain': verdict == 'uncertain',
+        'unanimous': len(set(votes)) == 1 if votes else False,
+        'genuineConflict': (sum(1 for v in conflict_votes if v) / len(conflict_votes) >= 0.5
+                            if conflict_votes else False),
         'whyNot': (bad[0].get('whyNot') if bad else ''),
         'whatISee': (bad[0].get('whatISee') if bad else (good[0].get('whatISee') if good else '')),
         'reviews': reviews,

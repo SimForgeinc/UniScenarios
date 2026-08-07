@@ -205,7 +205,7 @@ def gate_batch(summary_path):
         'qualityLoss': {k: sum(1 for c in cells if c.get(k) is False)
                         for k in ('Q1_jointChallenger', 'Q2_egoReallyResponded', 'Q3_noPropOverlap',
                                   'Q4_headingSane', 'Q5_notClipped', 'Q6_ttcPairIsEgo',
-                                  'Q7_contestedSpace')},
+                                  'Q7_contestedSpace', 'Q8_noBodyOverlap')},
     }
 
 
@@ -222,6 +222,7 @@ def gate_batch(summary_path):
 #   Q5 not clipped        -- metrics.clippedCriticality must be false
 #   Q6 the pair is the ego -- minTTC must actually involve the ego
 
+Q7_PATH_SEP_M = 2.0         # how close the two paths must come, with timing removed
 Q_RESPONSE_DECEL = 1.0      # m/s^2 actually observed in the ego speed trace
 Q_RESPONSE_DROP = 1.5       # m/s of speed actually given up
 
@@ -305,9 +306,16 @@ def quality(trace, facts):
     q6 = ('ego' in pair) if pair else False
 
     ce = contested_space(trace, joint)          # raises if the measure is unavailable
-    q7 = bool(ce.get('contested'))
+    # `contested` is TRUE only when pathSeparationM == 0, i.e. the two bodies literally occupied the
+    # same ground. That turned out to reject genuine conflicts on a hair: among Q7-failing cells the
+    # median pathSeparationM was 0.20 m and the 25th percentile 0.09 m -- paths missing by centimetres.
+    # A close pass in an adjacent lane is also a legitimate edge case and never has separation 0.
+    # So Q7 asks whether the paths came within Q7_PATH_SEP_M of each other with timing removed.
+    ps = ce.get('pathSeparationM')
+    q7 = bool(ce.get('contested')) or (ps is not None and ps <= Q7_PATH_SEP_M)
+    q8 = not body_overlap(facts)
 
-    return {'Q7_contestedSpace': q7,
+    return {'Q7_contestedSpace': q7, 'Q8_noBodyOverlap': q8,
             'pathSeparationM': (ce or {}).get('pathSeparationM'),
             'encroachmentGapS': (ce or {}).get('encroachmentGapS'),
             'Q1_jointChallenger': q1, 'Q1_challenger': joint,
@@ -315,7 +323,7 @@ def quality(trace, facts):
             'Q5_notClipped': q5, 'Q6_ttcPairIsEgo': q6,
             'egoPeakDecelMps2': resp['peakDecelMps2'], 'egoSpeedDropMps': resp['speedDropMps'],
             'egoHeadingErrRad': resp['headingErrRad'], 'propClearance': pc,
-            'highQuality': bool(q1 and q2 and q3 and q4 and q5 and q6 and q7),
+            'highQuality': bool(q1 and q2 and q3 and q4 and q5 and q6 and q7 and q8),
             # diagnostic only: C2 measured from the START OF RECORDING rather than from
             # warmup+0.5, because trace t=0 is ALREADY post-warm-up and the frozen clause
             # therefore demands 2*warmup+0.5 s after spawn
@@ -338,3 +346,51 @@ def contested_space(trace, challenger=None):
         sys.path.insert(0, here)
     from judge.conflict import conflict_event      # deliberately unguarded: must raise, not vanish
     return conflict_event(trace, challenger=challenger)
+
+
+# Q8 -- the bodies must not interpenetrate.
+# The frozen C3 has an UPPER bound (clearance <= 5 m) and no lower bound, so a true clearance of 0.00 --
+# the ego's footprint overlapping another actor's -- satisfies it. The engine does not object either:
+# measured on el-camino-road/10e7aead, ego and lead are both 4.8 m long yet only 4.453 m apart
+# centre-to-centre, with metrics.collisions == [], physics collisionCount == 0, and evaluate returning
+# accept/critical. 39 of 65 gate-passing cells in that batch were interpenetrations.
+# A clip in which the ego drives THROUGH the car in front is not a near miss, and as training data it
+# teaches the opposite of the intended lesson. Contact is a failure, not a success.
+Q8_MIN_CLEARANCE_M = 0.10       # below this the bodies are touching or overlapping
+
+
+def body_overlap(facts):
+    """True when the ego and any challenger interpenetrate (or all but touch)."""
+    c = facts.get('clearanceM')
+    return c is not None and c < Q8_MIN_CLEARANCE_M
+
+
+def scenario_signature(c, coarse=True):
+    """A coarse behavioural signature. Two cells with the same signature teach the same lesson, so
+    counting both as training data inflates the corpus without adding information.
+
+    Measured on one harvested template: 302 'training-grade' cells collapsed to 134 distinct ones,
+    with ego peak deceleration varying by sd 0.02 m/s^2 across all 302. Parameter draws were producing
+    numerical jitter, not variety.
+    """
+    def b(x, w):
+        return None if x is None else int(x / w)
+    if coarse:
+        return (c.get('mapId'), c.get('siteId'),
+                b(c.get('clearanceM'), 0.5),        # half-metre bands
+                b(c.get('minTTC'), 0.5),            # half-second bands
+                b(c.get('egoPeakDecelMps2'), 1.0))  # 1 m/s^2 bands
+    return (c.get('mapId'), c.get('siteId'), round(c.get('clearanceM') or 0, 2),
+            round(c.get('minTTC') or 0, 2), round(c.get('closestT') or 0, 2))
+
+
+def deduplicate(cells, coarse=True):
+    """Keep one representative per behavioural signature."""
+    seen, out = set(), []
+    for c in cells:
+        s = scenario_signature(c, coarse)
+        if s in seen:
+            continue
+        seen.add(s)
+        out.append(c)
+    return out
