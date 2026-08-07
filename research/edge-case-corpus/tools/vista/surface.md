@@ -499,3 +499,17 @@ actor that needed it.
     when the true closest approach was 2.03 m at t=1.66. Since `evaluate` reads those metrics, a real
     near miss can be graded `trivially-safe`. Compute clearance yourself from `ticks.actors` x/y/
     headingRad, which keeps recording regardless of scoring.
+
+24. **Never write a negative CONSTANT `s` on an `on_reference` role. It silently makes every site
+    infeasible.** Measured sweep: `s` of "-50", "-40", "-35", "-30", "-25", "-20", "-5", "-1" and the
+    JSON number `-35` all match **0 sites on every map**, with no clause attributed in
+    `selectivityOrder` and no validator finding. The same values written as an unfoldable expression —
+    `"-lane.speedLimitKph"`, which evaluates to -40 — match **3 sites per map**. `"0"` and `"5"` match
+    3 per map.
+    So the constant-folding path rejects negative stations while the expression path accepts them, and
+    nothing anywhere names the field. This cost me an entire bisect: I stripped the anchor to empty,
+    swapped the role binding, and dropped every feature, all still returning 0 sites, because the cause
+    was a number in `roles[0].pose.s`.
+    If you need a role upstream of the frame origin, express it relative to something —
+    `"origin - 35"`, `"-lane.speedLimitKph"`, or a `relative_to` binding with a negative `dsM`, which
+    works normally. Recorded in `newcaps/DEFECT-negative-role-s-infeasible.md`.
