@@ -381,3 +381,28 @@ actor that needed it.
     and a drift/encroachment that does NOT complete a lane change is `laneOffset` with a `tFrac`
     beyond the lane edge — remembering that `tFrac` is a fraction of lane width, so 0.8 is still
     inside the actor's own lane and only |tFrac| > 1 crosses the line.
+
+17. **A challenger that is meant to move INTO the ego's lane must not START in it.** This is the
+    single largest remaining defect, measured independently over 478 gate-passing cells:
+
+      real incursion                                   0.358
+      moved sideways but stopped a lane short          0.174
+      **spawned ALREADY IN the ego's lane, never moved  0.306**
+      never moved, stayed outside                      0.163
+
+    Of the already-in-lane cells, only a fifth were legitimate lead vehicles. The rest were roles
+    named `oncoming_cutter`, `drifting_motorcycle`, `wrongWayBicycle`, `reckless_turner` — names that
+    promise a lateral manoeuvre — placed in the ego's lane at t = 0 and never moving. A car that is
+    already in the lane is not a cut-in, however it is labelled.
+
+    So, whenever the brief has someone move in, drift in, cut in, swerve in, wander over, cross the
+    line, or emerge into the ego's path:
+      - bind the challenger to a DIFFERENT lane to start with: `relative_to` with **`dLane` of -1 or
+        +1**, or a pose with **`laneOffset` of -1 or +1**. Never `dLane: 0` / `laneOffset: 0`;
+      - then move it with `changeLane` `{mode:"toRole", role:"ego"}`;
+      - the only role that should start in the ego's lane at `laneOffset: 0` is a genuine LEAD or
+        FOLLOWING vehicle, or a stationary obstacle the brief says is already there.
+
+    Prefer `changeLane` over `laneOffset` for this. Measured true-incursion rate by primitive:
+    `changeLane` 0.455, hand-rolled `route` polyline 0.454, **`laneOffset` only 0.098** — an actor
+    nudged within its own lane usually never reaches the ego at all.

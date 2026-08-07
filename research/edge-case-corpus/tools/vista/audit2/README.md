@@ -64,3 +64,13 @@ the specific measurement that settles it. `FALSE-POSITIVES.json` -- the template
 `REPORT-5-CORRECTION-AND-DECISION.md` supersedes parts of REPORT-4. It contains two corrections to
 this audit's OWN instruments, a re-scoring of the current `hybrid.py`, and the answer to the
 AND-vs-veto decision plus a measured way to recover recall at zero cost.
+
+## Authoring bottleneck (REPORT-6)
+`REPORT-6-AUTHORING.md` measures why authored lateral incursions fail, and pre-registers a forecast
+for the `changeLane[toRole]` A/B. Rerun tool, usable on any run directory:
+
+    python incursion_rate_run.py /tmp/vista-gen4-blind /tmp/vista-gen3-blind
+
+prints the TRUE incursion rate (corrected arbiter) with a Wilson CI, split into the two failure
+modes that decide whether a lateral primitive can help: TARGETING (moved sideways, stopped short)
+and PLACEMENT (spawned already inside the ego's corridor).

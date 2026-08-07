@@ -1,0 +1,32 @@
+[
+ {
+  "run": "vista-gen3-blind",
+  "nCells": 167,
+  "trueIncursionRate": 0.521,
+  "ci95": [
+   0.4456,
+   0.5954
+  ],
+  "counts": {
+   "incursion": 87,
+   "static_outside": 28,
+   "targeting_defect": 35,
+   "placement_defect": 17
+  }
+ },
+ {
+  "run": "vista-gen4-blind",
+  "nCells": 118,
+  "trueIncursionRate": 0.5763,
+  "ci95": [
+   0.4861,
+   0.6616
+  ],
+  "counts": {
+   "incursion": 68,
+   "static_outside": 6,
+   "targeting_defect": 24,
+   "placement_defect": 20
+  }
+ }
+]
