@@ -470,3 +470,32 @@ actor that needed it.
     5.0 m proximity bound by four centimetres, and most of a lane away in reality. That is the
     "physically valid but boring" failure in a new costume. A carriageway hazard belongs at
     `tFrac` near 0 in the ego's own lane, not on the shoulder beside it.
+
+21. **The ego will not drive past a static obstacle in its own lane — it stops short.** With
+    `rules.collisionAvoidance` on (the default), an ego facing a hazard in its lane comes to a halt
+    rather than squeezing by: measured stopping at s = 44.7 against a hazard at s = 50, even after a
+    1.57 m lateral shift that would have cleared a 0.56 m tyre by about 2 m. So "the ego passes the
+    debris closely" is close to unauthorable by default, and that — not poor placement — is the main
+    reason static-hazard scenarios read as physically valid but boring.
+    To get a genuine close pass you must either turn the ego's avoidance off deliberately, or accept
+    that the interesting event is the EMERGENCY STOP rather than the pass, and author for that: a late
+    reveal, a short sight line, and a decel demand near but under the friction ceiling.
+
+22. **Never author the avoidance as a t = 0 route polyline.** A static/moving pair is scored only while
+    the moving actor is genuinely on a collision course with it. If the ego's route steers around the
+    hazard from the first frame, it was never on that course, the pair is never scored, and the clip
+    comes back with `minDistance: null` and `minTTC: null` — 30 of 30 cells in a measured case, a
+    correctly placed hazard, and no criticality at all.
+    Author the swerve as a TRIGGERED `laneOffset` (or `changeLane`) instead. Same geometry, but the
+    collision course exists until the trigger fires, so the encounter is measured: minTTC recorded on
+    26 of 30 cells.
+    The general form of this rule: **an evasive action authored as an initial condition deletes the
+    conflict it was meant to evade.** Conflicts must exist first and be resolved during the clip.
+
+23. **Treat the engine's own criticality metrics as unreliable once an actor leaves a collision
+    course.** `metrics.minTTC` / `minDistance` / `minPET` stop updating for a pair the moment it is no
+    longer on a collision course, so for any hazard the ego successfully avoids, the retained value is
+    a sample from BEFORE the avoidance — one measured case reported `minDistance 15.83 m at t=0.14`
+    when the true closest approach was 2.03 m at t=1.66. Since `evaluate` reads those metrics, a real
+    near miss can be graded `trivially-safe`. Compute clearance yourself from `ticks.actors` x/y/
+    headingRad, which keeps recording regardless of scoring.

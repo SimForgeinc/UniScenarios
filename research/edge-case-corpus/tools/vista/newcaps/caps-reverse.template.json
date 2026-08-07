@@ -32,15 +32,15 @@
         "distribution": "uniform"
       },
       {
-        "id": "egoApproachKph",
+        "id": "brakeTriggerDistanceM",
         "type": "continuous",
-        "unit": "kph",
+        "unit": "m",
         "tier": 1,
         "range": [
-          20,
-          34
+          18,
+          28
         ],
-        "default": 28,
+        "default": 23,
         "distribution": "uniform"
       }
     ],
@@ -119,11 +119,11 @@
       },
       "pose": {
         "laneOffset": 0,
-        "s": "-param.egoApproachKph / 3.6 * 4.5",
+        "s": "-clamp(0.65 * lane.speedLimitKph, 18, 35) / 3.6 * 5",
         "tFrac": 0,
         "headingOffsetRad": 0
       },
-      "initialSpeedKph": "param.egoApproachKph",
+      "initialSpeedKph": "clamp(0.65 * lane.speedLimitKph, 18, 35)",
       "extensions": {
         "placementFeature": "driveway"
       }
@@ -253,7 +253,7 @@
             },
             "measure": "euclidean",
             "op": "<=",
-            "valueM": 24
+            "valueM": "param.brakeTriggerDistanceM"
           },
           "byLatest": 8,
           "ifNever": "fire"
