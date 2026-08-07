@@ -33,6 +33,8 @@ export const ISSUE_CODES = [
   'interaction_ref_unknown',
   'param_ref_unknown',
   'control_ref_unknown',
+  'sensor_ref_unknown',
+  'divergence_ref_unknown',
   'feature_kind_mismatch',
   'self_reference',
   // --- timeline structure ---------------------------------------------------

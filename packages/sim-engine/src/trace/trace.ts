@@ -16,6 +16,12 @@
 import { quantize } from '../core/math.js';
 import { toSceneXZ } from '../frames.js';
 import type { ActorKind, ControlIndication, Dims, MotionPhysicsMode, OperationalConditions, StaticProp } from '../schema/input.js';
+import {
+  quantizeSensorTracks,
+  type MapDivergenceTrack,
+  type PerceptionMetrics,
+  type SensorTrack,
+} from './sensor-track.js';
 
 /** v4 adds the mandatory lane-relative lateral-offset actor channel. */
 export const TRACE_FORMAT_VERSION = 4;
@@ -265,6 +271,11 @@ export interface EpisodeMetrics {
   readonly clippedCriticality: boolean;
   /** Wall-clock-free performance counter: integration steps executed. */
   readonly ticksSimulated: number;
+  /**
+   * Per-sensor detection summary and declared map/percept divergence exposure.
+   * Absent when no actor declares a sensor and no divergence is declared.
+   */
+  readonly perception?: PerceptionMetrics;
 }
 
 export interface TraceHeader {
@@ -342,6 +353,13 @@ export interface SimTrace {
     readonly actors: Record<string, ActorTrack>;
     /** Present on traces produced by signal-aware engines; empty on unsignalized maps. */
     readonly signals?: Record<string, SignalTrack>;
+    /**
+     * Per-sensor perception channel, keyed `observerId/sensorId`. Present only
+     * when an actor declares a sensor, so older traces stay byte-identical.
+     */
+    readonly sensors?: Record<string, SensorTrack>;
+    /** Declared map/percept divergence exposure, keyed `divergenceId/observerId`. */
+    readonly mapDivergence?: Record<string, MapDivergenceTrack>;
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
@@ -400,6 +418,19 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
             ),
           }
         : {}),
+      // A raw floating-point confidence product is exactly the kind of thing
+      // that breaks a bit-identical replay comparison, so it is quantised here
+      // with the rest of the channels rather than at the producer.
+      ...(trace.ticks.sensors ? { sensors: quantizeSensorTracks(trace.ticks.sensors) } : {}),
+      ...(trace.ticks.mapDivergence
+        ? {
+            mapDivergence: Object.fromEntries(
+              Object.keys(trace.ticks.mapDivergence)
+                .sort()
+                .map((id) => [id, { ...trace.ticks.mapDivergence![id]!, active: [...trace.ticks.mapDivergence![id]!.active] }]),
+            ),
+          }
+        : {}),
     },
     events: trace.events.map((event) => ({ ...event, t: quantize(event.t, TRACE_PRECISION.event) })),
     metrics: quantizeMetrics(trace.metrics),
@@ -413,6 +444,9 @@ export interface SceneTrace {
     readonly t: number[];
     readonly actors: Record<string, Omit<ActorTrack, 'y'> & { z: number[] }>;
     readonly signals?: Record<string, SignalTrack>;
+    /** Frame-independent: bearings are sensor-relative, ranges are scalars. */
+    readonly sensors?: Record<string, SensorTrack>;
+    readonly mapDivergence?: Record<string, MapDivergenceTrack>;
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
@@ -461,6 +495,8 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
             ),
           }
         : {}),
+      ...(trace.ticks.sensors ? { sensors: trace.ticks.sensors } : {}),
+      ...(trace.ticks.mapDivergence ? { mapDivergence: trace.ticks.mapDivergence } : {}),
     },
     events: trace.events,
     metrics: trace.metrics,

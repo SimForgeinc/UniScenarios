@@ -18,6 +18,11 @@
 
 import { z } from 'zod';
 
+import { SURFACE_KINDS } from '../environment.js';
+// Perception is defined in its own module and imported *into* the input
+// contract, never the other way round, so there is no schema cycle.
+import { perceptionConfigSchema, simSensorSchema } from '../perception/schema.js';
+
 /* ------------------------------------------------------------------ basics */
 
 const finite = z.number().finite();
@@ -27,6 +32,12 @@ const positive = finite.gt(0);
 export const CONTROL_INDICATIONS = [
   'green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off',
   'green_arrow', 'yellow_arrow', 'red_x', 'proceed', 'stop',
+  // Flashing arrows are the indications that change *turn* logic rather than
+  // through logic: a flashing yellow arrow is the permissive left, and a
+  // flashing red arrow is the stop-then-turn. Reversible-lane heads use the
+  // same two. Without them a permissive-left conflict has to be faked with a
+  // plain `flashing_yellow` on a head that is supposed to be an arrow.
+  'flashing_yellow_arrow', 'flashing_red_arrow',
 ] as const;
 export const controlIndicationSchema = z.enum(CONTROL_INDICATIONS);
 export type ControlIndication = z.infer<typeof controlIndicationSchema>;
@@ -233,6 +244,16 @@ export const actorSchema = z.object({
   static: z.boolean().optional(),
   /** Free-form tags carried through to the trace header (role, class, …). */
   tags: z.array(z.string()).default([]),
+  /**
+   * Rigidly mounted perception sensors.
+   *
+   * `optional`, not `default([])`, on purpose: a defaulted array would
+   * materialize a new property on every historical document and change its
+   * input hash — the same rule `physics` and `nearMissCriteria` follow. The
+   * sensor objects themselves are strict, so a mistyped field is an *error*
+   * rather than a silently discarded declaration.
+   */
+  sensors: z.array(simSensorSchema).max(32).optional(),
 }).transform((actor) => ({
   ...actor,
   dims: actor.dims ?? DEFAULT_ACTOR_DIMS[actor.kind],
@@ -260,11 +281,16 @@ export const laneChangeTargetSchema = z.discriminatedUnion('mode', [
 ]);
 export type LaneChangeTarget = z.infer<typeof laneChangeTargetSchema>;
 
-/** Keys the `set` verb understands. `rules.*` feed the controllers; the rest
- * are recorded state only (they exist so the renderer and the exporter can read
- * them back out of the trace). */
+/** Keys the `set` verb understands. `rules.*` and `motion.*` feed the
+ * controllers; the rest are recorded state only (they exist so the renderer and
+ * the exporter can read them back out of the trace).
+ *
+ * `motion.gear` selects forward or reverse. It lives on the `set` axis rather
+ * than being a signed `speed` target because `speedMps` is a magnitude
+ * everywhere downstream — TTC, min-clearance, required-decel, the exporters —
+ * and signing it would corrupt all of them silently. See `sim/gear.ts`. */
 export const setKeySchema = z.string().regex(
-  /^(rules\.(obeySignals|yield|yieldToVehicles|yieldToPedestrians|collisionAvoidance|aggression|speedFactor)|lights\.[A-Za-z0-9_]+|audio\.[A-Za-z0-9_]+|doors\.[A-Za-z0-9_]+|pose\.[A-Za-z0-9_]+|env\.[A-Za-z0-9_]+|signal:[A-Za-z0-9._:@/-]+\.phase|control:[A-Za-z0-9._:@/-]+\.indication)$/,
+  /^(rules\.(obeySignals|yield|yieldToVehicles|yieldToPedestrians|collisionAvoidance|aggression|speedFactor)|motion\.[A-Za-z0-9_]+|lights\.[A-Za-z0-9_]+|audio\.[A-Za-z0-9_]+|doors\.[A-Za-z0-9_]+|pose\.[A-Za-z0-9_]+|env\.[A-Za-z0-9_]+|signal:[A-Za-z0-9._:@/-]+\.phase|control:[A-Za-z0-9._:@/-]+\.indication)$/,
   'unknown set() key — see the typed key registry',
 );
 
@@ -309,6 +335,32 @@ export const regionSchema = z.discriminatedUnion('kind', [
 ]);
 export type Region = z.infer<typeof regionSchema>;
 
+/* ------------------------------------------------------- surface conditions */
+
+/**
+ * A localised patch of road with different grip.
+ *
+ * Deliberately a `Region` and not a new spatial vocabulary: an ice patch and a
+ * `reaches` trigger want to name the same shapes, and one implementation of
+ * "is this actor inside that" per shape is one place for it to be wrong. See
+ * `../environment.ts` for the resolution rules and the per-kind coefficients —
+ * this schema is only the wire format.
+ */
+export const surfacePatchSchema = z.object({
+  id: idSchema,
+  kind: z.enum(SURFACE_KINDS),
+  region: regionSchema,
+  /**
+   * Overrides the coefficient implied by `kind`. Present when the scenario is
+   * *about* the exact value; absent when the author means "ice".
+   */
+  frictionScale: positive.min(0.05).max(1.5).optional(),
+  /** Blend distance at the patch boundary, metres. `0` is a hard edge, as ice has. */
+  edgeTaperM: nonNeg.default(0),
+  label: z.string().max(200).optional(),
+});
+export type SurfacePatch = z.infer<typeof surfacePatchSchema>;
+
 const cmp = z.enum(['lte', 'gte']);
 
 /**
@@ -325,6 +377,15 @@ export type Condition =
   | { kind: 'signal'; signalId: string; phase: ControlIndication }
   | { kind: 'collision'; a?: string; b?: string }
   | { kind: 'visible'; a: string; to: string; value: boolean }
+  /**
+   * `detected(a, by: observer)` — the *perception* counterpart of `visible`.
+   *
+   * `visible` is pure plan-view geometry and is unaffected by weather. This one
+   * asks the observer's declared sensor suite, so an actor in clear line of
+   * sight but lost in fog, glare or darkness reads `false`. Omitting `sensor`
+   * takes the suite's best opinion, which is what a fused stack reports.
+   */
+  | { kind: 'detected'; a: string; by: string; sensor?: string; value: boolean }
   | { kind: 'and'; of: Condition[] }
   | { kind: 'or'; of: Condition[] }
   | { kind: 'not'; of: Condition };
@@ -356,6 +417,13 @@ const leafConditionSchema = z.discriminatedUnion('kind', [
   }),
   z.object({ kind: z.literal('collision'), a: idSchema.optional(), b: idSchema.optional() }),
   z.object({ kind: z.literal('visible'), a: idSchema, to: idSchema, value: z.boolean() }),
+  z.object({
+    kind: z.literal('detected'),
+    a: idSchema,
+    by: idSchema,
+    sensor: idSchema.optional(),
+    value: z.boolean(),
+  }),
 ]);
 
 export const conditionSchema: z.ZodType<Condition> = z.union([
@@ -462,6 +530,23 @@ export const signalProgramSchema = z.object({
     .min(1),
   offsetS: finite.default(0),
   loop: z.boolean().default(true),
+  /**
+   * The right-of-way rule that applies while this head shows no indication.
+   *
+   * A dark signal is **not** an uncontrolled junction. In the jurisdictions
+   * these maps come from it reverts to an all-way stop (MUTCD 4D.34, UVC
+   * 11-205, Highway Code r.176), which is the opposite of "proceed". The
+   * default is therefore the law, and the exceptions that genuinely exist — a
+   * decommissioned head, a jurisdiction that signs the blackout as a yield —
+   * have to be written down rather than assumed.
+   *
+   * Optional rather than defaulted for the same reason `physics` is: parsing an
+   * older document must not materialize a new property and thereby change its
+   * input hash. `SignalBook` applies the default at read time.
+   */
+  darkFallback: z.enum(['all_way_stop', 'uncontrolled', 'yield']).optional(),
+  /** Minimum standstill at the line while this program is dark or flashing red. */
+  darkDwellS: positive.optional(),
   /**
    * Stop lines this program controls. An actor whose route crosses one of these
    * lanes brakes for the line when the phase forbids entry.
@@ -746,6 +831,8 @@ export const simScenarioInputSchema = z
     interactions: z.array(interactionSchema).default([]),
     signalPrograms: z.array(signalProgramSchema).default([]),
     roadControls: z.array(roadControlSchema).default([]),
+    /** Localised grip: ice on the bend, a flooded dip, wet leaves under the trees. */
+    surfacePatches: z.array(surfacePatchSchema).default([]),
     /** Fixed renderable catalog props, expanded to one record per concrete member. */
     props: z.array(staticPropSchema).default([]),
     occluders: z.array(occluderSchema).default([]),
@@ -753,6 +840,12 @@ export const simScenarioInputSchema = z
     // Optional (rather than default []) so parsing historical immutable inputs
     // does not alter their content hash.
     nearMissCriteria: z.array(nearMissCriterionSchema).optional(),
+    /**
+     * Atmosphere, emissive glare and declared map/percept divergence. Optional
+     * for the same hash-stability reason; a document that declares sensors but
+     * omits this block simulates in clear air at full daylight.
+     */
+    perception: perceptionConfigSchema.optional(),
   })
   .superRefine((doc, ctx) => {
     const actorIds = new Set<string>();
@@ -881,6 +974,91 @@ export const simScenarioInputSchema = z
           path: ['occlusionPairs', i, 'occluderId'],
           message: `unknown occluder or occluder group ${pair.occluderId}`,
         });
+      }
+    }
+    /* ------------------------------------------------------- perception --
+     * A declared sensor that nothing consumes is worse than no sensor at all:
+     * the document validates, simulates, and quietly behaves as though it never
+     * said anything. Every reference below therefore fails loudly.
+     */
+    const sensorIdsByActor = new Map<string, Set<string>>();
+    for (let i = 0; i < doc.actors.length; i++) {
+      const actor = doc.actors[i]!;
+      const ids = new Set<string>();
+      for (let s = 0; s < (actor.sensors?.length ?? 0); s++) {
+        const sensor = actor.sensors![s]!;
+        if (ids.has(sensor.id)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['actors', i, 'sensors', s, 'id'],
+            message: `duplicate sensor id ${sensor.id} on actor ${actor.id}`,
+          });
+        }
+        ids.add(sensor.id);
+      }
+      sensorIdsByActor.set(actor.id, ids);
+    }
+    const perceptionConditions: Array<{ path: (string | number)[]; condition: Condition }> = [];
+    for (let i = 0; i < doc.interactions.length; i++) {
+      const it = doc.interactions[i]!;
+      if (it.trigger.kind === 'when') {
+        perceptionConditions.push({ path: ['interactions', i, 'trigger', 'condition'], condition: it.trigger.condition });
+      }
+      if (it.until !== undefined) {
+        perceptionConditions.push({ path: ['interactions', i, 'until'], condition: it.until as Condition });
+      }
+    }
+    for (const entry of perceptionConditions) {
+      const leaves: Condition[] =
+        entry.condition.kind === 'and' || entry.condition.kind === 'or'
+          ? entry.condition.of
+          : entry.condition.kind === 'not'
+            ? [entry.condition.of]
+            : [entry.condition];
+      for (const leaf of leaves) {
+        if (leaf.kind !== 'detected') continue;
+        if (!actorIds.has(leaf.a)) {
+          ctx.addIssue({ code: 'custom', path: entry.path, message: `detected() references unknown actor ${leaf.a}` });
+        }
+        const declared = sensorIdsByActor.get(leaf.by);
+        if (declared === undefined) {
+          ctx.addIssue({ code: 'custom', path: entry.path, message: `detected() references unknown observer ${leaf.by}` });
+          continue;
+        }
+        if (declared.size === 0) {
+          ctx.addIssue({
+            code: 'custom',
+            path: entry.path,
+            message: `detected() observer ${leaf.by} declares no sensors, so it can never detect anything`,
+          });
+        } else if (leaf.sensor !== undefined && !declared.has(leaf.sensor)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: entry.path,
+            message: `detected() references unknown sensor ${leaf.sensor} on actor ${leaf.by}`,
+          });
+        }
+      }
+    }
+    const divergenceIds = new Set<string>();
+    for (let i = 0; i < (doc.perception?.mapDivergences.length ?? 0); i++) {
+      const divergence = doc.perception!.mapDivergences[i]!;
+      if (divergenceIds.has(divergence.id)) {
+        ctx.addIssue({
+          code: 'custom',
+          path: ['perception', 'mapDivergences', i, 'id'],
+          message: `duplicate map divergence id ${divergence.id}`,
+        });
+      }
+      divergenceIds.add(divergence.id);
+      for (let o = 0; o < divergence.observers.length; o++) {
+        if (!actorIds.has(divergence.observers[o]!)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: ['perception', 'mapDivergences', i, 'observers', o],
+            message: `unknown actor ${divergence.observers[o]}`,
+          });
+        }
       }
     }
     const signalIds = new Set(doc.signalPrograms.map((p) => p.id));

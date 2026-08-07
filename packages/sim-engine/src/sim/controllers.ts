@@ -477,7 +477,11 @@ export function distanceToStopLine(
       const routeS = leg.sStart + laneS;
       const d = routeS - a.routeS;
       if (d < -0.5 || d > lookaheadM) continue;
-      if (line.kind === 'stop') {
+      // Authority is resolved per tick, not per binding: a signal that is dark
+      // or flashing red right now presents a stop control right now.
+      const authority = signals.authorityAt(line, t);
+      if (authority.kind === 'none') continue;
+      if (authority.kind === 'stop') {
         const states = a.roadControlStates;
         const state = states.get(line.controlId) ?? {
           stoppedSinceS: null, released: false, arrivedAtS: null, releasedAtS: null,
@@ -492,7 +496,7 @@ export function distanceToStopLine(
             state.stoppedSinceS = t;
             state.arrivedAtS = t;
           }
-          if (t - state.stoppedSinceS >= line.dwellS) {
+          if (t - state.stoppedSinceS >= authority.dwellS) {
             if (state.proceedAfterS === null && (canReleaseStop?.(line.controlId, line.coordinationId, a.id, t) ?? true)) {
               state.proceedAfterS = t + driverFor(a).startDelayS;
             }

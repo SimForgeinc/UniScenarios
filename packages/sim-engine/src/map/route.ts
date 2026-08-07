@@ -248,6 +248,40 @@ export class Route {
     return { s, d: dist(this.poseAt(s).point, p) };
   }
 
+  /**
+   * The same path traversed the other way, from the far end back to the start.
+   *
+   * This is what selecting reverse gear means geometrically. A shift does *not*
+   * rotate the body — a car backing down the lane it just came up keeps its
+   * heading exactly, and every oriented bounding box and render depends on that
+   * being true. What inverts is the direction of travel. Flipping the route and
+   * re-basing `routeS` to `lengthM - s` expresses that with no discontinuity:
+   * the reversing body's heading is `newTangent + PI`, which is the old tangent.
+   *
+   * Flipping the **lane chain** rather than degrading to a polyline is the whole
+   * point — `laneRsl`, lane width, the leader search and the corridor guard all
+   * keep working while the actor reverses.
+   */
+  reversedRoute(): Route {
+    if (this.freePoints) return Route.fromPolyline([...this.freePoints].reverse());
+    if (!this.graph || this.legs.length === 0) return this;
+    const legs: RouteLeg[] = [];
+    let sStart = 0;
+    for (let i = this.legs.length - 1; i >= 0; i--) {
+      const leg = this.legs[i]!;
+      legs.push({
+        rsl: leg.rsl,
+        reversed: !leg.reversed,
+        sStart,
+        lengthM: leg.lengthM,
+        // A junction connector traversed backwards is not the authored turn.
+        turnRelation: null,
+      });
+      sStart += leg.lengthM;
+    }
+    return Route.fromLegs(this.graph, legs);
+  }
+
   /** Signed lateral offset of `p` from the centreline at `s` (`+` = left). */
   lateralOffsetAt(s: number, p: Vec2): number {
     const pose = this.poseAt(s);

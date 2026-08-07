@@ -156,6 +156,27 @@ export const VisibleConditionSchema = z.strictObject({
   minFraction: z.number().min(0).max(1).optional(),
 });
 
+/**
+ * The *perception* counterpart of `visible`.
+ *
+ * `visible` is pure plan-view geometry and is unaffected by weather: it answers
+ * "is anything in the way". `detected` asks the observer's declared sensor
+ * suite instead, so an actor in clear line of sight but lost in fog, glare or
+ * darkness reads `false`. That difference is what makes "the ego cannot see the
+ * pedestrian it is looking straight at" expressible.
+ *
+ * Omitting `sensor` takes the suite's best opinion, which is what a fused stack
+ * reports; naming one grades a single modality.
+ */
+export const DetectedConditionSchema = z.strictObject({
+  kind: z.literal('detected'),
+  of: RoleRefSchema,
+  by: RoleRefSchema,
+  /** Sensor id on `by`. Omitted means any of its sensors. */
+  sensor: z.string().min(1).max(128).optional(),
+  detected: z.boolean().default(true),
+});
+
 /** An actor has been stationary for a while. */
 export const StandstillConditionSchema = z.strictObject({
   kind: z.literal('standstill'),
@@ -179,6 +200,7 @@ export const LeafConditionSchema = z.discriminatedUnion('kind', [
   SpeedConditionSchema,
   SignalConditionSchema,
   VisibleConditionSchema,
+  DetectedConditionSchema,
   StandstillConditionSchema,
   CollisionConditionSchema,
 ]);

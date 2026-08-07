@@ -146,7 +146,8 @@
    "label": "a person standing in the live lane beside a broken-down car",
    "actor": {
     "class": "pedestrian",
-    "catalogId": "pedestrian.adult_walking"
+    "catalogId": "pedestrian.adult_walking",
+    "static": true
    },
    "essentiality": "required",
    "pose": {

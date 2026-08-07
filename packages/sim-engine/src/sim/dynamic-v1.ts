@@ -451,10 +451,22 @@ export class DynamicV1Backend implements MotionBackend {
     const rearFx = clamp(rearFxRequest, -mu * rearNormal, mu * rearNormal);
 
     const speedForSlip = Math.max(Math.abs(s.longitudinalVelocityMps), 0.75);
+    // The steer contribution to front-tyre slip is signed by the direction of
+    // travel, and this is not a detail: a tyre is symmetric, so the lateral slip
+    // velocity it sees from a steer angle `d` is `-u * sin(d)`, which changes
+    // sign with `u`. Dropping that sign makes a reversing car respond to
+    // steering the wrong way — the controller's correction becomes positive
+    // feedback, the steer saturates, and the body peels off its path. That is
+    // the whole reason reverse manoeuvres were uncontrollable under this
+    // backend. Forward motion is untouched (`direction` is +1).
+    //
+    // Everything else here is already direction-agnostic: the yaw-rate and
+    // sideslip terms enter through `atan2(.., |u|)`, whose sign is carried by
+    // the numerator.
     const frontSlip = Math.atan2(
       s.lateralVelocityMps + lf * s.yawRateRadps,
       speedForSlip,
-    ) - s.steerRad;
+    ) - direction * s.steerRad;
     const rearSlip = Math.atan2(
       s.lateralVelocityMps - lr * s.yawRateRadps,
       speedForSlip,

@@ -1306,6 +1306,36 @@
           "properties": {
             "kind": {
               "type": "string",
+              "const": "detected"
+            },
+            "of": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "by": {
+              "$ref": "#/$defs/__schema3"
+            },
+            "sensor": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128
+            },
+            "detected": {
+              "default": true,
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "kind",
+            "of",
+            "by"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
               "const": "standstill"
             },
             "of": {

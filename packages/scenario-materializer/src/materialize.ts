@@ -96,14 +96,22 @@ import {
   type SimIssue,
   type SimScenarioInput,
   type StaticProp,
+  type PerceptionConfig as SimPerceptionConfig,
+  type SurfacePatch as SimSurfacePatch,
   type Trigger as SimTrigger,
   pruneDanglingAfterInteractions,
 } from '@uniscenarios/sim-engine';
 
 import { CliError } from './errors.js';
+import {
+  atmosphereFromEnvironment,
+  lowerMapDivergence,
+  lowerSensor,
+  type DivergenceWindow,
+} from './perception.js';
 import type { MapBundle } from './types.js';
 import { paramsVersion, resolveParams, templateId, type ParamDraw } from './params.js';
-import { propBehavior, propDims } from './prop-dims.js';
+import { actorCatalogMismatch, catalogActorDims, propBehavior, propDims } from './prop-dims.js';
 import {
   buildMapControlPlan,
   buildSiteSignalPlan,
@@ -686,6 +694,19 @@ const LOCAL_ROLE_PROJECTION_MAX_DISTANCE_M = 12;
 /** A point geometrically on a matched lane endpoint is an authored station,
  * not the ambiguous far-away clamp that the endpoint guard rejects. */
 const CONSTRAINED_ENDPOINT_EXACT_HIT_M = 0.25;
+
+/**
+ * Failures that mean "the author named a lane this site does not have".
+ *
+ * They are singled out because several call sites wrap pose resolution in a
+ * best-effort `try`/`continue` — correct for a repeat that walks off the end of
+ * the frame, catastrophic for a lane offset, which is a statement about the
+ * cross-section the scenario needs rather than about how far along it reaches.
+ */
+const LANE_OFFSET_ERROR_CODES: ReadonlySet<string> = new Set([
+  'lane_offset_unavailable',
+  'lane_offset_unroutable',
+]);
 
 function coverTarget(
   bundle: MapBundle,
@@ -1316,13 +1337,45 @@ class Materializer {
         route = semanticRoute;
         routeS = route.projectPoint({ x: center.x, y: center.y }).s;
       } else if (!rsl) {
-        this.notes.push({ path: `${path}.laneOffset`, reason: `no lane at k = ${pose.laneOffset}; using the reference lane` });
+        // Falling back to the reference lane here is the silent-relocation
+        // defect in its purest form: a prop, route vertex, arrival trigger or
+        // `at.pose` invariant authored one lane over lands in the *reference*
+        // lane instead, and nothing downstream can tell that it moved. The
+        // scenario then measures a station it never described — and on the
+        // one-lane corridors that dominate these maps, an actor authored
+        // beside the ego is placed inside it. A lane the site does not have is
+        // a site that cannot render this scenario.
+        throw new CliError(
+          'lane_offset_unavailable',
+          `no lane at lane offset ${pose.laneOffset} at this site`,
+          {
+            path: `${path}.laneOffset`,
+            detail: {
+              siteId: this.site.siteId,
+              requestedK: pose.laneOffset,
+              availableK: Object.keys(this.site.frame.lateralLanes).map(Number).sort((a, b) => a - b),
+              hint: 'require corridor.throughLanesSameDir so only sites wide enough to hold this pose are matched',
+            },
+            exitCode: 2,
+          },
+        );
       } else {
         const built = routeFromChain(this.bundle.graph, [rsl], rsl, this.notes, `${path}.laneOffset`);
-        if (built) {
-          route = built;
-          routeS = built.projectPoint({ x: center.x, y: center.y }).s;
+        if (!built) {
+          // The lane is in the cross-section but is not drivable as a route,
+          // so its stations do not exist either. Same rule: say so.
+          throw new CliError(
+            'lane_offset_unroutable',
+            `lane offset ${pose.laneOffset} resolves to ${rsl}, which has no drivable route at this site`,
+            {
+              path: `${path}.laneOffset`,
+              detail: { siteId: this.site.siteId, requestedK: pose.laneOffset, laneRsl: rsl },
+              exitCode: 2,
+            },
+          );
         }
+        route = built;
+        routeS = built.projectPoint({ x: center.x, y: center.y }).s;
       }
     }
     const laneWidth = route.widthAt(routeS) ?? this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
@@ -1475,7 +1528,31 @@ class Materializer {
     const scope = this.baseScope(binding.laneRsl);
     this.scopeByRole.set(role.id, scope);
 
-    const dims = role.actor.dims ?? DEFAULT_ACTOR_DIMS[role.actor.class];
+    // An actor's semantic class and its catalog model must describe the same
+    // kind of thing. A measured clip in this repo reads class:animal with
+    // catalog:pedestrian.adult_walking — the trajectory is an animal's and the
+    // model is a walking human, which passes every trajectory- and render-based
+    // check because only the catalog id can see it. Same defect as an
+    // unresolvable id silently becoming a sedan, so the rule is stated for
+    // every class. (`ActorSpecSchema` in scenario-model is the better long-term
+    // home — it would fail at `template validate` — but reaching the catalog
+    // from there needs a new workspace dependency.)
+    const catalogMismatch = role.actor.catalogId === undefined
+      ? null
+      : actorCatalogMismatch(role.actor.class, role.actor.catalogId);
+    if (catalogMismatch !== null) {
+      throw new CliError('actor_catalog_class_mismatch', `role "${role.id}": ${catalogMismatch}`, {
+        path: `${path}.actor.catalogId`,
+        detail: { roleId: role.id, actorClass: role.actor.class, catalogId: role.actor.catalogId },
+        exitCode: 2,
+      });
+    }
+    // The catalog model's own footprint, when the template did not override it:
+    // `ActorSpecSchema.dims` is documented as "overriding the catalog model's
+    // own", which only means anything if the catalog's dims are used otherwise.
+    const dims = role.actor.dims
+      ?? (role.actor.catalogId === undefined ? null : catalogActorDims(role.actor.catalogId))
+      ?? DEFAULT_ACTOR_DIMS[role.actor.class];
     const kind = actorKindForClass(role.actor.class);
 
     if (role.kind === 'scene_absolute') {
@@ -2839,6 +2916,15 @@ class Materializer {
         };
       case 'visible':
         return { kind: 'visible', a: condition.of, to: condition.to, value: condition.visible };
+      case 'detected':
+        // `visible` is geometry; `detected` asks the observer's sensor suite.
+        return {
+          kind: 'detected',
+          a: condition.of,
+          by: condition.by,
+          ...(condition.sensor === undefined ? {} : { sensor: condition.sensor }),
+          value: condition.detected,
+        };
       case 'collision':
         return {
           kind: 'collision',
@@ -2934,6 +3020,117 @@ class Materializer {
     if (!existing) this.occlusionPairs.push(pair);
   }
 
+  /* ------------------------------------------------------------ perception */
+
+  /**
+   * The sensor passthrough.
+   *
+   * Roles have carried a `sensors` array since the schema was written, and
+   * nothing consumed it: `parseSimScenarioInput` silently *stripped* the field,
+   * so a template could declare a dash camera, validate clean, and simulate as
+   * though it had said nothing. This is the seam that was missing.
+   *
+   * It runs after the actors are built rather than inside `buildActor`, so the
+   * lowering stays one reviewable block and cannot perturb placement.
+   */
+  private applyRoleSensors(): void {
+    for (const role of this.template.roles) {
+      if (role.actor.sensors.length === 0) continue;
+      const index = this.actors.findIndex((actor) => actor.id === role.id);
+      if (index < 0) {
+        // Refuse to lose the declaration quietly. A sensor that vanishes is the
+        // exact failure this layer exists to make impossible.
+        throw new CliError(
+          'sensor_actor_unavailable',
+          `role "${role.id}" declares ${role.actor.sensors.length} sensor(s) but has no concrete actor at this site`,
+          { path: `roles.${role.id}.sensors`, exitCode: 2 },
+        );
+      }
+      this.actors[index] = {
+        ...this.actors[index]!,
+        sensors: role.actor.sensors.map((sensor) => lowerSensor(sensor)),
+      };
+    }
+  }
+
+  /**
+   * Atmosphere from `environment`, plus any declared map/percept divergence.
+   *
+   * Returns `undefined` when the scenario says nothing about perception and
+   * nothing carries a sensor, so an existing document's input hash is
+   * unchanged — the field is `.optional()` on `SimScenarioInput` for exactly
+   * that reason.
+   */
+  private buildPerception(): SimPerceptionConfig | undefined {
+    const hasSensor = this.actors.some((actor) => (actor.sensors?.length ?? 0) > 0);
+    const declared = this.template.perception.mapDivergences;
+    if (!hasSensor && declared.length === 0) return undefined;
+    const scope = this.baseScope();
+    // A site always has a reference chain; the null guard keeps the sun bearing
+    // well defined rather than silently rotating glare to due east.
+    const referenceHeadingRad = this.refRoute === null ? 0 : this.refRoute.poseAt(0).headingRad;
+    const divergences = declared.flatMap((divergence) =>
+      lowerMapDivergence(divergence, {
+        windows: (fromFrac, toFrac, lane) => this.divergenceWindows(divergence.id, fromFrac, toFrac, lane),
+        rolePose: (role) => {
+          const actor = this.actors.find((candidate) => candidate.id === role);
+          return actor ? { x: actor.initial.pose.x, z: actor.initial.pose.z } : undefined;
+        },
+      }),
+    );
+    for (const divergence of declared) {
+      if (divergence.extent.kind === 'corridor' && !divergences.some((d) => d.id === divergence.id || d.id.startsWith(`${divergence.id}:`))) {
+        this.notes.push({
+          path: `perception.mapDivergences.${divergence.id}`,
+          reason: 'divergence covers no drivable lane at this site; omitted',
+        });
+      }
+    }
+    return {
+      atmosphere: atmosphereFromEnvironment(
+        this.template.environment,
+        referenceHeadingRad,
+        (value, path) => evalNum(value, scope, path, 0),
+      ),
+      mapDivergences: divergences,
+    } as SimPerceptionConfig;
+  }
+
+  /** Lane windows covered by a corridor-relative divergence interval. */
+  private divergenceWindows(
+    id: string,
+    fromFrac: number,
+    toFrac: number,
+    lane: number | undefined,
+  ): DivergenceWindow[] {
+    const rsl = lane === undefined || lane === 0 ? null : this.site.frame.lateralLanes[lane];
+    if (lane !== undefined && lane !== 0 && !rsl) {
+      this.notes.push({
+        path: `perception.mapDivergences.${id}.extent.lane`,
+        reason: `no lane at k = ${lane} at this site; divergence omitted`,
+      });
+      return [];
+    }
+    const route = rsl
+      ? routeFromChain(this.bundle.graph, [rsl], rsl, this.notes, `perception.mapDivergences.${id}`)
+      : this.refRoute;
+    if (route === null || route === undefined) return [];
+    const lo = Math.max(0, Math.min(fromFrac, toFrac)) * route.lengthM;
+    const hi = Math.min(1, Math.max(fromFrac, toFrac)) * route.lengthM;
+    const windows: DivergenceWindow[] = [];
+    for (const leg of route.legs) {
+      const legLo = Math.max(lo, leg.sStart);
+      const legHi = Math.min(hi, leg.sStart + leg.lengthM);
+      if (legHi - legLo <= 1e-6) continue;
+      // Route `s` runs along the leg's travel direction; a reversed leg stores
+      // its arc length the other way round.
+      const a = leg.reversed ? leg.lengthM - (legHi - leg.sStart) : legLo - leg.sStart;
+      const b = leg.reversed ? leg.lengthM - (legLo - leg.sStart) : legHi - leg.sStart;
+      windows.push({ rsl: leg.rsl, sMin: Math.max(0, Math.min(a, b)), sMax: Math.max(0, Math.max(a, b)) });
+    }
+    return windows;
+  }
+
   private buildRoleOcclusionPairs(): void {
     for (const role of this.template.roles) {
       const raw = role.extensions?.['occludes'];
@@ -2945,6 +3142,122 @@ class Materializer {
       }
       this.declareOcclusionPair({ observer: pair.observer, target: pair.target, occluderId: `actor:${role.id}` });
     }
+  }
+
+  /* -------------------------------------------------------------- surfaces */
+
+  /**
+   * Lower `environment.surfacePatches` onto the site.
+   *
+   * The authored patch is a longitudinal interval of the corridor; the engine
+   * wants lane windows, because grip has to be answered per actor per tick from
+   * the actor's own lane position. A patch that spans a lane boundary of the
+   * reference chain therefore becomes one window per crossed lane — which is
+   * also why this walks the route legs rather than emitting a single window and
+   * hoping the corridor is one lane all the way.
+   *
+   * An empty `laneOffsets` means every same-direction lane the site knows
+   * about, which is what a weather-like covering actually does. That is the
+   * common case and it is also the safe one: 87.8% of non-junction sections on
+   * these maps have exactly one driving lane per direction, so asking for a
+   * specific non-zero offset usually asks for a lane that is not there.
+   */
+  private buildSurfacePatches(): SimSurfacePatch[] {
+    const patches: SimSurfacePatch[] = [];
+    const scope = this.baseScope();
+    for (const patch of this.template.environment.surfacePatches) {
+      const path = `environment.surfacePatches.${patch.id}`;
+      const featureOffset = patch.feature
+        ? this.site.featureMatches[patch.feature]?.s
+        : 0;
+      if (featureOffset === undefined) {
+        if (patch.essentiality === 'required') {
+          throw new CliError(
+            'surface_patch_feature_unbound',
+            `required surface patch "${patch.id}" is anchored to feature "${patch.feature}", which is not bound at this site`,
+            { path: `${path}.feature`, detail: { feature: patch.feature, siteId: this.site.siteId }, exitCode: 2 },
+          );
+        }
+        this.notes.push({ path: `${path}.feature`, reason: `feature "${patch.feature}" is not bound at this site; patch omitted` });
+        continue;
+      }
+      const startFrameS = featureOffset + evalNum(patch.atM, scope, `${path}.atM`, 0);
+      const lengthM = evalNum(patch.lengthM, scope, `${path}.lengthM`, 0);
+      if (!(lengthM > 0)) {
+        this.notes.push({ path: `${path}.lengthM`, reason: `patch length resolved to ${lengthM} m; patch omitted` });
+        continue;
+      }
+      const frictionScale = patch.frictionScale === undefined
+        ? undefined
+        : evalNum(patch.frictionScale, scope, `${path}.frictionScale`);
+      const edgeTaperM = Math.max(0, evalNum(patch.edgeTaperM, scope, `${path}.edgeTaperM`, 0));
+
+      const offsets = patch.laneOffsets.length > 0
+        ? [...new Set(patch.laneOffsets)].sort((a, b) => a - b)
+        : [...new Set([0, ...Object.keys(this.site.frame.lateralLanes).map(Number)])]
+            .filter((k) => Number.isFinite(k))
+            .sort((a, b) => a - b);
+
+      const windows: Array<{ rsl: string; sMin: number; sMax: number }> = [];
+      for (const k of offsets) {
+        const route = this.surfaceRouteAt(k, path);
+        if (!route) continue;
+        // Project the two frame endpoints onto whichever lane chain this offset
+        // resolved to: `s` restarts on every lane of a chain, so the interval
+        // cannot be carried across as a pair of numbers.
+        const from = route.projectPoint(this.framePoint(startFrameS)).s;
+        const to = route.projectPoint(this.framePoint(startFrameS + lengthM)).s;
+        const lo = Math.min(from, to);
+        const hi = Math.max(from, to);
+        for (const leg of route.legs) {
+          const legLo = Math.max(lo, leg.sStart);
+          const legHi = Math.min(hi, leg.sStart + leg.lengthM);
+          if (legHi - legLo <= 1e-6) continue;
+          // Route `s` runs along the leg's travel direction; a reversed leg
+          // stores its arc length the other way round.
+          const a = leg.reversed ? leg.lengthM - (legHi - leg.sStart) : legLo - leg.sStart;
+          const b = leg.reversed ? leg.lengthM - (legLo - leg.sStart) : legHi - leg.sStart;
+          windows.push({ rsl: leg.rsl, sMin: Math.max(0, Math.min(a, b)), sMax: Math.max(0, Math.max(a, b)) });
+        }
+      }
+      if (windows.length === 0) {
+        if (patch.essentiality === 'required') {
+          throw new CliError(
+            'surface_patch_unplaceable',
+            `required surface patch "${patch.id}" covers no drivable lane at this site`,
+            { path, detail: { atM: startFrameS, lengthM, siteId: this.site.siteId }, exitCode: 2 },
+          );
+        }
+        this.notes.push({ path, reason: 'patch covers no drivable lane at this site; omitted' });
+        continue;
+      }
+      const seen = new Set<string>();
+      for (const window of windows) {
+        const key = `${window.rsl} ${window.sMin.toFixed(3)} ${window.sMax.toFixed(3)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        patches.push({
+          id: windows.length === 1 ? patch.id : `${patch.id}:${seen.size - 1}`,
+          kind: patch.kind,
+          region: { kind: 'laneWindow', rsl: window.rsl, sMin: window.sMin, sMax: window.sMax },
+          ...(frictionScale === undefined ? {} : { frictionScale }),
+          edgeTaperM,
+          ...(patch.label ? { label: patch.label } : {}),
+        });
+      }
+    }
+    return patches;
+  }
+
+  /** The lane chain a surface patch at same-direction lane index `k` sits on. */
+  private surfaceRouteAt(k: number, path: string): Route | null {
+    if (k === 0) return this.refRoute;
+    const rsl = this.site.frame.lateralLanes[k];
+    if (!rsl) {
+      this.notes.push({ path: `${path}.laneOffsets`, reason: `no lane at k = ${k}; that offset is not covered` });
+      return null;
+    }
+    return routeFromChain(this.bundle.graph, [rsl], rsl, this.notes, `${path}.laneOffsets`);
   }
 
   /* ------------------------------------------------------------------ props */
@@ -2987,7 +3300,13 @@ class Materializer {
             scope,
             `props.${prop.id}.pose`,
           );
-        } catch {
+        } catch (error) {
+          // A repeat that runs off the end of the frame is a normal, expected
+          // outcome and is skipped. An unsatisfiable `laneOffset` is not: the
+          // prop was authored in a lane this site does not have, and skipping
+          // it silently deletes an occluder the scenario depends on. Let that
+          // one through.
+          if (error instanceof CliError && LANE_OFFSET_ERROR_CODES.has(error.code)) throw error;
           continue;
         }
         const scene = toSceneXZ({ x: at.x, y: at.y });
@@ -3189,9 +3508,13 @@ class Materializer {
         impact: 'informational',
       });
     }
+    // Sensors first: an interaction may name one, and the loud "declares no
+    // sensors" check must see the suite that the roles actually declared.
+    this.applyRoleSensors();
     this.buildInteractions();
     this.buildRoleOcclusionPairs();
     this.buildPropsAndOccluders();
+    const perception = this.buildPerception();
 
     let input = parseSimScenarioInput({
       schemaVersion: 1,
@@ -3211,10 +3534,12 @@ class Materializer {
       interactions: this.interactions,
       signalPrograms: [...(this.compiledMapSignalPrograms ?? this.signalPlan.programs), ...this.authoredControlPrograms],
       roadControls: this.roadControls,
+      surfacePatches: this.buildSurfacePatches(),
       props: this.props,
       occluders: this.occluders,
       occlusionPairs: this.occlusionPairs,
       nearMissCriteria: this.nearMissCriteria,
+      ...(perception ? { perception } : {}),
     });
 
     // --- arrival: the criticality that makes the scenario a scenario --------
@@ -3438,6 +3763,47 @@ function parseActor(value: unknown): SimActor {
   return parsed.value.actors[0] as SimActor;
 }
 
+/**
+ * Actor and sensor ids a lowered interaction's `detected()` leaves reference.
+ *
+ * Walks the already-lowered engine condition shape, which is one level of
+ * `and`/`or`/`not` over leaves by contract, so this needs no recursion.
+ */
+function detectedReferences(record: { trigger?: unknown; until?: unknown }): {
+  actors: string[];
+  sensorsByObserver: Map<string, string[]>;
+} {
+  const actors: string[] = [];
+  const sensorsByObserver = new Map<string, string[]>();
+  const roots: unknown[] = [];
+  const trigger = record.trigger as { kind?: string; condition?: unknown } | undefined;
+  if (trigger?.kind === 'when') roots.push(trigger.condition);
+  if (record.until !== undefined) roots.push(record.until);
+  for (const root of roots) {
+    const node = root as { kind?: string; of?: unknown } | undefined;
+    if (!node) continue;
+    const leaves: unknown[] = node.kind === 'and' || node.kind === 'or'
+      ? (node.of as unknown[]) ?? []
+      : node.kind === 'not'
+        ? [node.of]
+        : [node];
+    for (const raw of leaves) {
+      const leaf = raw as { kind?: string; a?: string; by?: string; sensor?: string } | undefined;
+      if (leaf?.kind !== 'detected') continue;
+      if (typeof leaf.a === 'string') actors.push(leaf.a);
+      if (typeof leaf.by === 'string') {
+        actors.push(leaf.by);
+        // A probe observer must own a sensor, otherwise the loud "declares no
+        // sensors" check fires on a world this function invented.
+        const ids = sensorsByObserver.get(leaf.by) ?? [];
+        ids.push(typeof leaf.sensor === 'string' ? leaf.sensor : `${leaf.by}-probe-sensor`);
+        sensorsByObserver.set(leaf.by, [...new Set(ids)].sort());
+      }
+    }
+  }
+  return { actors, sensorsByObserver };
+}
+
 function parseInteraction(value: unknown): SimInteraction {
   const record = value as {
     id?: string;
@@ -3470,16 +3836,34 @@ function parseInteraction(value: unknown): SimInteraction {
           },
         ];
 
+  // Same class of bug as the `after()` one above, for the same reason:
+  // `detected()` resolves its observer, its target and the observer's sensor at
+  // *scenario* level, so inside a one-actor probe every perception trigger
+  // would fail with "unknown actor" / "declares no sensors" and the whole
+  // condition kind would be unreachable through `uniscenarios`. The probe
+  // carries a stub for whatever the condition names, including a sensor on any
+  // actor used as an observer.
+  const perceptionRefs = detectedReferences(record as { trigger?: unknown; until?: unknown });
+  const probeActor = (id: string, sensorIds: readonly string[]) => ({
+    id,
+    kind: 'vehicle' as const,
+    dims: { l: 4, w: 2, h: 1.5 },
+    initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+    behavior: { route: { kind: 'polyline' as const, points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
+    ...(sensorIds.length > 0
+      ? {
+          sensors: sensorIds.map((sensorId) => ({
+            id: sensorId,
+            type: 'dash_camera' as const,
+            mount: { position: { x: 0, y: 1, z: 0 } },
+          })),
+        }
+      : {}),
+  });
+  const probeIds = [...new Set([actorId, ...perceptionRefs.actors])].sort();
+
   const parsed = safeParseSimScenarioInput({
-    actors: [
-      {
-        id: actorId,
-        kind: 'vehicle',
-        dims: { l: 4, w: 2, h: 1.5 },
-        initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
-        behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] } },
-      },
-    ],
+    actors: probeIds.map((id) => probeActor(id, perceptionRefs.sensorsByObserver.get(id) ?? [])),
     interactions: [...stubs, value],
   });
   if (!parsed.ok) {
@@ -3531,7 +3915,10 @@ export function mapSetKey(key: string): string | null {
     default:
       break;
   }
-  if (/^(lights|doors|pose|env|audio)\.[A-Za-z0-9_]+$/.test(key)) return key;
+  // `motion.gear` is a controller switch, not recorded state: the engine reads
+  // it to select forward or reverse. It rides the same passthrough because the
+  // key name is identical on both sides of the boundary.
+  if (/^(motion|lights|doors|pose|env|audio)\.[A-Za-z0-9_]+$/.test(key)) return key;
   if (/^signal:[A-Za-z0-9._:@/-]+\.phase$/.test(key)) return key;
   if (/^control:[A-Za-z0-9._:@/-]+\.indication$/.test(key)) return key;
   return null;

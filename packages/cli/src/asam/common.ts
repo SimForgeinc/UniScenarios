@@ -49,6 +49,12 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
     operationalConditions: replay
       ? decision('derived', 'approximate', 'effects are baked into sampled motion but weather/time/traffic intent is not editable')
       : decision('omitted', 'none', 'this profile does not emit environment/weather/traffic declarations'),
+    // Localised surface patches (ice/water/gravel over a bounded region) have no ASAM equivalent:
+    // OpenSCENARIO road conditions are scene-wide, so a per-region friction field cannot be expressed
+    // without silently promoting it to the whole scene, which would change the scenario.
+    surfacePatches: replay
+      ? decision('derived', 'approximate', 'reduced-grip regions are baked into the sampled motion, but the patch geometry and its friction field are not recoverable from the trajectory')
+      : decision('omitted', 'none', 'ASAM road conditions are scene-wide; a bounded low-grip region has no portable equivalent and promoting it to the whole scene would alter the scenario'),
     metricSubject: decision('omitted', 'none', 'UniScenarios metric evaluation is outside the exported execution model'),
     actors: replay
       ? decision('derived', 'approximate', 'identity and geometry are preserved; motion is a sampled simulation trace')
@@ -66,6 +72,14 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
     occluders: decision('preserved', 'approximate', 'exported as stationary bounding-box objects without catalog appearance'),
     occlusionPairs: decision('omitted', 'none', 'line-of-sight evaluation pairs are not an ASAM execution concept'),
     nearMissCriteria: decision('extension', 'metadata-only', 'executable triggers/trajectories are standard; exact OBB-clearance acceptance is retained in UniScenarios Properties'),
+    // OpenSCENARIO can state fog visual range, precipitation and sun position,
+    // but it has no portable notion of *whether a sensor reported an actor*.
+    // Replaying a trace bakes the late reaction into the trajectory; the reason
+    // for it does not survive, so the declaration is retained as provenance
+    // rather than claimed as executable behaviour.
+    perception: replay
+      ? decision('derived', 'approximate', 'sensor-driven reactions are baked into the sampled trajectories; the detection channel and its causes are retained only as UniScenarios provenance')
+      : decision('extension', 'metadata-only', 'sensor mounts, detection thresholds and declared map/percept divergence are retained in UniScenarios Properties; ASAM has no portable sensor-detection execution model'),
   } satisfies Record<keyof SimScenarioInput, CapabilityDecision>;
 }
 
@@ -80,6 +94,7 @@ function fieldHasMaterialValue(input: SimScenarioInput, path: keyof SimScenarioI
     case 'occluders': return input.occluders.length > 0;
     case 'occlusionPairs': return input.occlusionPairs.length > 0;
     case 'nearMissCriteria': return (input.nearMissCriteria?.length ?? 0) > 0;
+    case 'perception': return input.perception !== undefined;
     default: return true;
   }
 }

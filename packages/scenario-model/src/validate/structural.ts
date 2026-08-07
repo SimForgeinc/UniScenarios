@@ -579,6 +579,22 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
           needRole(leaf.of, joinPath(leafPath, 'of'));
           needRole(leaf.to, joinPath(leafPath, 'to'));
           break;
+        case 'detected': {
+          needRole(leaf.of, joinPath(leafPath, 'of'));
+          needRole(leaf.by, joinPath(leafPath, 'by'));
+          // A sensor that nothing consumes is worse than no sensor at all, so
+          // every reference here is checked rather than silently ignored.
+          const observer = roles.get(leaf.by);
+          if (observer && observer.actor.sensors.length === 0) {
+            out.push(issue('error', 'sensor_ref_unknown', joinPath(leafPath, 'by'),
+              `role "${leaf.by}" declares no sensors, so it can never detect anything`));
+          } else if (observer && leaf.sensor !== undefined
+            && !observer.actor.sensors.some((sensor) => sensor.id === leaf.sensor)) {
+            out.push(issue('error', 'sensor_ref_unknown', joinPath(leafPath, 'sensor'),
+              `role "${leaf.by}" has no sensor with id "${leaf.sensor}"`));
+          }
+          break;
+        }
         case 'collision':
           needRole(leaf.of, joinPath(leafPath, 'of'));
           if (leaf.with !== 'any') needRole(leaf.with, joinPath(leafPath, 'with'));
@@ -615,6 +631,38 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
       }
       if ('syncWith' in invariant) needRole(invariant.syncWith, joinPath(base, 'syncWith'));
       if ('at' in invariant) checkPointRef(invariant.at, joinPath(base, 'at'));
+    }
+    // Perception invariants carry references the generic role check cannot
+    // see. An invariant that silently grades nothing is the failure mode this
+    // whole layer exists to prevent, so each one is resolved here.
+    if (
+      invariant.kind === 'detection_gap'
+      || invariant.kind === 'time_to_first_detection'
+      || invariant.kind === 'perception_lag'
+    ) {
+      const observer = roles.get(invariant.of);
+      if (observer && observer.actor.sensors.length === 0) {
+        out.push(issue('error', 'sensor_ref_unknown', joinPath(base, 'of'),
+          `role "${invariant.of}" declares no sensors, so there is no detection to grade`));
+      } else if (observer && invariant.sensor !== undefined
+        && !observer.actor.sensors.some((sensor) => sensor.id === invariant.sensor)) {
+        out.push(issue('error', 'sensor_ref_unknown', joinPath(base, 'sensor'),
+          `role "${invariant.of}" has no sensor with id "${invariant.sensor}"`));
+      }
+    }
+    if (invariant.kind === 'map_divergence'
+      && !template.perception.mapDivergences.some((entry) => entry.id === invariant.divergence)) {
+      out.push(issue('error', 'divergence_ref_unknown', joinPath(base, 'divergence'),
+        `no perception.mapDivergences entry with id "${invariant.divergence}"`));
+    }
+  });
+
+  // --- declared map/percept divergence --------------------------------------
+  template.perception.mapDivergences.forEach((divergence, index) => {
+    const base = joinPath('perception', 'mapDivergences', index);
+    divergence.observers.forEach((role, i) => needRole(role, joinPath(base, 'observers', i)));
+    if (divergence.extent.kind === 'aroundRole') {
+      needRole(divergence.extent.role, joinPath(base, 'extent', 'role'));
     }
   });
 

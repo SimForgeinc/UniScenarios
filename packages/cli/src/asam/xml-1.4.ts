@@ -496,6 +496,12 @@ function leafCondition(resolved: ResolvedAsamScenario, condition: Condition): Le
       return { triggeringActor: actor(condition.a), xml: `<CollisionCondition><EntityRef entityRef="${xml(actor(condition.b))}"/></CollisionCondition>` };
     case 'reaches':
     case 'visible':
+    // `detected` is a PERCEPTION predicate: whether a sensor on the observer currently detects the
+    // target, given fog attenuation, glare, range and field of view. ASAM has no sensor model, so
+    // there is nothing to map it onto -- and silently degrading it to `visible` would export a
+    // geometric line-of-sight test in place of a detection test, turning a perception scenario into
+    // an occlusion one. Refuse it instead.
+    case 'detected':
     case 'and':
     case 'or':
     case 'not':
@@ -899,11 +905,17 @@ function signalSemantics(
     case 'yellow_arrow':
       return 'attention_stop';
     case 'flashing_yellow':
+    // A flashing yellow ARROW is the permissive-left indication: proceed after yielding, which is
+    // the same advisory semantics as a flashing yellow head.
+    case 'flashing_yellow_arrow':
       return 'caution';
     case 'off':
       return 'fallback';
     case 'red':
     case 'flashing_red':
+    // A flashing red ARROW is stop-and-proceed, carrying the same stop authority as a flashing red
+    // head; ASAM has no stop-and-proceed distinction, so both map to `stop`.
+    case 'flashing_red_arrow':
     case 'red_x':
     case 'stop':
       return 'stop';

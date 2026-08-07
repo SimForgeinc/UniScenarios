@@ -473,7 +473,7 @@ describe('the set-key registry', () => {
     const namespaces = new Set(
       SET_KEY_REGISTRY.map((d) => d.key.startsWith('signal:') ? 'signal' : d.key.startsWith('control:') ? 'control' : d.key.split('.')[0]),
     );
-    expect([...namespaces].sort()).toEqual(['audio', 'control', 'doors', 'env', 'lights', 'pose', 'rules', 'signal']);
+    expect([...namespaces].sort()).toEqual(['audio', 'control', 'doors', 'env', 'lights', 'motion', 'pose', 'rules', 'signal']);
   });
 
   it('ships the make-or-break switch', () => {

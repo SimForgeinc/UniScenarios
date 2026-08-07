@@ -111,7 +111,12 @@ describe('signal compliance', () => {
     expect(phaseForbidsEntry('green_arrow')).toBe(false);
     expect(phaseForbidsEntry('proceed')).toBe(false);
     expect(phaseForbidsEntry('flashing_yellow')).toBe(false);
-    expect(phaseForbidsEntry('off')).toBe(false);
+    // `off` used to be listed permissive here, which said a dark head means
+    // "proceed". It does not: a blackout resolves to `stop` AUTHORITY in
+    // `SignalBook.authorityAt` before this predicate is consulted, and leaving
+    // it permissive here as well would let whichever check ran first wave a
+    // dark head through. See DEFECT-signal-authority.md.
+    expect(phaseForbidsEntry('off')).toBe(true);
     expect(phaseForbidsEntry('red_x')).toBe(true);
     expect(phaseForbidsEntry('stop')).toBe(true);
   });
@@ -144,15 +149,34 @@ describe('signal compliance', () => {
     expect(second.events).toEqual(first.events);
   });
 
-  it('treats a dark failed normal signal as uncontrolled', () => {
+  it('treats a dark failed normal signal as an all-way stop, then releases it', () => {
+    // This test used to be called "…as uncontrolled" and asserted only that the
+    // ego ended up past the line, which a stop-and-release also satisfies. The
+    // law is that a dark head reverts the junction to an all-way stop, so the
+    // standstill is the assertion that matters.
     const base = signalScenario(true);
     const input = parseSimScenarioInput({
       ...base,
       signalPrograms: [{ ...base.signalPrograms[0]!, phases: [{ phase: 'off', durationS: 120 }] }],
     });
     const { trace } = runSimulation(input, { graph });
+    expect(Math.min(...trace.ticks.actors['ego']!.speedMps)).toBeLessThanOrEqual(0.05);
     expect(trace.ticks.actors['ego']!.x.at(-1)).toBeGreaterThan(STOP_LINE_S);
     expect(trace.ticks.signals?.['sig-main']?.phase.at(-1)).toBe('off');
+  });
+
+  it('honours an authored blackout that is genuinely uncontrolled', () => {
+    const base = signalScenario(true);
+    const input = parseSimScenarioInput({
+      ...base,
+      signalPrograms: [{
+        ...base.signalPrograms[0]!,
+        phases: [{ phase: 'off', durationS: 120 }],
+        darkFallback: 'uncontrolled',
+      }],
+    });
+    const { trace } = runSimulation(input, { graph });
+    expect(Math.min(...trace.ticks.actors['ego']!.speedMps)).toBeGreaterThan(5);
   });
 
   it('stops, dwells continuously, and releases once at a static stop control', () => {
