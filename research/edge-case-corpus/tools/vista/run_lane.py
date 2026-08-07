@@ -1,5 +1,5 @@
 """Run the authoring loop over a set of briefs, in parallel, and collect the results."""
-import os, sys, json, time, argparse, traceback
+import os, sys, json, time, argparse, traceback, signal
 from concurrent.futures import ProcessPoolExecutor, as_completed
 
 import author, gate
@@ -49,6 +49,7 @@ def run(briefs, mode, root, workers=3, max_iters=4, use_critic=False):
     out = []
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=workers) as ex:
+        _install_pool_guard(ex)
         futs = {ex.submit(_one, j): j for j in jobs}
         for f in as_completed(futs):
             out.append(f.result())
@@ -77,7 +78,37 @@ def run(briefs, mode, root, workers=3, max_iters=4, use_critic=False):
     return summary
 
 
+def _own_process_group():
+    """Become a process-group leader so the whole worker pool can be killed as one unit.
+
+    `pkill -f run_lane.py` kills only the parent; ProcessPoolExecutor children are reparented to init
+    and keep running. Measured: 31 orphans accumulated across restarts, the oldest 19h15m old, still
+    holding CPU AND still writing into output directories that had since been deleted and recreated --
+    which is what produced the FileNotFoundError on freshly written trace files.
+    Kill a whole run with:  kill -TERM -<pid-of-run_lane>
+    """
+    try:
+        os.setpgrp()
+    except Exception:                                             # noqa: BLE001
+        pass
+
+
+def _install_pool_guard(ex):
+    """Make SIGTERM/SIGINT tear the pool down instead of orphaning it."""
+    def _bye(signum, _frame):
+        try:
+            ex.shutdown(wait=False, cancel_futures=True)
+        finally:
+            os.killpg(os.getpgrp(), signal.SIGKILL)
+    for s in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(s, _bye)
+        except Exception:                                         # noqa: BLE001
+            pass
+
+
 if __name__ == '__main__':
+    _own_process_group()
     ap = argparse.ArgumentParser()
     ap.add_argument('--split', default='DEV')
     ap.add_argument('--mode', default='sight')
