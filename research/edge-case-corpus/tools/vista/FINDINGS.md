@@ -911,3 +911,70 @@ occurred, and coarse timing.
   it** (2 cells of 1,642). Q2 is left alone.
 - **No vehicle in this engine can reverse** (1 body in 1,642 moved >0.8 m backwards), so briefs naming
   a reversing manoeuvre are unbuildable and are now filtered at generation.
+
+---
+
+## 23. The capability workstream: what was actually missing, and what only looked missing
+
+I dispatched five parallel agents to implement the functionality that a user-supplied list of 67
+edge-case topics could not express. The headline result is not the code. It is this:
+
+**Four of five gaps turned out to be capabilities that already existed and were unreachable.**
+
+| gap | what I claimed | what was true |
+|---|---|---|
+| reverse | "no vehicle can reverse" (1 body in 1,642 moved >0.8 m backwards) | reverse works under `kinematic-v1`; under `dynamic-v1`, **the default**, the body detaches from its route entirely — `s` pinned at 0.0001 m and `laneRsl` null for all 601 ticks across 30/30 cells, all rejected `no_interaction`. Authoring is via `role.extensions.motionSemantics`, a `z.record(z.string(), z.unknown())` field absent from all three published JSON Schemas, so no LLM author can discover it |
+| catalog | "no animal id, no debris, no traffic furniture" | the entire construction and debris inventory already existed — `construction.jersey_barrier`, `hazard.tire_debris`, `street.shopping_cart` — under names no author reaches for. Only `animal.*`, `hazard.ladder`, `hazard.mattress` were genuinely absent |
+| sensors | "no sensor model" | correct, and worse: `sensors` is **silently stripped** by `parseSimScenarioInput`, so a template can declare them, validate clean, and simulate as if it never said anything |
+| signals | "no blackout or flashing arrow" | correct, plus a live defect: `phaseForbidsEntry` classified a dark signal (`off`) as **PERMISSIVE**. Every scenario ever run with a blackout had the ego drive straight through at speed; the law is an all-way stop. `flashing_red` was treated as a solid red — wrong in the opposite direction |
+| lanes | "87.8% of sections are single-lane, so cut-ins are unbuildable" | **a group-counting artifact of mine.** See below |
+
+### The single-lane claim was wrong, and it was steering the authoring
+I counted *groups*, where a group is a `(road, laneSection, side)` row on roads averaging ~13 m. That
+denominator is close to meaningless. Measured properly:
+
+- **30.1%** of driving lanes sit in a corridor two or more lanes wide
+- **22.9%** of matchable corridors have `throughLanesSameDir >= 2`, on **all five maps**
+- a template requiring `[2, 8]` matches **23 sites across 4 maps at verdict `exact`, on unmodified code**
+
+So multi-lane cut-ins, zipper merges and lane splitting were buildable the whole time.
+
+**And the real defect was found in the process.** `pose.laneOffset` is SILENTLY DISCARDED for
+`on_reference` roles in `adapt.ts`; `relative_to` `dLane` clamps unconditionally; `framePosePoint`
+falls back to the reference lane with only a note. `template validate` reports ok in every case. So
+when this document told authors to "start in the adjacent lane", they wrote the natural thing —
+`kind:"on_reference"` with `pose.laneOffset:-1` — it was thrown away, and the actor spawned in the
+ego's own lane and sat there. That is exactly the tripled spawned-already-in-lane defect and the
+measured **0.521 -> 0.238** collapse in true incursion rate. The one binding that works,
+`kind:"lane_offset"`, is the one an author is least likely to reach for.
+
+### The pattern worth generalising
+Of five gaps, one was a genuine absence (a sensor model), one was half-absent (animal models), and
+three were **discoverability or default-path failures**. In every one of those three the capability
+existed, was reachable only through an undocumented or non-default path, and failed silently when
+reached the obvious way. That is a far more dangerous failure mode than a missing feature, because a
+missing feature announces itself and a silent fallback does not: the scenario still validates, still
+simulates, still passes the gate, and is simply not what it claims to be.
+
+The authoring surface has been corrected accordingly: it now exposes **54 catalog ids and 26 aliases**
+instead of 18, names `kind:"lane_offset"` as the binding that carries a lane offset, and no longer
+tells authors that adjacent lanes do not exist.
+
+### Two engine defects recorded independently of the feature work
+- `newcaps/DEFECT-signal-authority.md` — blackout classified permissive; `flashing_red` as solid red.
+- `newcaps/DEFECT-reverse-route-detachment.md` — `dynamic-v1` computes `trackingYaw = yaw + PI` while
+  the actor is registered with the authored pose heading equal to the route tangent rather than
+  tangent + PI, so tracking starts 180 degrees wrong and steering saturates. The two physics backends
+  disagree about what a route means for a reversing actor.
+
+Both would have produced confidently mislabelled training data, and neither is visible from any metric
+the gate reads.
+
+### Delivered so far
+- `caps-catalog` — 22/22 green. `animal.deer` is 1.76 x 0.46 x 1.62 (a deer, not a human); aliases
+  resolve to real footprints; `construction.pedestrian_barrier` no longer materialises as a 1 m cube;
+  and **class/catalog agreement is now enforced for every class**, so the live defect I captured —
+  a role tagged `class:animal` filled with `pedestrian.adult_walking` — is a hard error.
+- `caps-surface` — 11/11 and 5/5 green. Localised surface patches with taper, overlap resolution and
+  no grip leakage into neighbouring lanes, so "black ice on the bend" no longer means making the whole
+  world slippery. Signal blackout and flashing arrows with correct right-of-way.
