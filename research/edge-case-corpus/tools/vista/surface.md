@@ -318,3 +318,27 @@ under the survivable-band rule above, and expect the ego to steer or stop.
 **0.5-4 m** of true clearance at the closest point. If you are getting collisions, the challenger is
 being placed into the ego's path with no room, or `rules.collisionAvoidance:false` has been set on an
 actor that needed it.
+
+
+13. **A scenario that only touches at the very end is not the scenario you described.**
+    Measured failure: a brief asking for a van *travelling alongside the ego and repeatedly wandering
+    over the lane line* produced a clip where the van sat far ahead in another lane for 9 of 13 seconds
+    and only came near the ego in the final frame. It passed the physical gate and an independent
+    reviewer rejected it, correctly.
+    Whenever the brief says **alongside, following, being followed, repeatedly, weaving, hesitating,
+    tailgating, filtering, or over and over**, the two actors must be CO-TRAVELLING for most of the
+    clip, not converging once at the end:
+      - bind the challenger `relative_to` the ego with a SMALL `dsM` (roughly -15..+15 m) and
+        `dLane` of -1 or +1 for an adjacent-lane companion, or `dLane` 0 for a lead/follower;
+      - give it an `initialSpeedKph` close to the ego's, so the pair stays together instead of one
+        running away from the other. A 10 kph difference separates them by 28 m over a 10 s clip;
+      - remember the warm-up closes the gap by `warmupSeconds * (v_ego - v_other)` before recording
+        even starts;
+      - then make the BEHAVIOUR the event: repeated `laneOffset` excursions, a `changeLane` and back,
+        a `speed` drop and recovery. Repetition needs at least two triggered excursions, not one.
+    A single late convergence reads as "a vehicle appeared near the ego", which is not an edge case and
+    will be rejected as not realising the brief.
+
+14. **The event must be visible for long enough to be seen.** If the whole interaction occupies the
+    last half-second of the clip, nothing can verify it. Aim for the conflict to develop over 2-5 s,
+    somewhere in the middle of the clip, with the ego still driving afterwards.
