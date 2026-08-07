@@ -26,8 +26,9 @@ Sight was genuinely exercised — 23/32 briefs saw at least one rollout render, 
 is a real test of the hypothesis, not a harness that failed to show the picture.
 
 **The biggest single result is not about sight at all.** The process is stochastic, and resampling it
-is worth more than anything else measured here: across four DEV runs, **21 of 32 briefs (0.656) were
-admitted at least once**, against a best single-run rate of 0.469 — and the scenarios that resampling
+is worth more than anything else measured here: across the first four DEV runs, **21 of 32 briefs (0.656) were
+admitted at least once** (24/32 = 0.750 over all five DEV runs re-scored in §16), against a best
+single-run rate of 0.469 — and the scenarios that resampling
 buys are **no worse** than the ones it finds reliably (0.476 vs 0.451 judged-good, p = 1.0).
 
 ---
@@ -631,14 +632,32 @@ Run in-loop over DEV (blind arm, 32 briefs):
 | critic **vetoed** | 4/8 = 0.500 |
 | final admitted (gate **and** critic) | 4/32 = 0.125 |
 
-**The critic rejects half of everything the frozen gate admits.** Applied to the full 60-scenario
-corpus: **19/60 = 0.317 intent-verified**, of which
-**10** also clear the physics quality gate, across 11 categories.
+**The critic rejected half of what the frozen gate admitted — but on n = 8 briefs**, Wilson 95% CI
+(0.215, 0.785). That interval is far too wide to quote 0.50 as a point estimate; the defensible claim is
+that a large fraction fails, not that it is exactly half. Applied to the full 60-scenario corpus:
+**19/60 = 0.317 intent-verified**, of which **10** also clear the physics quality gate, across 11
+categories.
 
-Three independent instruments converge on the same number: my critic vetoes 0.50, the evaluation lane's
-judge rejects 0.45–0.60, and **the lane-1 baseline's own blind judge scored category agreement at
-0.517**. That last agreement is worth stating plainly: *the baseline's 29 archetypes were very likely
-subject to the same ~50% intent failure, and were simply never checked for it.*
+**Two independent intent checks, built from different evidence, both find a large intent-failure rate
+that the gate cannot see** — but they are not the same number and should not be pooled as one:
+
+| instrument | unit | rate | 95% CI |
+|---|---|---|---|
+| this lane's critic | brief-level, n = 8 | 0.500 | (0.215, 0.785) |
+| evaluation lane's judge, intent-specific only | cell-level, n = 252 | 0.302 | (0.248, 0.361) |
+
+Fisher exact p = 0.255 — **consistent, not identical, and both intervals are wide.** The judge's
+headline 0.45–0.60 is a *five-dimension* rejection rate; decomposing it, 0.302 is intent-specific
+(intent-not-realised + invalid) and a further 0.234 is novelty/boredom, which has nothing to do with
+intent. Only the 0.302 is comparable to my critic.
+
+**The lane-1 baseline's 0.517 is deliberately excluded from that comparison.** It is *category
+agreement* — whether a judge assigns the same taxonomy label — and a scenario can realise its brief
+perfectly while being labelled C7 instead of C5, or vice versa. It is context, not a third intent check.
+
+So the supportable statement about the baseline is the weaker one: *its 29 archetypes were never
+intent-checked, and on this evidence a substantial fraction would fail such a check.* The specific
+figure of ~50% is **not** supported.
 
 ### What the critic actually catches
 Verbatim, and these are errors no trajectory statistic can see:
@@ -659,10 +678,19 @@ into and blocking the ego lane"*), the critic's specific complaint was fed back 
 instruction, and the re-authored version was accepted 2/2 at the final expansion. The critic is not only
 a filter; its feedback is actionable in a way the gate's numbers are not.
 
-### The cost
-Admission falls from ~0.40 to 0.125 in a single run. That is the correct direction — it is not a
-capability regression but the removal of scenarios that were never valid — but it means an
-intent-verified corpus needs **best-of-N on top of the critic**, not instead of it.
+### The cost, split so the critic is not blamed for more than it did
+Two separate drops are easy to conflate:
+
+| step | rate | attributable to |
+|---|---|---|
+| run-2 blind arm, gate-admitted | 0.469 | — |
+| critic-in-loop run, gate-admitted **before any veto** | 0.250 | run-to-run variation, **plus** possibly the critic's feedback changing what the author attempts |
+| after the critic's veto | 0.125 | **the veto itself** |
+
+**Only the 0.250 → 0.125 step is the critic.** The first drop is not cleanly attributable and should not
+be charged to it. The veto is the correct direction — it removes scenarios that were never valid rather
+than degrading capability — but it means an intent-verified corpus needs **best-of-N on top of the
+critic**, not instead of it.
 
 ## 19. Final state of the corpus
 
@@ -673,6 +701,43 @@ intent-verified corpus needs **best-of-N on top of the critic**, not instead of 
 | \+ intent verified by the critic | **10–19** | a second agent confirms the brief's mechanism is on screen |
 
 **The honest headline: 54 candidate archetypes at a generalisation gap of −0.037, of which 24 clear a
-strictly tighter quality gate and 19 are confirmed to contain the event they claim —
-against a single-attempt baseline of 29 that was never intent-checked and whose own judge put category
-agreement at 0.517.**
+strictly tighter quality gate and 10 of those are also confirmed by an independent critic to contain
+the event they claim — against a single-attempt baseline of 29 that was never intent-checked at all.**
+
+Separately, and on a different denominator: **19 of the 60 scenarios produced across all runs were
+intent-verified** by the critic, 10 of them also clearing the quality gate. The nested chain is
+54 → 24 → 10; the 19 is not a subset of the 24 and must not be quoted as though it were.
+
+---
+
+## 20. Method note: how the errors in this study were actually caught
+
+Both lanes shipped wrong results and then corrected them. The corrections came from one mechanism, and
+it is the most transferable thing here.
+
+**Errors this lane published and then had to fix:**
+- a headline pairing an N = 5 count with an N = 2 generalisation gap, breaking a rule stated two
+  sections earlier in the same document;
+- three different corpus counts (54 / 57 / 60) in one report;
+- `Q7` failing *open*, so a quality clause silently disabled itself and inflated the rate it was meant
+  to protect;
+- a headline nesting error implying 19 intent-verified scenarios were a subset of the 24 quality-gated
+  ones, when only 10 are;
+- pooling three rejection rates that measure three different things as "convergence".
+
+**Errors the evaluation lane published and then retracted:**
+- a `PROXIMITY_IS_NOT_THE_CONFLICT` headline firing on 28/28 cells, which was a bearing test rather
+  than a path test — its own bug;
+- nearly reporting this lane's `Q7` as broken when it was the reviewer's own import that was disabled;
+- a report generator printing a directional claim backwards.
+
+**Not one of these was caught by careful reading.** Every one was caught by *measuring the same thing
+twice by different means and treating the disagreement as a bug until proven otherwise*: OBB clearance
+against three implementations and the engine's own invariant; admission re-derived from raw traces by
+both lanes independently; the Q layer checked against an LLM judge sharing no code with it; conflict
+geometry measured by bearing and then by all-pairs path separation.
+
+The corollary, in the reviewer's words, is that **an adversarial reviewer has to be adversarial toward
+its own instruments first** — and the specific tell worth internalising is that *a flag which fires on
+everything is an alarm about the flag, not a finding.* Both lanes hit that exact failure, in opposite
+directions, within a day of each other.
