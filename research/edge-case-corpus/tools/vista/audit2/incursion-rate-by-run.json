@@ -15,21 +15,6 @@
   }
  },
  {
-  "run": "vista-gen4-blind",
-  "nCells": 118,
-  "trueIncursionRate": 0.5763,
-  "ci95": [
-   0.4861,
-   0.6616
-  ],
-  "counts": {
-   "incursion": 68,
-   "static_outside": 6,
-   "targeting_defect": 24,
-   "placement_defect": 20
-  }
- },
- {
   "run": "vista-gen5-blind",
   "nCells": 147,
   "trueIncursionRate": 0.2381,
@@ -42,6 +27,21 @@
    "placement_defect": 59,
    "static_outside": 16,
    "incursion": 35
+  }
+ },
+ {
+  "run": "vista-gen6-blind",
+  "nCells": 136,
+  "trueIncursionRate": 0.5147,
+  "ci95": [
+   0.4315,
+   0.5971
+  ],
+  "counts": {
+   "placement_defect": 36,
+   "incursion": 70,
+   "targeting_defect": 17,
+   "static_outside": 13
   }
  }
 ]
