@@ -291,6 +291,58 @@ def report(S, B, sj, bj, out_dir, n_cells):
     p()
 
     # ---------------- difficulty
+    # ---------------- 4b: controlling the confound
+    p('## 4b. Controlling the category-mix confound')
+    p()
+    p('   Pooled quality in section 2 compares different sets of briefs: the two modes did not admit')
+    p('   the same ones. Two controls, in increasing order of strictness.')
+    p()
+    scat = {r.get('category') for r in sok}
+    bcat = {r.get('category') for r in bok}
+    both_c = sorted(c for c in scat & bcat if c)
+    p(f'   (i) CATEGORY-MATCHED -- restricted to categories BOTH modes admitted: {both_c}')
+    sm = [r for r in sok if r.get('category') in both_c]
+    bm = [r for r in bok if r.get('category') in both_c]
+    if sm and bm:
+        gsm = sum(1 for r in sm if r['verdict'] in GOOD)
+        gbm = sum(1 for r in bm if r['verdict'] in GOOD)
+        p(f'       sight {gsm}/{len(sm)} = {gsm/len(sm):.3f}   blind {gbm}/{len(bm)} = '
+          f'{gbm/len(bm):.3f}   Fisher exact p = '
+          f'{fisher_2x2(gsm, len(sm)-gsm, gbm, len(bm)-gbm)}')
+        p(f'       mean difficulty  sight '
+          f'{statistics.mean(r["difficultyMeasured"]["score"] for r in sm):.1f}   blind '
+          f'{statistics.mean(r["difficultyMeasured"]["score"] for r in bm):.1f}')
+    for nm, js, only in (('sight', sok, sorted(c for c in scat - bcat if c)),
+                         ('blind', bok, sorted(c for c in bcat - scat if c))):
+        sel = [r for r in js if r.get('category') in only]
+        if sel:
+            g = sum(1 for r in sel if r['verdict'] in GOOD)
+            p(f'       {nm}-ONLY categories {only}: {g}/{len(sel)} good '
+              f'({g/len(sel):.3f}) -- this block is what the pooled number is really comparing')
+    p()
+    sb_ = {r['briefId'] for r in sok}; bb_ = {r['briefId'] for r in bok}
+    paired = sorted(sb_ & bb_)
+    p(f'   (ii) PAIRED -- the {len(paired)} briefs BOTH modes admitted. Same sentence, same gate,')
+    p('        same surface hash. This is the cleanest available comparison.')
+    if paired:
+        p(f"        {'briefId':26s} {'category':22s} | {'sight':>9s} {'diff':>6s} | "
+          f"{'blind':>9s} {'diff':>6s}")
+        ps = pn = qs = qn = 0
+        for bid in paired:
+            s_ = [r for r in sok if r['briefId'] == bid]
+            b_ = [r for r in bok if r['briefId'] == bid]
+            g1 = sum(1 for r in s_ if r['verdict'] in GOOD)
+            g2 = sum(1 for r in b_ if r['verdict'] in GOOD)
+            d1 = statistics.mean(r['difficultyMeasured']['score'] for r in s_)
+            d2 = statistics.mean(r['difficultyMeasured']['score'] for r in b_)
+            ps += g1; pn += len(s_); qs += g2; qn += len(b_)
+            p(f"        {bid:26s} {str(s_[0].get('category')):22s} | {g1:4d}/{len(s_):<4d} "
+              f"{d1:6.1f} | {g2:4d}/{len(b_):<4d} {d2:6.1f}")
+        if pn and qn:
+            p(f'        PAIRED TOTAL  sight {ps}/{pn} = {ps/pn:.3f}   blind {qs}/{qn} = '
+              f'{qs/qn:.3f}   Fisher exact p = {fisher_2x2(ps, pn-ps, qs, qn-qs)}')
+    p()
+
     p('## 5. Measured difficulty (trajectory-derived; the authoring surface cannot reach it)')
     p()
     for name, js in (('sight', sok), ('blind', bok)):
@@ -338,14 +390,29 @@ def report(S, B, sj, bj, out_dir, n_cells):
         p(f'           sight {afs} x {sg:.3f} = {afs*sg:.2f}')
         p(f'           blind {afb} x {bg:.3f} = {afb*bg:.2f}')
         p()
-        if abs(sg - bg) < 0.10:
-            p('  READ: quality per admitted cell is comparable between modes. Any advantage is in')
-            p('        QUANTITY, not quality -- sight produced MORE, not BETTER.')
-        elif sg > bg:
-            p('  READ: sight admitted cells score higher AND (see above) may admit more.')
+        # The READ line must consider BOTH axes independently. An earlier version assumed the
+        # quantity direction, and printed "sight admits more" on a run where sight admitted FEWER.
+        more = 'more' if afs > afb else ('fewer' if afs < afb else 'the same number of')
+        qual = ('higher' if sg - bg > 0.10 else
+                'lower' if bg - sg > 0.10 else 'comparable')
+        p(f'  READ: sight admitted {more} briefs than blind, and the quality of its admitted cells is')
+        p(f'        {qual}.')
+        if qual == 'comparable' and more == 'the same number of':
+            p('        => no detectable difference on either axis.')
+        elif qual == 'comparable':
+            p(f'        => any difference is in QUANTITY only: sight produced {more.upper()}, '
+              f'not better or worse.')
+        elif more in ('fewer', 'the same number of') and qual == 'lower':
+            p('        => sight is worse on BOTH axes on this run.')
+        elif more == 'more' and qual == 'lower':
+            p('        => a quality/quantity trade: more scenarios, worse ones. This is the failure')
+            p('           mode this judge exists to detect.')
         else:
-            p('  READ: sight admits more but its admitted cells score LOWER -- a quality/quantity')
-            p('        trade, which is the failure mode this judge exists to detect.')
+            p('        => sight is better on quality; check whether the category mix explains it '
+              '(section 4b).')
+        p()
+        p('  BEFORE READING ANY POOLED QUALITY NUMBER, SEE SECTION 4b. Pooled quality compares')
+        p('  DIFFERENT SETS OF BRIEFS, because the two modes did not admit the same ones.')
     p()
 
     # ---------------- rejects and flags
