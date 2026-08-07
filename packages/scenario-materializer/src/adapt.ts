@@ -414,6 +414,23 @@ function adaptFeature(
   return out;
 }
 
+/**
+ * The lane index an authored role actually names, or 0.
+ *
+ * `lane_offset` states it as `k` and the schema says `pose.laneOffset` is
+ * ignored for that kind, so `k` wins there. Every other posed kind states it
+ * only through `pose.laneOffset`. `relative_to`, `on_crossing` and
+ * `in_parking_zone` carry no `FramePose` at all, and `scene_absolute`'s pose is
+ * in world coordinates rather than frame coordinates — neither has a lane index
+ * to read.
+ */
+function authoredLaneOffset(role: V2Role): number {
+  if (role.kind === 'lane_offset') return role.k;
+  if (role.kind === 'scene_absolute') return 0;
+  if (role.kind === 'conflicting_gate') return role.fallbackPose?.laneOffset ?? 0;
+  return 'pose' in role ? role.pose.laneOffset : 0;
+}
+
 function adaptRole(
   role: V2Role,
   template: ScenarioTemplateV2,
@@ -431,14 +448,55 @@ function adaptRole(
       : { requiredHeadingRelation: { ...role.requiredHeadingRelation } }),
   } as const;
 
+  // `pose.laneOffset` is part of every `FramePose`, so it is authorable on
+  // every posed role kind, but only `lane_offset` has somewhere to put it. It
+  // used to be dropped here in silence, which is the worst possible outcome:
+  // the document validates, the matcher binds `k = 0`, and the actor the author
+  // asked for "one lane over" spawns inside the reference actor. See
+  // `authoredLaneOffset`.
+  const authoredK = authoredLaneOffset(role);
+  if (authoredK !== 0 && role.kind !== 'on_reference' && role.kind !== 'lane_offset') {
+    // The remaining kinds resolve their lane structurally — from a gate, a
+    // taper, a crossing, a parking zone, the opposing carriageway. An offset
+    // cannot be applied on top of that without contradicting the binding, so
+    // say so rather than let the author believe it moved the actor.
+    notes.push({
+      path: `${path}.pose.laneOffset`,
+      reason:
+        `laneOffset ${authoredK} is not applied: a "${role.kind}" role's lane is resolved ` +
+        'structurally by the matcher; use kind "lane_offset" to name a lane index',
+    });
+  }
+
   switch (role.kind) {
-    case 'on_reference':
+    case 'on_reference': {
+      if (authoredK !== 0) {
+        // The author described a lane, not the reference lane. Carry it into
+        // the one binding that can express a lane index, and resolve it
+        // strictly: a site without that lane is the wrong site, not an excuse
+        // to re-park the actor.
+        notes.push({
+          path: `${path}.pose.laneOffset`,
+          reason:
+            `on_reference carries laneOffset ${authoredK}, which names a lane rather than the ` +
+            `reference lane; bound as lane_offset k=${authoredK} with onMissing: "fail"`,
+        });
+        return {
+          ...base,
+          kind: 'lane_offset',
+          k: authoredK,
+          onMissing: 'fail',
+          dsM: numberish(role.pose.s, scope, 0),
+          tFrac: numberish(role.pose.tFrac, scope, 0),
+        };
+      }
       return {
         ...base,
         kind: 'on_reference',
         dsM: numberish(role.pose.s, scope, 0),
         tFrac: numberish(role.pose.tFrac, scope, 0),
       };
+    }
     case 'lane_offset':
       return {
         ...base,
@@ -516,6 +574,12 @@ function adaptRole(
         kind: 'relative_to',
         ref: role.ref,
         dLane: role.dLane,
+        // v2 has no `onMissing` on this kind, so the adapter has to pick one,
+        // and the one thing it must not pick is the old silent clamp: on a
+        // one-lane corridor that resolves `dLane: -1` to the reference actor's
+        // own lane. A `required` actor whose lane is absent means the site is
+        // wrong; a non-required one is honestly absent rather than misplaced.
+        onMissing: role.essentiality === 'required' ? 'fail' : 'drop',
         dsM: numberish(role.dsM, scope, 0),
         tFrac: role.tFrac,
       };

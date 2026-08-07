@@ -984,3 +984,44 @@ the gate reads.
 - `caps-surface` — 11/11 and 5/5 green. Localised surface patches with taper, overlap resolution and
   no grip leakage into neighbouring lanes, so "black ice on the bend" no longer means making the whole
   world slippery. Signal blackout and flashing arrows with correct right-of-way.
+
+---
+
+## 24. Measured throughput on a clean machine, with the FP-0 validator
+
+Every earlier throughput figure in this document was taken on a compromised setup: up to 31 orphaned
+worker processes competing for CPU, a CLI that resolved `@uniscenarios/*` to the MAIN checkout rather
+than the worktree, and a JSON parser that silently discarded whole briefs. Those numbers are withdrawn.
+This one is measured end to end after all three were fixed.
+
+| stage | input | output | wall clock |
+|---|---|---|---|
+| author (6 workers, 2 runs x 84 generated briefs) | 168 briefs | 46 admitted templates | ~122 min |
+| intent-verify (`predicates` AND `critic@enh`, the FP-0 config) | 46 templates | **11 verified** | 458 s |
+| harvest (8 sites x 20 draws, 5 maps) | 11 templates | 8,420 simulated -> 407 training-grade -> **218 distinct** | 325 s |
+
+**218 distinct training-grade scenarios in 135 minutes = ~2,324 per day** at 6 workers.
+
+Every one of those 218 passes the frozen gate `1a08698e95fca4bc`, the Q1-Q8 physics quality layer, and
+an intent check requiring a mechanical trajectory validator and an independent vision critic to AGREE
+(audited precision 1.000, false-positive rate 0.000 on 49 negatives).
+
+### Where the time actually goes
+Simulation is free: 8,420 concrete scenarios in 325 s, and a standalone measurement put it at
+~25,000/hour on 4 workers. **93% of the wall clock is LLM authoring.** The scaling lever is therefore
+templates per hour, not cells per template — and cells per template saturates anyway, at roughly 50
+distinct behaviours before parameter draws stop producing new ones.
+
+### The honest bottleneck
+11 verified from 46 admitted is 24%. That is the conjunction doing its job: `predicates` alone runs at
+a 0.102 false-positive rate, which is corpus poisoning, and the AND buys precision 1.000 at the cost of
+recall. For a training corpus that is the right trade, because a false positive is permanent
+mislabelling and a false negative only costs yield — and yield is the cheap thing, since another 84
+briefs cost an hour of machine time and nothing else.
+
+### Delivered artifacts
+- `/tmp/vista-dataset/` — `train.jsonl` (7 archetypes, 189 scenarios), `test.jsonl` (3 archetypes,
+  29 scenarios), `MANIFEST.json`. **Split by ARCHETYPE, not by scenario**: no mechanism appears in both
+  halves, so a model cannot see the same situation at a different site and score it as generalisation.
+- `/tmp/vista-showcase-final/` — 20 ego-centric renders, 8 frames each, ego ringed, with measured
+  clearance / minTTC / actual braking in the caption so a picture can be checked against its numbers.

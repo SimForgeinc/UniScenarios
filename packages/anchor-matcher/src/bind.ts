@@ -14,7 +14,7 @@ import { crossSectionAt } from './cross-section.js';
 import { angleDiff, headingAtS, pointAtS, projectPoint, toDeg } from './geometry.js';
 import type { ApproachRelation } from './types/anchor.js';
 import type { ConflictPair, DerivedMapIndex, LaneRsl } from './types/map-index.js';
-import type { RoleBinding } from './types/roles.js';
+import type { OnMissing, RoleBinding } from './types/roles.js';
 import type { AnchorFrame, FeatureBinding, FramePose, MatchedSite } from './types/site.js';
 
 /** How far upstream a conflicting actor's route is walked for run-up. */
@@ -29,6 +29,43 @@ export const DEFAULT_TEMPLATE_ANGLE_DEG: Record<ApproachRelation, number> = {
 
 function laneRslAtK(frame: AnchorFrame, k: number): LaneRsl | undefined {
   return frame.lateralLanes[k];
+}
+
+/**
+ * Resolve one signed lane request against a site, honouring `onMissing`.
+ *
+ * Every lane-indexed binding funnels through here so that "the lane you asked
+ * for is not here" has exactly one answer in the matcher rather than one per
+ * role kind. The interesting case is the *absence* of a silent branch: a
+ * request that cannot be met either fails, drops, or clamps because the author
+ * said `clamp` — never because a code path defaulted to the nearest lane.
+ * Clamping to the nearest lane on a one-lane corridor yields `k = 0`, which is
+ * the reference actor's own lane, so the silent branch used to place a
+ * "next lane over" actor inside the ego.
+ */
+function resolveLaneOffset(
+  frame: AnchorFrame,
+  k: number,
+  onMissing: OnMissing,
+  notes: string[],
+): { status: FeatureBinding['status']; k: number; laneRsl: LaneRsl | undefined } {
+  const direct = laneRslAtK(frame, k);
+  if (direct) return { status: 'bound', k, laneRsl: direct };
+  if (onMissing === 'fail') {
+    notes.push(`lane k=${k} does not exist at this site (onMissing: fail)`);
+    return { status: 'failed', k, laneRsl: undefined };
+  }
+  if (onMissing === 'drop') {
+    notes.push(`lane k=${k} does not exist at this site (onMissing: drop)`);
+    return { status: 'dropped', k, laneRsl: undefined };
+  }
+  const clamped = clampK(frame, k);
+  if (clamped === null) {
+    notes.push('no same-direction lanes to clamp to');
+    return { status: 'failed', k, laneRsl: undefined };
+  }
+  notes.push(`lane k=${k} clamped to k=${clamped}`);
+  return { status: 'clamped', k: clamped, laneRsl: laneRslAtK(frame, clamped) };
 }
 
 /** Nearest existing lane index to `k` on the same side, for `clamp`. */
@@ -479,40 +516,19 @@ export function bindRoles(
       }
 
       case 'lane_offset': {
-        let k = role.k;
-        let status: FeatureBinding['status'] = 'bound';
-        let laneRsl = laneRslAtK(frame, k);
-        if (!laneRsl) {
-          if (role.onMissing === 'fail') {
-            status = 'failed';
-            notes.push(`lane k=${role.k} does not exist at this site (onMissing: fail)`);
-          } else if (role.onMissing === 'drop') {
-            status = 'dropped';
-            notes.push(`lane k=${role.k} does not exist at this site (onMissing: drop)`);
-          } else {
-            const clamped = clampK(frame, k);
-            if (clamped === null) {
-              status = 'failed';
-              notes.push('no same-direction lanes to clamp to');
-            } else {
-              k = clamped;
-              laneRsl = laneRslAtK(frame, k);
-              status = clamped === role.k ? 'bound' : 'clamped';
-              if (status === 'clamped') notes.push(`lane k=${role.k} clamped to k=${k}`);
-            }
-          }
-        }
+        const resolved = resolveLaneOffset(frame, role.k, role.onMissing, notes);
         binding = {
           role: role.role,
           kind: role.kind,
-          status,
+          status: resolved.status,
           onMissing: role.onMissing,
+          requestedK: role.k,
           notes,
         };
-        if (status === 'bound' || status === 'clamped') {
-          binding.pose = poseAt(k, role.dsM, role.tFrac);
-          binding.laneRsl = laneRsl;
-          binding.routeLaneChain = routeFrom(index, frame, laneRsl, k);
+        if (resolved.status === 'bound' || resolved.status === 'clamped') {
+          binding.pose = poseAt(resolved.k, role.dsM, role.tFrac);
+          binding.laneRsl = resolved.laneRsl;
+          binding.routeLaneChain = routeFrom(index, frame, resolved.laneRsl, resolved.k);
         }
         break;
       }
@@ -628,24 +644,14 @@ export function bindRoles(
           break;
         }
         const wantedK = ref.pose.k + role.dLane;
-        let k = wantedK;
-        let laneRsl = laneRslAtK(frame, k);
-        let status: FeatureBinding['status'] = 'bound';
-        if (!laneRsl) {
-          const clamped = clampK(frame, wantedK);
-          if (clamped === null) {
-            notes.push(`no lane at k=${wantedK} and nothing to clamp to`);
-            break;
-          }
-          k = clamped;
-          laneRsl = laneRslAtK(frame, k);
-          status = 'clamped';
-          notes.push(`lane k=${wantedK} clamped to k=${k}`);
-        }
-        binding.status = status;
-        binding.pose = poseAt(k, ref.pose.s + role.dsM, role.tFrac ?? ref.pose.tFrac);
-        binding.laneRsl = laneRsl;
-        binding.routeLaneChain = routeFrom(index, frame, laneRsl, k);
+        const resolved = resolveLaneOffset(frame, wantedK, role.onMissing, notes);
+        binding.onMissing = role.onMissing;
+        binding.requestedK = wantedK;
+        binding.status = resolved.status;
+        if (resolved.status !== 'bound' && resolved.status !== 'clamped') break;
+        binding.pose = poseAt(resolved.k, ref.pose.s + role.dsM, role.tFrac ?? ref.pose.tFrac);
+        binding.laneRsl = resolved.laneRsl;
+        binding.routeLaneChain = routeFrom(index, frame, resolved.laneRsl, resolved.k);
         break;
       }
     }
