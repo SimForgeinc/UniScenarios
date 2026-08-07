@@ -304,8 +304,8 @@ def quality(trace, facts):
     pair = (m.get('minTTC') or {}).get('pair') or []
     q6 = ('ego' in pair) if pair else False
 
-    ce = contested_space(trace, joint)
-    q7 = True if ce is None else bool(ce.get('contested'))
+    ce = contested_space(trace, joint)          # raises if the measure is unavailable
+    q7 = bool(ce.get('contested'))
 
     return {'Q7_contestedSpace': q7,
             'pathSeparationM': (ce or {}).get('pathSeparationM'),
@@ -328,16 +328,13 @@ def quality(trace, facts):
 # case under any rubric, because nothing was ever contested. Uses judge/conflict.py, whose
 # pathSeparationM is the min true-OBB clearance over ALL PAIRS of tick indices (time decoupled).
 def contested_space(trace, challenger=None):
-    try:
-        from judge.conflict import conflict_event
-    except Exception:                                             # noqa: BLE001
-        try:
-            import sys, os as _os
-            sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
-            from judge.conflict import conflict_event
-        except Exception:                                         # noqa: BLE001
-            return None
-    try:
-        return conflict_event(trace, challenger=challenger)
-    except Exception:                                             # noqa: BLE001
-        return None
+    """FAILS CLOSED. An earlier version swallowed ImportError and returned None, and quality()
+    mapped None -> Q7 True, so running from a cwd where `judge.conflict` was not importable silently
+    disabled the clause and INFLATED the HQ rate with no error and no log line. A quality clause that
+    quietly turns itself off is worse than no clause, because it looks like it ran."""
+    import sys, os as _os
+    here = _os.path.dirname(_os.path.abspath(__file__))
+    if here not in sys.path:
+        sys.path.insert(0, here)
+    from judge.conflict import conflict_event      # deliberately unguarded: must raise, not vanish
+    return conflict_event(trace, challenger=challenger)

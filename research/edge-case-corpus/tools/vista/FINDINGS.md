@@ -331,12 +331,45 @@ no overfitting — HELDOUT is very slightly *better* than DEV.
 Under the strictly tighter HQ gate (frozen gate **plus** Q1–Q7): **29/92 = 0.315**. That equals the
 lane-1 corpus count while clearing seven additional quality clauses that the frozen gate does not test.
 
-### The honest asterisk
-The frozen-gate result generalises (−0.037); **the quality layer does not** (+0.188). HQ admission falls
-from 0.438 on DEV to 0.250 on HELDOUT. The tightened clauses were developed while looking at DEV
-behaviour, and although they were never tuned per brief, they clearly capture something DEV-specific.
-The frozen-gate number is the trustworthy headline; the HQ number should be read as an upper bound on
-DEV and a fairer estimate on HELDOUT.
+### Correction: the apparent HQ generalisation gap was an instrument change
+The +0.188 in the table above is **not** a generalisation failure and should not be read as one.
+`Q7_contestedSpace` was added *after* DEV run 2 and *before* HELDOUT, so the two splits were scored with
+different gates — visible directly in the records, where DEV `qualityLoss` has six keys and HELDOUT has
+seven. Recomputed from the traces with a single gate applied to both splits:
+
+| | HQ **with** Q7 | HQ **without** Q7 |
+|---|---|---|
+| DEV best-of-2 | 9/32 = 0.281 | 14/32 = 0.438 |
+| HELDOUT best-of-2 | 15/60 = 0.250 | 27/60 = 0.450 |
+| **gap** | **+0.031** | **−0.012** |
+
+Both are ≈ 0. **The quality layer generalises fine.** This was caught by the evaluation lane, which
+reproduced each published number and identified which gate had produced it. The lesson is procedural:
+adding a clause mid-study silently made two numbers incomparable, and it looked exactly like a real
+scientific finding.
+
+### Which Q clauses actually carry weight
+Per-cell loss over frozen-passing cells (DEV-sight / DEV-blind / HELD-sight / HELD-blind):
+
+| clause | loss rate | verdict |
+|---|---|---|
+| **Q7 contested space** | .208 / .275 / .421 / .203 | dominant on both splits; rescues 3/4/7/5 briefs on leave-one-out |
+| Q3 no prop overlap | .188 / .158 / .075 / .123 | real and load-bearing |
+| Q6 TTC pair is ego | .042 / .075 / .045 / .145 | modest |
+| Q2 ego really responded | .036–.058 | modest |
+| Q1, Q4, Q5 | .000 everywhere | **never bind — they cost nothing and prove nothing.** Demote to diagnostics |
+
+So the audit clause that mattered was not the one I expected: it is Q7, the requirement that the two
+actors ever contest the same ground.
+
+### A bug in Q7 worth recording
+`contested_space()` originally caught `ImportError` and returned `None`, and `quality()` mapped `None`
+to `Q7 = True`. Running the gate from any working directory where `judge.conflict` was not importable
+therefore **silently disabled the clause and inflated the HQ rate — no error, no log line.** It was
+found when the evaluation lane's own attribution run hit exactly that path and measured Q7 loss as
+0.000 everywhere. Now fixed to fail closed: the import is deliberately unguarded, so a missing measure
+raises instead of vanishing. **A quality clause that quietly turns itself off is worse than no clause,
+because it looks like it ran.**
 
 ---
 
@@ -361,3 +394,150 @@ a deliberately simple method, and specifically **not** the imaging hypothesis th
    `collidable:false` and absent from `ticks['actors']`.
 6. **Accept the environmental ceiling.** Rail, school-zone and work-zone briefs cannot reach two maps.
    Either add map inventory or drop those briefs from the denominator explicitly.
+
+---
+
+## 13. The corpus that was actually produced
+
+Collected from all six runs (DEV ×4, HELDOUT ×2), keeping the best version of each brief:
+
+| | this lane | lane-1 baseline |
+|---|---|---|
+| archetypes admitted (frozen gate) | **57** | 29 |
+| of those, passing the tightened HQ gate | **35** | not measured |
+| taxonomy categories covered | **14 / 15** | 11 / 15 |
+| portability violations | **0 / 57** | — |
+| replay determinism | **40 / 40 bit-identical** | 156/156 |
+| wall clock | ~210 s per brief | ~35 s per brief |
+
+Category spread: C2 cut-in-merge 8, C5 pedestrian 7, C8 workzone 6, C9 hazard 6, C1 car-following 5,
+C7 occlusion 5, C3 intersection 4, C6 cyclist-ptw 4, C11 parking 3, C10 oncoming 2, C12 school 2,
+C14 loss-of-control 2, C15 adversarial 2, C4 roundabout 1.
+
+**The single empty category is C13.control**, and the reason is structural rather than authorial: a
+signal phase change is not by itself an encounter. It needs a second actor whose movement the phase
+provokes, and the maps have few signalised junctions (16 / 0 / 6 / 0 / 1).
+
+**Portability was verified mechanically, not assumed** (`collect.py:portability_check`): no `anchor.pin`,
+no `sourceMap`, no `scene_absolute` role, no baked map name, no road/lane/site identifier. 0 violations
+in 57 templates. Requirement A holds — the emitted artifact is a logical anchor over road structure, and
+every scenario materialises at ≥ 3 sites across ≥ 2 maps it was never authored against.
+
+**Cost.** ~210 s per brief against the baseline's ~35 s, roughly 6×. Most of it is model latency across
+up to three authoring iterations plus a final multi-site expansion; the simulation itself is seconds.
+
+---
+
+## 14. The one place sight ever looked better — and how much weight it can carry
+
+On HELDOUT, restricted to the **6 briefs both arms admitted** (same sentence, same gate, same frozen
+surface), the judged-good rate was:
+
+| | good / cells | rate |
+|---|---|---|
+| **sight** | 17/18 | **0.944** |
+| blind | 9/18 | 0.500 |
+
+Fisher exact **p = 0.0072** — the only significant result in the study. Driven by `c3-ev-crossing`
+(3/3 vs 0/3), `c2-parking-cut-in` (3/3 vs 1/3), `c2-blind-spot` (2/3 vs 1/3).
+
+**How much weight this can carry, stated so it is not over-claimed:** n = 6 briefs; it is one of roughly
+20 comparisons run in this study, so a Bonferroni-corrected threshold puts it at ≈ 0.14 and it is **not
+significant after correction**; and it did **not** replicate on either DEV run (paired 7/12 vs 6/12, and
+6/15 vs 7/15). Pooled across all three runs, paired: sight 30/45 = 0.667 vs blind 22/45 = 0.489,
+p = 0.13.
+
+The defensible sentence is: *on the held-out split, restricted to briefs both arms admitted, the seeing
+arm produced markedly better scenarios (0.94 vs 0.50, p = 0.007 uncorrected); this did not replicate on
+either DEV run and should be treated as a hypothesis for a powered rerun.*
+
+It is nevertheless the shape the rest of the evidence predicts: **sight does not get more briefs through
+the gate, but when both arms clear the same brief, the seeing arm's version tends to be the better
+scenario.** Quality-adjusted yield on HELDOUT is dead level — sight 20 × 0.450 = 9.00, blind
+22 × 0.409 = 9.00.
+
+---
+
+## 15. Is this corpus fit for training data? No — it is a candidate pool
+
+The independent judge's blunt assessment, over 252 judged cells, and I agree with it:
+
+- **45–60% of frozen-gate-admitted cells are rejected by an independent quality judge in every run.**
+  On HELDOUT, 55% of sight cells and 59% of blind cells are boring, intent-not-realised, or invalid.
+- **~24% never realise their brief.** Their taxonomy *label is wrong*, which is worse than a missing
+  scenario, because it teaches the wrong association.
+- **Mean novelty (R3) is 2.1–2.4 across every run and never moved under any intervention.** The corpus
+  is not novel; it is *competent*. Nothing done here made scenarios more distinctive — a fair result
+  given that no intervention targeted novelty.
+- Coverage ceiling: 21/32 DEV briefs admitted at least once; 11 never admitted at all.
+
+**The three numbers should be reported separately and never conflated:**
+
+| tier | count | meaning |
+|---|---|---|
+| gate-admitted | **57** | passes the frozen contractual gate |
+| quality-gated | **35** (29 with Q7 live on both splits) | also passes Q1–Q7 |
+| judged fit | **≈ 13** | also survives an independent LLM judge at high/acceptable |
+
+**Do not call any of this a training corpus until the intent-not-realised rate is under ~10%.** The
+honest description of the 57 is a *candidate pool* that a judge must still filter. That is a real
+improvement on a baseline of 29 whose corpus-layout judge called it "inadequate" — but it is an
+improvement in yield, not a solution to the quality problem.
+
+### What would actually raise quality, on this evidence
+Nothing measured here moved novelty or intent-realisation. The two concrete leads are:
+1. **Verify intent, don't just verify physics.** ~24% of admitted scenarios do not contain the mechanism
+   their brief names. The judge can detect this; the gate structurally cannot, because the gate only
+   reads trajectories. Putting an intent check *inside* the loop — reject and re-author when the named
+   mechanism is absent — is the highest-value untested change.
+2. **Novelty needs an explicit objective.** R3 never moved because nothing ever optimised it. Diversity
+   against the already-admitted corpus, rather than against the brief alone, is the obvious mechanism.
+
+---
+
+## 16. Definitive numbers — every run re-scored with ONE gate
+
+Because `Q7` was added mid-study, the tables above mix two instruments. Every run was therefore
+re-gated from the raw traces with a single current gate (`regate.py`). **These are the numbers of
+record.**
+
+| run | n | frozen | HQ (Q1–Q7) |
+|---|---|---|---|
+| DEV run 1 sight | 32 | 0.281 | 0.156 |
+| DEV run 1 blind | 32 | 0.312 | 0.156 |
+| DEV run 2 sight | 32 | 0.250 | 0.094 |
+| DEV run 2 blind | 32 | **0.469** | 0.219 |
+| DEV run 3 blind (prop rule) | 32 | 0.406 | 0.219 |
+| HELDOUT sight | 60 | 0.333 | 0.150 |
+| HELDOUT blind | 60 | 0.367 | 0.167 |
+
+### Generalisation, like-for-like (best-of-2, same N and same frozen surface on both splits)
+
+| gate | DEV | HELDOUT | **gap** |
+|---|---|---|---|
+| frozen (contractual) | 0.562 (18/32) | **0.600** (36/60) | **−0.037** |
+| HQ (Q1–Q7) | 0.281 (9/32) | 0.250 (15/60) | **+0.031** |
+
+**Both gaps are ≈ 0: neither the authoring surface nor the quality layer is overfitted to DEV.**
+HELDOUT is very slightly *better* than DEV on the frozen gate.
+
+### Against the baseline
+
+| | this lane | lane-1 baseline |
+|---|---|---|
+| HELDOUT rate, frozen gate, best-of-2 | **0.600** | 0.317 |
+| whole corpus, frozen gate | **60/92 = 0.652** | 29/92 = 0.315 |
+| whole corpus, HQ gate (strictly harder) | **33/92 = 0.359** | not measured |
+| generalisation gap | −0.037 | −0.004 |
+
+**60 archetypes against 29, at a generalisation gap of −0.037.** Under the strictly tighter HQ gate —
+which additionally requires a real ego response, no prop pass-through, a sane heading, a TTC pair that
+involves the ego, and paths that genuinely contest the same ground — the corpus is **33**, still above
+the baseline's 29 while clearing seven checks the baseline never faced.
+
+### A negative result on my own fix
+DEV run 3 added the prop-placement rule ("keep props out of the ego's driving line") to address the
+regression in §8. It **did not work**: frozen admission 0.406 vs 0.469, HQ identical at 0.219, and
+per-cell `Q3_noPropOverlap` failures rose from 0.069 to 0.132. Telling the author where *not* to put
+props appears to have made it place more of them. The prop problem remains open, and `Q3` remains the
+only thing catching it.
