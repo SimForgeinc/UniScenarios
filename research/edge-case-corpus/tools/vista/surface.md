@@ -61,12 +61,25 @@ The ego role MUST have id `ego`.
 {id, catalogId, label, essentiality, pose{laneOffset,s,tFrac,headingOffsetRad}, headingOffsetRad, scale,
  repeat{count,spacingM,tFracStep}, occludes{observer,target}, targetRevealToConflictS}
 
-**Exact catalog ids only** (an unknown id used to materialise silently as a sedan):
-vehicle.sedan, vehicle.suv, vehicle.hatchback, vehicle.pickup, vehicle.van, vehicle.box_truck,
-vehicle.semi_truck, vehicle.bus, vehicle.ambulance, vehicle.motorcycle, vehicle.bicycle,
-vehicle.mobility_scooter, vehicle.tram,
-pedestrian.adult_walking, pedestrian.adult_standing, pedestrian.child_walking,
-pedestrian.child_standing, pedestrian.traffic_marshal
+**Exact catalog ids only.** An unknown id used to materialise silently as a sedan, and an id
+belonging to another class used to materialise silently as the wrong thing -- a brief asking for an
+animal produced an actor tagged `class:animal` filled with `pedestrian.adult_walking`, a walking
+human, which passed the gate, the quality layer AND the intent critic because every one of those
+reads trajectories. Both are now hard errors. The full inventory:
+
+  vehicle:      vehicle.ambulance, vehicle.bicycle, vehicle.box_truck, vehicle.bus, vehicle.hatchback, vehicle.mobility_scooter, vehicle.motorcycle, vehicle.pickup, vehicle.sedan, vehicle.semi_truck, vehicle.suv, vehicle.tram, vehicle.van
+  pedestrian:   pedestrian.adult_standing, pedestrian.adult_walking, pedestrian.child_standing, pedestrian.child_walking, pedestrian.traffic_marshal
+  animal:       animal.buck, animal.cat, animal.deer, animal.doe, animal.dog, animal.stray_dog
+  hazard:       hazard.cardboard_box, hazard.debris, hazard.downed_branch, hazard.ladder, hazard.mattress, hazard.tire_debris, hazard.trash_bags
+  construction: construction.arrow_board, construction.barricade_type3, construction.channelizer_drum, construction.excavator, construction.flagger, construction.jersey_barrier, construction.jersey_barrier_run, construction.long_pipe, construction.pedestrian_barrier, construction.portable_signal, construction.portable_toilet, construction.sign_road_work, construction.spoil_pile, construction.temporary_stop_sign, construction.traffic_cone
+  street:       street.bus_shelter, street.food_cart, street.mailbox_cluster, street.shopping_cart
+  occluder:     occluder.covered_car, occluder.dumpster, occluder.fence_run, occluder.hedge_run
+
+Author-facing aliases resolve to the canonical model with its real footprint, so prefer the
+obvious name: object.tyre, object.cone, object.barrel, object.barrier, object.sign_board,
+object.ladder, object.mattress, object.debris, object.box, object.shopping_cart, object.branch.
+**`actor.class` and `actor.catalogId` must agree** -- a `pedestrian` role cannot be filled by
+`vehicle.box_truck`, and an `animal` role must use an `animal.*` model.
 
 ## choreography — the timeline
 {clipSeconds, warmupSeconds, interactions[]}
