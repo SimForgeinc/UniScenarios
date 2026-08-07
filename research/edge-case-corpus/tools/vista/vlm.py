@@ -51,6 +51,14 @@ def ask_json(prompt, images=None, **kw):
 
 
 def parse_json(txt):
+    """Parse the model's reply into JSON, tolerating fences and trailing content.
+
+    The naive version lost whole briefs to `Extra data: line 1 column 4089`: when the model emits a
+    valid object followed by anything else (a second object, a stray note), `json.loads` raises, and
+    the first-brace/last-brace fallback spans BOTH values and raises again. Scan for the first
+    complete JSON value instead, then keep scanning and prefer the largest object found -- the
+    template is always the biggest thing in the reply.
+    """
     s = txt.strip()
     if s.startswith('```'):
         s = s.split('\n', 1)[1] if '\n' in s else s
@@ -60,7 +68,22 @@ def parse_json(txt):
     try:
         return json.loads(s)
     except json.JSONDecodeError:
-        a, b = s.find('{'), s.rfind('}')
-        if a >= 0 and b > a:
-            return json.loads(s[a:b + 1])
-        raise
+        pass
+
+    dec = json.JSONDecoder()
+    best, i, n = None, 0, len(s)
+    while i < n:
+        c = s.find('{', i)
+        if c < 0:
+            break
+        try:
+            val, end = dec.raw_decode(s, c)
+        except json.JSONDecodeError:
+            i = c + 1
+            continue
+        if isinstance(val, dict) and (best is None or len(json.dumps(val)) > len(json.dumps(best))):
+            best = val
+        i = max(end, c + 1)
+    if best is not None:
+        return best
+    raise ValueError('no JSON object found in model reply (%d chars)' % len(s))
