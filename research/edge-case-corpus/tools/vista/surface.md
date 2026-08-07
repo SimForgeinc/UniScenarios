@@ -408,3 +408,23 @@ actor that needed it.
     Prefer `changeLane` over `laneOffset` for the movement itself. Measured true-incursion rate by
     primitive: `changeLane` 0.455, hand-rolled `route` polyline 0.454, **`laneOffset` only 0.098** —
     an actor nudged within its own lane usually never reaches the ego at all.
+
+
+18. **An `arrival` trigger cannot converge if EITHER actor stops — including the ego.** The existing
+    warning covers syncing to a parked challenger, but the case that actually bites is a
+    stop-controlled junction: at a four-way stop the EGO stops, so `syncWith:"ego"` has no finite
+    arrival time and every site is thrown away with `arrival_unconverged`. Measured on a four-way-stop
+    brief: 5 of 5 cells lost this way, with 24 sites matched across all 5 maps — the anchor was fine,
+    the mechanism was impossible.
+
+    So for any scenario where the ego stops or crawls — all-way stops, minor-stop junctions, queues,
+    give-way, a signal the ego waits at — do NOT drive the conflict with `arrival … syncWith:"ego"`.
+    Use instead:
+      - `{kind:"when", condition:{...}, byLatest:<t>, ifNever:"..."}` on a distance or `reaches`
+        condition, so the challenger moves when the ego gets somewhere rather than at a solved time;
+      - or `{kind:"after", of:<interactionId>, delay:<s>}` chained off the ego's own stop;
+      - or let the conflict come from a RULE violation with an `at` trigger: the challenger simply
+        does not yield (`rules.yield:false`, `rules.obeySignals:false`) and the geometry does the rest.
+    `arrival` remains the right tool when both actors are genuinely in motion toward a shared conflict
+    point — a crossing VRU, an oncoming turn across the ego, a merging vehicle. It is the wrong tool
+    the moment either party is expected to come to a halt.

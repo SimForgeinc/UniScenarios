@@ -20,13 +20,20 @@ def load_briefs(split=None, corpus=CORPUS):
 def _one(args):
     b, mode, root, max_iters, use_critic = args
     outdir = f"{root}/{b['id']}-{mode}"
+    os.makedirs(outdir, exist_ok=True)
     try:
         r = author.author(b['id'], b['brief'], b['category'], outdir, mode=mode,
                           max_iters=max_iters, log=lambda *_: None, use_critic=use_critic)
     except Exception as e:                                        # noqa: BLE001
         r = {'briefId': b['id'], 'mode': mode, 'category': b['category'], 'admitted': False,
-             'error': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-1500:],
+             'error': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-2500:],
              'outdir': outdir}
+        try:
+            os.makedirs(outdir, exist_ok=True)
+            with open(outdir + '/CRASH.txt', 'w') as fh:
+                fh.write(traceback.format_exc())
+        except Exception:                                         # noqa: BLE001
+            pass
     r['outdir'] = outdir
     lg = r.get('lastGate') or {}
     print(f"[{mode}] {b['id']:26} admitted={str(r.get('admitted')):5} "

@@ -20,6 +20,19 @@ GOLD = open(REPO + '/research/edge-case-corpus/templates/'
 SURFACE_SHA = hashlib.sha256(SURFACE.encode()).hexdigest()
 
 
+def _dump(obj, path):
+    """Write JSON, creating the directory if it is missing.
+
+    A brief was lost to `FileNotFoundError: .../template.json` with zero iterations recorded, even
+    though `author()` calls `os.makedirs(outdir)` as its first statement. Rather than guess at the
+    race, every write now guarantees its own directory: a lost brief is silent data loss and costs a
+    whole authoring slot.
+    """
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, 'w') as f:
+        json.dump(obj, f, indent=1, default=str)
+
+
 def run_cli(args, timeout=1200):
     env = dict(os.environ, FORCE_COLOR='0', NO_COLOR='1')
     p = subprocess.run(CLI + args, capture_output=True, text=True, timeout=timeout, cwd=REPO, env=env)
@@ -276,8 +289,8 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
             break
         template.setdefault('meta', {}).setdefault('author', 'agent/vista-' + mode)
         step['expectation'] = template.get('meta', {}).get('expectation')
-        json.dump(template, open(tpl_path, 'w'), indent=1)
-        json.dump(template, open(outdir + f'/template.iter{it}.json', 'w'), indent=1)
+        _dump(template, tpl_path)
+        _dump(template, outdir + f'/template.iter{it}.json')
 
         # --- schema validation, with cheap text-only repairs
         vfind = None
@@ -292,7 +305,7 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
             step['validateRepairs'] = step.get('validateRepairs', 0) + 1
             try:
                 template, _ = vlm.ask_json(validate_repair_prompt(template, vfind))
-                json.dump(template, open(tpl_path, 'w'), indent=1)
+                _dump(template, tpl_path)
             except Exception as e:                                # noqa: BLE001
                 step['error'] = 'validate-repair: ' + str(e)
                 break
@@ -327,7 +340,7 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
                    'wrong. Emit ONLY the corrected template JSON object.')
             try:
                 template, _ = vlm.ask_json(fix)
-                json.dump(template, open(tpl_path, 'w'), indent=1)
+                _dump(template, tpl_path)
             except Exception as e:                                # noqa: BLE001
                 step['error'] = 'anchor-repair: ' + str(e)
                 break
@@ -424,7 +437,7 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
 
     # --- final: give the best template its best shot across more sites
     if not rec['admitted'] and best['template'] is not None and best['score'][0] >= 1:  # noqa: PLR2004
-        json.dump(best['template'], open(tpl_path, 'w'), indent=1)
+        _dump(best['template'], tpl_path)
         fdir = outdir + '/batch-final'
         _rc, bd, _e = run_cli(['batch', tpl_path, '--all-maps', '--draws', '2', '--max-sites', '8',
                                '--out', fdir, '--concurrency', '2'])
@@ -458,9 +471,9 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
             rec['admitted'] = rec['admitted'] or best['gate']['admitted']
         rec['gateAdmitted'] = bool(best['gate']['admitted']) or bool(rec.get('finalExpansion', {})
                                                                     .get('admitted'))
-        json.dump(template, open(tpl_path, 'w'), indent=1)
+        _dump(template, tpl_path)
 
     rec['wallClockS'] = round(time.time() - t_start, 1)
     rec['template'] = template
-    json.dump(rec, open(outdir + '/record.json', 'w'), indent=1, default=str)
+    _dump(rec, outdir + '/record.json')
     return rec
