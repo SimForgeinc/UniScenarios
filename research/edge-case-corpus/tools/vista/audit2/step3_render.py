@@ -14,7 +14,7 @@ RD = os.path.join(HERE, 'renders')
 
 
 def one(job):
-    import scene, render2
+    import scene, render2, render_trails
     pid, trace, ct, mode = job
     out = os.path.join(RD, f'{pid}.{mode}.png')
     if os.path.exists(out) and os.path.getsize(out) > 5000:
@@ -26,6 +26,8 @@ def one(job):
             render2.render_rollout2(DEV, trace, out, closest_t=ct)
         elif mode == 'world':
             render2.render_rollout2(DEV, trace, out, closest_t=ct, world_fixed=True)
+        elif mode == 'trails':
+            render_trails.render_trails(DEV, trace, out, closest_t=ct)
     except Exception as e:                                        # noqa: BLE001
         return f'ERROR {pid} {mode}: {e}'
     return out

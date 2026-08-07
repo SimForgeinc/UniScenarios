@@ -741,3 +741,94 @@ The corollary, in the reviewer's words, is that **an adversarial reviewer has to
 its own instruments first** — and the specific tell worth internalising is that *a flag which fires on
 everything is an alarm about the flag, not a finding.* Both lanes hit that exact failure, in opposite
 directions, within a day of each other.
+
+---
+
+## 21. Scaling to training data: what actually changed
+
+The objective moved from "beat a baseline admission rate" to "produce thousands of training-grade
+scenarios per day". That reframing exposed problems the earlier framing could not see.
+
+### The validator was the bottleneck, and it was not trustworthy
+An independent audit measured the vision-only critic at **precision 0.545 (CI 0.280-0.787), recall
+0.333, FP rate 0.085** over 77 ground-truth pairs — **statistically indistinguishable from accepting
+everything** (base rate 0.409, Fisher p = 0.31). Its errors were perceptual, not linguistic, measured
+against facts the trace settles exactly:
+
+| question the trace answers exactly | critic recall |
+|---|---|
+| does this actor move? | 0.800 |
+| **does it enter the ego's lane?** | **0.500** |
+| **does it slow sharply?** | **0.440** |
+
+It missed half of every lane incursion. Verbatim on one case: the critic said a challenger *"remains in
+its own adjacent circulating lane"* when it had moved **16.58 m laterally** and turned **88.8°**.
+
+**Worse, it had certified my highest-yield template.** `c9g-displaced-drain-grate` — source of 302 of
+310 harvested cells — is a confirmed false positive: the grate never moves, sits 4.83 m from the ego
+path, and is never occluded. **The previously reported ~1,300 scenarios/day is retracted**; it was
+mostly one non-existent mechanism replicated across sites.
+
+### The fix: compute what is computable, and see only what is not
+`motion.py` + `hybrid.py` invert the labour. An LLM reads **only the brief text** and selects from a
+closed vocabulary of 18 predicates; **code evaluates them against trace geometry exactly**; the vision
+critic is demoted to a **veto on the non-computable residue** (occlusion, "unexpectedly", a door
+opening). A predicate the vocabulary cannot express returns `abstain` rather than a guess.
+Scored 6/6 on hand-labelled cases including three adversarial negatives on the same clip.
+
+Two bugs found and fixed while building it: a pedestrian who simply stops reported **109 m/s²** of
+braking (a dt = 0.02 s sampling artifact — now a 0.3 s windowed measure), and "two parked vehicles"
+was being counted as two challengers when parked cars are **props**, absent from `ticks['actors']`.
+
+### The co-travel rule: a clean A/B win
+Diagnosed by rendering a failure and adjudicating it myself — a van meant to travel alongside the ego
+spent **9 of 13 seconds far ahead in another lane**, converging only in the final frame. The surface
+now requires sustained co-travel for alongside/repeatedly/tailgating briefs. On the **identical 84
+briefs**, only the surface differing:
+
+| | admitted | **intent-realised** |
+|---|---|---|
+| surface v3 | 27/84 | **7/27 = 0.259** |
+| surface v4 (co-travel) | 28/84 | **14/28 = 0.500** |
+
+Admission was flat; **intent realisation doubled** — which is exactly the axis that matters, and exactly
+the axis the old validator could not measure.
+
+The dominant residual failure is `challenger_enters_ego_path` (missing 18-30 times per run): **getting
+another road user to actually move into the ego's lane is the hardest thing to author.**
+
+### Measured end-to-end throughput
+
+| stage | time |
+|---|---|
+| author 84 generated briefs, 6 workers | 64 min |
+| intent-verify 28 admitted templates | 167 s |
+| harvest 7,620 concrete simulations | 247 s |
+| **total** | **71 min** |
+
+28 admitted → **11 intent-verified** → **204 distinct training-grade scenarios**
+→ **≈ 4,140 distinct training-grade scenarios per day.**
+
+Yield concentration is now healthy: the top template contributes **31%**, against 97% (from a false
+positive) in the retracted run.
+
+### Two more gate clauses, both found by measurement
+- **Q8 `noBodyOverlap`** — the frozen C3 bounds clearance from above only, so a true clearance of
+  **0.00 m** satisfies it. On one site the ego and lead are both 4.8 m long yet **4.453 m apart
+  centre-to-centre** — interpenetrating — with `collisions == []` and `evaluate` returning
+  `accept/critical`. **39 of 65 gate-passing cells were the ego driving through the car in front.**
+- **Q7 corrected.** It originally required paths to literally intersect; the median cell it rejected
+  missed by **0.20 m**, and it would reject any legitimate close pass. Relaxed to a 2.0 m path
+  separation.
+
+### Honest counting
+`gate.deduplicate()` bands cells by (map, site, clearance/0.5 m, minTTC/0.5 s, decel/1 m/s²). One
+template produced 302 "training-grade" cells that collapsed to **134 distinct**, with ego peak
+deceleration varying by **sd 0.02 m/s²** across all 302. Only deduplicated counts are reported.
+
+### Brief supply is no longer the limit
+`briefgen.py` generates fresh briefs, constrained to the engine's actual primitives (describe observable
+motion, never internal mechanical causes — the simulator cannot burst a tyre or jackknife a trailer).
+That cut unbuildable briefs **31% → 4%**. Generated briefs author at 0.32-0.39, the same as the
+hand-written ones. It did **not** by itself raise intent realisation — a negative result; the
+co-travel rule did.

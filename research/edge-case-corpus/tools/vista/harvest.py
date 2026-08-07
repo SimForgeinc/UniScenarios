@@ -8,7 +8,7 @@ steps; this stage exists to amortise those over as many concrete scenarios as ea
 import os, sys, json, glob, argparse, time
 from concurrent.futures import ProcessPoolExecutor, as_completed
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import author, critic, gate
+import author, critic, gate, hybrid
 
 
 def _verify(a):
@@ -26,11 +26,46 @@ def _verify(a):
     passing = [c for c in g['cells'] if c.get('pass')]
     if not passing:
         return None
-    cr = critic.review_cells(passing, r['brief'], limit=limit, reps=reps, workers=3)
+    # PRIMARY validator: exact trajectory predicates. The vision-only critic was independently
+    # measured at precision 0.545 / recall 0.333 -- indistinguishable from accepting everything --
+    # because it was being asked to SEE geometry the trace states exactly (lane-incursion recall 0.500).
+    try:
+        parsed = hybrid.parse_brief(r['brief'])
+    except Exception as e:                                        # noqa: BLE001
+        return {'briefId': r['briefId'], 'error': 'parse: ' + str(e)}
+    seen, picks = set(), []
+    for c in passing:
+        k = (c['mapId'], c['siteId'])
+        if k in seen:
+            continue
+        seen.add(k)
+        picks.append(c)
+        if len(picks) >= 4:
+            break
+    vs = []
+    for c in picks:
+        try:
+            vs.append(hybrid.validate(c['traceFile'], None, parsed=parsed))
+        except Exception:                                         # noqa: BLE001
+            pass
+    pres = sum(1 for v in vs if v['verdict'].startswith('present'))
+    mech = 'present' if vs and pres > len(vs) / 2 else 'absent'
+    needs_vision = bool(parsed.get('notComputable'))
+
+    # SECONDARY: the vision critic is consulted only for the residue the trace cannot settle
+    # (occlusion, "unexpectedly", a door opening), and only as a VETO on an otherwise-present clip.
+    cr = {'verdict': 'n/a', 'yesFraction': None, 'whyNot': ''}
+    if mech == 'present' and needs_vision:
+        cr = critic.review_cells(passing, r['brief'], limit=limit, reps=reps, workers=3)
+        if cr['verdict'] == 'rejected':
+            mech = 'absent'
     return {'briefId': r['briefId'], 'brief': r['brief'], 'category': r.get('category'),
             'template': os.path.dirname(rec_path) + '/template.json',
-            'verdict': cr['verdict'], 'yesFraction': cr['yesFraction'],
-            'whyNot': cr['whyNot']}
+            'verdict': 'verified' if mech == 'present' else 'rejected',
+            'mechanical': mech, 'predicates': parsed['required'],
+            'notComputable': parsed['notComputable'],
+            'visionVerdict': cr['verdict'], 'yesFraction': cr.get('yesFraction'),
+            'whyNot': cr.get('whyNot', '')}
 
 
 def _mass(a):
