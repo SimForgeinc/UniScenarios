@@ -15,7 +15,7 @@
   "declarations": [
    {"id": "egoSpeedKph", "type": "continuous", "description": "ego approach speed", "unit": "kph", "tier": 1, "range": [38, 52], "default": 45, "distribution": "uniform"},
    {"id": "crossSpeedKph", "type": "continuous", "description": "speed of the vehicle on the crossing arm", "unit": "kph", "tier": 1, "range": [30, 46], "default": 38, "distribution": "uniform"},
-   {"id": "blackoutAtS", "type": "continuous", "description": "green duration before the head loses power; the program clock starts at -warmupSeconds, so the blackout lands at this minus the warm-up", "unit": "s", "tier": 1, "range": [0.8, 1.5], "default": 1.15, "distribution": "uniform"},
+   {"id": "blackoutAtS", "type": "continuous", "description": "when the head loses power", "unit": "s", "tier": 1, "range": [0.8, 1.5], "default": 1.15, "distribution": "uniform"},
    {"id": "conflictDeltaT", "type": "continuous", "description": "seconds the crossing vehicle reaches the conflict point after the ego would have, had the signal not failed", "unit": "s", "tier": 1, "range": [0.0, 0.7], "default": 0.35, "distribution": "uniform"}
   ],
   "constraints": []
@@ -42,7 +42,7 @@
     "essentiality": "required",
     "weight": 4,
     "arms": {"value": [3, null], "essentiality": "preferred", "weight": 1},
-    "control": {"value": ["signalized", "uncontrolled", "minor_stop", "all_way_stop", "yield"], "essentiality": "preferred", "weight": 1},
+    "control": {"value": ["signalized"], "essentiality": "required"},
     "egoTurn": {"value": ["straight"], "essentiality": "preferred", "weight": 2},
     "conflictingApproach": {
      "value": {"from": "from_left", "turn": "straight", "crossingAngleDeg": [55, 125]},
@@ -52,26 +52,6 @@
   ],
   "policy": {"allowMirror": true, "maxSitesPerMap": 8, "diversity": "moderate", "minScore": 0.4}
  },
- "trafficControls": [
-  {
-   "id": "ego-head",
-   "kind": "normal_signal",
-   "label": "the signal head on the ego's approach, which fails",
-   "pose": {"laneOffset": 0, "s": -2, "tFrac": 0.9, "headingOffsetRad": 0},
-   "feature": "dark-junction",
-   "stopLines": [
-    {"pose": {"laneOffset": 0, "s": -4, "tFrac": 0, "headingOffsetRad": 0}, "feature": "dark-junction"}
-   ],
-   "phases": [
-    {"indication": "green", "durationS": "param.blackoutAtS"},
-    {"indication": "off", "durationS": 300}
-   ],
-   "offsetS": 0,
-   "loop": false,
-   "darkFallback": "all_way_stop",
-   "darkDwellS": 1
-  }
- ],
  "roles": [
   {"id": "ego", "kind": "on_reference", "label": "vehicle under test, approaching on green",
    "actor": {"class": "car", "catalogId": "vehicle.sedan"}, "essentiality": "required",
@@ -89,6 +69,9 @@
   "clipSeconds": 12,
   "warmupSeconds": 0.5,
   "interactions": [
+   {"id": "the-head-goes-dark", "label": "the signal on the ego's approach loses power",
+    "actor": "@world", "verb": "set", "trigger": {"kind": "at", "t": "param.blackoutAtS"},
+    "target": {"key": "signal:feature:dark-junction:ego.phase", "value": "off"}},
    {"id": "cross-ignores-the-junction", "label": "the crossing vehicle has no working control and does not give way",
     "actor": "cross", "verb": "set", "trigger": {"kind": "at", "t": 0},
     "target": {"key": "rules.yieldToVehicles", "value": false}},

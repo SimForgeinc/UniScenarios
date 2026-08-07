@@ -17,6 +17,11 @@ import type { ControlIndication, RoadControl, SignalProgram } from '../schema/in
 
 export type SignalPhase = ControlIndication;
 
+/** The law a dark head reverts to when the author has not said otherwise. */
+export const DEFAULT_DARK_FALLBACK = 'all_way_stop' as const;
+/** Standstill required at a dark or flashing-red line when unspecified, seconds. */
+export const DEFAULT_DARK_DWELL_S = 1;
+
 /** Observable phase plus the source that currently owns it. Program timing
  * provenance remains on `SignalProgram.mapBinding.timingSource`; `source`
  * distinguishes that cycle from a runtime `set(signal:*.phase)` override. */
@@ -24,6 +29,27 @@ export interface SignalState {
   readonly phase: SignalPhase;
   readonly source: 'program' | 'override';
   readonly timingSource: 'map' | 'synthetic-default' | 'authored';
+}
+
+/**
+ * What law a stop line is executing **right now**.
+ *
+ * Authority is a function of time, not a property fixed when the book is built.
+ * A working signal is `signal` authority: obey the indication, and a forbidding
+ * indication means wait for it to change. A *failed* signal is not a weaker
+ * version of that — it is the other authority the engine already has,
+ * `stop`: come to a complete standstill, dwell, and then be released by the
+ * all-way arbitration in the engine. Modelling the failure as a phase inside
+ * the first authority is what produced both halves of the signal-authority
+ * defect (see `research/edge-case-corpus/tools/vista/newcaps/DEFECT-signal-authority.md`):
+ * a dark head that meant "proceed", and a flashing red that deadlocked forever.
+ */
+export interface StopLineAuthority {
+  readonly kind: 'signal' | 'stop' | 'none';
+  /** Minimum continuous standstill before release. Meaningful when `kind` is `stop`. */
+  readonly dwellS: number;
+  /** Why this authority applies, for the trace and for a human reading a failure. */
+  readonly reason: 'program' | 'blackout' | 'flashing_red' | 'static_stop' | 'blackout_uncontrolled';
 }
 
 export interface StopLineBinding {
@@ -63,7 +89,10 @@ export class SignalBook {
       for (const sl of [...p.stopLines].sort((a, b) => (a.rsl < b.rsl ? -1 : a.rsl > b.rsl ? 1 : a.s - b.s))) {
         const binding: StopLineBinding = {
           controlId: p.id,
-          coordinationId: p.id,
+          // A junction whose four heads all black out is ONE all-way stop, not
+          // four independent ones, so signal-derived lines coordinate on the
+          // junction exactly as static stop controls already do.
+          coordinationId: p.mapBinding?.junctionId ?? p.id,
           kind: 'signal',
           signalId: p.id,
           dwellS: 0,
@@ -134,6 +163,45 @@ export class SignalBook {
     return { phase: p.phases[p.phases.length - 1]!.phase, source: 'program', timingSource };
   }
 
+  /**
+   * The law this stop line is executing at `t`.
+   *
+   * Static stop controls are always `stop`. A signal is `signal` while it is
+   * working, and degrades to `stop` when it is dark (unless the author declared
+   * the blackout uncontrolled or a yield) or while it shows a flashing red —
+   * which *is* a stop sign, not a red that never clears.
+   *
+   * `coordinationId` is deliberately the program's junction where one is known,
+   * so an intersection whose four heads black out arbitrates as one all-way
+   * stop rather than as four independent ones.
+   */
+  authorityAt(line: StopLineBinding, t: number): StopLineAuthority {
+    if (line.kind === 'stop') return { kind: 'stop', dwellS: line.dwellS, reason: 'static_stop' };
+    const program = line.signalId === null ? null : this.byId.get(line.signalId);
+    if (!program) return { kind: 'signal', dwellS: 0, reason: 'program' };
+    const phase = this.phaseAt(line.signalId!, t);
+    // Defaults applied at read time so an older document keeps its input hash.
+    const dwellS = program.darkDwellS ?? DEFAULT_DARK_DWELL_S;
+    const fallback = program.darkFallback ?? DEFAULT_DARK_FALLBACK;
+    if (phase === 'flashing_red' || phase === 'flashing_red_arrow') {
+      return { kind: 'stop', dwellS, reason: 'flashing_red' };
+    }
+    if (phase === 'off') {
+      if (fallback === 'uncontrolled') {
+        return { kind: 'none', dwellS: 0, reason: 'blackout_uncontrolled' };
+      }
+      if (fallback === 'yield') {
+        // A yield keeps the `signal` authority: `phaseForbidsEntry('off')` is
+        // false, so the actor is not stopped by the line, and the ordinary
+        // conflict governor is what makes it give way. That is exactly what a
+        // yield is, and the engine already has it.
+        return { kind: 'none', dwellS: 0, reason: 'blackout_uncontrolled' };
+      }
+      return { kind: 'stop', dwellS, reason: 'blackout' };
+    }
+    return { kind: 'signal', dwellS: 0, reason: 'program' };
+  }
+
   /** Force a world signal phase through `set(signal:<id>.phase, ...)`. */
   setOverride(signalId: string, phase: SignalPhase | null): boolean {
     if (!this.byId.has(signalId)) return false;
@@ -152,8 +220,16 @@ export class SignalBook {
  * "stop if you comfortably can", which the governor resolves with the
  * comfort-decel test rather than here. */
 export function phaseForbidsEntry(phase: SignalPhase): boolean {
-  // A dark/failed normal signal is uncontrolled. Flashing yellow is caution,
-  // while flashing red retains stop semantics. Lane-use and human indications
-  // share the same executable right-of-way boundary.
-  return !['green', 'green_arrow', 'proceed', 'flashing_yellow', 'off'].includes(phase);
+  // Flashing yellow — round or arrow — is caution, not a boundary: the driver
+  // proceeds and the conflict governor owns giving way. That is the whole point
+  // of the flashing yellow arrow, which turns a protected left permissive.
+  //
+  // `off` is NOT in this list, and that is the correction to the original
+  // defect. A dark head does not mean "proceed"; it means the stop line has
+  // degraded to `stop` AUTHORITY (see `SignalBook.authorityAt`), which is
+  // resolved before this predicate is ever reached. A blackout an author has
+  // explicitly declared uncontrolled resolves to `none` authority and likewise
+  // never reaches here. Leaving `off` permissive here as well would let a dark
+  // head be waved through by whichever check ran first.
+  return !['green', 'green_arrow', 'proceed', 'flashing_yellow', 'flashing_yellow_arrow'].includes(phase);
 }
