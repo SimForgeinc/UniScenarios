@@ -717,6 +717,66 @@
     }
   },
   {
+    "id": "animal.deer",
+    "label": "Deer",
+    "class": "animal",
+    "description": "Adult white-tailed deer standing broadside with its head up. The reference large animal: it dominates real animal-strike statistics and its mass sits at windscreen height rather than under the bumper.",
+    "dims": {
+      "l": 1.76,
+      "w": 0.46,
+      "h": 1.62
+    },
+    "tags": [
+      "occlusion:low",
+      "mobile",
+      "vru",
+      "roadway"
+    ],
+    "defaultParams": {
+      "color": "#9c7b52"
+    }
+  },
+  {
+    "id": "animal.dog",
+    "label": "Large dog",
+    "class": "animal",
+    "description": "Loose large dog in a trotting stance. The medium animal: short enough to be hidden by a parked car and fast enough to cross a lane inside a driver reaction time.",
+    "dims": {
+      "l": 1.07,
+      "w": 0.3,
+      "h": 0.75
+    },
+    "tags": [
+      "occlusion:low",
+      "mobile",
+      "vru",
+      "roadway"
+    ],
+    "defaultParams": {
+      "color": "#a8834f"
+    }
+  },
+  {
+    "id": "animal.cat",
+    "label": "Cat",
+    "class": "animal",
+    "description": "Cat crossing in a low crouched run. The small animal: the case where braking hard or swerving is the wrong response, and the one that is genuinely hard to detect against asphalt at night.",
+    "dims": {
+      "l": 0.63,
+      "w": 0.15,
+      "h": 0.35
+    },
+    "tags": [
+      "occlusion:low",
+      "mobile",
+      "vru",
+      "roadway"
+    ],
+    "defaultParams": {
+      "color": "#5c5750"
+    }
+  },
+  {
     "id": "street.mailbox_cluster",
     "label": "Mailbox cluster",
     "class": "street",
@@ -845,6 +905,57 @@
       "l": 2.44,
       "w": 1.2,
       "h": 0.45
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.ladder",
+    "label": "Fallen ladder",
+    "class": "hazard",
+    "description": "Aluminium extension ladder shed from a roof rack, lying across the carriageway. Long, thin and low: too long to straddle and hard to see at range.",
+    "dims": {
+      "l": 3.55,
+      "w": 0.44,
+      "h": 0.08
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.mattress",
+    "label": "Shed mattress",
+    "class": "hazard",
+    "description": "Double mattress lost from a load and lying folded in the lane. Large, soft and completely undrivable-over: it fills a lane despite weighing almost nothing.",
+    "dims": {
+      "l": 1.86,
+      "w": 1.32,
+      "h": 0.3
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.debris",
+    "label": "Unidentified debris",
+    "class": "hazard",
+    "description": "Scatter of broken material in the travelled way with no recognisable identity. The generic obstacle for briefs that say \"there is debris in the lane\" without naming the object.",
+    "dims": {
+      "l": 0.88,
+      "w": 0.85,
+      "h": 0.24
     },
     "tags": [
       "debris",

@@ -37,9 +37,13 @@ export const PROP_DIMS: Readonly<Record<string, PropDims>> = {
   'pedestrian.child_standing': { l: 0.24, w: 0.35, h: 1.2 },
   'pedestrian.child_walking': { l: 0.58, w: 0.35, h: 1.2 },
   'pedestrian.traffic_marshal': { l: 0.72, w: 0.68, h: 1.88 },
+  'animal.deer': { l: 1.76, w: 0.46, h: 1.62 },
+  'animal.dog': { l: 1.07, w: 0.3, h: 0.75 },
+  'animal.cat': { l: 0.63, w: 0.15, h: 0.35 },
   'construction.traffic_cone': { l: 0.36, w: 0.36, h: 0.7 },
   'construction.channelizer_drum': { l: 0.58, w: 0.58, h: 1.07 },
   'construction.barricade_type3': { l: 0.62, w: 2.44, h: 1.66 },
+  'construction.pedestrian_barrier': { l: 2, w: 0.55, h: 1.1 },
   'construction.jersey_barrier': { l: 3.05, w: 0.61, h: 0.81 },
   'construction.jersey_barrier_run': { l: 12.2, w: 0.61, h: 0.81 },
   'construction.sign_road_work': { l: 0.9, w: 1.73, h: 2.21 },
@@ -63,7 +67,54 @@ export const PROP_DIMS: Readonly<Record<string, PropDims>> = {
   'hazard.cardboard_box': { l: 0.58, w: 0.44, h: 0.47 },
   'hazard.trash_bags': { l: 1.02, w: 0.93, h: 0.58 },
   'hazard.downed_branch': { l: 2.44, w: 1.2, h: 0.45 },
+  'hazard.ladder': { l: 3.55, w: 0.44, h: 0.08 },
+  'hazard.mattress': { l: 1.86, w: 1.32, h: 0.3 },
+  'hazard.debris': { l: 0.88, w: 0.85, h: 0.24 },
 };
+
+/**
+ * Author-facing synonyms, mirroring `CATALOG_ALIASES` in `@uniscenarios/prop-catalog`.
+ *
+ * The catalog files a prop under the class that owns it — a tyre carcass is a
+ * `hazard`, a cone is `construction`, a trolley is `street` furniture. Authors
+ * and LLMs write `object.tyre`, `object.cone`, `object.barrier`, and those used
+ * to resolve to nothing at all: not an error, a silent fall-through to a unit
+ * cube. Resolving synonyms is a vocabulary fix, not a second copy of every prop.
+ */
+export const PROP_ALIAS_TARGETS: Readonly<Record<string, string>> = {
+  'object.tyre': 'hazard.tire_debris',
+  'object.tire': 'hazard.tire_debris',
+  'object.box': 'hazard.cardboard_box',
+  'object.cardboard_box': 'hazard.cardboard_box',
+  'object.branch': 'hazard.downed_branch',
+  'object.trash_bags': 'hazard.trash_bags',
+  'object.ladder': 'hazard.ladder',
+  'object.mattress': 'hazard.mattress',
+  'object.debris': 'hazard.debris',
+  'object.shed_load': 'hazard.debris',
+  'object.shopping_cart': 'street.shopping_cart',
+  'object.cone': 'construction.traffic_cone',
+  'object.traffic_cone': 'construction.traffic_cone',
+  'object.barrel': 'construction.channelizer_drum',
+  'object.drum': 'construction.channelizer_drum',
+  'object.barrier': 'construction.jersey_barrier',
+  'object.jersey_barrier': 'construction.jersey_barrier',
+  'object.barrier_run': 'construction.jersey_barrier_run',
+  'object.barricade': 'construction.barricade_type3',
+  'object.pedestrian_barrier': 'construction.pedestrian_barrier',
+  'object.sign_board': 'construction.sign_road_work',
+  'object.arrow_board': 'construction.arrow_board',
+  'object.stop_sign': 'construction.temporary_stop_sign',
+  'animal.doe': 'animal.deer',
+  'animal.buck': 'animal.deer',
+  'animal.stray_dog': 'animal.dog',
+};
+
+/** Canonical catalog id for anything an author might write, else `null`. */
+export function resolvePropCatalogId(catalogId: string): string | null {
+  if (Object.prototype.hasOwnProperty.call(PROP_DIMS, catalogId)) return catalogId;
+  return PROP_ALIAS_TARGETS[catalogId] ?? null;
+}
 
 export interface PropBehavior { readonly collidable: boolean; readonly occluder: boolean }
 
@@ -79,15 +130,50 @@ export const PROP_BEHAVIOR: Readonly<Record<string, PropBehavior>> = {
   'construction.portable_signal': { collidable: true, occluder: true },
   'construction.long_pipe': { collidable: true, occluder: true },
   'street.shopping_cart': { collidable: true, occluder: true },
+  // Loose objects in the travelled way are physical objects. Whether an ADS
+  // *should* brake for a tyre carcass is a behaviour question; whether the tyre
+  // is there is not, and a prop the engine cannot hit cannot be an obstacle.
+  'hazard.tire_debris': { collidable: true, occluder: true },
+  'hazard.cardboard_box': { collidable: true, occluder: true },
+  'hazard.downed_branch': { collidable: true, occluder: true },
+  'hazard.trash_bags': { collidable: true, occluder: true },
+  'hazard.ladder': { collidable: true, occluder: true },
+  'hazard.mattress': { collidable: true, occluder: true },
+  'hazard.debris': { collidable: true, occluder: true },
+  'animal.deer': { collidable: true, occluder: true },
+  'animal.dog': { collidable: true, occluder: true },
+  'animal.cat': { collidable: true, occluder: true },
 };
 
 export function propBehavior(catalogId: string): PropBehavior {
-  return PROP_BEHAVIOR[catalogId] ?? { collidable: false, occluder: true };
+  const id = resolvePropCatalogId(catalogId) ?? catalogId;
+  return PROP_BEHAVIOR[id] ?? { collidable: false, occluder: true };
+}
+
+/**
+ * Is this a catalog id this package can resolve to real dimensions?
+ *
+ * `propDims` deliberately falls back for unknown ids so non-Studio consumers stay parseable, and the
+ * original note said "renderers reject them loudly". Headless authoring never reaches a renderer, so
+ * for an agent the fallback is silent: a template carrying `vehicle.boxTruck` (which does not exist —
+ * the real id is `vehicle.box_truck`) validates with exit 0 and materialises at 4.70 x 1.82 x 1.45,
+ * i.e. a sedan. An occluder that silently becomes a sedan deletes the point of the scenario, which is
+ * pitfall 4 in docs/research/retargeting.md: resolve assets against the catalog at author time and
+ * fail loud. Author-time surfaces must call this and refuse unknown ids.
+ */
+export function isKnownPropCatalogId(catalogId: string): boolean {
+  return resolvePropCatalogId(catalogId) !== null;
+}
+
+/** Every id this package can resolve, sorted — suitable for a "did you mean" repair hint. */
+export function knownPropCatalogIds(): string[] {
+  return [...Object.keys(PROP_DIMS), ...Object.keys(PROP_ALIAS_TARGETS)].sort();
 }
 
 /** Unknown ids remain parseable for non-Studio consumers; renderers reject them loudly. */
 export function propDims(catalogId: string, override?: Partial<PropDims>): PropDims {
-  const base = PROP_DIMS[catalogId] ?? (catalogId.startsWith('vehicle.')
+  const resolved = resolvePropCatalogId(catalogId);
+  const base = (resolved === null ? undefined : PROP_DIMS[resolved]) ?? (catalogId.startsWith('vehicle.')
     ? { l: 4.7, w: 1.82, h: 1.45 }
     : { l: 1, w: 1, h: 1 });
   return {
@@ -95,4 +181,107 @@ export function propDims(catalogId: string, override?: Partial<PropDims>): PropD
     w: override?.w ?? base.w,
     h: override?.h ?? base.h,
   };
+}
+
+/* --------------------------------------------- actor class / catalog id agreement */
+
+/**
+ * Which actor classes each catalog id may legitimately fill.
+ *
+ * ### Why this exists
+ *
+ * `roles[].actor` carries a semantic `class` *and* a `catalogId`, and nothing
+ * checked that the two described the same object. A measured clip in this
+ * repository reads `kind: 'animal'`, `tags: ['class:animal',
+ * 'catalog:pedestrian.adult_walking']`: the trajectory is an animal's, the
+ * model is a walking adult human. That scenario passed the admission gate, the
+ * physics-quality layer and an independent intent critic, because every one of
+ * those instruments reads trajectories or a top-down render, where a 0.6 m box
+ * is a 0.6 m box whatever fills it. The only place the substitution is visible
+ * is the catalog id — so the catalog id is where it has to be caught. A corpus
+ * built from clips like that teaches a perception model that an animal looks
+ * like a person.
+ *
+ * It is the same defect as `vehicle.boxTruck` (not a real id) materialising as
+ * a sedan, so the rule is stated for every class, not for animals: **an actor's
+ * class and its catalog model must describe the same kind of thing, or the
+ * build fails.**
+ *
+ * ### The rule
+ *
+ * A catalog id's own class does most of the work, because ids are
+ * `<class>.<name>` by schema. `vehicle.*` is the exception: "vehicle" covers a
+ * hatchback and a 53-foot tractor-trailer, whose dynamics classes are not
+ * interchangeable, so those are enumerated. `static_object` is accepted for
+ * *any* id: a deer carcass, a parked car and a dumped mattress are all
+ * legitimately inert scenery, and refusing that would forbid real scenarios.
+ */
+const ACTOR_CLASSES_BY_CATALOG_ID: Readonly<Record<string, readonly string[]>> = {
+  'vehicle.sedan': ['car'],
+  'vehicle.hatchback': ['car'],
+  'vehicle.suv': ['car'],
+  'vehicle.pickup': ['car', 'truck'],
+  'vehicle.van': ['van'],
+  'vehicle.ambulance': ['van', 'truck'],
+  'vehicle.box_truck': ['truck'],
+  'vehicle.semi_truck': ['truck'],
+  'vehicle.bus': ['bus'],
+  'vehicle.tram': ['bus', 'truck'],
+  'vehicle.motorcycle': ['motorcycle'],
+  'vehicle.bicycle': ['bicycle'],
+  'vehicle.mobility_scooter': ['scooter'],
+  // A flagger and a marshal are people, filed under the work zone they belong to.
+  'construction.flagger': ['pedestrian'],
+};
+
+/** Actor classes acceptable for a catalog id, or `null` if the id is unknown. */
+export function actorClassesForCatalogId(catalogId: string): readonly string[] | null {
+  const id = resolvePropCatalogId(catalogId);
+  if (id === null) return null;
+  const explicit = ACTOR_CLASSES_BY_CATALOG_ID[id];
+  if (explicit) return [...explicit, 'static_object'];
+  const propClass = id.slice(0, id.indexOf('.'));
+  switch (propClass) {
+    case 'pedestrian':
+      return ['pedestrian', 'static_object'];
+    case 'animal':
+      return ['animal', 'static_object'];
+    default:
+      // construction / occluder / street / hazard props are inert scenery.
+      return ['static_object'];
+  }
+}
+
+/**
+ * Why this `class` may not be filled by this `catalogId`, or `null` if it may.
+ *
+ * Returns a sentence rather than a boolean because the caller's job is to fail
+ * loudly and say what to fix. An unknown id is a mismatch too: it is the shape
+ * the `vehicle.boxTruck` defect took.
+ *
+ * The long-term home for this check is `ActorSpecSchema` in
+ * `scenario-model/src/schema/v2/roles.ts`, which would reject the document at
+ * `template validate` instead of at materialize time; that move needs the
+ * catalog id table to be reachable from `scenario-model`, which today would
+ * mean a new workspace dependency.
+ */
+export function actorCatalogMismatch(actorClass: string, catalogId: string): string | null {
+  const allowed = actorClassesForCatalogId(catalogId);
+  if (allowed === null) {
+    return `catalog id "${catalogId}" does not exist; an unresolved id silently materialises as a default model`;
+  }
+  if (allowed.includes(actorClass)) return null;
+  return `actor class "${actorClass}" cannot be filled by catalog model "${catalogId}" ` +
+    `(that model may only be ${allowed.join(', ')})`;
+}
+
+/** The catalog model's own footprint, in the scenario-model dims convention. */
+export function catalogActorDims(
+  catalogId: string,
+): { length: number; width: number; height: number } | null {
+  const id = resolvePropCatalogId(catalogId);
+  if (id === null) return null;
+  const dims = PROP_DIMS[id];
+  if (!dims) return null;
+  return { length: dims.l, width: dims.w, height: dims.h };
 }

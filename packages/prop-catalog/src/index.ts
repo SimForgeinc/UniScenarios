@@ -30,12 +30,14 @@ export { PROP_CLASSES, PROP_TAGS } from './types.js';
 
 export {
   CATALOG,
+  CATALOG_ALIASES,
   CATALOG_IDS,
   type CatalogId,
   type CatalogQuery,
   getEntry,
   isCatalogId,
   queryCatalog,
+  resolveCatalogId,
 } from './catalog.js';
 
 export { BUILDER_IDS, buildProp, type PropParamMap } from './registry.js';
@@ -79,3 +81,4 @@ export type {
 } from './builders/construction.js';
 export type { RunParams } from './builders/street.js';
 export type { TrashBagParams } from './builders/hazards.js';
+export type { AnimalParams } from './builders/animals.js';

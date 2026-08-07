@@ -387,6 +387,42 @@ export const CATALOG = [
     defaultParams: { length: 6, height: 1.8 },
   },
 
+  // ----------------------------------------------------------------- animals
+  // `ACTOR_CLASSES` has always allowed `animal`, but with no model behind it an
+  // author had to substitute a pedestrian, which is invisible to every check
+  // that reads trajectories or a top-down render. Deer / dog / cat span the
+  // decision space: too big to drive through, ambiguous, too small to swerve for.
+  {
+    id: 'animal.deer',
+    label: 'Deer',
+    class: 'animal',
+    description:
+      'Adult white-tailed deer standing broadside with its head up. The reference large animal: it dominates real animal-strike statistics and its mass sits at windscreen height rather than under the bumper.',
+    dims: { l: 1.76, w: 0.46, h: 1.62 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadway'],
+    defaultParams: { color: '#9c7b52' },
+  },
+  {
+    id: 'animal.dog',
+    label: 'Large dog',
+    class: 'animal',
+    description:
+      'Loose large dog in a trotting stance. The medium animal: short enough to be hidden by a parked car and fast enough to cross a lane inside a driver reaction time.',
+    dims: { l: 1.07, w: 0.3, h: 0.75 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadway'],
+    defaultParams: { color: '#a8834f' },
+  },
+  {
+    id: 'animal.cat',
+    label: 'Cat',
+    class: 'animal',
+    description:
+      'Cat crossing in a low crouched run. The small animal: the case where braking hard or swerving is the wrong response, and the one that is genuinely hard to detect against asphalt at night.',
+    dims: { l: 0.63, w: 0.15, h: 0.35 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadway'],
+    defaultParams: { color: '#5c5750' },
+  },
+
   // ------------------------------------------------------------------ street
   {
     id: 'street.mailbox_cluster',
@@ -470,6 +506,36 @@ export const CATALOG = [
     tags: ['debris', 'roadway', 'occlusion:low'],
     defaultParams: {},
   },
+  {
+    id: 'hazard.ladder',
+    label: 'Fallen ladder',
+    class: 'hazard',
+    description:
+      'Aluminium extension ladder shed from a roof rack, lying across the carriageway. Long, thin and low: too long to straddle and hard to see at range.',
+    dims: { l: 3.55, w: 0.44, h: 0.08 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
+  {
+    id: 'hazard.mattress',
+    label: 'Shed mattress',
+    class: 'hazard',
+    description:
+      'Double mattress lost from a load and lying folded in the lane. Large, soft and completely undrivable-over: it fills a lane despite weighing almost nothing.',
+    dims: { l: 1.86, w: 1.32, h: 0.3 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
+  {
+    id: 'hazard.debris',
+    label: 'Unidentified debris',
+    class: 'hazard',
+    description:
+      'Scatter of broken material in the travelled way with no recognisable identity. The generic obstacle for briefs that say "there is debris in the lane" without naming the object.',
+    dims: { l: 0.88, w: 0.85, h: 0.24 },
+    tags: ['debris', 'roadway', 'occlusion:low'],
+    defaultParams: {},
+  },
 ] as const satisfies readonly CatalogEntry[];
 
 /** Every catalog id, as a literal union. */
@@ -481,6 +547,66 @@ export const CATALOG_IDS = CATALOG.map((entry) => entry.id) as readonly CatalogI
 
 export function isCatalogId(id: string): id is CatalogId {
   return BY_ID.has(id);
+}
+
+/**
+ * Author-facing spellings that resolve onto a canonical entry.
+ *
+ * The catalog files a prop under the class that owns it — a tyre carcass is a
+ * `hazard`, a cone is `construction`, a trolley is `street` furniture. An
+ * author (or an LLM writing a template) does not know that taxonomy and reaches
+ * for the generic `object.` namespace: `object.tyre`, `object.cone`,
+ * `object.barrier`. Until now those resolved to nothing, and an unresolved id
+ * is the dangerous failure in this system — it does not error, it falls through
+ * to a unit cube or, under a `vehicle.` prefix, to a sedan, and the scenario
+ * silently stops being about the thing it was about.
+ *
+ * So this is a vocabulary problem, not a content problem, and the fix is a
+ * synonym table rather than a second copy of every prop. Two invariants keep it
+ * honest, both asserted in the test suite: an alias may never name an id that
+ * does not exist, and an alias may never shadow a canonical id.
+ */
+export const CATALOG_ALIASES: Readonly<Record<string, CatalogId>> = {
+  // Loose objects in the carriageway.
+  'object.tyre': 'hazard.tire_debris',
+  'object.tire': 'hazard.tire_debris',
+  'object.box': 'hazard.cardboard_box',
+  'object.cardboard_box': 'hazard.cardboard_box',
+  'object.branch': 'hazard.downed_branch',
+  'object.trash_bags': 'hazard.trash_bags',
+  'object.ladder': 'hazard.ladder',
+  'object.mattress': 'hazard.mattress',
+  'object.debris': 'hazard.debris',
+  'object.shed_load': 'hazard.debris',
+  'object.shopping_cart': 'street.shopping_cart',
+  // Traffic-management furniture: a work zone is made of these.
+  'object.cone': 'construction.traffic_cone',
+  'object.traffic_cone': 'construction.traffic_cone',
+  'object.barrel': 'construction.channelizer_drum',
+  'object.drum': 'construction.channelizer_drum',
+  'object.barrier': 'construction.jersey_barrier',
+  'object.jersey_barrier': 'construction.jersey_barrier',
+  'object.barrier_run': 'construction.jersey_barrier_run',
+  'object.barricade': 'construction.barricade_type3',
+  'object.pedestrian_barrier': 'construction.pedestrian_barrier',
+  'object.sign_board': 'construction.sign_road_work',
+  'object.arrow_board': 'construction.arrow_board',
+  'object.stop_sign': 'construction.temporary_stop_sign',
+  // Animals, under the spellings a brief uses.
+  'animal.doe': 'animal.deer',
+  'animal.buck': 'animal.deer',
+  'animal.stray_dog': 'animal.dog',
+} as const;
+
+/**
+ * Canonical id for anything an author might write, or `null` if there is no
+ * such prop. Callers that resolve assets at author time should treat `null` as
+ * an error rather than substituting a default — that substitution is the defect
+ * this function exists to prevent.
+ */
+export function resolveCatalogId(id: string): CatalogId | null {
+  if (BY_ID.has(id)) return id as CatalogId;
+  return CATALOG_ALIASES[id] ?? null;
 }
 
 /** Look up an entry, throwing on an unknown id (ids are a hard contract). */

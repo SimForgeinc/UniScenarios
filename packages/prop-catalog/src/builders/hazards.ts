@@ -132,3 +132,86 @@ export function buildDownedBranch(): Group {
   );
   return group;
 }
+
+/**
+ * Aluminium extension ladder that has come off a roof rack.
+ *
+ * The long thin case: a 3.6 m object lying across a lane is far too long to
+ * straddle and far too low to see at range, and its aspect ratio is nothing
+ * like a vehicle's.
+ */
+export function buildLadder(): Group {
+  const group = new Group();
+  const alu = material('metal');
+  const length = 3.55;
+  const width = 0.44;
+  const railW = 0.055;
+  const railH = 0.08;
+
+  // Two rails along +X, rungs across. The whole thing lies flat on the road,
+  // slightly askew, which is how a shed load actually comes to rest.
+  for (const z of [width / 2 - railW / 2, -(width / 2 - railW / 2)]) {
+    group.add(box([length, railH, railW], alu, { at: [0, railH / 2, z] }));
+  }
+  const rungs = 11;
+  for (let i = 0; i < rungs; i += 1) {
+    const x = -length / 2 + (length * (i + 0.5)) / rungs;
+    group.add(cyl(0.016, width - railW, alu, { axis: 'z', at: [x, railH * 0.55, 0], segments: 8 }));
+  }
+  return group;
+}
+
+/**
+ * Double mattress shed from a load, lying folded in the lane.
+ *
+ * The classic "large, soft, and completely undrivable-over" obstacle: it fills
+ * a lane, it is tall enough to matter, and a bumper hitting it is a real event
+ * even though the object weighs nothing.
+ */
+export function buildMattress(): Group {
+  const group = new Group();
+  const ticking = material('mattress');
+  const l = 1.86;
+  const w = 1.32;
+  const h = 0.24;
+
+  group.add(box([l, h * 0.8, w], ticking, { at: [0, h * 0.4, 0] }));
+  // Buckled corner: one end has folded up on itself.
+  group.add(box([l * 0.36, h * 0.7, w * 0.98], ticking, {
+    at: [l * 0.28, h * 0.72, 0],
+    rot: [0, 0, -0.22],
+  }));
+  // Piping along the edges, so the silhouette is not a perfect slab.
+  for (const z of [w / 2 - 0.03, -(w / 2 - 0.03)]) {
+    group.add(cyl(0.03, l * 0.98, material('fabric'), { axis: 'x', at: [0, h * 0.4, z], segments: 8 }));
+  }
+  return group;
+}
+
+/**
+ * Unidentified debris: a scatter of broken material in the travelled way.
+ *
+ * The generic escape hatch. When a scenario needs "there is something in the
+ * lane" and the exact object is not the point, this is the id to use — it is
+ * deliberately irregular and deliberately not any recognisable product, so a
+ * brief that says "debris" no longer has to be authored as a cardboard box.
+ */
+export function buildDebrisPile(): Group {
+  const group = new Group();
+  const random = rand(23);
+  const mats = [material('plastic'), material('wood'), material('cardboard'), material('metal')];
+
+  for (let i = 0; i < 9; i += 1) {
+    const mat = mats[i % mats.length] as ReturnType<typeof material>;
+    const l = 0.16 + random() * 0.34;
+    const w = 0.10 + random() * 0.24;
+    const h = 0.05 + random() * 0.16;
+    group.add(
+      box([l, h, w], mat, {
+        at: [(random() - 0.5) * 0.66, h / 2 + 0.006, (random() - 0.5) * 0.5],
+        rot: [0, (random() - 0.5) * 2.4, (random() - 0.5) * 0.16],
+      }),
+    );
+  }
+  return group;
+}

@@ -20,6 +20,7 @@
 export type PropClass =
   | 'vehicle'
   | 'pedestrian'
+  | 'animal'
   | 'construction'
   | 'occluder'
   | 'hazard'
@@ -28,6 +29,7 @@ export type PropClass =
 export const PROP_CLASSES: readonly PropClass[] = [
   'vehicle',
   'pedestrian',
+  'animal',
   'construction',
   'occluder',
   'hazard',

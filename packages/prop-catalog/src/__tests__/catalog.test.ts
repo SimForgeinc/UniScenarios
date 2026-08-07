@@ -54,7 +54,7 @@ describe('catalog', () => {
 
   it('queries by class and by tag', () => {
     expect(queryCatalog({ class: 'vehicle' })).toHaveLength(13);
-    expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(8);
+    expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(11);
 
     const vru = queryCatalog({ tags: ['vru'] });
     expect(vru.map((entry) => entry.id)).toContain('pedestrian.child_walking');

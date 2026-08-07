@@ -28,10 +28,15 @@ import {
   buildTemporaryStopSign,
   buildTrafficCone,
 } from './builders/construction.js';
+import type { AnimalParams } from './builders/animals.js';
+import { buildCat, buildDeer, buildDog } from './builders/animals.js';
 import type { TrashBagParams } from './builders/hazards.js';
 import {
   buildCardboardBox,
+  buildDebrisPile,
   buildDownedBranch,
+  buildLadder,
+  buildMattress,
   buildTireDebris,
   buildTrashBags,
 } from './builders/hazards.js';
@@ -91,6 +96,9 @@ export interface PropParamMap {
   'pedestrian.child_standing': PedestrianParams;
   'pedestrian.child_walking': PedestrianParams;
   'pedestrian.traffic_marshal': PedestrianParams;
+  'animal.deer': AnimalParams;
+  'animal.dog': AnimalParams;
+  'animal.cat': AnimalParams;
   'construction.traffic_cone': ConeParams;
   'construction.channelizer_drum': Record<string, never>;
   'construction.barricade_type3': Record<string, never>;
@@ -118,6 +126,9 @@ export interface PropParamMap {
   'hazard.cardboard_box': Record<string, never>;
   'hazard.trash_bags': TrashBagParams;
   'hazard.downed_branch': Record<string, never>;
+  'hazard.ladder': Record<string, never>;
+  'hazard.mattress': Record<string, never>;
+  'hazard.debris': Record<string, never>;
 }
 
 type Builders = { [K in CatalogId]: (params: PropParamMap[K]) => Group };
@@ -146,6 +157,9 @@ const BUILDERS: Builders = {
   'pedestrian.child_standing': buildChildStanding,
   'pedestrian.child_walking': buildChildWalking,
   'pedestrian.traffic_marshal': buildTrafficMarshal,
+  'animal.deer': buildDeer,
+  'animal.dog': buildDog,
+  'animal.cat': buildCat,
   'construction.traffic_cone': buildTrafficCone,
   'construction.channelizer_drum': buildChannelizerDrum,
   'construction.barricade_type3': buildBarricadeTypeIII,
@@ -173,6 +187,9 @@ const BUILDERS: Builders = {
   'hazard.cardboard_box': buildCardboardBox,
   'hazard.trash_bags': buildTrashBags,
   'hazard.downed_branch': buildDownedBranch,
+  'hazard.ladder': buildLadder,
+  'hazard.mattress': buildMattress,
+  'hazard.debris': buildDebrisPile,
 };
 
 /**
