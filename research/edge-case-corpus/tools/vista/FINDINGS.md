@@ -1025,3 +1025,69 @@ briefs cost an hour of machine time and nothing else.
   halves, so a model cannot see the same situation at a different site and score it as generalisation.
 - `/tmp/vista-showcase-final/` — 20 ego-centric renders, 8 frames each, ego ringed, with measured
   clearance / minTTC / actual braking in the caption so a picture can be checked against its numbers.
+
+---
+
+## 25. The capability workstream, completed: five for five
+
+All five parallel workstreams landed, verified end to end through the CLI, and committed. The gold
+regression is unchanged after all of it (3/3 frozen, 3/3 HQ, every Q clause clean), and all eight
+packages typecheck clean.
+
+**Every single workstream's headline finding was the same shape, and it was not the one I predicted:
+the capability existed and was unreachable, or was reachable and broken in the default path.**
+
+| workstream | what I claimed was missing | what was actually true |
+|---|---|---|
+| reverse | "no vehicle can reverse" | reverse existed, authored only via `role.extensions.motionSemantics` — a `z.record(z.string(), z.unknown())` field absent from all three published JSON Schemas — and then **broken under `dynamic-v1`, the default backend**, by a sign error in the tyre-slip model |
+| catalog | "no animal / debris / traffic furniture" | the entire construction and debris inventory existed under names no author reaches for. Only `animal.*`, `hazard.ladder`, `hazard.mattress` were genuinely absent |
+| sensors | "no sensor model" | correct, and worse: `sensors` was **silently stripped** by `parseSimScenarioInput`, so a template could declare them, validate clean, and simulate as if it had said nothing |
+| signals | "no blackout or flashing arrow" | correct, plus `phaseForbidsEntry` classified a dark signal as **PERMISSIVE**, and stop lines were bound to lanes the ego never drives — **0 of 16 cells** had a stop line on the driven route |
+| lanes | "87.8% single-lane, so cut-ins are unbuildable" | **a group-counting artifact of mine.** 22.9% of corridors are multi-lane on all five maps. The real defect was `pose.laneOffset` being silently discarded |
+
+Two of my five diagnoses were wrong. Three agents corrected my *measurements* rather than my code.
+
+### The reverse root cause, because it is the sharpest example
+```
+frontSlip = atan2(vy + lf*r, |u|) - steerRad            // as written: unsigned
+frontSlip = atan2(vy + lf*r, |u|) - direction * steerRad // fixed
+```
+A tyre is symmetric: the lateral slip velocity a steer `d` produces is `-u·sin(d)`, which changes sign
+with `u`. So a reversing car yawed the **opposite way to the command**, every correction was positive
+feedback, steering saturated in ~3 s, and the body left its route — `s` pinned at 0.0001 m and
+`laneRsl` null for all 601 ticks across 30/30 cells, every one rejected `no_interaction`. Forward
+motion is bit-identical (`direction = +1`). Verified after the fix: median 4.40 m rearward, max 9.11 m,
+20/30 cells over 3 m, heading held to 0.0°.
+
+### Authoring traps found, now surface rules 19-24
+- **A carriageway hazard must be a ROLE with `static: true`, never a prop.** Props have no actor track;
+  criticality metrics iterate actors only, so a prop-authored obstacle has **no TTC and no PET by
+  construction**.
+- **The ego stops short of a static obstacle rather than passing it** (s=44.7 against a hazard at
+  s=50). "Ego passes debris closely" is close to unauthorable with collision avoidance on — which is
+  why the whole static-hazard family reads as physically-valid-but-boring.
+- **Never author the avoidance as a t=0 route polyline.** It removes the collision course, so the pair
+  is never scored: 30/30 cells with `minTTC: null` despite a correctly placed hazard. Triggered
+  `laneOffset` records on 26/30. General form: *an evasive action authored as an initial condition
+  deletes the conflict it was meant to evade.*
+- **Engine criticality metrics go stale after an avoidance** — one case reported `minDistance 15.83 m`
+  when the true closest approach was 2.03 m. `evaluate` reads those, so a real near miss can be graded
+  `trivially-safe`. (My gate is immune: it recomputes OBB clearance from raw ticks.)
+- **A negative constant `s` on an `on_reference` role silently zeroes site matching.** Swept
+  `-50 … -1` and the JSON number `-35`: **0 sites on every map**, no clause attributed, no validator
+  finding. The same value as an unfoldable expression matches 3 sites per map. The safer-looking
+  authoring is the one that fails.
+
+### Engine defects recorded independently of the features
+`newcaps/DEFECT-signal-authority.md` (blackout permissive; flashing_red as solid red; stop lines on
+un-driven lanes), `DEFECT-reverse-route-detachment.md` (the slip sign, and the two backends disagreeing
+about what a route means for a reversing actor), `DEFECT-self-occlusion.md` (real but latent — 0 of
+14,309 declarations affected, so my occlusion rule stands), `DEFECT-negative-role-s-infeasible.md`,
+and `OPEN-reversing-pedestrian-golden.md`, which I deliberately left red rather than re-baseline.
+
+### A methodological failure of my own worth recording
+For several hours I reported "`npx tsc --noEmit` clean" as evidence the tree was healthy. **There is no
+root tsconfig in this repo**, so that command silently prints help and exits 1 — it was checking
+nothing. Per-package typechecking immediately surfaced real errors that had been hiding, including four
+in `cli` caused by an exhaustiveness gate that a released agent's change had broken. Verifying with a
+command whose failure mode looks like success is worse than not verifying.
