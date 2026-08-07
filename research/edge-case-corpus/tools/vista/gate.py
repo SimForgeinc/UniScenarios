@@ -401,3 +401,23 @@ def deduplicate(cells, coarse=True):
         seen.add(s)
         out.append(c)
     return out
+
+
+def structural_signature(c, trace_facts=None):
+    """Signature over CONFLICT STRUCTURE, not outcome magnitude.
+
+    The first signature banded (map, site, clearance/0.5 m, minTTC/0.5 s, decel/1 m/s^2). Every one of
+    those last three is an outcome magnitude, which is exactly what parameter jitter perturbs, so it
+    kept cells 11 cm of clearance apart as "different lessons" while they were identical in
+    closest-approach time and path separation. Structure is what makes a scenario a different lesson:
+    which kind of road user, coming from where, doing what, and how the conflict resolves.
+    """
+    f = trace_facts or {}
+    def band(x, w):
+        return None if x is None else int(x / w)
+    return (c.get('mapId'), c.get('siteId'),
+            f.get('kind'),                       # what kind of road user
+            f.get('geometry'),                   # crossing / rear-end / lateral
+            bool(f.get('incursion')),            # did it come into our lane
+            band(c.get('closestT'), 2.0),        # when in the clip, coarsely
+            band(c.get('clearanceM'), 2.0))      # near-miss vs comfortable, coarsely

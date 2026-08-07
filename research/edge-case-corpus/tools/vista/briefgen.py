@@ -64,6 +64,11 @@ Also: **there are no rail crossings, no school-zone markings and no work-zone ma
 never require them as map features - build the situation from ordinary road structure, vehicles and
 people.
 
+**No vehicle in this simulator can reverse.** Measured: exactly 1 body in 1642 cells moved more than
+0.8 m backwards. So never write a brief that needs a car to back out of a driveway or parking bay, or
+to reverse in the carriageway. If you want that situation, describe what the ego encounters instead -
+a vehicle already protruding from a driveway across the lane, or one stopped broadside in the road.
+
 What else makes a good brief:
 - it names a SPECIFIC observable event, not a vague danger. "A vehicle behaves unpredictably" is
   useless; "The lead brakes hard and stops in the lane while the ego is closing" is usable.

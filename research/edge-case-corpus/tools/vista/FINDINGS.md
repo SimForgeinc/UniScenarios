@@ -832,3 +832,82 @@ motion, never internal mechanical causes — the simulator cannot burst a tyre o
 That cut unbuildable briefs **31% → 4%**. Generated briefs author at 0.32-0.39, the same as the
 hand-written ones. It did **not** by itself raise intent realisation — a negative result; the
 co-travel rule did.
+
+---
+
+## 22. Corrections forced by the second independent audit
+
+Two numbers I published did not reproduce. Both are corrected here; the conclusions they supported
+survive, but the arguments were wrong.
+
+### "39 of 65 gate-passing cells were interpenetrations" — did not reproduce
+That specific batch contains only **5** C1–C5-passing cells. Wherever the 39/65 came from, it was not
+that batch, and it should not have been quoted. The correct figure is from a scan of **3,390
+accept/critical cells across 13 runs**:
+
+| | n |
+|---|---|
+| cells passing the frozen gate C1–C5 | 1,642 |
+| …of which the ego truly interpenetrates another body | **482 = 29.4%** |
+
+**The finding is confirmed and understated.** On the worked case the ego's footprint is **62.5%
+inside** the lead's (5.70 m² of overlap, 1.80 m depth) sustained for **5.36 s**, with
+`metrics.collisions == []` and `evaluate` returning accept/critical. Root cause, independently
+established: **the engine's collision detector misses 50.5% of true interpenetrations**, so C5's
+"zero collisions" clause carries almost no information. Q8 is doing work nothing else does.
+Sub-tick aliasing was ruled out: 16× supersampling over 667 cells found **zero** hidden contacts, so
+the 0.10 m threshold is a rendering convention, not a sampling safeguard.
+
+### "The median Q7-rejected cell missed by 0.20 m" — did not reproduce
+Measured over the population Q7 actually filters, the median is **1.973 m**, roughly 10× my figure.
+My 0.20 m came from a small non-representative sample.
+
+**The 2.0 m threshold is nevertheless right, for a reason I did not give.** Adjacent 3.5 m lanes
+carrying 1.9 m-wide vehicles leave a body-to-body gap of about **1.6 m**, so any threshold below
+~1.9 m makes adjacent-lane conflicts *structurally impossible* to express. The number stands; the
+justification is lane geometry, not a sample median.
+
+**And Q7 had a real hole**: it ignored timing entirely, so **10.8%** of the cells the relaxation
+rescued had the two bodies on the same ground **more than 4 s apart** — which is not a conflict.
+Q7 now requires `pathSeparationM <= 2.0 AND encroachmentGapS <= 4.0`.
+
+### My lane-incursion predicate was inverted, and worse than I reported
+I attributed the dominant residual failure to authoring. The auditor showed the **predicate itself**
+was broken: `ego_frame_offsets` had **no longitudinal gate**, so a body 100 m off to the side scored a
+huge lateral offset, and the moment the ego turned the projection collapsed below the threshold and
+was scored as "entered my lane". Independently measured **precision 0.375**, firing **253** times when
+nothing entered anything — false positives with start-lateral offsets of 102.57 m, −67.64 m and
+−40.26 m on bodies the engine says moved 0.16–0.67 m sideways.
+
+Corrected with a 30 m longitudinal gate and corroboration from the engine's own `lateralOffsetM`.
+Firing rate on a held sample fell **0.681 → 0.404**, against an independently measured true rate of
+**0.286**. One caveat found while fixing it: `lateralOffsetM` is identically ~0 for `relative_to`/
+route-bound actors (it is measured against their own path), reading 0.00–0.06 m throughout the gold
+dart-out, so it **cannot** be used alone — it would reject a textbook incursion.
+
+**The volume consequence is the real finding: only 28.6% of gate-passing cells truly contain a lateral
+incursion.** That is an authoring limit, and the broken predicate had been concealing how bad it is.
+
+### Two more validator bugs, both mine
+- **`challenger_oncoming` never checked relative heading.** It fired on 22 actors of which 16 were
+  travelling the *same* direction — precision **0.136**. An ordinary lead vehicle satisfied every
+  condition. Now requires a relative heading ≥ 120°.
+- **Near-tautologies were being accepted as the central requirement.** Base rates: `challenger_is_ahead`
+  **1.000**, `ego_brakes_hard` 0.889, `static_obstacle_present` 0.644 — and one template was admitted
+  on `static_obstacle_present` alone. A verdict now abstains if it rests only on predicates with a base
+  rate above 0.6.
+
+### Deduplication was too LAX, not too aggressive
+The 310 → 61 collapse reproduced exactly, and the signature was vindicated on the axes it uses
+(0/109 groups mixed different challengers). But cells kept as "different lessons" differ by **11 cm of
+clearance and 0.065 m/s²** while being identical in closest-approach time and path separation. All
+three banded fields are **outcome magnitudes — precisely what parameter jitter perturbs.** The
+signature is now over conflict *structure*: road-user kind, conflict geometry, whether an incursion
+occurred, and coarse timing.
+
+### Also corrected
+- `Q1` and `Q5` **never fire on any of 1,642 cells** — they cost nothing and prove nothing.
+- I raised a concern that `Q2` was weakened by one-tick freezes; the auditor tested it and **withdrew
+  it** (2 cells of 1,642). Q2 is left alone.
+- **No vehicle in this engine can reverse** (1 body in 1,642 moved >0.8 m backwards), so briefs naming
+  a reversing manoeuvre are unbuildable and are now filtered at generation.

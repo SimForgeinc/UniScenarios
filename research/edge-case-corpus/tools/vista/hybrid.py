@@ -92,9 +92,12 @@ def _eval_one(pred, ch, ego, trace):
     """Exact evaluation of one predicate. Returns True/False."""
     any_ = lambda f: any(f(c) for c in ch if c)
     if pred == 'challenger_enters_ego_path':
-        return any_(lambda c: c['entersEgoPath'])
+        vs = [motion.lane_incursion(trace, c['actor']) for c in ch if c]
+        return True if any(v is True for v in vs) else (False if any(v is False for v in vs) else None)
     if pred == 'challenger_crosses_ego_path':
-        return any_(lambda c: c['entersEgoPath'] and (c['lateralRangeM'] or 0) >= 3.0)
+        vs = [(motion.lane_incursion(trace, c['actor']) is True) and (c['lateralRangeM'] or 0) >= 3.0
+              for c in ch if c]
+        return any(vs)
     if pred == 'challenger_brakes_hard':
         return any_(lambda c: c['brakesHard'])
     if pred == 'challenger_stops_in_path':
@@ -111,8 +114,11 @@ def _eval_one(pred, ch, ego, trace):
     if pred == 'challenger_turns':
         return any_(lambda c: (c['headingChangeDeg'] or 0) >= 45.0)
     if pred == 'challenger_oncoming':
-        return any_(lambda c: (c['headingChangeDeg'] or 0) < 45.0 and c['aheadAtStart']
-                    and c['moves'] and (c['minAbsLateralM'] or 99) < 6.0)
+        # It must actually be coming the OTHER WAY. The first version never checked relative
+        # heading at all and fired on 22 actors of which 16 were travelling the same direction
+        # (precision 0.136) -- an ordinary lead vehicle satisfied every condition.
+        return any_(lambda c: c['moves'] and c.get('relHeadingDeg') is not None
+                    and c['relHeadingDeg'] >= 120.0)
     if pred == 'challenger_is_vehicle':
         return any_(lambda c: c['kind'] in ('car', 'truck', 'bus', 'van', 'motorcycle') and c['moves'])
     if pred == 'challenger_is_pedestrian':
@@ -146,6 +152,11 @@ def evaluate(trace, parsed):
     if not per:
         return {'verdict': 'abstain', 'perPredicate': per, 'missing': [],
                 'reason': 'no computable predicate was selected for this brief'}
+    # a verdict resting only on near-tautologies is not evidence of anything
+    if not discriminating([p['predicate'] for p in per]):
+        return {'verdict': 'abstain', 'perPredicate': per, 'missing': [],
+                'reason': 'only near-tautological predicates were selected ('
+                          + ', '.join(p['predicate'] for p in per) + '); nothing discriminating'}
     if missing:
         return {'verdict': 'absent', 'perPredicate': per, 'missing': missing,
                 'reason': 'required and not observed: ' + ', '.join(missing)}
@@ -162,3 +173,20 @@ def validate(trace_path, brief, parsed=None):
     r = evaluate(trace, parsed)
     r['parsed'] = parsed
     return r
+
+# Predicates that are nearly always true carry no evidence. Measured base rates over 45 clips:
+# challenger_is_ahead 1.000, ego_brakes_hard 0.889, static_obstacle_present 0.644. One template was
+# admitted on `static_obstacle_present` ALONE. A `central` predicate with a base rate above this is
+# refused, and the brief is treated as having no discriminating computable requirement.
+TAUTOLOGY_BASE_RATE = {
+    'challenger_is_ahead': 1.000,
+    'ego_brakes_hard': 0.889,
+    'static_obstacle_present': 0.644,
+    'challenger_is_vehicle': 0.62,
+}
+TAUTOLOGY_MAX = 0.60
+
+
+def discriminating(preds):
+    """The subset of predicates that actually carry evidence."""
+    return [p for p in preds if TAUTOLOGY_BASE_RATE.get(p, 0.0) <= TAUTOLOGY_MAX]
