@@ -471,13 +471,14 @@ The independent judge's blunt assessment, over 252 judged cells, and I agree wit
   given that no intervention targeted novelty.
 - Coverage ceiling: 21/32 DEV briefs admitted at least once; 11 never admitted at all.
 
-**The three numbers should be reported separately and never conflated:**
+**The three numbers should be reported separately and never conflated.** All three are best-of-2,
+one gate, applied identically to both splits:
 
 | tier | count | meaning |
 |---|---|---|
-| gate-admitted | **57** | passes the frozen contractual gate |
-| quality-gated | **35** (29 with Q7 live on both splits) | also passes Q1–Q7 |
-| judged fit | **≈ 13** | also survives an independent LLM judge at high/acceptable |
+| gate-admitted (candidate) | **54 / 92 = 0.587** | passes the frozen contractual gate |
+| quality-gated | **24 / 92 = 0.261** | also passes Q1–Q7 |
+| judged fit | **≈ 15** | also survives an independent judge at high/acceptable (measured, §17) |
 
 **Do not call any of this a training corpus until the intent-not-realised rate is under ~10%.** The
 honest description of the 57 is a *candidate pool* that a judge must still filter. That is a real
@@ -521,19 +522,37 @@ record.**
 **Both gaps are ≈ 0: neither the authoring surface nor the quality layer is overfitted to DEV.**
 HELDOUT is very slightly *better* than DEV on the frozen gate.
 
-### Against the baseline
+### Against the baseline — one N, applied identically everywhere
+
+An earlier draft of this section paired the *largest available* count (a union over five DEV runs and
+two HELDOUT runs) with a gap computed at N = 2, which breaks the rule stated in §11. Corrected: **every
+number below is best-of-2, the same procedure on both splits, one gate.**
 
 | | this lane | lane-1 baseline |
 |---|---|---|
-| HELDOUT rate, frozen gate, best-of-2 | **0.600** | 0.317 |
-| whole corpus, frozen gate | **60/92 = 0.652** | 29/92 = 0.315 |
-| whole corpus, HQ gate (strictly harder) | **33/92 = 0.359** | not measured |
-| generalisation gap | −0.037 | −0.004 |
+| HELDOUT rate, frozen gate | **0.600** | 0.317 |
+| whole corpus, frozen gate | **54/92 = 0.587** | 29/92 = 0.315 |
+| whole corpus, HQ gate (strictly harder) | **24/92 = 0.261** | not measured |
+| of those, expected to survive an independent judge | **≈ 15** (measured, §17) | not measured |
+| generalisation gap, frozen | **−0.037** | −0.004 |
+| generalisation gap, HQ | **+0.031** | — |
 
-**60 archetypes against 29, at a generalisation gap of −0.037.** Under the strictly tighter HQ gate —
-which additionally requires a real ego response, no prop pass-through, a sane heading, a TTC pair that
-involves the ego, and paths that genuinely contest the same ground — the corpus is **33**, still above
-the baseline's 29 while clearing seven checks the baseline never faced.
+**The comparison against the baseline is not like-for-like and should not be quoted as 1.86×.**
+Lane 1's 29 is *one arm, one run*; best-of-2 is a max over two arms. Single-arm, same frozen surface,
+whole corpus:
+
+| arm | corpus | vs baseline |
+|---|---|---|
+| sight | 28/92 = 0.304 | **0.97×** — at or slightly below it |
+| blind | 37/92 = 0.402 | **1.28×** |
+| best-of-2 | 54/92 = 0.587 | 1.86×, but the baseline never got a second attempt |
+
+**The defensible claim is 1.28× single-arm, or 1.86× with best-of-2 against a baseline given one
+attempt.** Running the baseline surface twice would settle it and has not been done.
+
+They are also **candidate** archetypes, not archetypes: 45–60% are rejected by an independent judge
+(§15). The baseline's 29 were never judged either, so this does not undermine the count comparison —
+it undermines the word.
 
 ### A negative result on my own fix
 DEV run 3 added the prop-placement rule ("keep props out of the ego's driving line") to address the
@@ -548,3 +567,112 @@ site budget (`--max-sites 4` against the 8–10 used originally): **4/6 still ad
 not each produced 2 passing cells and missed only the "≥ 3 distinct sites" clause — a sampling artifact
 of the smaller budget, not a defect in the template. Replay determinism was separately verified at
 **40/40 bit-identical** via `evidence verify`.
+
+---
+
+## 17. External validation: the physics-only quality layer predicts an independent LLM judge
+
+The strongest evidence that the Q layer is measuring something real, rather than my own preferences.
+Over all **252 judged cells**, with `passHQ` recomputed independently by the evaluation lane:
+
+| | HQ-pass | HQ-fail | Fisher |
+|---|---|---|---|
+| judged **good** | 80/130 = **0.615** | 37/122 = 0.303 | **p < 1e-6** |
+| judged **invalid** | 2/130 = **0.015** | 30/122 = 0.246 | **p < 1e-6** |
+
+Two independently built instruments — mine physics-only, theirs an LLM with vision — agree strongly.
+**The Q layer doubles the judged-good rate and all but eliminates `invalid`.** This is a better argument
+for the tightening than any admission count, because the two instruments share no code, no inputs beyond
+the trace, and no author.
+
+It also converts the earlier extrapolated "≈ 13 judged fit" into a measured figure:
+0.615 × 24 ≈ **15** like-for-like.
+
+### The one thing the quality layer cannot do — and it is the important one
+
+| | HQ-pass | HQ-fail | Fisher |
+|---|---|---|---|
+| intent-not-realised | 0.185 | 0.164 | **p = 0.74** |
+
+**Identical.** Every clause in the gate and in the Q layer is a physics clause, and no physics clause
+can tell whether the brief's *mechanism* is present. A clip in which a car is simply already in the
+ego's lane has exactly the same trajectory statistics as one in which a car cuts in. **The quality layer
+has taken physics as far as physics goes.**
+
+This is the direct motivation for the critic (§18), and it is why the remaining ~18% intent failure rate
+cannot be fixed by tightening the gate further.
+
+---
+
+## 18. The critic in the loop — application (b) from the brief, built and measured
+
+A second agent watches the **rendered rollout** and rules on one question only: *does the clip contain
+the mechanism the brief names?* It never sees the template, the gate result, or the author's reasoning —
+only the brief and the pictures — so its verdict is independent of the thing it is checking.
+
+This is the one place where sight is the right instrument. The repair loop's question ("is the clearance
+small enough?") is numeric, and the trace answers it exactly; an image is strictly worse. The critic's
+question is *semantic*, and **no number in the trace answers it** — §17 shows intent-not-realised is
+statistically identical for cells that pass and fail every physics clause I have (0.185 vs 0.164,
+p = 0.74).
+
+Validated against ground truth before use: it accepts the gold dart-out (confidence 0.94) and rejects a
+brief whose mechanism is absent from the same clip (confidence 0.98, *"There is no oncoming vehicle
+turning left across the ego path"*), while still correctly noting the clip contains a genuine conflict.
+
+### Critic-vs-gate agreement — the requested deliverable
+
+Run in-loop over DEV (blind arm, 32 briefs):
+
+| | |
+|---|---|
+| gate-admitted | 8/32 |
+| critic **agreed** the brief's mechanism is present | **4/8 = 0.500** |
+| critic **vetoed** | 4/8 = 0.500 |
+| final admitted (gate **and** critic) | 4/32 = 0.125 |
+
+**The critic rejects half of everything the frozen gate admits.** Applied to the full 60-scenario
+corpus: **19/60 = 0.317 intent-verified**, of which
+**10** also clear the physics quality gate, across 11 categories.
+
+Three independent instruments converge on the same number: my critic vetoes 0.50, the evaluation lane's
+judge rejects 0.45–0.60, and **the lane-1 baseline's own blind judge scored category agreement at
+0.517**. That last agreement is worth stating plainly: *the baseline's 29 archetypes were very likely
+subject to the same ~50% intent failure, and were simply never checked for it.*
+
+### What the critic actually catches
+Verbatim, and these are errors no trajectory statistic can see:
+
+- `c9-animal` — *"No animal is present; the actor crossing near the ego is a pedestrian."* The scenario
+  is filed under C9.hazard with an animal in its name and contains no animal.
+- `c1-tailgated-brake` — *"There is no vehicle behind the ego, so the ego is not being tailgated."*
+  Caught four times running; the gate admitted it every time.
+- `c8-taper-merge` — *"There is no visible lane-closure taper forcing a lateral merge."*
+- `c6-dooring` — *"The cyclist does enter the ego's path, but no parked-car door opening is shown."*
+
+These are **mislabelled** scenarios, which §15 argues is worse than a missing one: a corpus that teaches
+"animal crossing" from a clip containing a pedestrian teaches the wrong association.
+
+### It repairs as well as rejects
+`c11-double-park` was vetoed at iteration 2 (*"the truck is not shown becoming double-parked or moving
+into and blocking the ego lane"*), the critic's specific complaint was fed back as the repair
+instruction, and the re-authored version was accepted 2/2 at the final expansion. The critic is not only
+a filter; its feedback is actionable in a way the gate's numbers are not.
+
+### The cost
+Admission falls from ~0.40 to 0.125 in a single run. That is the correct direction — it is not a
+capability regression but the removal of scenarios that were never valid — but it means an
+intent-verified corpus needs **best-of-N on top of the critic**, not instead of it.
+
+## 19. Final state of the corpus
+
+| tier | count | verified how |
+|---|---|---|
+| gate-admitted candidates (best-of-2) | **54 / 92** | frozen contractual gate, 0 portability violations, 40/40 replay-deterministic |
+| \+ physics quality gate Q1–Q7 | **24 / 92** | doubles the independent judge's good-rate, near-eliminates `invalid` (§17) |
+| \+ intent verified by the critic | **10–19** | a second agent confirms the brief's mechanism is on screen |
+
+**The honest headline: 54 candidate archetypes at a generalisation gap of −0.037, of which 24 clear a
+strictly tighter quality gate and 19 are confirmed to contain the event they claim —
+against a single-attempt baseline of 29 that was never intent-checked and whose own judge put category
+agreement at 0.517.**

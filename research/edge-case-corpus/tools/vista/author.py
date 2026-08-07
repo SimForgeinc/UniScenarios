@@ -8,7 +8,7 @@ so the difference between the two is the experiment.
 """
 import os, json, subprocess, time, hashlib
 
-import gate, scene, vlm
+import critic, gate, scene, vlm
 
 REPO = '/Users/michaelvu-simforge/Documents/Programming/UniScenarios-vista'
 DEV_ASSETS = REPO + '/dev-assets'
@@ -250,7 +250,7 @@ CELL_KEYS = ('mapId', 'siteId', 'pass', 'C1', 'C2', 'C3', 'C4', 'C5', 'clearance
 # ---------------------------------------------------------------- the loop
 
 def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
-           probe_sites=2, final_sites=4, log=print):
+           probe_sites=2, final_sites=4, log=print, use_critic=False):
     os.makedirs(outdir, exist_ok=True)
     t_start = time.time()
     rec = {'briefId': brief_id, 'brief': brief, 'category': category, 'mode': mode,
@@ -375,8 +375,31 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
                f"maps={g['nMaps']} sites={g['nSites']} loss={g['lossCounts']}" if g else 'NO SITES'))
 
         if g and g['admitted']:
-            rec['admitted'] = True
-            break
+            # The gate only reads trajectories. It cannot tell whether the clip contains the MECHANISM
+            # the brief names -- measured at ~24% of admitted scenarios. So a second agent watches the
+            # rendered rollout and rules on intent, independently of the template and the gate.
+            if not use_critic:
+                rec['admitted'] = True
+                break
+            cr = critic.review_cells([c for c in g['cells'] if c.get('pass')], brief, limit=2, log=log)
+            step['critic'] = {k: v for k, v in cr.items() if k != 'reviews'}
+            rec.setdefault('criticVerdicts', []).append(
+                {'iter': it, 'gateAdmitted': True, **{k: v for k, v in cr.items() if k != 'reviews'}})
+            if cr.get('intentRealised'):
+                rec['admitted'] = True
+                rec['criticAgreed'] = True
+                break
+            # gate says yes, critic says the brief's mechanism is not in the clip -> keep working
+            rec['criticAgreed'] = False
+            log(f"  [{brief_id}/{mode}] iter{it}: GATE PASSED but CRITIC REJECTED intent -- "
+                f"{str(cr.get('whyNot'))[:110]}")
+            diag += ("\n\nAN INDEPENDENT REVIEWER WATCHED THE RENDERED ROLLOUT AND REJECTED IT.\n"
+                     "It passes the physical gate, so the geometry and timing are fine. The problem is\n"
+                     "that the clip does not contain the event the brief describes.\n"
+                     f"  what the reviewer saw:  {cr.get('whatISee')}\n"
+                     f"  what is missing:        {cr.get('whyNot')}\n"
+                     "Keep the physics you have already got right. Change the scenario so the brief's\n"
+                     "actual mechanism happens on screen.")
 
         # --- repair from the BEST attempt so far, not from the most recent one
         src_tpl, src_gate, src_diag = template, g, diag
@@ -400,7 +423,7 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
         prompt = repair_prompt(brief, category, src_tpl, src_diag, seeing=bool(images))
 
     # --- final: give the best template its best shot across more sites
-    if not rec['admitted'] and best['template'] is not None and best['score'][0] >= 1:
+    if not rec['admitted'] and best['template'] is not None and best['score'][0] >= 1:  # noqa: PLR2004
         json.dump(best['template'], open(tpl_path, 'w'), indent=1)
         fdir = outdir + '/batch-final'
         _rc, bd, _e = run_cli(['batch', tpl_path, '--all-maps', '--draws', '2', '--max-sites', '8',
@@ -413,14 +436,28 @@ def author(brief_id, brief, category, outdir, mode='sight', max_iters=4,
             if gf['passingCells'] > best['gate']['passingCells']:
                 best['gate'], best['cellsdir'] = gf, fdir
             if gf['admitted']:
-                rec['admitted'] = True
+                if use_critic:
+                    cr = critic.review_cells([c for c in gf['cells'] if c.get('pass')], brief,
+                                             limit=2, log=log)
+                    rec.setdefault('criticVerdicts', []).append(
+                        {'iter': 'final', 'gateAdmitted': True,
+                         **{k: v for k, v in cr.items() if k != 'reviews'}})
+                    rec['criticAgreed'] = bool(cr.get('intentRealised'))
+                    rec['admitted'] = bool(cr.get('intentRealised'))
+                    if not cr.get('intentRealised'):
+                        log(f"  [{brief_id}/{mode}] final: GATE PASSED but CRITIC REJECTED intent")
+                else:
+                    rec['admitted'] = True
     if best['template'] is not None:
         template = best['template']
         rec['lastGate'] = {k: v for k, v in best['gate'].items() if k != 'cells'}
         rec['lastCells'] = [{k: c.get(k) for k in CELL_KEYS} for c in best['gate']['cells']]
         rec['evidenceDir'] = best['cellsdir']
         rec['bestIter'] = best['iter']
-        rec['admitted'] = rec['admitted'] or best['gate']['admitted']
+        if not use_critic:
+            rec['admitted'] = rec['admitted'] or best['gate']['admitted']
+        rec['gateAdmitted'] = bool(best['gate']['admitted']) or bool(rec.get('finalExpansion', {})
+                                                                    .get('admitted'))
         json.dump(template, open(tpl_path, 'w'), indent=1)
 
     rec['wallClockS'] = round(time.time() - t_start, 1)

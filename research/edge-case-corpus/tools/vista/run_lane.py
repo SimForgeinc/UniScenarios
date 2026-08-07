@@ -18,11 +18,11 @@ def load_briefs(split=None, corpus=CORPUS):
 
 
 def _one(args):
-    b, mode, root, max_iters = args
+    b, mode, root, max_iters, use_critic = args
     outdir = f"{root}/{b['id']}-{mode}"
     try:
         r = author.author(b['id'], b['brief'], b['category'], outdir, mode=mode,
-                          max_iters=max_iters, log=lambda *_: None)
+                          max_iters=max_iters, log=lambda *_: None, use_critic=use_critic)
     except Exception as e:                                        # noqa: BLE001
         r = {'briefId': b['id'], 'mode': mode, 'category': b['category'], 'admitted': False,
              'error': f'{type(e).__name__}: {e}', 'tb': traceback.format_exc()[-1500:],
@@ -36,9 +36,9 @@ def _one(args):
     return r
 
 
-def run(briefs, mode, root, workers=3, max_iters=4):
+def run(briefs, mode, root, workers=3, max_iters=4, use_critic=False):
     os.makedirs(root, exist_ok=True)
-    jobs = [(b, mode, root, max_iters) for b in briefs]
+    jobs = [(b, mode, root, max_iters, use_critic) for b in briefs]
     out = []
     t0 = time.time()
     with ProcessPoolExecutor(max_workers=workers) as ex:
@@ -55,6 +55,10 @@ def run(briefs, mode, root, workers=3, max_iters=4):
         'meanWallPerBriefS': round(sum(r.get('wallClockS', 0) for r in out) / max(1, len(out)), 1),
         'meanIters': round(sum(len(r.get('iterations', [])) for r in out) / max(1, len(out)), 2),
         'surfaceSha': author.SURFACE_SHA,
+        'useCritic': use_critic,
+        'gateAdmitted': sum(1 for r in out if r.get('gateAdmitted')),
+        'criticAgreed': sum(1 for r in out if r.get('criticAgreed') is True),
+        'criticRejectedGatePass': sum(1 for r in out if r.get('criticAgreed') is False),
         'results': [{k: v for k, v in r.items() if k not in ('iterations', 'template', 'lastCells')}
                     for r in out],
     }
@@ -75,8 +79,9 @@ if __name__ == '__main__':
     ap.add_argument('--max-iters', type=int, default=4)
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--corpus', default=CORPUS)
+    ap.add_argument('--critic', action='store_true')
     a = ap.parse_args()
     bs = load_briefs(None if a.split == 'ALL' else a.split, a.corpus)
     if a.limit:
         bs = bs[:a.limit]
-    run(bs, a.mode, a.root, a.workers, a.max_iters)
+    run(bs, a.mode, a.root, a.workers, a.max_iters, a.critic)
