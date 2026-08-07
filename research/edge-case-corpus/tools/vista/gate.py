@@ -290,6 +290,20 @@ def quality(trace, facts):
     m = trace.get('metrics', {})
     warm = facts['warmupSeconds']
 
+    # Q1/Q7 must also work for STATIC-OBSTACLE scenarios.
+    # A hazard in the carriageway -- debris, a fallen ladder, a shed load, cones -- is a PROP, and
+    # props are absent from ticks['actors']. So a clause that asks "did the ego and a CHALLENGER
+    # contest the same ground" is unsatisfiable by construction for the whole C9.hazard family.
+    # Measured on a debris template: frozen gate 11/30, HQ 0/30, with Q7 failing 30/30 and Q1 19/30
+    # purely because the obstacle was scenery rather than an actor. The ego driving into a stationary
+    # hazard IS the conflict; the prop is the conflict partner.
+    # NOTE, measured: this branch is a safety net, not the fix I first thought it was. A scenario with
+    # NO challenger role cannot pass the FROZEN gate at all, because C3 reads the ego-to-challenger
+    # clearance and it is None when there are no challengers. So pure-prop hazards are unadmittable
+    # under the pre-registered contract, which I may tighten but not loosen. The usual way to author a
+    # carriageway hazard is a ROLE with `static: true`, which does appear in ticks['actors'].
+    prop_only = not facts['perChallenger'] and bool(trace['header'].get('propMetadata'))
+
     # Q1: one challenger must win BOTH C2 and C3
     joint = None
     for aid, v in facts['perChallenger'].items():
@@ -298,6 +312,9 @@ def quality(trace, facts):
             if joint is None or v['clearanceM'] < facts['perChallenger'][joint]['clearanceM']:
                 joint = aid
     q1 = joint is not None
+    if prop_only and pc and pc.get('minPropClearanceM') is not None:
+        # the nearest prop stands in for the challenger, and C3's proximity bound applies to it
+        q1 = pc['minPropClearanceM'] <= C3_CLEARANCE
 
     q2 = (resp['peakDecelMps2'] >= Q_RESPONSE_DECEL and resp['speedDropMps'] >= Q_RESPONSE_DROP)
     q3 = pc is None or pc['minPropClearanceM'] > 0.0
@@ -320,6 +337,10 @@ def quality(trace, facts):
     q7 = bool(ce.get('contested')) or (
         ps is not None and ps <= Q7_PATH_SEP_M
         and (eg is None or eg <= Q7_ENCROACH_S))
+    if prop_only and pc and pc.get('minPropClearanceM') is not None:
+        # a stationary hazard cannot "encroach"; the test is whether the ego's own path came through
+        # the space the hazard occupies. Timing is irrelevant because the hazard is always there.
+        q7 = pc['minPropClearanceM'] <= Q7_PATH_SEP_M
     q8 = not body_overlap(facts)
 
     return {'Q7_contestedSpace': q7, 'Q8_noBodyOverlap': q8,

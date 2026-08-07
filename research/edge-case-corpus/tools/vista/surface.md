@@ -446,3 +446,27 @@ actor that needed it.
     `arrival` remains the right tool when both actors are genuinely in motion toward a shared conflict
     point — a crossing VRU, an oncoming turn across the ego, a merging vehicle. It is the wrong tool
     the moment either party is expected to come to a halt.
+
+19. **A hazard that must create criticality has to be a ROLE with `static: true`, never a prop.**
+    Props are fixed geometry: the engine turns each collidable prop into a static OBB under the id
+    `prop:<id>` and drops it into the collision grid, but it has no actor track — its state lives in
+    `header.propMetadata`, not in `ticks.actors`. The criticality metrics iterate ACTORS only, so a
+    prop-authored obstacle has **no TTC and no PET by construction**; the most it can ever produce is a
+    collision event in the `prop:` namespace. A debris field authored as props is therefore invisible
+    to the gate no matter how dangerous it looks.
+
+    The engine's actual rule for static actors is narrower and better than "not a metric participant":
+    a static actor is scored **iff the moving actor is genuinely on a path conflict with it**, which is
+    what stops a parked car beside the lane from stealing the incident. So:
+      - the tyre, the fallen ladder, the shed load, the stalled car IN the ego's path -> a **role**
+        with `actor.static: true`;
+      - the parked row, the cones, the barriers, the skip, the hedge -> **props**, whose job is to
+        occlude, to narrow, and to be collidable scenery.
+    Authored that way a static hazard produces exactly the evidence the gate wants: a real
+    `minTTC` pair of `[hazard, ego]`.
+
+20. **Put the hazard where the ego actually drives.** Measured on a debris template: 16 of 30 cells
+    were accepted by `evaluate` while the ego passed the obstacle at **4.96 m** — inside the gate's
+    5.0 m proximity bound by four centimetres, and most of a lane away in reality. That is the
+    "physically valid but boring" failure in a new costume. A carriageway hazard belongs at
+    `tFrac` near 0 in the ego's own lane, not on the shoulder beside it.
