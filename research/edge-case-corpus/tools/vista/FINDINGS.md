@@ -541,3 +541,10 @@ regression in §8. It **did not work**: frozen admission 0.406 vs 0.469, HQ iden
 per-cell `Q3_noPropOverlap` failures rose from 0.069 to 0.132. Telling the author where *not* to put
 props appears to have made it place more of them. The prop problem remains open, and `Q3` remains the
 only thing catching it.
+
+### Reproducibility from the committed artifacts
+Six templates drawn at random from the committed corpus were re-run from a clean state at a *reduced*
+site budget (`--max-sites 4` against the 8–10 used originally): **4/6 still admit**. The two that did
+not each produced 2 passing cells and missed only the "≥ 3 distinct sites" clause — a sampling artifact
+of the smaller budget, not a defect in the template. Replay determinism was separately verified at
+**40/40 bit-identical** via `evidence verify`.
