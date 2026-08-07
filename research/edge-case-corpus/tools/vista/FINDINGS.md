@@ -415,9 +415,15 @@ Category spread: C2 cut-in-merge 8, C5 pedestrian 7, C8 workzone 6, C9 hazard 6,
 C7 occlusion 5, C3 intersection 4, C6 cyclist-ptw 4, C11 parking 3, C10 oncoming 2, C12 school 2,
 C14 loss-of-control 2, C15 adversarial 2, C4 roundabout 1.
 
-**The single empty category is C13.control**, and the reason is structural rather than authorial: a
-signal phase change is not by itself an encounter. It needs a second actor whose movement the phase
-provokes, and the maps have few signalised junctions (16 / 0 / 6 / 0 / 1).
+**The single empty category is C13.control.** I originally attributed this to authoring — that a signal
+phase change is not by itself an encounter — and that was wrong, or at least not the binding reason.
+Measured later by the independent capability workstream: **0 of 16 cells had a signal stop line on the
+ego's actually-driven route.** The phase changes, it is recorded in the trace, `SignalBook.authorityAt`
+returns the correct authority, and `distanceToStopLine` finds nothing, because the bound programs put
+their stop lines on lanes the ego never drives (ego on `612:0:-1, 0:0:-3, 775:0:-3, 1:0:-3`; programs on
+`26:*, 72:*, 128:*, 74:*`). **A signal scenario can be authored, materialised, simulated and ACCEPTED
+while the signal governs nobody.** That is the worst class of defect in this project, because it looks
+like it worked. Recorded as Defect 4 in `newcaps/DEFECT-signal-authority.md` with two reproducers.
 
 **Portability was verified mechanically, not assumed** (`collect.py:portability_check`): no `anchor.pin`,
 no `sourceMap`, no `scene_absolute` role, no baked map name, no road/lane/site identifier. 0 violations

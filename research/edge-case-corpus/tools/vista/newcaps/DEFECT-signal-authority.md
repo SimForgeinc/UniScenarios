@@ -115,3 +115,48 @@ Implemented alongside the surface-patch work:
   authoring and engine layers, permissive and forbidding respectively.
 
 Regression tests: `packages/sim-engine/src/__tests__/environment-signal-failure.test.ts`.
+
+
+---
+
+## Defect 4 (found while proving Defect 1 end to end) — a matched site's controls are usually not on the ego's route
+
+This is not part of the signal-authority fix and I do not own the code, but it is what stopped the
+end-to-end proof of Defect 1, and it is measurable.
+
+Template `caps-surface-blackout.template.json` anchors a junction with `control: ["signalized"]`
+required, puts the ego straight through it, and fails the head with
+`set(signal:feature:dark-junction:ego.phase, "off")`.
+
+The override fires and is recorded: the trace's signal channel for `signal:2232` goes
+`["green", "off"]`. `SignalBook.authorityAt` correctly returns `stop`. And nothing happens, because:
+
+```
+cells with a signal stop line on the ego's driven route: 0/16
+```
+
+across el-camino-road, richmond-field-station and yale-street. Concretely, on
+`el-camino-road/24990c5c98b2746a`, the ego drives `612:0:-1, 0:0:-3, 775:0:-3, 1:0:-3`, while the four
+bound signal programs put their stop lines on `26:*`, `72:*`, `128:*` and `74:*`. The feature matched,
+the head resolved, the phase was forced — and the executable right-of-way boundary was on other lanes.
+`distanceToStopLine` looks up stop lines by the lanes in the actor's route, so it finds none and the
+ego's `obeySignals` is inert no matter what the phase is.
+
+The authored-control path has the same shape of problem from a different direction:
+`buildTrafficControls` binds every stop line to `this.site.frame.lateralLanes[k]` — the lane at the
+**frame origin** — and then projects the junction-feature point onto it. When the junction is 50–110 m
+downstream, that projection clamps to the end of a lane the ego may not even drive, so a portable
+`trafficControls` entry attached to a junction feature lands in the wrong place.
+
+Spot check of what is already committed, for calibration: of the 18 `catalog/evidence/*/instance.json`
+files, only 3 carry any control at all, and 2 of those 3 do have controls on the metric subject's route
+(`yale-street-001-left-turn-across-opposing-through`, static stop controls). So it is not universal —
+but for a *signalized* junction reached through the anchor/feature path it was 0 for 16.
+
+Consequence: a signal-phase scenario can be authored, materialized, simulated and accepted while the
+signal never governs anybody. The phase appears in the trace, so it looks like it worked.
+
+Not fixed here. Owner: whoever owns `buildTrafficControls` / `resolveSiteSignalProgram` in
+`packages/scenario-materializer/src/materialize.ts` and the site-frame lane binding.
+Reproducer: `research/edge-case-corpus/tools/vista/newcaps/check-stopline-binding.ts` (per-instance)
+and `check-stopline-binding-corpus.ts` (over committed evidence).
