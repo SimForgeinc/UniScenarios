@@ -11,9 +11,23 @@ quality defect in the corpus (~24% of admitted scenarios do not contain the mech
 The critic never sees the template, the gate result, or the author's reasoning: only the brief and the
 pictures. That keeps its verdict independent of the thing it is checking.
 """
-import os, json
+import os, sys, json
 
 import scene, vlm
+
+# The independent render audit scored four renderings on the same 80 clips with this exact prompt.
+# The enhanced one (9 panels, auto-zoom, 2.5 s motion trails, per-actor SPEED LABELS, legend) nearly
+# doubled verdict recall (0.333 -> 0.611) and raised precision (0.545 -> 0.647). The single largest
+# component was the speed label: hard-deceleration recall went 0.073 -> 0.440, because "did the lead
+# brake?" is answered by a number printed on the panel, not by a picture of a car.
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), 'audit2'))
+    from audit2.render2 import render_rollout2 as _render_enh
+except Exception:                                                 # noqa: BLE001
+    try:
+        from render2 import render_rollout2 as _render_enh
+    except Exception:                                             # noqa: BLE001
+        _render_enh = None
 
 REPO = '/Users/michaelvu-simforge/Documents/Programming/UniScenarios-vista'
 DEV_ASSETS = REPO + '/dev-assets'
@@ -64,7 +78,10 @@ Reply with ONLY this JSON object and nothing else:
 def review_trace(trace_path, brief, out_png=None, closest_t=None):
     """Render the rollout and ask the critic whether the brief's mechanism actually happened."""
     png = out_png or (os.path.splitext(trace_path)[0] + '.critic.png')
-    scene.render_rollout(DEV_ASSETS, trace_path, png, closest_t=closest_t)
+    if _render_enh is not None:
+        _render_enh(DEV_ASSETS, trace_path, png, closest_t=closest_t)
+    else:
+        scene.render_rollout(DEV_ASSETS, trace_path, png, closest_t=closest_t)
     try:
         d, raw = vlm.ask_json(PROMPT.format(brief=brief), images=[png], max_tokens=3000)
     except Exception as e:                                        # noqa: BLE001

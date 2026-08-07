@@ -73,10 +73,14 @@ def _draw_actor(ax, b, span, label=True):
              head_width=1.1, head_length=1.1, fc='white', ec='white', zorder=7,
              length_includes_head=True, clip_on=True)
     if label:
-        ax.annotate(b['id'], (b['x'], b['y']), textcoords='offset points', xytext=(0, -11),
-                    color='white', fontsize=7.5, ha='center', va='top', zorder=8,
+        # Print the SPEED on the actor. The independent render audit found this single change takes
+        # hard-deceleration recall from 0.073 to 0.440 -- a 6x gain -- because "did the lead brake?"
+        # is answered by a number on the panel, not by a picture of a car.
+        txt = b['id'] + (f"\n{b['speed']*3.6:.0f} kph" if b.get('speed') is not None else '')
+        ax.annotate(txt, (b['x'], b['y']), textcoords='offset points', xytext=(0, -11),
+                    color='white', fontsize=7.0, ha='center', va='top', zorder=8,
                     weight='bold', annotation_clip=True,
-                    bbox=dict(boxstyle='round,pad=0.12', fc='#000000', ec='none', alpha=0.55))
+                    bbox=dict(boxstyle='round,pad=0.12', fc='#000000', ec='none', alpha=0.6))
 
 
 def _panel(ax, dev_assets, mapid, boxes, cx, cy, span, title, grid_m=10):

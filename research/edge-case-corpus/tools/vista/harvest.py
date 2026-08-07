@@ -52,12 +52,17 @@ def _verify(a):
     mech = 'present' if vs and pres > len(vs) / 2 else 'absent'
     needs_vision = bool(parsed.get('notComputable'))
 
-    # SECONDARY: the vision critic is consulted only for the residue the trace cannot settle
-    # (occlusion, "unexpectedly", a door opening), and only as a VETO on an otherwise-present clip.
+    # CONJUNCTION, not a veto. The independent audit scored six configurations on a non-circular
+    # tier (n=63): `predicates AND critic(enh render)` was the only one with ZERO false positives on
+    # 49 negatives (precision 1.000, FP rate 0.000, 95% CI 0.000-0.073). Predicates alone run at
+    # FP 0.102, which is corpus poisoning; the critic alone runs at recall 0.357.
+    # For a TRAINING corpus a false positive is permanent mislabelling and a false negative merely
+    # costs yield, and yield is the cheap thing here -- so we take the conjunction and accept the
+    # recall cost.
     cr = {'verdict': 'n/a', 'yesFraction': None, 'whyNot': ''}
-    if mech == 'present' and needs_vision:
+    if mech == 'present':
         cr = critic.review_cells(passing, r['brief'], limit=limit, reps=reps, workers=3)
-        if cr['verdict'] == 'rejected':
+        if cr['verdict'] != 'verified':
             mech = 'absent'
     return {'briefId': r['briefId'], 'brief': r['brief'], 'category': r.get('category'),
             'template': os.path.dirname(rec_path) + '/template.json',

@@ -223,6 +223,7 @@ def gate_batch(summary_path):
 #   Q6 the pair is the ego -- minTTC must actually involve the ego
 
 Q7_PATH_SEP_M = 2.0         # how close the two paths must come, with timing removed
+Q7_ENCROACH_S = 4.0         # ...and how close in TIME they used that ground
 Q_RESPONSE_DECEL = 1.0      # m/s^2 actually observed in the ego speed trace
 Q_RESPONSE_DROP = 1.5       # m/s of speed actually given up
 
@@ -311,8 +312,14 @@ def quality(trace, facts):
     # median pathSeparationM was 0.20 m and the 25th percentile 0.09 m -- paths missing by centimetres.
     # A close pass in an adjacent lane is also a legitimate edge case and never has separation 0.
     # So Q7 asks whether the paths came within Q7_PATH_SEP_M of each other with timing removed.
+    # The audit found a real hole: relaxing to a distance threshold alone rescues cells whose two
+    # actors used the same ground MINUTES apart, which is not a conflict. Pair the spatial threshold
+    # with an encroachment-time bound. Literal interpenetration (contested) needs no timing test.
     ps = ce.get('pathSeparationM')
-    q7 = bool(ce.get('contested')) or (ps is not None and ps <= Q7_PATH_SEP_M)
+    eg = ce.get('encroachmentGapS')
+    q7 = bool(ce.get('contested')) or (
+        ps is not None and ps <= Q7_PATH_SEP_M
+        and (eg is None or eg <= Q7_ENCROACH_S))
     q8 = not body_overlap(facts)
 
     return {'Q7_contestedSpace': q7, 'Q8_noBodyOverlap': q8,
