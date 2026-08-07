@@ -1091,3 +1091,44 @@ root tsconfig in this repo**, so that command silently prints help and exits 1 �
 nothing. Per-package typechecking immediately surfaced real errors that had been hiding, including four
 in `cli` caused by an exhaustiveness gate that a released agent's change had broken. Verifying with a
 command whose failure mode looks like success is worse than not verifying.
+
+---
+
+## 26. Final delivered corpus
+
+Two harvests, merged, split by archetype with zero leakage (verified: 0 shared archetypes between
+train and test).
+
+| | scenarios | archetypes |
+|---|---|---|
+| train | 283 | 12 |
+| test | 10 | 3 |
+| **total** | **293** | **15**, across all 5 maps |
+
+Categories represented: C1 car-following, C4 roundabout, C5 pedestrian, C7 occlusion, C9 hazard,
+C11 parking, C12 school, C14 loss-of-control, C15 adversarial.
+
+Every scenario passes the frozen gate `1a08698e95fca4bc`, the Q1-Q8 physics quality layer, and an
+intent check requiring a mechanical trajectory validator AND an independent vision critic to agree
+(audited precision 1.000, false-positive rate 0.000 on 49 negatives). All templates are portable
+ScenarioTemplate v2 with no coordinates and no road ids.
+
+**Artifacts**
+- `/tmp/vista-dataset-all/` — `train.jsonl`, `test.jsonl`, `MANIFEST.json` (merged, the one to use)
+- `/tmp/vista-dataset/` and `/tmp/vista-dataset-user/` — the two source corpora separately
+- `/tmp/vista-showcase-final/` (20 renders) and `/tmp/vista-showcase-user/` (14 renders)
+
+**The user-topic corpus specifically**: 56 briefs converted from a 67-topic list, 12 admitted,
+5 intent-verified, **75 distinct training-grade scenarios**. Notably `low-friction-stop-slide` — a car
+sliding through a stop-controlled junction into the ego's path at 1.269 m closest approach with the ego
+braking at 6.78 m/s^2 — is the "black ice" topic, and it is only expressible because of the localised
+surface-patch capability added during this session. Before it, road friction was a single scene-wide
+scalar and that scenario could not be written.
+
+### Throughput, restated on the delivered work
+The generated-brief corpus measured ~2,324 distinct training-grade scenarios/day at 6 workers
+(s24). The user-topic corpus ran at 230 s/brief with 2.96 mean iterations and yielded 75 distinct from
+56 briefs in ~3.6 h of wall clock including validation and harvest. The user list is harder than
+generated briefs — it is dominated by intersection, control and adversarial cases, historically the
+worst-performing categories — so 0.214 admission against 0.32-0.39 on generated briefs is expected
+rather than a regression.
