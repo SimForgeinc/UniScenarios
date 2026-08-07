@@ -303,6 +303,16 @@ If you find yourself reacting to a `trivially_safe` result by moving the hazard 
 the speed a lot, stop: that is the move that produces an unavoidable crash on the next iteration. Make
 the hazard appear *later in time* rather than *nearer in space*.
 
+## Keep props out of the ego's driving line
+Props are `collidable:false` and do not appear in the simulated actor list, so **nothing in the engine
+or the gate objects if the ego drives straight through one.** A parked SUV the ego passes through is a
+broken clip that scores as a clean one. Measured: once occlusion declarations were discouraged, the
+share of admitted cells with the ego's footprint overlapping a prop rose from 0.067 to 0.333.
+So place every prop clearly off the ego's path: `tFrac` at or beyond +/-0.8 for a kerbside object, or in
+an adjacent lane, never near `tFrac` 0 on the lane the ego drives. If a prop must sit in the ego's lane
+(a broken-down vehicle, a fallen load), that is an OBSTACLE the ego has to avoid - give it enough room
+under the survivable-band rule above, and expect the ego to steer or stop.
+
 ## Contact is a failure, not a success
 `minDistance` reaching 0 means the ego hit the actor. A near miss must stay strictly positive; aim for
 **0.5-4 m** of true clearance at the closest point. If you are getting collisions, the challenger is
