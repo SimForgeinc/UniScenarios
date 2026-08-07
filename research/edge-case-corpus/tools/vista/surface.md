@@ -382,27 +382,29 @@ actor that needed it.
     beyond the lane edge — remembering that `tFrac` is a fraction of lane width, so 0.8 is still
     inside the actor's own lane and only |tFrac| > 1 crosses the line.
 
-17. **A challenger that is meant to move INTO the ego's lane must not START in it.** This is the
-    single largest remaining defect, measured independently over 478 gate-passing cells:
+17. **A challenger that moves INTO the ego's lane must start somewhere real — and on these maps that
+    is almost never an adjacent same-direction lane.** Measured over the five maps: **87.8% of
+    non-junction road sections have exactly ONE driving lane per direction** (2 lanes 5.9%, 3+ only
+    6.2%). So binding a cut-in actor with `dLane: -1` or `laneOffset: +1` asks for a lane that does
+    not exist at most sites; the materializer places it back in the ego's own lane and it then sits
+    there without moving. That is not a hypothesis: adding "start in the adjacent lane" advice to
+    this document drove the true incursion rate **0.521 -> 0.238** and tripled the
+    spawned-already-in-lane defect **0.102 -> 0.401** on an otherwise identical run.
 
-      real incursion                                   0.358
-      moved sideways but stopped a lane short          0.174
-      **spawned ALREADY IN the ego's lane, never moved  0.306**
-      never moved, stayed outside                      0.163
+    Where an incursion can actually come from here:
+      - **the opposing direction** — an oncoming vehicle crossing the centreline (`opposing` role);
+      - **a side road or junction arm** — the `conflicting_gate` role, which names a junction MOVEMENT
+        and is the most portable of all of them;
+      - **a driveway** feature;
+      - **the verge, sidewalk, shoulder or a bike lane** — where VRUs come from, and these adjacencies
+        DO exist (sidewalk on 4 of 5 maps, bike lanes on 4 of 5);
+      - **a parking row**, on the two maps that have one.
+    Only reach for an adjacent same-direction lane when the anchor explicitly requires
+    `throughLanesSameDir >= 2`, and expect to lose most sites when you do.
 
-    Of the already-in-lane cells, only a fifth were legitimate lead vehicles. The rest were roles
-    named `oncoming_cutter`, `drifting_motorcycle`, `wrongWayBicycle`, `reckless_turner` — names that
-    promise a lateral manoeuvre — placed in the ego's lane at t = 0 and never moving. A car that is
-    already in the lane is not a cut-in, however it is labelled.
+    A genuine LEAD or FOLLOWING vehicle, or a stationary obstacle the brief says is already there,
+    SHOULD start in the ego's lane at `laneOffset: 0`. Everything else should not.
 
-    So, whenever the brief has someone move in, drift in, cut in, swerve in, wander over, cross the
-    line, or emerge into the ego's path:
-      - bind the challenger to a DIFFERENT lane to start with: `relative_to` with **`dLane` of -1 or
-        +1**, or a pose with **`laneOffset` of -1 or +1**. Never `dLane: 0` / `laneOffset: 0`;
-      - then move it with `changeLane` `{mode:"toRole", role:"ego"}`;
-      - the only role that should start in the ego's lane at `laneOffset: 0` is a genuine LEAD or
-        FOLLOWING vehicle, or a stationary obstacle the brief says is already there.
-
-    Prefer `changeLane` over `laneOffset` for this. Measured true-incursion rate by primitive:
-    `changeLane` 0.455, hand-rolled `route` polyline 0.454, **`laneOffset` only 0.098** — an actor
-    nudged within its own lane usually never reaches the ego at all.
+    Prefer `changeLane` over `laneOffset` for the movement itself. Measured true-incursion rate by
+    primitive: `changeLane` 0.455, hand-rolled `route` polyline 0.454, **`laneOffset` only 0.098** —
+    an actor nudged within its own lane usually never reaches the ego at all.

@@ -28,5 +28,20 @@
    "targeting_defect": 24,
    "placement_defect": 20
   }
+ },
+ {
+  "run": "vista-gen5-blind",
+  "nCells": 147,
+  "trueIncursionRate": 0.2381,
+  "ci95": [
+   0.1765,
+   0.3131
+  ],
+  "counts": {
+   "targeting_defect": 37,
+   "placement_defect": 59,
+   "static_outside": 16,
+   "incursion": 35
+  }
  }
 ]
