@@ -204,7 +204,8 @@ def gate_batch(summary_path):
         'lossCounts': {k: sum(1 for c in cells if c.get(k) is False) for k in ('C1', 'C2', 'C3', 'C4', 'C5')},
         'qualityLoss': {k: sum(1 for c in cells if c.get(k) is False)
                         for k in ('Q1_jointChallenger', 'Q2_egoReallyResponded', 'Q3_noPropOverlap',
-                                  'Q4_headingSane', 'Q5_notClipped', 'Q6_ttcPairIsEgo')},
+                                  'Q4_headingSane', 'Q5_notClipped', 'Q6_ttcPairIsEgo',
+                                  'Q7_contestedSpace')},
     }
 
 
@@ -303,13 +304,40 @@ def quality(trace, facts):
     pair = (m.get('minTTC') or {}).get('pair') or []
     q6 = ('ego' in pair) if pair else False
 
-    return {'Q1_jointChallenger': q1, 'Q1_challenger': joint,
+    ce = contested_space(trace, joint)
+    q7 = True if ce is None else bool(ce.get('contested'))
+
+    return {'Q7_contestedSpace': q7,
+            'pathSeparationM': (ce or {}).get('pathSeparationM'),
+            'encroachmentGapS': (ce or {}).get('encroachmentGapS'),
+            'Q1_jointChallenger': q1, 'Q1_challenger': joint,
             'Q2_egoReallyResponded': q2, 'Q3_noPropOverlap': q3, 'Q4_headingSane': q4,
             'Q5_notClipped': q5, 'Q6_ttcPairIsEgo': q6,
             'egoPeakDecelMps2': resp['peakDecelMps2'], 'egoSpeedDropMps': resp['speedDropMps'],
             'egoHeadingErrRad': resp['headingErrRad'], 'propClearance': pc,
-            'highQuality': bool(q1 and q2 and q3 and q4 and q5 and q6),
+            'highQuality': bool(q1 and q2 and q3 and q4 and q5 and q6 and q7),
             # diagnostic only: C2 measured from the START OF RECORDING rather than from
             # warmup+0.5, because trace t=0 is ALREADY post-warm-up and the frozen clause
             # therefore demands 2*warmup+0.5 s after spawn
             'C2_spawnOnly': facts['closestT'] is not None and facts['closestT'] > C2_MARGIN}
+
+
+# Q7 -- the paths must actually contest the same ground.
+# Measured by the independent evaluation lane: 9 of 57 frozen-gate-admitted cells had an ego and a
+# challenger whose paths NEVER overlapped, even with timing removed. Such a cell cannot be an edge
+# case under any rubric, because nothing was ever contested. Uses judge/conflict.py, whose
+# pathSeparationM is the min true-OBB clearance over ALL PAIRS of tick indices (time decoupled).
+def contested_space(trace, challenger=None):
+    try:
+        from judge.conflict import conflict_event
+    except Exception:                                             # noqa: BLE001
+        try:
+            import sys, os as _os
+            sys.path.insert(0, _os.path.dirname(_os.path.abspath(__file__)))
+            from judge.conflict import conflict_event
+        except Exception:                                         # noqa: BLE001
+            return None
+    try:
+        return conflict_event(trace, challenger=challenger)
+    except Exception:                                             # noqa: BLE001
+        return None
