@@ -205,41 +205,27 @@ def rollout_features(trace):
     if cands:
         conflict = min(cands)[1]
 
-    # --- the CONTESTED-SPACE instant, which is NOT the same thing as the closest approach ---
-    # Calibration finding: in real admitted cells the min-clearance instant is routinely a post-event
-    # pass-by (the pedestrian has already crossed and stopped), while the moment the challenger was
-    # actually in the ego's path happened 2 s earlier with 6x the clearance. Judging the clip from the
-    # min-clearance frame alone shows the critic the wrong moment.
+    # --- the CONTESTED-SPACE instant, measured rigorously ---
+    # RETRACTED v1: an earlier version of this used argmin |lateral bearing offset| subject to the
+    # challenger being ahead of the ego. That is a BEARING test, not a path test: it fires whenever the
+    # challenger is anywhere on the ego's forward axis, including 16 m away on a piece of road the ego
+    # has not reached. It produced a false 'the proximity is not the conflict' flag on 28/28 cells.
+    # The correct measure is the space-time footprint minimum in conflict.py: min over ALL tick-index
+    # PAIRS (i, j) of clearance(ego_i, challenger_j). See judge/conflict.py for the derivation.
+    import conflict as CF
     for aid in list(per):
         if 'minClearanceM' not in per[aid]:
             continue
-        a = trace['ticks']['actors'][aid]
-        best = None
-        for k in range(len(ts)):
-            if not (e['present'][k] and a['present'][k]):
-                continue
-            dx, dy = a['x'][k] - e['x'][k], a['y'][k] - e['y'][k]
-            hcos, hsin = math.cos(e['headingRad'][k]), math.sin(e['headingRad'][k])
-            fwd = hcos * dx + hsin * dy
-            lat = -hsin * dx + hcos * dy
-            if fwd <= 0:
-                continue
-            if best is None or abs(lat) < abs(best[1]):
-                best = (ts[k], lat, fwd, k)
-        if best is None:
-            per[aid]['pathCrossing'] = None
+        try:
+            ev = CF.conflict_event(trace, challenger=aid)
+        except Exception:                                          # noqa: BLE001
+            per[aid]['conflictEvent'] = None
             continue
-        t_x, lat_x, fwd_x, k = best
-        md = hdr['actorMetadata']
-        cl = G.obb_clearance(
-            _corners(e['x'][k], e['y'][k], e['headingRad'][k], md['ego']['dims']['l'], md['ego']['dims']['w']),
-            _corners(a['x'][k], a['y'][k], a['headingRad'][k], md[aid]['dims']['l'], md[aid]['dims']['w']))
-        per[aid]['pathCrossing'] = {
-            't': t_x, 'lateralOffsetM': round(lat_x, 2), 'aheadM': round(fwd_x, 2),
-            'clearanceM': round(cl, 2), 'egoSpeedMps': round(e['speedMps'][k], 2),
-            'challengerSpeedMps': round(a['speedMps'][k], 2),
-            'sameEventAsClosestApproach': abs(t_x - per[aid]['tMinClearance']) <= 1.0,
-        }
+        per[aid]['conflictEvent'] = None if ev.get('challenger') is None else {
+            k: ev[k] for k in ('contested', 'pathSeparationM', 'tCross', 'tChallengerAtCross',
+                               'encroachmentGapS', 'whoArrivedFirst', 'clearanceAtCross',
+                               'challengerSpeedAtEgoArrival', 'sameEvent', 'lagS', 'geometry')
+            if k in ev}
 
     m = trace.get('metrics', {})
     ctrl = ego_control_effort(trace)

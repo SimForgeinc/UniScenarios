@@ -115,42 +115,82 @@ C3, and it is exactly the kind of move a repair loop discovers when the gate is 
 
 ---
 
-## 5. The near miss and the conflict are routinely different events, and the picture hides it
+## 5. RETRACTED AND REPLACED — the near-miss instant *is* the conflict; what is wrong is that the challenger has stopped
 
-**This is the finding I did not expect, and it is in a cell the gate ADMITS and my judge scored `high`.**
+**I got this wrong the first time and I am correcting it here rather than quietly editing it.**
 
-`/tmp/vista-probe0/yale-street/25fd4ad601d7872b/draw-000.trace.json.gz`, in the ego's own frame
-(`lat` positive to the left, `fwd` positive ahead):
+**What I originally claimed.** That the min-clearance instant is never the interaction, on 28/28 cells.
 
-| t (s) | child lat (m) | child ahead (m) | OBB clearance (m) | child speed | ego speed |
-|---|---|---|---|---|---|
-| 6.00 | −0.99 | 19.6 | 16.73 | 2.18 | 9.69 |
-| **6.46** | **0.00** | **15.9** | **13.2** | 2.18 | 8.7 |
-| 7.66 | +2.58 | 8.9 | 6.25 | 2.18 | 6.13 |
-| 8.40 | +3.49 | 4.8 | 3.19 | **0.00** | 7.15 |
-| **8.72** | **+3.50** | **2.35** | **2.128** | **0.00** | **8.13** |
+**Why it was wrong.** My first "contested-space" measure was `argmin_t |lateral offset of the challenger
+in the ego frame|` subject to the challenger being ahead. That is a **bearing** test, not a **path**
+test. It fires whenever the challenger is anywhere on the ego's forward axis — including 16 m away, on a
+piece of road the ego has not reached yet. Of course it never coincided with the closest approach; it was
+never measuring the same kind of thing.
 
-The child crosses the ego's centreline at **t ≈ 6.46 s with 13.2 m of clearance**. The 2.128 m that
-satisfies C3 happens at **t = 8.72 s**, by which time the child has been **stationary for 0.3 s** at
-3.5 m to the ego's left, and **the ego is accelerating through it** (6.1 → 8.1 → 11.1 m/s).
+**The correct measure**, now in `judge/conflict.py`. Over **all pairs of tick indices `(i, j)` —
+different times allowed** — compute the true OBB clearance between `ego at t_i` and `challenger at t_j`:
 
-The dart-out is real and the ego really did brake 11.1 → 6.1 m/s. But **the number the gate scores as
-"genuine proximity" is a pass-by of a now-stationary pedestrian, 2.3 s after the actual interaction.**
+```
+pathSeparationM  = min over (i, j) of clearance(ego_i, challenger_j)
+```
 
-**Why this is a *sight* problem specifically.** A rendered close-up "at the closest approach" shows the
-critic a stationary yellow box beside a moving ego. That frame contains no conflict at all. The critic
-either scores it low (wrong — the scenario was fine) or, as mine did, reconstructs the conflict from the
-filmstrip and scores it high while the frame it was given is uninformative. Either way the *picture is
-of the wrong moment*.
+`pathSeparationM == 0` means the two bodies genuinely occupied the same ground at some point:
+**the space was contested**. It cleanly separates the two things simultaneous clearance conflates —
+*spatial* separation (how close the paths came, timing removed) and *temporal* separation
+(`encroachmentGapS = |t_i − t_j|`, a post-encroachment time measured from footprints rather than
+predicted). A genuine conflict is small in both.
 
-**What I changed in my own judge because of this**, and what your loop should do: compute the
-**contested-space instant** — `argmin_t |lateral offset|` subject to the challenger being ahead of the
-ego — separately from the minimum-clearance instant, render **both, side by side**, and flag
-`PROXIMITY_IS_NOT_THE_CONFLICT` when they are more than 1 s apart. With that change the judge's
-one-liner on this cell became: *"the actual closest approach is to a stopped child rather than the
-moving contested-space event"*, and its suggested fix was the correct mechanism-level one.
+**The corrected result on the same 28 cells:**
 
----
+```
+28/28 cells: the minimum-clearance instant IS the contested-space instant (within 1.0 s)
+```
+* `pathSeparationM = 0.000` in **28/28** — every cell is a real encroachment; the child's body and the
+  ego's body occupied the same ground.
+* `encroachmentGapS` ranges **0.38 – 1.80 s**, median ~1.5 s. These are genuinely tight crossings.
+* `lagS = tMinClear − tCross` has median **0.12 s**, max **0.72 s**. The gate is scoring the right event.
+
+**So the frozen gate's C3 is not measuring the wrong moment. I withdraw that claim, and with it the
+`PROXIMITY_IS_NOT_THE_CONFLICT` fire rate of 28/28.** It now fires on 0/28, which is correct.
+
+### What survives, sharpened
+
+`judge/conflict.py` shows the real defect underneath, and it is narrower and more actionable:
+
+```
+20/28 cells pass the candidate tightening clause C3b
+ 8/28 FAIL, every one of them for the same reason:
+     ! the challenger had stopped (0 m/s) by the time the ego arrived
+```
+
+Worked case (`vista-probe0` yale `25fd4ad6` d0): the child occupies the contested ground at
+**t = 6.88 s while moving at 2.2 m/s**; the ego arrives at **t = 8.50 s**; encroachment gap **1.62 s**.
+That is a real conflict. But by t = 8.50 the child has **stopped dead** and is standing at 3.5 m to the
+ego's left, and the ego is *accelerating* through the moment the gate calls the closest approach
+(6.1 → 8.1 → 11.1 m/s). The encroachment was real; the *near miss the gate scores* is a pass-by of a
+now-stationary pedestrian, 1.6 s after the fact.
+
+That is a **realism** defect (route exhaustion, §6), not a conflict-detection defect — which is why
+`c3b_conflict_is_the_proximity()` ships with `min_challenger_speed` **defaulted to 0.0, i.e. off**.
+Turning it on would reject 8/28 cells that contain genuine 1.5 s-PET encroachments. Report it, do not
+gate on it.
+
+### What the loop should actually take from this
+* Use `conflict.py:conflict_event()` as the **gate-side** measurement. It is honest about
+  "there was no contested-space event at all" (`contested: False` plus the exact miss distance), which
+  is the case the bearing heuristic could never express.
+* The tightening worth considering is `C3b` **without** the stopped-challenger clause: require
+  `pathSeparationM <= 2.0`, `encroachmentGapS <= 4.0`, and `|lagS| <= 1.0`. On this batch that is a
+  no-op (28/28 pass), which is the right behaviour for a clause aimed at other archetypes — the
+  categories that lose to C3 (`C3.intersection` 76%, `C13.control` 93%) are exactly the ones where
+  `pathSeparationM` will be large and `contested` will be `False`.
+* Keep `CHALLENGER_STOPPED_AFTER_CROSSING` as a **quality flag**. It fires on 10/28 and it is a real
+  wart, but it is not grounds for rejection.
+
+**Method note, since it is the point of this lane:** the thing that caught my error was building the
+rigorous measurement and running it against the heuristic I had already published. A flag that fires on
+100% of cells is not a finding, it is a bug — I should have treated the 28/28 as the alarm it was
+instead of the headline.
 
 ## 6. Route exhaustion: actors stop dead and stand in the carriageway
 
@@ -241,6 +281,6 @@ not just in site id.
    thing your repair loop will otherwise learn to exploit.
 4. **§3** render the warm-up-propagated state, and report `C2_spawn` alongside `C2`. Without this your
    headline C2-recovery number is measured against a moving target.
-5. **§5** render the contested-space instant, not only the closest-approach instant.
+5. **§5** use `conflict.py:conflict_event()` as the gate-side conflict measure (path separation and encroachment gap, reported separately from simultaneous clearance).
 6. **§8** runway precondition before rendering. Free admission; costs nothing.
 7. **§6, §7, §9, §10** as budget allows.

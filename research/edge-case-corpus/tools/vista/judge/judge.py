@@ -256,18 +256,20 @@ def _facts_block(feat, diff):
             f"  closing rate at that instant: {c.get('closingRateAtMinMps')} m/s",
             f"  was it already closest at the very start of the clip? {c.get('closestAtStart')}",
         ]
-    pc = c.get('pathCrossing') or {}
+    pc = c.get('conflictEvent') or {}
     if pc:
         lines += [
-            'THE CONTESTED-SPACE INSTANT (when it was most directly in the ego\'s path) IS A '
-            'DIFFERENT MEASUREMENT from the closest approach:',
-            f"  t={pc['t']} s, it was {pc['aheadM']} m ahead of the ego and "
-            f"{abs(pc['lateralOffsetM'])} m off the ego's centreline",
-            f"  clearance at THAT instant: {pc['clearanceM']} m "
-            f"(ego {pc['egoSpeedMps']} m/s, it {pc['challengerSpeedMps']} m/s)",
-            f"  is that the same event as the closest approach? {pc['sameEventAsClosestApproach']} "
-            '-- if False, the moment the gate scored as "genuine proximity" is NOT the moment of the '
-            'actual interaction',
+            'CONTESTED-SPACE EVENT (did the two bodies ever occupy the SAME GROUND, at possibly '
+            'different times? this is separate from how close they were at any one instant):',
+            f"  did their footprints ever overlap in space? {pc.get('contested')} "
+            f"(closest the two PATHS came, with timing removed: {pc.get('pathSeparationM')} m)",
+            f"  the ego occupied that ground at t={pc.get('tCross')} s; the other party occupied it "
+            f"at t={pc.get('tChallengerAtCross')} s",
+            f"  time separation at that point (a post-encroachment time): "
+            f"{pc.get('encroachmentGapS')} s; {pc.get('whoArrivedFirst')} got there first",
+            f"  the other party's speed WHEN THE EGO ARRIVED: "
+            f"{pc.get('challengerSpeedAtEgoArrival')} m/s "
+            '(if ~0 it had already finished and stopped, which is usually route exhaustion)',
         ]
     others = [k for k in feat['challengers'] if k != conf]
     if others:
@@ -314,12 +316,26 @@ def mechanical_flags(feat, gate_cell=None):
         if conf['maxTickJumpM'] > 1.5 * v * dt + 0.05:
             f.append(('CHALLENGER_DISCONTINUOUS',
                       f"largest single-tick jump {conf['maxTickJumpM']} m exceeds its own speed"))
-    pc = conf.get('pathCrossing') or {}
-    if pc and not pc.get('sameEventAsClosestApproach'):
-        f.append(('PROXIMITY_IS_NOT_THE_CONFLICT',
-                  f"minimum clearance ({conf.get('minClearanceM')} m at t={conf.get('tMinClearance')}) "
-                  f"and the contested-space instant ({pc['clearanceM']} m at t={pc['t']}) are "
-                  'different events; the gate scored C3 on the wrong one'))
+    pc = conf.get('conflictEvent') or {}
+    if pc:
+        if not pc.get('contested') and pc.get('pathSeparationM', 0) > 2.0:
+            f.append(('NO_CONTESTED_SPACE',
+                      f"the two paths never came closer than {pc['pathSeparationM']} m even with "
+                      'timing removed: they never contested any ground'))
+        if not pc.get('sameEvent'):
+            f.append(('PROXIMITY_IS_NOT_THE_CONFLICT',
+                      f"the minimum-clearance instant (t={conf.get('tMinClearance')}) is "
+                      f"{pc.get('lagS')} s away from the contested-space instant (t={pc.get('tCross')})"))
+        if pc.get('challengerSpeedAtEgoArrival') is not None \
+                and pc['challengerSpeedAtEgoArrival'] < 0.3:
+            f.append(('CHALLENGER_STOPPED_AFTER_CROSSING',
+                      f"the other party crossed with a {pc.get('encroachmentGapS')} s gap and had "
+                      f"stopped ({pc['challengerSpeedAtEgoArrival']} m/s) by the time the ego "
+                      'arrived; it is left standing in the carriageway'))
+        if pc.get('encroachmentGapS') is not None and pc['encroachmentGapS'] < 0.2:
+            f.append(('NEAR_COLLISION_BY_TIMING',
+                      f"encroachment gap only {pc['encroachmentGapS']} s: a collision that missed by "
+                      'timing alone'))
     if conf.get('presentFrac', 1.0) < 0.98:
         f.append(('CHALLENGER_PARTIALLY_ABSENT',
                   f"present for only {conf.get('presentFrac')} of the clip"))
@@ -354,6 +370,9 @@ HARD_CAPS = {
     # also not capped: it is a fact about the GATE's bookkeeping, not necessarily about the scenario.
     # Surfaced to the model, which must decide whether the real interaction was genuine.
     'PROXIMITY_IS_NOT_THE_CONFLICT': {},
+    'CHALLENGER_STOPPED_AFTER_CROSSING': {},   # realism note, not a conflict test -- see conflict.py
+    'NEAR_COLLISION_BY_TIMING': {},            # informative; C5's PET floor already governs it
+    'NO_CONTESTED_SPACE':       {'R2': 1},     # they never shared any ground: not a conflict
 }
 
 
@@ -376,7 +395,8 @@ def cross_check(stage1, feat):
     # the critic may legitimately name EITHER the minimum-clearance instant or the contested-space
     # instant; both are correct answers to "when was the critical moment". Only naming neither is wrong.
     valid_t = [t for t in (c.get('tMinClearance'),
-                           (c.get('pathCrossing') or {}).get('t')) if t is not None]
+                           (c.get('conflictEvent') or {}).get('tCross'),
+                           (c.get('conflictEvent') or {}).get('tChallengerAtCross')) if t is not None]
     t_claim = (stage1.get('critical_moment') or {}).get('t_seconds')
     if valid_t and isinstance(t_claim, (int, float)):
         out['conflict_time_error_s'] = round(min(abs(t_claim - t) for t in valid_t), 2)
@@ -410,8 +430,8 @@ def judge_trace(trace_path, brief, out_dir, dev_assets, instance_path=None,
     tmin = (feat['challengers'].get(conf or '') or {}).get('tMinClearance')
     clr = (feat['challengers'].get(conf or '') or {}).get('minClearanceM')
 
-    pc = (feat['challengers'].get(conf or '') or {}).get('pathCrossing') or {}
-    tcross = pc.get('t')
+    pc = (feat['challengers'].get(conf or '') or {}).get('conflictEvent') or {}
+    tcross = pc.get('tCross')
     film = os.path.join(out_dir, f'{tag}.film.png')
     close = os.path.join(out_dir, f'{tag}.close.png')
     RR.filmstrip(trace, dev_assets, film, tmin=tmin)

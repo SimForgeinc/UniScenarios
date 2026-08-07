@@ -306,14 +306,29 @@ Difficulty separates the verdicts in the expected direction:
 ego brakes hard, they simply are not the scenario that was asked for. Difficulty and quality are
 different axes and the rubric keeps them apart.)
 
-### The systemic finding
-`PROXIMITY_IS_NOT_THE_CONFLICT` fires on **28 / 28 cells** — every single one. In this entire template
-family, the instant of minimum footprint clearance is *never* the instant of the actual interaction. The
-gate's C3 clause is measuring a post-event pass-by in 100% of these cells. See `FAILURE-MODES.md` §5 for
-the worked numbers.
+### The systemic finding — CORRECTED
+The first version of this section reported `PROXIMITY_IS_NOT_THE_CONFLICT` firing on **28/28 cells**.
+**That was a bug in my own measure, not a finding, and it is retracted.** The v1 "contested space"
+instant was `argmin_t |lateral bearing offset|`, which is a bearing test, not a path test; it fires on
+anything on the ego's forward axis at any distance, so it could never coincide with a closest approach.
+A flag that fires on 100% of cells should have been treated as an alarm.
 
-`CHALLENGER_STOPPED_AT_CONFLICT` fires on 10/28: in over a third of cells the child has already come to
-a complete stop by the time of the "near miss".
+The rigorous replacement is `judge/conflict.py`: the minimum over **all tick-index pairs** `(i, j)`
+(different times allowed) of `clearance(ego_i, challenger_j)`. Zero means the two bodies genuinely
+occupied the same ground. On the same 28 cells:
+
+* `pathSeparationM = 0.000` on **28/28** — every cell is a real encroachment
+* `encroachmentGapS` 0.38–1.80 s (a footprint-measured post-encroachment time)
+* `lagS = tMinClear − tCross`: median **0.12 s**, max **0.72 s** → **28/28 same event**
+
+So the gate's C3 is scoring the right instant. `PROXIMITY_IS_NOT_THE_CONFLICT` now fires on 0/28.
+
+What survives is narrower and real: **8/28 cells have a challenger that has stopped dead (0.0 m/s) by
+the time the ego reaches the contested ground** (`CHALLENGER_STOPPED_AFTER_CROSSING`, and
+`CHALLENGER_STOPPED_AT_CONFLICT` on 10/28). The encroachment happened; the near-miss the gate then
+scores is a pass-by of a now-stationary pedestrian. That is a realism defect (route exhaustion), not a
+conflict-detection defect, which is why `conflict.c3b_conflict_is_the_proximity()` ships with its
+stopped-challenger clause **defaulted off**.
 
 ### Negative controls, final run
 

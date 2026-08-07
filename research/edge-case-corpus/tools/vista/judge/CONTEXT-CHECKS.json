@@ -1,0 +1,49 @@
+{
+ "claim_accept_iff_findings_empty": {
+  "verified": true,
+  "evidence": "/tmp/judge-a1/batch-summary.json: 19/19 accepted cells have findings==[]; 9/9 rejected have >=1 finding"
+ },
+ "claim_preferred_violations_are_free": {
+  "verified": false,
+  "note": "not testable in my data: the only preferred violation (ego-decel-budget, achieved 9.934 vs 6.5) came bundled with an independent hard finding `physically_unavoidable` (\"ego needed 9.93 m/s^2, above the 7.85 m/s^2 friction ceiling\"), which rejects on its own. Operative rule is \"any finding rejects\"; exceeding the decel budget emits its own finding regardless of essentiality."
+ },
+ "map_feature_availability": {
+  "yale-street": {
+   "parking_lane": 70,
+   "occlusion_zone": 61,
+   "crosswalk": 12,
+   "bus_stop": 6
+  },
+  "belmont-research-center": {
+   "occlusion_zone": 87,
+   "parking_lane": 30,
+   "crosswalk": 10,
+   "bus_stop": 2
+  },
+  "el-camino-road": {
+   "parking_lane": 21,
+   "occlusion_zone": 96,
+   "crosswalk": 5,
+   "work_zone_suitable": 2,
+   "bus_stop": 5
+  },
+  "easterbrook-discovery-school": {
+   "crosswalk": 13,
+   "occlusion_zone": 7,
+   "school_zone": 2,
+   "parking_lane": 2
+  },
+  "richmond-field-station": {
+   "parking_lane": 32,
+   "occlusion_zone": 24,
+   "crosswalk": 5,
+   "bus_stop": 1
+  }
+ },
+ "rail_crossings": "no rail/tram/level-crossing location kind or token exists on ANY of the 5 maps",
+ "unadmittable_under_2map_rule": [
+  "work-zone briefs (el-camino-road only)",
+  "school-zone briefs (easterbrook-discovery-school only)",
+  "rail-crossing briefs (no map has them)"
+ ]
+}
