@@ -114,6 +114,7 @@ if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
   throw new Error(`--evidence-class must be catalog or corpus, got ${evidenceClassArg}`);
 }
 const corpusMode = evidenceClassArg === 'corpus';
+const showProgress = args.has('progress');
 const maps = args.has('all-maps')
   ? MAPS
   : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
@@ -160,10 +161,21 @@ async function settleFrames(page, count = 8) {
 async function hideUiForExport(page) {
   if (includeUi) return;
   await page.evaluate(() => {
-    const root = document.querySelector('#root > div');
-    if (!root) return;
-    for (const child of root.children) {
-      if (child.tagName !== 'CANVAS') child.style.visibility = 'hidden';
+    // The viewer canvas is nested several layout wrappers below `#root > div`
+    // (#root > div > div > div > div > canvas). Hiding every non-CANVAS child
+    // of `#root > div` therefore hid the canvas itself: the element became
+    // non-visible and `elementHandle.screenshot()` blocked on actionability
+    // forever. Walk the canvas ancestor chain instead and hide only its
+    // siblings at each level, which removes the chrome while leaving the
+    // canvas visible and its layout box unchanged.
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    let node = canvas;
+    while (node.parentElement && node.parentElement !== document.documentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node) sibling.style.visibility = 'hidden';
+      }
+      node = node.parentElement;
     }
   });
 }
@@ -428,6 +440,22 @@ async function exportScenario(page) {
 
   const pageUrl = withMap(url, evidence.mapId);
   await page.goto(pageUrl, { waitUntil: 'load' });
+  // Studio defers mounting the 3D world until a render-quality preference is
+  // *stored*. An unparsable value silently degrades to `invalid`, the chooser
+  // still disappears, and every captured frame would be empty. Fail loudly.
+  const qualityState = await page.evaluate(() => {
+    try {
+      const raw = window.localStorage.getItem('uniscenarios.studio.render-quality.v1');
+      if (!raw) return { state: 'missing', raw: null };
+      const parsed = JSON.parse(raw);
+      return { state: typeof parsed?.preset === 'string' ? 'stored' : 'invalid', raw };
+    } catch (error) {
+      return { state: 'unavailable', raw: String(error) };
+    }
+  });
+  if (qualityState.state !== 'stored') {
+    throw new Error(`render-quality preference is ${qualityState.state}; the 3D world would never mount`);
+  }
   await waitForApp(page);
   await waitForStreamIdle(page);
   await page.evaluate(() => {
@@ -461,6 +489,16 @@ async function exportScenario(page) {
   }).map((prop) => prop.id));
 
   const renderTraceFrame = async (selected, file, settleCount, clipCamera = false) => {
+    // Stage timings on stderr make a stalled export diagnosable instead of a
+    // silent multi-hour hang. They never enter the manifest.
+    const stageStart = Date.now();
+    let lastStage = stageStart;
+    const stage = (name) => {
+      if (!showProgress) return;
+      const now = Date.now();
+      process.stderr.write(`[progress] t=${selected.t} ${name} ${now - lastStage}ms total=${now - stageStart}ms\n`);
+      lastStage = now;
+    };
     const views = renderViewsAtTraceIndex(instanceDoc, trace, evidence, selected.index);
     const grounded = await page.evaluate(({ actors, props }) => {
       const overlays = window.__overlays;
@@ -481,6 +519,7 @@ async function exportScenario(page) {
       editor.renderer.setSelection([]);
       return { actors: groundedActors, props: groundedProps };
     }, views);
+    stage('sync');
     const groundedPoses = grounded.actors;
     const pairGround = groundedPoses
       .filter((pose) => evidence.metricPair.includes(pose.id))
@@ -505,11 +544,14 @@ async function exportScenario(page) {
       );
     }
     await setView(page, camera.eye, camera.target, camera.fovDeg);
+    stage('setView');
     // Catalog evidence must fail closed if the incident view never reaches a
     // fully resident state. Capturing after a swallowed timeout can make a
     // missing city tile look like clear line of sight.
     await waitForStreamIdle(page, 60000);
+    stage('streamIdle');
     await settleFrames(page, settleCount);
+    stage('settle');
     const composition = await inspectIncidentComposition(
       page,
       [...groundedPoses, ...framingProps],
@@ -528,6 +570,7 @@ async function exportScenario(page) {
       }
       throw new Error(`incident composition failed at t=${selected.t}: ${failures.join(', ')}`);
     }
+    stage('composition');
     if (includeUi) {
       await page.screenshot({ path: file, fullPage: false });
     } else {
@@ -535,6 +578,7 @@ async function exportScenario(page) {
       if (!canvas) throw new Error('viewer canvas not found');
       await canvas.screenshot({ path: file });
     }
+    stage('screenshot');
     return {
       requestedT: selected.targetT,
       index: selected.index,
@@ -697,6 +741,7 @@ async function exportScenario(page) {
       ? { evidenceClass: 'corpus-scenario-clip', resultBinding }
       : {}),
   });
+  manifest.simulationNotices = simulationNotices;
   const manifestFile = path.join(outDir, 'manifest.json');
   await writeJsonAtomic(manifestFile, manifest);
   // Preserve the rejected manifest for diagnosis, but never report a strict
@@ -828,6 +873,23 @@ const context = await browser.newContext({ viewport: { width, height }, deviceSc
 // same preference a human would pick (default: the app's own `balanced`
 // preset, i.e. full city + vegetation) before the app boots.
 const qualityPreset = args.get('quality') ?? 'balanced';
+if (args.has('pin-page')) {
+  // A long batch export can run while the Vite dev server is still hot-reloading
+  // from unrelated source edits. A full page reload mid-sequence destroys
+  // window.__viewer and the run dies with a confusing error. `--pin-page`
+  // neutralises the dev-client's `location.reload()` for the export session only.
+  await context.addInitScript(() => {
+    try {
+      const reload = window.location.reload.bind(window.location);
+      Object.defineProperty(window.location, 'reload', {
+        configurable: true,
+        value: () => { console.warn('[export-render] suppressed dev-server reload'); void reload; },
+      });
+    } catch {
+      // Non-configurable location in some engines; the export simply stays exposed.
+    }
+  });
+}
 await context.addInitScript((preset) => {
   try {
     const key = 'uniscenarios.studio.render-quality.v1';
@@ -840,7 +902,19 @@ await context.addInitScript((preset) => {
 }, qualityPreset);
 const page = await context.newPage();
 const diagnostics = [];
-page.on('console', (m) => { if (m.type() === 'error') diagnostics.push({ type: 'console', text: m.text() }); });
+// The bundled SUMO-derived traffic model emits its own advisory channel through
+// console.error, e.g. "Warning: Vehicle 'sumo-...' performs emergency braking on
+// lane ...". Those are simulation-quality notices about ambient traffic, not
+// browser or renderer faults, and they must not be able to reject a visual
+// evidence bundle. They are still recorded, just in a non-blocking bucket.
+const simulationNotices = [];
+const SIMULATION_NOTICE = /^Warning: /;
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  const text = m.text();
+  if (SIMULATION_NOTICE.test(text)) simulationNotices.push({ type: 'console', text });
+  else diagnostics.push({ type: 'console', text });
+});
 page.on('pageerror', (e) => diagnostics.push({ type: 'pageerror', text: String(e) }));
 
 const results = [];
