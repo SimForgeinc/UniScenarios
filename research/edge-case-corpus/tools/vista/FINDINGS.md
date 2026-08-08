@@ -1308,3 +1308,49 @@ batch writer, which this pipeline does not use. The checks are therefore unenfor
 and dropping them is the only option; the semantic bindings that DO exist (`inputHash`, `instanceId`,
 `mapId`, `traceDigest` vs `sha256Json(trace)`) are checked. Design stands. **M3.2 must be reported as
 "semantic hash equality + actor-id equality", never as "full catalog integrity".**
+
+---
+
+## 30. WS-4 signals: 3 of 4 measures met, and the RoadRunner handoff shipped
+
+**M4.1 MET** — `newcaps/DIAG-signals.md` (24 KB), file:line evidence, re-runnable commands.
+
+**M4.2 MET** — `newcaps/HANDOFF-roadrunner-signals.md` (17 KB), written for someone who does not know
+this repo. Counted directly from the delivered `map.xodr` files:
+
+| map | `<junction>` | junctions with a **working** signal | `<signal>` records | of which `dynamic="yes"` |
+|---|---:|---:|---:|---:|
+| yale-street | 56 | **4** — 134, 303, 345, 447 | 143 | 69 |
+| richmond-field-station | 31 | **1** — 238 | 39 | 12 |
+| el-camino-road | 68 | **1** — 590 (+1 wired-but-uncontrolled: 2218) | 73 | 30 |
+| belmont-research-center | 75 | **0** | 50 | **0** |
+| easterbrook-discovery-school | 17 | **0** | 54 | **0** |
+| **total** | **247** | **6** | **359** | **111** |
+
+Three distinct problems, not one: belmont and easterbrook contain **no dynamic signal head at all**
+(their 104 `<signal>` records are stop signs, speed plates and stop-line markings, every one
+`dynamic="no"`) — 92 junctions with zero signal capability; el-camino has one junction with dynamic
+heads but no `<controller>` wiring; and everywhere else the heads simply are not there. The doc gives
+a minimal correct XML example and a command the map author can run on their own export before sending
+it. It is explicitly non-blaming: this is metadata RoadRunner writes only under a particular
+intersection configuration, and nobody told them we depended on it.
+
+**M4.4 MET** — clause C6, audited by me independently (s29): 8 deletions in the diff, none touching a
+C1-C5 clause body; `pass` is a pure conjunction so C6 can only turn a pass into a fail. Rejects 88/293
+(30%). Gold unchanged at 3/3 frozen, 3/3 HQ.
+
+**M4.3 NOT YET** — no `trafficControls` authoring rules in `surface.md`, no re-authored template. Handed
+to a fresh agent, because the fix is proven and worth ~88 rescued scenarios.
+
+### A process failure worth recording
+**Two agents did excellent work and terminated mid-investigation having written ZERO files.** `ws1b`
+had derived the full map-intel location vocabulary and the right architectural call for signal
+archetypes; `ws4` had finished three of four measures. Everything unwritten was lost, and `ws1b` left
+nothing at all.
+
+The instruction I had given said "write X.md with a BOTTOM LINE" — which reads as a *final* step. Both
+agents treated it as one. Every subsequent spawn now carries an explicit rule: **create the deliverable
+stub in the first few actions and update it as you learn; assume you may stop at any moment; a partial
+written result beats a perfect unwritten one.** The same applies to me: I have been recording findings
+into FINDINGS.md turn by turn rather than at the end, which is the only reason the retractions in s27
+and s28 survived.
