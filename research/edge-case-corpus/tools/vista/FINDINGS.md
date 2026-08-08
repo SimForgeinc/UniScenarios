@@ -1731,3 +1731,61 @@ should not ship without an explanation.
 
 **A one-off discovery has been converted into a permanent instrument.** That is the only durable
 response to finding a defect by luck.
+
+---
+
+## 38. The composition defect: ambient traffic made the frozen gate unsatisfiable
+
+The first full re-harvest with `--ambient moderate` returned **0 training-grade of 140 simulated** on its
+first archetype. Diagnosis:
+
+```
+clause losses  C1 0  C2 0  C3 0  C4 66  C5 140/140  C6 0
+```
+
+**C5 is `verdict == accept AND band == critical AND collisions == 0 AND no never-fired trigger`, and
+`collisions` counted every collision in the trace.** With ambient traffic on, of 348 collisions across
+80 cells:
+
+| pair | count |
+|---|---:|
+| ambient <-> ambient | **312 (90%)** |
+| authored <-> authored | 28 |
+| ambient <-> authored | 8 |
+
+Background cars crashing into each other were condemning the scenario. **Ambient traffic and the frozen
+gate were mutually exclusive as composed**, and the whole ambient corpus would have had zero yield. WS-2
+correctly kept collision detection *global* so that an ego hitting a background car still fails the
+clip; nobody noticed that this also made every background fender-bender fail the clip.
+
+### The fix, and why it is not a loosening
+`trace_facts` now counts a collision only when **at least one side is an authored actor**:
+- ego-involved and challenger-involved collisions count, unchanged;
+- an ambient car hit BY an authored actor still counts — one authored side is enough;
+- `ambientActorIds` is absent from every trace written before ambient traffic existed, so on all
+  historical traces and on the gold set this is byte-identical to the old `len(collisions)`.
+
+Verified: **gold 3/3 frozen, 3/3 HQ, all six loss counts 0**, and the 293-scenario scorecard is
+unchanged on M4.4/M2.2/M2.5. Re-gating the failed archetype: C5 loss **140 -> 117**, frozen **0 -> 6**.
+`collisionsAll` and `collisionsAmbientOnly` are now reported alongside, so the exclusion is auditable
+rather than invisible.
+
+This is the same principle already applied twice — ambient actors are excluded from criticality pairs
+(WS-2, `monitored-pairs.ts`) and from the gate's closest-approach search (the two-line patch in s33).
+**Three separate layers each independently assumed "every actor in the trace is part of the scenario."**
+The lesson generalises: introducing a new *class* of actor requires auditing every place that takes a
+minimum, a count, or an aggregate over actors.
+
+### An honest quality caveat on the ambient traffic itself
+Ambient cars crash into each other frequently: median **6 ambient-ambient collisions per 13 s clip** at
+`--ambient moderate` (40 actors), **2** at `--ambient city` (32 actors), up to 8. The gate now ignores
+them, but they will be **visible in the 3D videos** as background cars colliding, which is not
+"realistic background traffic" in the sense the goal asks for. It is not monotonic in preset density, so
+it is site-dependent rather than a simple over-crowding problem. **Reported rather than hidden: the
+roads are populated, and the population is not yet well-behaved.**
+
+### Two operational fixes
+`reharvest.sh` no longer wipes the harvest directory unless given `--fresh` — a blind `rm -rf` had
+already destroyed 1065 computed traces once. And the doomed run was stopped correctly: `kill -TERM` on
+the process group, then confirmed zero PPID=1 strays and zero remaining `uniscenarios.js batch`
+processes before relaunching.
