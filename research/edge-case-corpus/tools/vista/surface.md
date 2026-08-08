@@ -513,3 +513,95 @@ actor that needed it.
     If you need a role upstream of the frame origin, express it relative to something —
     `"origin - 35"`, `"-lane.speedLimitKph"`, or a `relative_to` binding with a negative `dsM`, which
     works normally. Recorded in `newcaps/DEFECT-negative-role-s-infeasible.md`.
+
+
+25. **If the brief mentions a traffic light, you MUST author a `trafficControls` block. The map will
+    not give you one.** A signal exists in the simulation if and only if the materialized scenario
+    carries at least one signal program, and a map-bound program exists only for a junction whose
+    OpenDRIVE `<junction>` element literally declares `<controller>` children — **6 of 247 junctions
+    across all five maps** (yale 134/303/345/447, richmond 238, el-camino 590). Two whole maps,
+    belmont-research-center and easterbrook-discovery-school, contain **zero** dynamic traffic-signal
+    heads, so no junction on either can ever be signal-controlled from the map.
+    Do **not** try to fix this with the anchor. `control: {value: ["signalized"], essentiality:
+    "required"}` buys a LABEL, not a light: the label is set by "some traffic-light point lies within
+    junction size/2 + 22 m of the centre", and **17 of the 23 junctions carrying it have no signal
+    record on any of their own roads** — they inherited a neighbour's heads through the pad. Requiring
+    it starves the archetype to a handful of sites AND still yields no signal state. Ask the anchor for
+    the GEOMETRY the brief needs (arms, the conflicting approach, crossing angle, approach speed) and
+    author the light yourself.
+    Minimal block, a top-level key of the template alongside `roles`/`choreography`:
+
+    ```json
+    "trafficControls": [
+      {
+        "id": "ego-approach-head",
+        "kind": "normal_signal",
+        "feature": "conflict-junction",
+        "pose":  { "laneOffset": 0, "s": -6, "tFrac": 0, "headingOffsetRad": 0 },
+        "stopLines": [
+          { "feature": "conflict-junction",
+            "pose": { "laneOffset": 0, "s": -6, "tFrac": 0, "headingOffsetRad": 0 } }
+        ],
+        "phases": [
+          { "indication": "green",  "durationS": 11 },
+          { "indication": "yellow", "durationS": 3 },
+          { "indication": "red",    "durationS": 30 }
+        ],
+        "offsetS": 0,
+        "loop": false,
+        "label": "authored head governing the ego approach"
+      }
+    ]
+    ```
+
+    The program appears in the trace as `control:<id>` and is what makes `set(rules.obeySignals, …)`
+    mean anything at all (see rule 26). Measured, `c15g-red-light-runner` on 5 maps x 8 sites x 4 draws:
+    the unmodified template produced signal state in **20 of 136** simulated cells (14.7%, only the six
+    real map junctions); with the block above, **136 of 136 (100%)**, and the physics was unchanged —
+    the same 18 cells passed the frozen gate and the quality layer either way. Adding the head costs
+    nothing and is the difference between an admitted scenario and a rejected one.
+
+26. **Without a signal or a stop line in the scenario, `set(rules.obeySignals, …)` is a pure no-op.**
+    The engine consults `obeySignals` in exactly one place, and that code returns immediately when the
+    scenario's signal book is empty (no programs AND no map stop-sign controls). So on an uncontrolled
+    junction, `set(rules.obeySignals, false)` on your violator and `set(rules.obeySignals, true)` on
+    the ego both flip a flag nobody reads: a `state_set` event is emitted and the vehicles behave
+    identically. That is how 67 delivered "red-light runner" scenarios came to contain no red light —
+    the conflict was produced entirely by `set(rules.yieldToVehicles, false)` plus the arrival solve,
+    and the signal language was decoration.
+    Three further things go quiet in the same state, all of them failing OPEN rather than loud:
+      - a `{kind:"signal", signalId, phase}` trigger condition compares `null === phase` and **never
+        fires**, so anything chained off "when the light turns red" waits forever;
+      - a signal/`control_indication` intent criterion grades **`unchecked`**, not `fail`, and a
+        non-required criterion then drops silently out of the verdict;
+      - `set(signal:<id>.phase, …)` against an id that does not exist is **discarded without error**.
+    Corollary: if your scenario's story depends on a phase, author the phase (rule 25) before you
+    author anything that reads it. And do not read "empty signal channel" as "no control" — a
+    stop-sign junction has real stop-line authority that the engine honours and never publishes to
+    the trace.
+
+27. **Author the phase the brief actually claims, and put the head where the ego meets it.**
+    Practical rules, all measured:
+      - **Give the ego the indication the brief gives it.** "The ego proceeds on green while a van runs
+        its red" means the ego's head is GREEN across the ego's approach; the violator's red is
+        expressed by `set(rules.obeySignals, false)` on the violator, not by a second head. Make the
+        green comfortably longer than the ego needs to reach the line (clip 13 s, ego at 45-64 kph
+        starting ~7 s upstream -> green 11 s is ample) and let yellow/red follow, so the trace shows a
+        real transition rather than a constant.
+      - **A red really does stop the ego, so use it deliberately.** Same template, same sites, only the
+        phase plan changed: green-through gave a median ego travel of **117.3 m** with the ego halted
+        in 36/136 cells (those halts caused by the van), while holding the head red across the approach
+        gave **67.4 m** and halted the ego in **83/136** cells and dropped gate admission to 0. The
+        phase is genuinely driving the vehicle; a red placed over your conflict window will delete the
+        conflict.
+      - **One head, one stop line, on the ego's own approach.** `stopLines[].connectingLaneRsls` is
+        emitted empty, so an authored head stops **every** movement across its line — a
+        protected-turn-only or single-movement head is not expressible. Never place an authored line
+        where a second actor must cross it unless you intend to stop that actor too.
+      - **Place the line upstream of the junction in the frame** (`s` negative, e.g. -6) on
+        `laneOffset` 0. It is projected onto the frame's lateral lane, and on a mirrored site that is
+        the frame lane rather than the ego's — if the ego seems to ignore the light, check
+        `ticks.actors.<id>.laneRsl` against the program's stop-line `rsl` before blaming the phase.
+      - **`darkFallback` and `darkDwellS` are parsed and then dropped**, so an `off`/dark phase always
+        falls back to the all-way-stop default with a 1 s dwell. Do not build a blackout scenario on
+        them yet.

@@ -66,6 +66,28 @@ export interface AmbientTrafficOptions {
    * not run the clip; the explicit robustness job applies this ceiling.
    */
   readonly maxAchievableDecelMps2?: number;
+  /**
+   * Keep generated traffic off the ground the authored scenario is going to
+   * use. A candidate is rejected when its spawn lane, or any lane on its route,
+   * is in this set.
+   *
+   * WHY. Background traffic exists to populate the road, never to become the
+   * conflict. A generated car that spawns in the ego's own lane becomes the
+   * ego's leader and can manufacture the braking demand and the closest
+   * approach that the authored challenger was supposed to own — the scenario
+   * then measures the wrong pair. Reserving the authored corridor makes that
+   * structurally impossible rather than statistically unlikely.
+   *
+   * `materializeAmbientCandidatePool` derives the authored corridor
+   * automatically from every authored `lanePath` route; this option adds to it.
+   */
+  readonly excludedLaneRsls?: readonly string[];
+  /**
+   * Opt out of the automatic authored-corridor exclusion. Off by default and
+   * intended only for the ambient-robustness evaluator, which deliberately
+   * drives generated traffic at the authored actors.
+   */
+  readonly allowAuthoredCorridor?: boolean;
 }
 
 export interface AmbientScreeningReason {
@@ -97,6 +119,10 @@ export interface AmbientTrafficProvenance {
   readonly generatedInputHash: string;
   readonly actors: readonly AmbientActorProvenance[];
   readonly rejectedSpawnCount: number;
+  /** Candidates dropped purely for touching the authored corridor. */
+  readonly authoredCorridorRejects: number;
+  /** The authored corridor that was reserved, sorted. */
+  readonly authoredCorridorLaneRsls: readonly string[];
   readonly eligibleLaneKm: number;
   /** Compatibility summary. Ordinary materialization never executes a screening clip. */
   readonly screening: {
@@ -187,7 +213,15 @@ export function createAmbientCandidatePool(
   const roadLanes = eligibleDirectedLanes(graph, ['driving'], [], Number.POSITIVE_INFINITY);
   const walkingLanes = eligibleDirectedLanes(graph, ['sidewalk', 'walking'], [], Number.POSITIVE_INFINITY);
   const totalLaneKm = roadLanes.reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
-  const candidateBudget = Math.min(4096, Math.max(profile.maxActors * 8, Math.ceil(totalLaneKm * profile.densityVehiclesPerKm * 2)));
+  // Oversample. Selection is LOCAL — a site uses only the candidates that fall
+  // inside `radiusM` — while the pool is map-wide, so the budget has to cover
+  // the rejection rate at the densest point rather than the average one.
+  // Measured on belmont-research-center/3b536530 with the old ×2 factor: 67
+  // candidates reached the site, 47 were rejected by reservations, runway and
+  // authored-corridor protection, and only 20 of a target 33 were placed. The
+  // shortfall was pure supply. ×8 leaves the same selection rules and the same
+  // determinism, and simply stops the local pool running dry.
+  const candidateBudget = Math.min(4096, Math.max(profile.maxActors * 16, Math.ceil(totalLaneKm * profile.densityVehiclesPerKm * 8)));
   const rng = new Rng(`${key}|ambient-candidate-pool-v1`);
   const candidates: AmbientCandidate[] = [];
   const attemptLimit = Math.max(80, candidateBudget * 4);
@@ -198,8 +232,19 @@ export function createAmbientCandidatePool(
     if (lanes.length === 0) continue;
     const lane = lanes[Math.floor(actorRng.next() * lanes.length)]!;
     const geom = graph.requireGeometry(lane.rsl);
+    // Degenerate stubs cannot hold a road user, and they used to produce a
+    // NEGATIVE storage station. The old expression was
+    //   routeS = range(margin, max(margin + 0.01, lengthM - margin))
+    // whose lower clamp can exceed `lengthM` on a centimetre-long lane; the
+    // reversed branch below then computed `lengthM - routeS < 0` and the actor
+    // failed `laneRef.s >= 0` at parse time. That surfaced as
+    // `internal_error: ZodError … initial.laneRef.s Too small` on
+    // el-camino-road/74cdf0b0 — a whole cell lost to one unusable lane.
+    // With `lengthM >= 1` the margin is at most `0.2 · lengthM`, so
+    // `routeS ∈ [0.2·L, 0.8·L]` and both branches stay inside the lane.
+    if (geom.lengthM < 1) continue;
     const margin = Math.min(8, geom.lengthM * 0.2);
-    const routeS = actorRng.range(margin, Math.max(margin + 0.01, geom.lengthM - margin));
+    const routeS = actorRng.range(margin, geom.lengthM - margin);
     const pose = graph.sampleDirected(lane, routeS);
     const scene = toSceneXZ(pose.point);
     const laneSpeed = requestedKind === 'pedestrian' ? 1.35 : requestedKind === 'bicycle' ? 5.5 : geom.speedLimitMps;
@@ -207,7 +252,7 @@ export function createAmbientCandidatePool(
     const cruise = laneSpeed * factor;
     const routeLaneRsls = walkRoute(graph, lane, profile, actorRng, routeS, 5_000);
     if (routeLaneRsls.length === 0) continue;
-    const storageS = lane.reversed ? geom.lengthM - routeS : routeS;
+    const storageS = Math.min(geom.lengthM, Math.max(0, lane.reversed ? geom.lengthM - routeS : routeS));
     const seedKey = contentHash({ key, attempt, lane: lane.rsl, storageS }).slice(0, 16);
     const id = `ambient:v1:${seedKey}`;
     const actor = normalizeActor({
@@ -263,8 +308,24 @@ export function materializeAmbientCandidatePool(
   const focus = base.actors.filter((actor) => !actor.static).map((actor) => actor.initial.pose);
   const allFocus = focus.length > 0 ? focus : base.actors.map((actor) => actor.initial.pose);
   const roadLanes = eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM);
-  const eligibleRsls = new Set(roadLanes.map((lane) => lane.rsl));
-  const eligibleLaneKm = roadLanes.reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
+  // The authored corridor: every lane an authored actor is routed along, plus
+  // whatever the caller reserved. Generated traffic may not spawn on it and may
+  // not route through it, so it can never become an authored actor's leader or
+  // its closest approach.
+  const authoredCorridor = new Set<string>(options.excludedLaneRsls ?? []);
+  if (options.allowAuthoredCorridor !== true) {
+    for (const actor of base.actors) {
+      if (actor.behavior.route.kind === 'lanePath') {
+        for (const rsl of actor.behavior.route.lanes) authoredCorridor.add(rsl);
+      }
+      const laneRef = actor.initial.laneRef;
+      if (laneRef) authoredCorridor.add(laneRef.rsl);
+    }
+  }
+  const eligibleRsls = new Set(roadLanes.map((lane) => lane.rsl).filter((rsl) => !authoredCorridor.has(rsl)));
+  const eligibleLaneKm = roadLanes
+    .filter((lane) => eligibleRsls.has(lane.rsl))
+    .reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
   const target = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
   const reservations: AmbientReservation[] = [
     ...base.actors.map((actor) => ({
@@ -284,9 +345,59 @@ export function materializeAmbientCandidatePool(
   const occupied = [...reservations];
   const selected: AmbientCandidate[] = [];
   let rejectedSpawnCount = 0;
-  for (const candidate of pool.candidates) {
+  // Spend the actor budget where it is visible.
+  //
+  // The pool is map-wide and ordered by generation attempt, so taking the first
+  // `target` eligible candidates scatters the population uniformly across the
+  // whole selection radius. Measured on `c3-allway-stop` at radius 90 m that put
+  // a median of 2 vehicles within 60 m of the ego while placing 9 per cell — the
+  // traffic existed, just not where the ego or the camera could see it.
+  // Ranking by distance to the authored choreography puts the same budget on the
+  // ego's own approach. The comparator is total and the tie-break is the stable
+  // candidate id, so selection stays deterministic.
+  const rankedCandidates = pool.candidates
+    .filter((candidate) => eligibleRsls.has(candidate.laneRsl))
+    .map((candidate) => {
+      let nearest = Number.POSITIVE_INFINITY;
+      for (const point of allFocus) {
+        const d = Math.hypot(candidate.actor.initial.pose.x - point.x, candidate.actor.initial.pose.z - point.z);
+        if (d < nearest) nearest = d;
+      }
+      return { candidate, nearest };
+    })
+    .sort((a, b) => a.nearest - b.nearest || (a.candidate.id < b.candidate.id ? -1 : a.candidate.id > b.candidate.id ? 1 : 0))
+    .map((entry) => entry.candidate);
+
+  let authoredCorridorRejects = 0;
+  for (const candidate of rankedCandidates) {
     if (selected.length >= target) break;
-    if (!eligibleRsls.has(candidate.laneRsl)) continue;
+    // A candidate whose route re-enters the authored corridor DURING THE CLIP is
+    // rejected too: spawning clear of the ego's lane is worthless if the car
+    // drives into it 60 m later and becomes the ego's leader.
+    //
+    // The window is bounded on purpose. An earlier version rejected any route
+    // that touched an authored lane anywhere along its full 5 km walk, and
+    // measured on belmont-research-center/3b536530 that threw away 41 of 51
+    // otherwise-usable candidates — background traffic starved because a car on
+    // the far side of the map would eventually reach the ego's exit lane long
+    // after the recording had stopped. Only ground contested inside
+    // `warmupSeconds + clipSeconds` can affect the evidence, so only that much
+    // of the route is protected. The travel budget is the same figure the
+    // downstream-runway check below already uses.
+    const travelBudgetM = (candidate.actor.behavior.cruiseSpeedMps ?? candidate.actor.initial.speedMps)
+      * (base.warmupSeconds + base.clipSeconds) * 1.1;
+    let travelledM = 0;
+    let entersAuthoredCorridor = false;
+    for (const rsl of candidate.routeLaneRsls) {
+      if (authoredCorridor.has(rsl)) { entersAuthoredCorridor = true; break; }
+      travelledM += graph.lengthOf(rsl);
+      if (travelledM >= travelBudgetM) break;
+    }
+    if (entersAuthoredCorridor) {
+      authoredCorridorRejects++;
+      rejectedSpawnCount++;
+      continue;
+    }
     const { x, z } = candidate.actor.initial.pose;
     if (occupied.some((area) => Math.hypot(x - area.x, z - area.z) < area.radiusM + candidate.footprintRadiusM)) {
       rejectedSpawnCount++;
@@ -309,6 +420,7 @@ export function materializeAmbientCandidatePool(
   const warnings: string[] = [];
   if (target === 0 && profile.preset !== 'off') warnings.push('No eligible drivable lane length was available near the authored scenario.');
   if (actors.length < target) warnings.push(`Placed ${actors.length}/${target} ambient actors; reservations and route feasibility rejected the remainder.`);
+  if (authoredCorridorRejects > 0) warnings.push(`${authoredCorridorRejects} candidate(s) rejected for entering the authored corridor (${authoredCorridor.size} lane(s)).`);
   return {
     input,
     provenance: {
@@ -329,6 +441,8 @@ export function materializeAmbientCandidatePool(
         editable,
       })),
       rejectedSpawnCount,
+      authoredCorridorRejects,
+      authoredCorridorLaneRsls: [...authoredCorridor].sort(),
       eligibleLaneKm,
       screening: {
         evaluated: false,

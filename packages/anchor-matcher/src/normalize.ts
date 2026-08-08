@@ -189,28 +189,70 @@ const LOCATION_KIND_MAP: Record<string, PointFeature['kind']> = {
   occlusion_zone: 'occlusion_zone',
 };
 
+/**
+ * Keep the facts a clause can actually evaluate.
+ *
+ * Scalars pass through. Arrays of strings pass through **as arrays** — the
+ * previous filter silently deleted them, which is why the
+ * `supported_scenario_templates` whitelist on all 275 occlusion zones was
+ * invisible to the matcher. Anything else (nested objects, mixed arrays) is
+ * still dropped: there is no clause vocabulary for it.
+ */
+export function normalizeFacts(input: unknown): Record<string, string | number | boolean | readonly string[]> | undefined {
+  if (!isRecord(input)) return undefined;
+  const out: Record<string, string | number | boolean | readonly string[]> = {};
+  for (const [key, value] of Object.entries(input as AnyRecord)) {
+    if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+      out[key] = value;
+    } else if (Array.isArray(value) && value.length > 0 && value.every((v) => typeof v === 'string')) {
+      out[key] = value as string[];
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/**
+ * The location type a `crest` point feature is derived from.
+ *
+ * map-intel does not publish a `crest` location kind; it publishes a
+ * `crest_present: true` fact on the driving corridor that carries the brow.
+ * That is the whole of the evidence, so that is exactly the condition. There is
+ * no `sag` counterpart in the fact vocabulary, so no `sag` kind is derived.
+ */
+const CREST_SOURCE_TYPE = 'driving_corridor';
+
 /** Adapt `locations.json` into {@link PointFeature}s (crossings, parking, …). */
 export function pointFeaturesFromLocations(locations: unknown): PointFeature[] {
   const out: PointFeature[] = [];
   for (const item of asArray(locations)) {
     if (!isRecord(item)) continue;
-    const kind = LOCATION_KIND_MAP[str(item['type'], '')];
+    const facts = normalizeFacts(item['facts']);
+    const type = str(item['type'], '');
+    const kind: PointFeature['kind'] | undefined =
+      LOCATION_KIND_MAP[type] ??
+      (type === CREST_SOURCE_TYPE && facts?.['crest_present'] === true ? 'crest' : undefined);
     if (!kind) continue;
     const anchor = isRecord(item['anchor']) ? (item['anchor'] as AnyRecord) : {};
     const road = isRecord(anchor['road']) ? (anchor['road'] as AnyRecord) : {};
     const laneRsl = str(road['rsl'], '');
     if (!laneRsl) continue;
     const offset = num(road['offsetM'], 0);
-    const facts = isRecord(item['facts'])
-      ? Object.fromEntries(Object.entries(item['facts'] as AnyRecord)
-          .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) as Record<string, string | number | boolean>
-      : undefined;
     const extent = isRecord(item['extent']) ? item['extent'] as AnyRecord : undefined;
     const radiusM = extent ? num(extent['radiusM'], Number.NaN) : Number.NaN;
     const enrichedFacts = {
       ...(facts ?? {}),
       ...(kind === 'crossing' && Number.isFinite(radiusM) && radiusM > 0 && facts?.['crossing_length_m'] === undefined
         ? { crossing_length_m: radiusM * 2 }
+        : {}),
+      // A parking zone's contiguous length: the measured fact when map-intel
+      // has one, otherwise the zone's own extent. Without this a `lengthM`
+      // clause is unanswerable on 155 of the 176 parking lanes.
+      ...(kind === 'parking_zone' && Number.isFinite(radiusM) && radiusM > 0 &&
+        facts?.['parking_length_m'] === undefined && facts?.['length_m'] === undefined
+        ? { parking_extent_length_m: radiusM * 2 }
+        : {}),
+      ...(kind === 'parking_zone' && typeof item['subtype'] === 'string' && facts?.['parking_orientation'] === undefined
+        ? { parking_orientation: item['subtype'] }
         : {}),
     };
     out.push({
@@ -251,10 +293,7 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
       const laneRsl = str(item['laneRsl'] ?? item['rsl'], '');
       if (!laneRsl) continue;
       const side = str(item['side'], '');
-      const facts = isRecord(item['facts'])
-        ? Object.fromEntries(Object.entries(item['facts'] as AnyRecord)
-            .filter(([, value]) => typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean')) as Record<string, string | number | boolean>
-        : undefined;
+      const facts = normalizeFacts(item['facts']);
       out.push({
         id: str(item['id'], `${kind}:${laneRsl}@${num(item['s'], 0).toFixed(1)}`),
         kind,
@@ -274,11 +313,12 @@ function adoptPointFeatures(input: AnyRecord): PointFeature[] {
   push('school_zone', asArray(input['schoolZones'] ?? input['school_zones']));
   push('work_zone_suitable', asArray(input['workZones'] ?? input['work_zones']));
   push('occlusion_zone', asArray(input['occlusionZones'] ?? input['occlusion_zones']));
+  push('crest', asArray(input['crests']));
   const explicit = asArray(input['pointFeatures']);
   for (const item of explicit) {
     if (!isRecord(item)) continue;
     const kind = str(item['kind'], '');
-    if (kind === 'crossing' || kind === 'parking_zone' || kind === 'bus_stop' || kind === 'driveway' || kind === 'school_zone' || kind === 'work_zone_suitable' || kind === 'occlusion_zone') {
+    if (kind === 'crossing' || kind === 'parking_zone' || kind === 'bus_stop' || kind === 'driveway' || kind === 'school_zone' || kind === 'work_zone_suitable' || kind === 'occlusion_zone' || kind === 'crest') {
       push(kind, [item]);
     }
   }

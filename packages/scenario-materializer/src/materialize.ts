@@ -83,6 +83,10 @@ import {
   blockingOccluder,
   localFromScene,
   toSceneXZ,
+  applyAmbientTraffic,
+  resolveAmbientTrafficProfile,
+  type AmbientTrafficProfile,
+  type AmbientTrafficProvenance,
   type ArrivalSolution,
   type Condition as SimCondition,
   type Interaction as SimInteraction,
@@ -270,6 +274,12 @@ export interface ReplayKey {
   readonly solverVersion: string;
   readonly paramSeed: string;
   readonly drawIndex: number;
+  /**
+   * Hash of the resolved ambient-traffic profile, or the literal `'none'`.
+   * A cached cell generated with a different background population is not the
+   * same cell.
+   */
+  readonly ambientProfileHash: string;
 }
 
 export interface InstanceManifest {
@@ -315,6 +325,12 @@ export interface InstanceManifest {
   readonly inputHash: string;
   readonly feasible: boolean;
   readonly issues: SimIssue[];
+  /**
+   * Complete provenance of the generated background population. Absent — not
+   * null — when no ambient traffic was requested, so an empty-road manifest is
+   * byte-identical to the ones written before this existed.
+   */
+  readonly ambient?: AmbientTrafficProvenance;
   /** Commands already accepted into the concrete t=0 world rather than left
    * for the runtime trigger evaluator. Optional for manifest-v1 compatibility. */
   readonly initialInteractionOutcomes?: InitialInteractionOutcome[];
@@ -343,6 +359,17 @@ export interface MaterializeOptions {
   /** Operational conditions reserved by a catalog slot. These are applied to
    * the concrete engine input; they are not an evidence-only provenance stamp. */
   readonly variant?: CatalogVariantApplication | undefined;
+  /**
+   * Generated background road users.
+   *
+   * Absent, or `preset: 'off'`, reproduces the previous empty-road behaviour
+   * byte for byte — nothing is added to the input and nothing is added to the
+   * manifest. When present, ambient actors are appended to the concrete input
+   * AFTER the authored feasibility verdict has been decided, so background
+   * traffic can never turn an authored-feasible cell infeasible, and BEFORE
+   * `inputHash` is taken, so the instance/trace evidence join still holds.
+   */
+  readonly ambient?: AmbientTrafficProfile | undefined;
 }
 
 export interface CatalogVariantApplication {
@@ -3687,6 +3714,21 @@ class Materializer {
     const issues = checkFeasibility(input, this.bundle.graph);
     const feasible = !issues.some((i) => i.severity === 'error');
 
+    // --- ambient traffic ----------------------------------------------------
+    // Deliberately LAST. The authored scenario is fully solved, its geometry is
+    // proved and its feasibility verdict is already fixed above, so generated
+    // background traffic cannot alter the authored answer in any direction.
+    // What it does alter, on purpose, is `input` — and therefore `inputHash` —
+    // so the instance, the trace and the evidence check all describe the same
+    // populated world.
+    let ambientProvenance: AmbientTrafficProvenance | null = null;
+    const ambientProfile = options.ambient;
+    if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
+      const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile);
+      input = applied.input;
+      ambientProvenance = applied.provenance;
+    }
+
     const key: ReplayKey = {
       templateId: templateId(this.template),
       templateVersion: this.template.scenarioVersion,
@@ -3699,6 +3741,10 @@ class Materializer {
       solverVersion: ENGINE_VERSION,
       paramSeed: this.draw.paramSeed,
       drawIndex: options.drawIndex ?? -1,
+      // Part of the replay key, not decoration: two cells with the same seed
+      // and different ambient populations are different worlds, and a resumable
+      // batch that reused one for the other would be serving a stale answer.
+      ambientProfileHash: ambientProvenance?.profileHash ?? 'none',
     };
 
     const manifest: InstanceManifest = {
@@ -3730,17 +3776,20 @@ class Materializer {
       actors: input.actors.map((a) => ({
         id: a.id,
         actorKind: a.kind,
-        roleKind: this.roleById.get(a.id)?.kind ?? 'unknown',
+        roleKind: this.roleById.get(a.id)?.kind
+          ?? (a.tags.includes('ambient') ? 'ambient' : 'unknown'),
         laneRsl: a.initial.laneRef?.rsl ?? null,
         spawnS: this.spawnSByRole.get(a.id) ?? 0,
         initialSpeedMps: a.initial.speedMps,
-        bindingStatus: this.bindingByRole.get(a.id)?.status ?? 'unknown',
+        bindingStatus: this.bindingByRole.get(a.id)?.status
+          ?? (a.tags.includes('ambient') ? 'generated' : 'unknown'),
       })),
       props: input.props.map((prop) => ({ ...prop })),
       arrival: solutions,
       inputHash: contentHash(input),
       feasible,
       issues,
+      ...(ambientProvenance === null ? {} : { ambient: ambientProvenance }),
       initialInteractionOutcomes: [...this.initialInteractionOutcomes],
       notes: [...this.notes],
     };

@@ -21,6 +21,8 @@ import {
   requireString,
   type ParsedArgs,
 } from './args.js';
+import type { AmbientTrafficProfile } from '@uniscenarios/sim-engine';
+
 import { CliError, EXIT, exitCodeOf, toStructuredError } from './errors.js';
 import { emit, emitError } from './output.js';
 import { availableMaps, resolveMapSelection } from './maps.js';
@@ -96,6 +98,52 @@ function filterMode(args: ParsedArgs): EvaluateFilterMode {
     });
   }
   return raw;
+}
+
+const AMBIENT_PRESETS = ['off', 'light', 'moderate', 'city', 'heavy'] as const;
+
+/**
+ * `--ambient <preset>` and its overrides.
+ *
+ * Returns `undefined` when `--ambient` is absent, which is what keeps the empty
+ * road the default: a run that does not ask for background traffic produces
+ * byte-identical artifacts to the ones it produced before this flag existed.
+ * `--ambient off` is accepted and means the same thing explicitly.
+ */
+function ambientProfileArg(args: ParsedArgs): AmbientTrafficProfile | undefined {
+  const preset = optionalString(args, 'ambient');
+  const density = optionalNumber(args, 'ambient-density');
+  const maxActors = optionalInt(args, 'ambient-max-actors');
+  const radiusM = optionalNumber(args, 'ambient-radius-m');
+  const seed = optionalString(args, 'ambient-seed');
+  if (preset === undefined) {
+    // An override without the flag that turns the feature on is a silent no-op,
+    // and a silent no-op in a generation pipeline is a corpus of empty roads.
+    for (const [flag, value] of [
+      ['--ambient-density', density],
+      ['--ambient-max-actors', maxActors],
+      ['--ambient-radius-m', radiusM],
+      ['--ambient-seed', seed],
+    ] as const) {
+      if (value !== undefined) {
+        throw new CliError('missing_argument', `${flag} requires --ambient <${AMBIENT_PRESETS.join('|')}>`, {
+          path: flag,
+        });
+      }
+    }
+    return undefined;
+  }
+  if (!(AMBIENT_PRESETS as readonly string[]).includes(preset)) {
+    throw new CliError('bad_value', `--ambient must be ${AMBIENT_PRESETS.join(' | ')}`, { path: '--ambient' });
+  }
+  return {
+    version: 1,
+    preset: preset as AmbientTrafficProfile['preset'],
+    ...(density === undefined ? {} : { densityVehiclesPerKm: density }),
+    ...(maxActors === undefined ? {} : { maxActors }),
+    ...(radiusM === undefined ? {} : { radiusM }),
+    ...(seed === undefined ? {} : { seed }),
+  };
 }
 
 function positional(args: ParsedArgs, index: number, name: string): string {
@@ -424,6 +472,11 @@ async function dispatch(argv: readonly string[]): Promise<number> {
           'concurrency',
           'filter',
           'trivial-ttc',
+          'ambient',
+          'ambient-density',
+          'ambient-max-actors',
+          'ambient-radius-m',
+          'ambient-seed',
         ],
       });
       return batch({
@@ -442,6 +495,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
         filter: filterMode(args),
         trivialTtcS: optionalNumber(args, 'trivial-ttc'),
         force: boolFlag(args, 'force'),
+        ...(ambientProfileArg(args) === undefined ? {} : { ambient: ambientProfileArg(args) }),
         pretty: boolFlag(args, 'pretty'),
       });
     }

@@ -1425,3 +1425,71 @@ Authored-only scenarios are unaffected. The physical-validity constraint holds.
   immediately, which is why equivalence has to be re-checked rather than assumed stable.
 - `uniscenarios simulate --trace out.json` writes **gzip** regardless of the `.json` suffix. Reading it
   with a plain `json.load` fails with a UnicodeDecodeError on byte 0x8b. Use `gzip.open`.
+
+---
+
+## 33. WS-1a and WS-2 landed: capabilities verified, and the measures that moved
+
+638 insertions across 14 files in `anchor-matcher`, `cli`, `scenario-materializer` and `sim-engine`.
+**All 8 packages typecheck clean. Every test suite matches its pre-change baseline exactly:**
+
+| package | passed | failed | baseline failed | delta |
+|---|---:|---:|---:|---:|
+| anchor-matcher | 128 | 0 | 0 | +0 |
+| scenario-model | 297 | 0 | 0 | +0 |
+| scenario-materializer | 75 | 0 | 0 | +0 |
+| sim-engine | 313 | 0 | 0 | +0 |
+| cli | 299 | 70 | **70** | +0 |
+
+(The cli baseline is **70**, not the ~67 I had been quoting from memory — WS-1a measured it properly
+and saved the failing test names before touching anything. My number was stale.)
+
+### WS-1a: silent predicate drops are now loud
+The whole silent-drop path was **one function**, `scenario-materializer/src/adapt.ts adaptTemplate()`,
+which recorded discarded clauses as `AdaptNote`s at `adapt.ts:192/300/408` that `template validate`
+printed and then exited 0 on. A discard is now an **error** when the clause is `required` or
+`preferred`, and stays a note only for `cosmetic` — the escape hatch that already existed in the
+schema, so no new opt-out was invented.
+
+Verified by me, not assumed:
+- `blind-crest-queue`'s **unedited** template (mtime 556 min, so nobody had touched it) previously
+  emitted *"feature kind `crest` is not matchable; feature dropped"*. It now validates with **zero**
+  adapter notes — the `crest` kind is genuinely there, backed by the 13 locations carrying
+  `facts.crest_present`.
+- A deliberately bogus `unicorn_crossing` feature now **exits 2**. The failure is loud.
+- `sag` was correctly NOT added: there is no `sag_present` fact anywhere in the index. Adding a
+  symmetric-looking kind with no data behind it would have recreated the exact bug being fixed.
+- Parking predicates map to published facts (`orientation`, `capacity`, `lengthM`), and `occupancy`
+  reports `supported: false` because **no map evidence for it exists**.
+
+Site counts are unchanged (`blind-crest-queue` still 377 sites / 0 exact) — correctly so. WS-1a added
+the *capability*; WS-1b must add the *requirement*. Capability without requirement changes nothing,
+which is the whole shape of this project.
+
+### WS-2: ambient traffic reaches the corpus pipeline
+`batch --ambient <preset> --ambient-density --ambient-max-actors --ambient-radius-m --ambient-seed`.
+
+| measure | result | |
+|---|---|---|
+| M2.1 reachable from `batch` | **PASS** | 40 ambient actors, published as `header.ambientActorIds` |
+| M2.2 median ambient within 60 m at t=0 | **PASS — 6.5 and 4.0** (baseline 0) | target >=3 |
+| M2.5 ambient never steals the subject pair | **PASS — 0 of 13 cells** | and no longer vacuous |
+| M2.3 standing queues at t=0 | **FAIL — 0.00** | target >=0.50 |
+
+M2.5 is now a *real* pass. In s29 I recorded it as vacuous because there was nothing to hijack; there
+are now up to 40 candidates per cell and it still holds.
+
+### M2.3 fails, and the diagnosis is exact
+On a 9-cell run with `--ambient city` where 9/9 cells carry real authored signal state:
+- `warmupSeconds` is **0.6 s**; ambient actors spawn already moving and cannot queue in 0.6 s;
+- at t=0, **0 of 32** ambient actors are below 0.5 m/s (min 5.02, median 13.60 m/s);
+- by the end of the 13 s clip, **14 of 32** are below 0.5 m/s and the minimum speed reached is **0**.
+
+**The queuing behaviour works. The settle window does not exist.** I had hypothesised the cause was
+missing traffic lights — cars queue at red. That was wrong: these cells have real signals and still no
+t=0 queue. Measuring beat guessing again.
+
+The fix is NOT to raise `choreography.warmupSeconds`: the engine integrates the whole scene from
+`t = -warmupSeconds`, so that also advances the ego and the authored challenger along their routes and
+destroys the arrival-trigger timing the conflict depends on. It needs a settle that advances only the
+generated population. Handed to WS-2b.

@@ -22,6 +22,96 @@ C4_DECEL, C4_TTC = 1.5, 3.0
 MIN_MAPS, MIN_SITES = 2, 3
 
 
+# ---------------------------------------------------------------- C6: real signal state
+# WHY. `ticks.signals` is non-empty IF AND ONLY IF the materialized SimScenarioInput.signalPrograms
+# array is non-empty (sim-engine/src/sim/engine.ts:363,2493,2590). A map-bound program exists only for
+# a junction whose <junction> element in the OpenDRIVE literally carries <controller> children -- 6 of
+# 246 junctions across the five dev maps. map-intel's `junction.control == 'signalized'` is a strictly
+# weaker label (a traffic_light point within sizeM/2 + 22 m of the centre; map-intel/src/build/
+# junctions.ts:277-303), and 17 of the 23 junctions it calls signalized have ZERO signal records on
+# their own roads. Consequence when `ticks.signals` is empty AND roadControls is empty:
+#   * `rules.obeySignals` is a pure no-op -- distanceToStopLine returns null on SignalBook.isEmpty
+#     (sim-engine/src/sim/controllers.ts:461), so set(rules.obeySignals, ...) changes nothing;
+#   * a {kind:'signal'} trigger evaluates phaseAt() === phase as null === phase and NEVER fires;
+#   * a control_indication intent criterion grades `unchecked`, not `fail` (trace/intent-rubric.ts:272),
+#     so it silently drops out of the verdict.
+# A "red-light runner" clip with no signal channel is therefore mislabelled training data: the brief
+# says the conflict is a signal violation and the physics contains no signal at all. Measured on the
+# delivered corpus: 93 of 293 records have a signal-naming brief and 88 of those carry no signal state.
+# REPAIR (not a loosening -- the author must add signal, not the gate remove the clause): author a
+# portable `trafficControls` block on the template (scenario-model/src/schema/v2/traffic-controls.ts,
+# lowered at scenario-materializer/src/materialize.ts:2354-2391). See surface.md rules 25-27.
+
+# Terms that name a TRAFFIC SIGNAL. Deliberately broad: this clause tightens, so a false hit costs an
+# authoring fix and a false miss costs a mislabelled scenario.
+SIGNAL_TERMS = re.compile(r"""
+    \btraffic[ -]?(?:light|signal)s?\b
+  | \b(?:red|green|amber|yellow)[ -](?:light|signal|phase|arrow|aspect|indication)s?\b
+  | \bsignal[ -](?:head|phase|group|cycle|aspect|indication|plan|program)s?\b
+  | \bsignal(?:i[sz]ed|i[sz]ation)\b
+  | \b(?:runs?|ran|running|jumps?|jumped|ignor\w+|disregard\w+|beats?|violat\w+|blows?|blew)
+      \s+(?:the\s+|its\s+|a\s+|their\s+|his\s+|her\s+)?(?:red|green|amber|yellow)\b
+  | \b(?:on|at|through|against)\s+(?:a\s+|the\s+|its\s+|their\s+)?(?:red|green|amber|yellow)\b
+  | \b(?:light|signal)s?\s+(?:turns?|turning|changes?|changing|goes?|going|drops?|dropping)
+      \s+(?:to\s+)?(?:red|green|amber|yellow)\b
+  | \b(?:pedestrian|crossing|walk|cyclist)\s+(?:signal|phase)s?\b
+  | \bamber\b
+  | \bstop\s+light\b
+  | \bphases?\b
+  | \bsignals?\b
+""", re.I | re.X)
+
+# "signal" in the INDICATOR / turn-lamp sense is not a traffic signal. Masked out BEFORE the search so
+# that e.g. "a bus ... signals late and moves laterally" and "a hatchback signals toward an empty bay"
+# do not arm the clause, while "ignores its RED signal" still does (the colour patterns above survive
+# the mask because no mask pattern spans a colour word).
+INDICATOR_SENSE = re.compile(r"""
+    \b(?:turn|direction|indicator|hazard|warning|hand|arm|brake)[\s-]+signals?\b
+  | \b(?:late|early|belated|missing|absent|no)[\s-]+signals?\b
+  | \bsignals?[\s-]+(?:toward|towards|left|right|into|for|that|late|early|briefly|before|then|but|and
+                     |only|to\s+(?:turn|pull|merge|change|exit|park))\b
+  | \bsignal(?:l)?(?:ing|ed)\b
+  | \b(?:without|never)\s+signal\w*
+""", re.I | re.X)
+
+
+def signal_intent(text):
+    """True when the brief (or template meta) claims a traffic signal is part of the scenario."""
+    if not text:
+        return False
+    flat = ' '.join(str(text).split())
+    return bool(SIGNAL_TERMS.search(INDICATOR_SENSE.sub(' ', flat)))
+
+
+def signal_state(trace):
+    """What signal state the trace ACTUALLY carries. Read from raw ticks, never from a summary."""
+    sig = (trace.get('ticks') or {}).get('signals') or {}
+    ids = sorted(sig.keys())
+    samples = {i: len((sig[i] or {}).get('phase') or []) for i in ids}
+    phases = sorted({p for i in ids for p in ((sig[i] or {}).get('phase') or [])})
+    live = [i for i in ids if samples[i] > 0]
+    return {'signalIds': ids, 'signalSamples': samples, 'signalPhases': phases,
+            'hasSignalState': bool(live)}
+
+
+def template_signal_text(summary):
+    """Fallback brief when a caller has none: the template's own meta name/description/tags.
+
+    This keeps C6 armed for every existing call site rather than only for the ones that were updated,
+    which matters because a clause that is only active when someone remembers to pass an argument is
+    a clause that is usually off.
+    """
+    path = summary.get('template')
+    if not path or not os.path.exists(path):
+        return ''
+    try:
+        meta = (json.load(open(path)).get('meta') or {})
+    except Exception:                                             # noqa: BLE001
+        return ''
+    return ' '.join([str(meta.get('name') or ''), str(meta.get('description') or ''),
+                     ' '.join(meta.get('tags') or [])])
+
+
 def _corners(x, y, hd, l, w):
     c, s = math.cos(hd), math.sin(hd)
     hl, hw = l / 2.0, w / 2.0
@@ -102,8 +192,13 @@ def trace_facts(trace):
     er = math.hypot(el, ew) / 2.0
     best = {'clearanceM': float('inf'), 't': None, 'with': None}
     per_challenger = {}
+    # Generated background road users are excluded from the closest-approach search. The engine
+    # publishes the set on the trace header; it is absent from every trace written before ambient
+    # traffic existed, so this is inert on all historical traces and can only ever TIGHTEN -- removing
+    # candidates can enlarge clearanceM or make it None, never turn a failing cell into a passing one.
+    ambient = set(hdr.get('ambientActorIds') or [])
     for aid, a in ticks['actors'].items():
-        if aid == 'ego':
+        if aid == 'ego' or aid in ambient:
             continue
         d = meta.get(aid, {}).get('dims', {})
         al, aw = d.get('l', 0.6), d.get('w', 0.6)
@@ -146,8 +241,12 @@ def trace_facts(trace):
     }
 
 
-def gate_cell(trace_path, verdict=None, band=None):
-    """Gate one cell. `verdict`/`band` come from the batch summary's own `evaluate` pass."""
+def gate_cell(trace_path, verdict=None, band=None, brief=None):
+    """Gate one cell. `verdict`/`band` come from the batch summary's own `evaluate` pass.
+
+    `brief` arms C6. When it is None the clause is inert, so no existing caller is loosened OR
+    tightened by accident; `gate_batch` supplies the template meta as a fallback brief.
+    """
     trace = load_trace(trace_path)
     f = trace_facts(trace)
     if 'error' in f:
@@ -158,17 +257,29 @@ def gate_cell(trace_path, verdict=None, band=None):
     c4 = (f['requiredDecelMaxEgo'] >= C4_DECEL) or (f['minTTC'] is not None and f['minTTC'] <= C4_TTC)
     c5 = (verdict == 'accept' and band == 'critical'
           and f['collisions'] == 0 and not f['triggerNeverFired'])
-    f.update({'C1': c1, 'C2': c2, 'C3': c3, 'C4': c4, 'C5': c5,
-              'pass': bool(c1 and c2 and c3 and c4 and c5),
+    # C6 -- a scenario whose brief names a traffic signal must carry real signal state.
+    ss = signal_state(trace)
+    wants_signal = signal_intent(brief)
+    c6 = (not wants_signal) or ss['hasSignalState']
+    f.update(ss)
+    f.update({'C1': c1, 'C2': c2, 'C3': c3, 'C4': c4, 'C5': c5, 'C6': c6,
+              'signalIntent': wants_signal,
+              'C6_reason': None if c6 else 'brief names a traffic signal but ticks.signals is empty',
+              'pass': bool(c1 and c2 and c3 and c4 and c5 and c6),
               'verdict': verdict, 'band': band})
     f.update(quality(trace, f))
     f['passHQ'] = bool(f['pass'] and f['highQuality'])
     return f
 
 
-def gate_batch(summary_path):
-    """Gate a whole `uniscenarios batch` summary. Returns per-cell gates plus the cell-spread rule."""
+def gate_batch(summary_path, brief=None):
+    """Gate a whole `uniscenarios batch` summary. Returns per-cell gates plus the cell-spread rule.
+
+    `brief` arms C6. If it is not given, the template's own meta (name/description/tags) is used, so
+    the clause is live for every call site rather than only the updated ones.
+    """
     s = json.load(open(summary_path))
+    sig_text = brief if brief is not None else template_signal_text(s)
     cells = []
     for r in s.get('results', []):
         tf = r.get('traceFile')
@@ -183,7 +294,7 @@ def gate_batch(summary_path):
                           'errorPath': e.get('path'),
                           'band': r.get('band')})
             continue
-        g = gate_cell(tf, r.get('verdict'), r.get('band'))
+        g = gate_cell(tf, r.get('verdict'), r.get('band'), brief=sig_text)
         g.update({'mapId': r['mapId'], 'siteId': r['siteId'], 'drawIndex': r.get('drawIndex'),
                   'traceFile': tf, 'instanceFile': r.get('instanceFile')})
         cells.append(g)
@@ -205,7 +316,10 @@ def gate_batch(summary_path):
         'nMapsHQ': len(hmaps), 'nSitesHQ': len(hsites),
         'cells': cells,
         'errorCounts': errs,
-        'lossCounts': {k: sum(1 for c in cells if c.get(k) is False) for k in ('C1', 'C2', 'C3', 'C4', 'C5')},
+        'signalIntent': signal_intent(sig_text),
+        'cellsWithSignalState': sum(1 for c in cells if c.get('hasSignalState')),
+        'lossCounts': {k: sum(1 for c in cells if c.get(k) is False)
+                       for k in ('C1', 'C2', 'C3', 'C4', 'C5', 'C6')},
         'qualityLoss': {k: sum(1 for c in cells if c.get(k) is False)
                         for k in ('Q1_jointChallenger', 'Q2_egoReallyResponded', 'Q3_noPropOverlap',
                                   'Q4_headingSane', 'Q5_notClipped', 'Q6_ttcPairIsEgo',

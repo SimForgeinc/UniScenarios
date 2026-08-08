@@ -331,6 +331,14 @@ class Simulation {
   private readonly perception: PerceptionRuntime | null;
   /** Preserve the authored-only engine path byte-for-byte unless ambient traffic exists. */
   private readonly hasAmbientTraffic: boolean;
+  /**
+   * Generated background road users, sorted. They are ordinary physical bodies
+   * — followed, yielded to, and collidable — but they are never a subject of
+   * episode criticality metrics, and the trace header publishes this set so an
+   * external recomputation can make the same distinction.
+   */
+  private readonly ambientActorIds: string[];
+  private readonly ambientActorIdSet: ReadonlySet<string>;
   private world: WorldState;
   private conflictSamples = new Map<string, Vec2[]>();
   private conflictCandidates = new Map<string, ActorRuntime[]>();
@@ -436,7 +444,12 @@ class Simulation {
       }
     }
 
-    this.hasAmbientTraffic = input.actors.some((actor) => actor.tags.includes('ambient'));
+    this.ambientActorIds = input.actors
+      .filter((actor) => actor.tags.includes('ambient'))
+      .map((actor) => actor.id)
+      .sort();
+    this.ambientActorIdSet = new Set(this.ambientActorIds);
+    this.hasAmbientTraffic = this.ambientActorIds.length > 0;
     for (const spec of [...input.actors].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       const rt = this.buildActor(spec);
       this.actors.push(rt);
@@ -510,6 +523,7 @@ class Simulation {
       this.actors.map((a) => a.id),
       input.occlusionPairs,
       input.metricSubject ?? null,
+      this.ambientActorIds,
     );
     this.world = {
       t: -input.warmupSeconds,
@@ -2096,7 +2110,16 @@ class Simulation {
     if (gov.accelCap < accel) accel = gov.accelCap;
     const frictionScale = this.frictionScaleFor(a);
     accel = Math.max(accel, -lim.brakeHard * frictionScale);
-    plan.requiredDecel = gov.requiredDecel;
+    // The body still brakes for a generated car in front — `accel` above is
+    // untouched — but the *evidence* figure `requiredDecelMax` must keep
+    // meaning "how hard the authored scenario made this actor brake". Crediting
+    // background traffic with the ego's braking demand would let ambient
+    // traffic manufacture the criticality the scenario is supposed to prove.
+    // Ambient actors keep the full figure: it is their own honest telemetry.
+    const leaderIsAmbient = nearestLeader !== null && this.ambientActorIdSet.has(nearestLeader.id);
+    plan.requiredDecel = leaderIsAmbient && !this.ambientActorIdSet.has(a.id)
+      ? gov.requiredDecelExcludingLeader
+      : gov.requiredDecel;
 
     let speed = a.speedMps + accel * this.dt;
     if (speed < 0) {
@@ -2607,6 +2630,10 @@ class Simulation {
         actorIds: [...actorIds].sort(),
         actorMetadata,
         propMetadata,
+        // Optional on purpose: a scenario with no ambient traffic writes the
+        // exact bytes it wrote before this channel existed, so every historical
+        // trace digest still reproduces.
+        ...(this.ambientActorIds.length > 0 ? { ambientActorIds: [...this.ambientActorIds] } : {}),
         metricSubject: input.metricSubject ?? null,
         operationalConditions: input.operationalConditions,
         physics: {

@@ -24,6 +24,17 @@
  *     --result artifacts/qa/golden-yale-bus-stop-20260801-corrected/result.json \
  *     --out artifacts/qa/golden-yale-bus-stop-20260801-corrected/studio-render \
  *     --headless --fps 2
+ *
+ * Corpus mode (`--evidence-class corpus`) renders a research corpus artifact
+ * that was never reserved in the 500-slot evidence catalog. It keeps every
+ * instance/trace/result hash and actor-id binding, frames every authored actor
+ * instead of only the metric pair, and encodes the FULL recorded clip instead
+ * of the seconds around the reveal:
+ *
+ *   node scripts/export-render.mjs --url http://127.0.0.1:5199 \
+ *     --instance <dir>/draw-000.instance.json --trace <dir>/draw-000.trace.json.gz \
+ *     --result <dir>/draw-000.result.json --out /tmp/vista-3d/<scenarioId> \
+ *     --headless --fps 12 --evidence-class corpus
  */
 import { chromium } from 'playwright-core';
 import { createHash } from 'node:crypto';
@@ -38,10 +49,14 @@ import {
   buildIncidentRenderPreflight,
   buildScenarioManifest,
   cameraActorClearance,
+  cameraForClip,
   cameraForIncident,
+  incidentWindow,
+  selectClipVideoFrames,
   selectIncidentVideoFrames,
   renderViewsAtTraceIndex,
   sha256Bytes,
+  validateCorpusScenarioResult,
   validateScenarioPair,
   validateScenarioResult,
 } from './export-render-lib.mjs';
@@ -94,6 +109,11 @@ const scenarioMode = Boolean(instancePath && tracePath);
 if (scenarioMode && !resultPath) {
   throw new Error('--result is required for bound scenario evidence');
 }
+const evidenceClassArg = args.get('evidence-class') ?? 'catalog';
+if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
+  throw new Error(`--evidence-class must be catalog or corpus, got ${evidenceClassArg}`);
+}
+const corpusMode = evidenceClassArg === 'corpus';
 const maps = args.has('all-maps')
   ? MAPS
   : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
@@ -344,14 +364,31 @@ async function exportScenario(page) {
   const evidence = validateScenarioPair(instanceDoc, trace, canonicalBytes);
   let resultDoc = null;
   let resultBytes = null;
+  let resultBinding = null;
   if (resultPath) {
     const loaded = await readJsonMaybeGzip(path.resolve(resultPath));
     resultDoc = loaded.value;
     resultBytes = loaded.bytes;
-    validateScenarioResult(instanceDoc, trace, resultDoc, canonicalBytes, {
-      instanceFileBytes: instanceBytes,
-      traceFileBytes,
-    });
+    if (corpusMode) {
+      const bound = validateCorpusScenarioResult(instanceDoc, trace, resultDoc, {
+        instanceFileBytes: instanceBytes,
+        traceFileBytes,
+      });
+      resultBinding = {
+        mode: 'corpus-semantic',
+        catalogSlot: null,
+        collisionPolicy: bound.collisionPolicy,
+        recordedCollisions: bound.recordedCollisions,
+        resultDigest: bound.resultDigest,
+        instanceFileSha256: bound.instanceFileSha256,
+        traceFileSha256: bound.traceFileSha256,
+      };
+    } else {
+      validateScenarioResult(instanceDoc, trace, resultDoc, canonicalBytes, {
+        instanceFileBytes: instanceBytes,
+        traceFileBytes,
+      });
+    }
   }
   const preflight = buildIncidentRenderPreflight(trace, evidence);
   const preflightFile = path.join(outDir, 'preflight.json');
@@ -405,10 +442,15 @@ async function exportScenario(page) {
     throw new Error(`Studio loaded map ${loadedMapId}, expected ${evidence.mapId}`);
   }
 
+  const incident = incidentWindow(trace);
   const occluderActorIds = (trace.metrics.revealToConflict?.relevantOccluderIds ?? [])
     .filter((id) => id.startsWith('actor:'))
     .map((id) => id.slice('actor:'.length));
-  const framingActorIds = [...new Set([...evidence.metricPair, ...occluderActorIds])];
+  // A corpus clip has to show the ego and every authored challenger, not just
+  // the two actors that produced the criticality metric.
+  const framingActorIds = corpusMode
+    ? [...evidence.actorIds]
+    : [...new Set([...evidence.metricPair, ...occluderActorIds])];
   const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
   const framingPropIds = new Set(evidence.props.filter((prop) => {
     const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
@@ -418,7 +460,7 @@ async function exportScenario(page) {
     return declared || relation;
   }).map((prop) => prop.id));
 
-  const renderTraceFrame = async (selected, file, settleCount) => {
+  const renderTraceFrame = async (selected, file, settleCount, clipCamera = false) => {
     const views = renderViewsAtTraceIndex(instanceDoc, trace, evidence, selected.index);
     const grounded = await page.evaluate(({ actors, props }) => {
       const overlays = window.__overlays;
@@ -444,7 +486,7 @@ async function exportScenario(page) {
       .filter((pose) => evidence.metricPair.includes(pose.id))
       .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
     const framingProps = grounded.props.filter((prop) => framingPropIds.has(prop.id));
-    const camera = cameraForIncident(
+    const camera = (clipCamera ? cameraForClip : cameraForIncident)(
       trace,
       evidence.metricPair,
       selected.index,
@@ -472,7 +514,7 @@ async function exportScenario(page) {
       page,
       [...groundedPoses, ...framingProps],
       [...framingActorIds, ...framingProps.map((prop) => prop.id)],
-      trace.metrics.revealToConflict.conflictT,
+      incident.conflictT,
       selected.t,
     );
     if (!composition.passed) {
@@ -531,14 +573,16 @@ async function exportScenario(page) {
   let videoSequence = null;
   if (!args.has('no-video')) {
     const videoFps = Math.max(8, fps);
-    const selection = selectIncidentVideoFrames(trace, videoFps);
+    const selection = corpusMode
+      ? selectClipVideoFrames(trace, videoFps)
+      : selectIncidentVideoFrames(trace, videoFps);
     const videoFramesDir = path.join(outDir, 'video-frames');
     await clearGeneratedFrames(videoFramesDir, /^frame-\d{5}\.png$/);
     const records = [];
     for (let frameNo = 0; frameNo < selection.frames.length; frameNo += 1) {
       const selected = selection.frames[frameNo];
       const file = path.join(videoFramesDir, `frame-${String(frameNo).padStart(5, '0')}.png`);
-      const record = await renderTraceFrame(selected, file, 3);
+      const record = await renderTraceFrame(selected, file, 3, corpusMode);
       records.push({
         sequenceIndex: frameNo,
         index: record.index,
@@ -607,6 +651,7 @@ async function exportScenario(page) {
       startT: selection.startT,
       endT: selection.endT,
       fps: videoFps,
+      ...(corpusMode ? { coverage: 'full-clip' } : {}),
       frameCount: records.length,
       frames: records,
     };
@@ -648,6 +693,9 @@ async function exportScenario(page) {
     },
     rendererStats,
     diagnostics,
+    ...(corpusMode
+      ? { evidenceClass: 'corpus-scenario-clip', resultBinding }
+      : {}),
   });
   const manifestFile = path.join(outDir, 'manifest.json');
   await writeJsonAtomic(manifestFile, manifest);
@@ -775,6 +823,21 @@ const browser = await chromium.launch({
   args: ['--ignore-gpu-blocklist', `--window-size=${width + 80},${height + 120}`],
 });
 const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+// A fresh browser profile has no stored render-quality preference, so Studio
+// shows its first-run graphics chooser and never mounts the viewer. Seed the
+// same preference a human would pick (default: the app's own `balanced`
+// preset, i.e. full city + vegetation) before the app boots.
+const qualityPreset = args.get('quality') ?? 'balanced';
+await context.addInitScript((preset) => {
+  try {
+    const key = 'uniscenarios.studio.render-quality.v1';
+    if (!window.localStorage.getItem(key)) {
+      window.localStorage.setItem(key, JSON.stringify({ preset }));
+    }
+  } catch {
+    // A privacy-restricted store simply leaves the chooser visible.
+  }
+}, qualityPreset);
 const page = await context.newPage();
 const diagnostics = [];
 page.on('console', (m) => { if (m.type() === 'error') diagnostics.push({ type: 'console', text: m.text() }); });

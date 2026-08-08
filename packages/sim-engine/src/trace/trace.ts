@@ -304,6 +304,18 @@ export interface TraceHeader {
    * in the input's scene frame; unlike actor tracks they do not need sampling.
    */
   readonly propMetadata?: Record<string, StaticProp>;
+  /**
+   * Ids of generated background road users, sorted. Absent when the scenario
+   * has none.
+   *
+   * These actors are ordinary physical bodies in `ticks.actors` — they are
+   * followed, yielded to, collidable and rendered — but they are excluded from
+   * every episode criticality metric, because the authored conflict is the
+   * lesson and a passing background car is not. Any external consumer that
+   * recomputes closest approach, TTC or a "who did the ego nearly hit" pair
+   * MUST subtract this set first, or it will silently describe the wrong pair.
+   */
+  readonly ambientActorIds?: string[];
   /** Optional catalog-cell provenance attached by batch/materialization layers. */
   readonly catalogSlot?: unknown;
   readonly metricSubject: string | null;

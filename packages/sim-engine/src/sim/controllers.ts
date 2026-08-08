@@ -253,6 +253,17 @@ export interface HazardResult {
   readonly accelCap: number;
   /** Decel that *would* have been required to avoid contact, m/s² (≥ 0). */
   readonly requiredDecel: number;
+  /**
+   * The same figure with the *car-following* term removed.
+   *
+   * Only the leader term can be produced by a body the caller did not author:
+   * `distanceToStopLine` is map infrastructure, and the crossing-conflict term
+   * already refuses to let generated traffic take priority over authored
+   * choreography. Publishing the split lets the caller keep
+   * `requiredDecelMax` meaning "how hard the authored scenario demanded I
+   * brake" even when a generated car is physically in front.
+   */
+  readonly requiredDecelExcludingLeader: number;
   readonly reason: 'none' | 'leader' | 'signal' | 'conflict';
 }
 
@@ -280,6 +291,8 @@ export function governorCap(
   const lim = limitsFor(a);
   let cap = Infinity;
   let required = 0;
+  // The same running maximum with the car-following term never folded in.
+  let requiredWithoutLeader = 0;
   let reason: HazardResult['reason'] = 'none';
 
   if (a.rules.collisionAvoidance && leader) {
@@ -324,6 +337,7 @@ export function governorCap(
       ? -lim.brakeHard
       : -(a.speedMps * a.speedMps) / (2 * d);
     required = Math.max(required, -accel);
+    requiredWithoutLeader = Math.max(requiredWithoutLeader, -accel);
     const capped = Math.max(accel, -lim.brakeHard);
     if (capped < cap) {
       cap = capped;
@@ -342,6 +356,7 @@ export function governorCap(
     // Give way: shed enough speed that we reach the crossing after them.
     const accel = -(a.speedMps * a.speedMps) / (2 * Math.max(conflict.distM - 2, 0.5));
     required = Math.max(required, -accel);
+    requiredWithoutLeader = Math.max(requiredWithoutLeader, -accel);
     const capped = Math.max(accel, -lim.brakeComfort);
     if (capped < cap) {
       cap = capped;
@@ -349,7 +364,12 @@ export function governorCap(
     }
   }
 
-  return { accelCap: cap, requiredDecel: required, reason };
+  return {
+    accelCap: cap,
+    requiredDecel: required,
+    requiredDecelExcludingLeader: requiredWithoutLeader,
+    reason,
+  };
 }
 
 /* ----------------------------------------------------------------- lateral */
