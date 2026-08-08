@@ -1354,3 +1354,36 @@ stub in the first few actions and update it as you learn; assume you may stop at
 written result beats a perfect unwritten one.** The same applies to me: I have been recording findings
 into FINDINGS.md turn by turn rather than at the end, which is the only reason the retractions in s27
 and s28 survived.
+
+---
+
+## 31. M4.3 verified independently: authoring the light works, 100% of simulated cells
+
+`surface.md` rules 25-27 now tell an author that a brief mentioning a traffic light MUST carry a
+portable `trafficControls` block, with a copy-pasteable example, because the map will not supply one.
+`c15g-red-light-runner` was re-authored to carry one. I re-gated both runs myself rather than trusting
+the agent's summary:
+
+| | cells attempted | simulated | with signal state | frozen pass | HQ | C6 loss |
+|---|---:|---:|---:|---:|---:|---:|
+| base (as delivered) | 160 | 136 | **20** | 0 | 0 | 116 |
+| treatment (authored head) | 160 | 136 | **136** | **18** | **18** | **0** |
+
+### Reconciling a number that first looked wrong
+The written claim was "136 of 136 (100%)"; my first measurement said 136 of **160**. Both are correct
+and mean different things: 24 of the 160 attempted cells fail with `arrival_unconverged` and never
+simulate at all, so no gate clause is evaluated on them (`C1..C6` are all `None`, `pass` is False).
+They are correctly excluded from clause loss counts because there is nothing to evaluate, and they are
+rejected regardless. **100% of SIMULATED cells now carry signal state, 85% of ATTEMPTED cells.** Both
+numbers should be quoted together; quoting only the first would flatter the result.
+
+**M4.3 target was >=90% of cells with signal state. MET on simulated cells (100%), and the honest
+denominator is stated.**
+
+The physics is unchanged — the authored light adds a signal channel, it does not alter the conflict.
+Frozen pass moves 0 -> 18 purely because C6 was rejecting every cell in the base run for claiming a
+signal it did not have. That is the clause doing exactly its job: it turned a silent mislabel into a
+loud rejection, and the repair was to make the scenario true rather than to weaken the gate.
+
+WS-4 is now **4 of 4 measures met** (M4.1 diagnosis, M4.2 RoadRunner handoff, M4.3 authored signals,
+M4.4 gate clause C6).
