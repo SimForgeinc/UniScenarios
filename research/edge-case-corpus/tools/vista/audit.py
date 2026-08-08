@@ -135,6 +135,48 @@ def m1_3(match_json):
     return {'perArchetype': per, 'belowFour': thin, 'pass': not thin, 'target': '>=4 each'}
 
 
+def m1_2(recs, workers=4):
+    """M1.2: what fraction of delivered scenarios sit at verdict='exact' sites?
+
+    Deliberately recorded as NECESSARY BUT NOT SUFFICIENT. `exact` certifies that every anchor clause
+    bound; it says nothing about whether the clauses asked for the right thing. Before the WS-1b
+    tightening, `c4g-circulating-sudden-stop` scored 24/24 exact for a roundabout scenario on a map set
+    containing zero roundabouts. Chasing this number alone would reward loosening clauses until
+    everything matches, which is the opposite of the goal. M1.1 and M1.4 are the measures with teeth.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    sys.path.insert(0, HERE)
+    import author
+    tpl = {}
+    for r in recs:
+        tpl.setdefault(r['archetypeId'], r['template'])
+
+    def verdicts(arch):
+        rc, d, err = author.run_cli(['sites', 'match', tpl[arch], '--all-maps', '--max-sites', '400'])
+        out = {}
+        for m in (d or {}).get('maps', []):
+            for s in m.get('sites', []):
+                out[(m['mapId'], s['siteId'])] = s.get('verdict')
+        return arch, out
+
+    keys = sorted(tpl)
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        idx = dict(ex.map(verdicts, keys))
+    per = collections.defaultdict(collections.Counter)
+    for r in recs:
+        per[r['archetypeId']][idx.get(r['archetypeId'], {}).get((r['mapId'], r['siteId']), 'MISSING')] += 1
+    tot = collections.Counter()
+    for c in per.values():
+        tot.update(c)
+    n = sum(tot.values())
+    ex_ = tot.get('exact', 0)
+    return {'exact': ex_, 'n': n, 'rate': round(ex_ / max(n, 1), 4),
+            'pass': n > 0 and ex_ / max(n, 1) >= 0.95, 'target': '>=0.95',
+            'verdicts': dict(tot),
+            'perArchetype': {k: f"{v.get('exact', 0)}/{sum(v.values())}" for k, v in sorted(per.items())},
+            'caveat': 'NECESSARY NOT SUFFICIENT -- an exact match against a vacuous clause is vacuous'}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dataset', nargs='+', required=True)
@@ -143,6 +185,7 @@ def main():
     ap.add_argument('--plaus', default='')
     ap.add_argument('--placefit', default='')
     ap.add_argument('--out', default='/tmp/vista-scorecard.json')
+    ap.add_argument('--skip-m12', action='store_true', help='M1.2 re-runs `sites match` per archetype and is slow')
     a = ap.parse_args()
     recs = _load(a.dataset)
     card = {'corpus': len(recs), 'archetypes': len({r['archetypeId'] for r in recs})}
@@ -150,6 +193,7 @@ def main():
     card.update(m2_2_2_3_2_5(recs))
     card.update(m3(recs, a.videos))
     card['M1.3'] = m1_3(a.sitecounts)
+    card['M1.2'] = m1_2(recs) if not a.skip_m12 else {'pass': False, 'note': 'skipped'}
     for key, path, field in (('M1.4', a.plaus, 'rate'), ('M1.1', a.placefit, 'rate')):
         if path and os.path.exists(path):
             d = json.load(open(path))

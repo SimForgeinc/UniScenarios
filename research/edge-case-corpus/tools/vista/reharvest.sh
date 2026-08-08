@@ -22,8 +22,16 @@ $PY sitecount.py --dataset /tmp/vista-dataset-final/train.jsonl /tmp/vista-datas
 $PY loccritic.py --dataset /tmp/vista-dataset-final/train.jsonl /tmp/vista-dataset-final/test.jsonl \
   --out /tmp/vista-plaus-final --per-archetype 6 --workers 5
 
+# 4b. M1.1 mechanical place fit, RE-RUN on the FINAL corpus. Without this the audit would read the
+#     stale /tmp/vista-placefit.json, which grades the OLD corpus against the new requirements and
+#     therefore measures the damage rather than the fix.
+$PY placefit.py --dataset /tmp/vista-dataset-final/train.jsonl /tmp/vista-dataset-final/test.jsonl \
+  --templates "$OUT/../vista-ws1b/templates" --out /tmp/vista-placefit-final.json || \
+$PY placefit.py --dataset /tmp/vista-dataset-final/train.jsonl /tmp/vista-dataset-final/test.jsonl \
+  --out /tmp/vista-placefit-final.json
+
 # 5. full scorecard M1.1-M4.4
 $PY audit.py --dataset /tmp/vista-dataset-final/train.jsonl /tmp/vista-dataset-final/test.jsonl \
   --videos /tmp/vista-3d --sitecounts /tmp/vista-sitecounts.json \
   --plaus /tmp/vista-plaus-final/PLAUSIBILITY.json \
-  --placefit /tmp/vista-placefit.json --out /tmp/vista-scorecard-final.json
+  --placefit /tmp/vista-placefit-final.json --out /tmp/vista-scorecard-final.json
