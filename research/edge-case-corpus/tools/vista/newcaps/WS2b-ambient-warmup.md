@@ -37,32 +37,34 @@ Key facts that make this exact and cheap:
 * Ambient OFF => the pre-pass is not called at all => byte-identical authored traces.
 
 
-## MEASURED SO FAR (probe A: c15g-red-light-runner-signals, --all-maps --max-sites 3 = 15 cells, --ambient city)
+## MEASURED (probe A: c15g-red-light-runner-signals, --all-maps --max-sites 3 = 15 cells, --ambient city)
 
-Measured with `audit.py m2_2_2_3_2_5`, identical command except `--ambient-settle`:
+Same command, only `--ambient-settle` differs. Measured with `audit.py m2_2_2_3_2_5` (not rewritten).
 
-| measure | settle 0 (baseline) | settle 20 |
-|---|---|---|
-| M2.2 median ambient within 60 m at t=0 | 5 (PASS) | **0 (REGRESSED)** |
-| M2.3 fraction of cells with >=2 ambient stopped at t=0 | 0.467 (FAIL) | **0.667 (PASS)** |
-| M2.3 median t=0 speed spread | 17.82 m/s | 13.00 m/s (still distributed) |
-| M2.5 closest partner is ambient | 0 (PASS) | 0 (PASS) |
+| measure | settle 0 (baseline) | settle 20 (v1) | settle 20 (v4, shipped) |
+|---|---|---|---|
+| **M2.3** fraction of cells with >=2 ambient stopped at t=0 | 0.467 FAIL | 0.667 | **0.933 PASS** (target >=0.50) |
+| M2.3 median t=0 speed spread | 17.82 m/s | 13.00 | **15.20 m/s, distributed** |
+| **M2.2** median ambient within 60 m at t=0 | 5 PASS | 0 REGRESSED | **4 PASS** (target >=3) |
+| **M2.5** cells whose closest partner is ambient | 0 PASS | 0 | **0 PASS** |
 
-So the settle DOES build the queues (M2.3 0.467 -> 0.667) and keeps speeds distributed, but v1 of it
-**regressed M2.2**: the population was selected for being near the authored choreography and then given
-20 s to drive AWAY from it. Two defects in v1, both from the same root cause (selection happens
-BEFORE the settle):
+Per-cell delivered populations are unchanged (32/32, 9/9, ...); only their state at t=0 differs.
 
-1. **Population drains away from the site.** 20 s at ~13 m/s is ~260 m of travel; the selected ring
-   is gone by t=0. Median near-ego count 5 -> 0.
-2. **Authored spawn exclusion is no longer enforced at t=0.** `exclusionRadiusM` keeps generated cars
-   off the authored spawn points at *spawn* time; after 20 s of settle a car can be sitting on the ego.
-   Observed as new `spawn_overlap ... overlaps ambient:v1:...` issues.
-
-FIX (v2, in progress): **settle first, select after.** Build a larger settle cohort (targetMultiplier x
-the placement target), settle the whole cohort, then apply the near-authored ranking, the authored
-reservations and the actor budget to the POST-settle positions. That is the configuration the clip
-actually records, so it is the configuration the selection rules should be applied to.
+### What v1 and v2/v3 got wrong (kept because it is the load-bearing part of the design)
+* **v1** settled the already-selected population. 20 s at 13 m/s is 260 m of travel, so the whole
+  population drove off the site: median near-ego 5 -> 0. It also invalidated the spawn-time
+  authored clearance (new `spawn_overlap ... overlaps ambient:v1:...` issues), because
+  `exclusionRadiusM` was enforced at spawn, which after a settle is the wrong instant.
+* **v2/v3** fixed the selection order (settle a cohort, then re-select) but sized the cohort by
+  requiring every candidate to own `cruise x (warmup + clip + settle)` of downstream route
+  (~480 m). On these maps that is unaffordable: the cohort collapsed to 7-43 candidates because the
+  candidate pool ran out of long-enough routes, and the delivered population fell with it
+  (yale/10f16d: 32 -> 5 actors). M2.2 stayed at 0.
+* **v4** drops the extra runway requirement (an actor that runs out of route during the settle just
+  despawns and is dropped; the oversized cohort absorbs it) and sizes the cohort as
+  `4 x min(maxActors, eligibleLaneKm(radius + 15 m/s x settle) x density)`.
+  That is ~24 veh/km of settle flow (a normal urban headway, not a jam) thinned back to the
+  profile's own budget after settling.
 
 ## Status log
 - [t0] Stub created.

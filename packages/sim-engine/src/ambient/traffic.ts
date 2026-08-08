@@ -111,6 +111,18 @@ export interface AmbientTrafficOptions {
    * positions. `1` (the default) is the un-settled behaviour exactly.
    */
   readonly targetMultiplier?: number;
+  /**
+   * Extra selection radius, metres, for the settle cohort.
+   *
+   * The cohort must not be the same neighbourhood at four times the density —
+   * that is a traffic jam, and a jam manufactures the queues the measure is
+   * supposed to find. It must be a LARGER neighbourhood at the SAME density:
+   * the cars standing next to the ego at `t = 0` are the ones that spawned
+   * `cruise x settleSeconds` upstream, so the radius has to reach that far.
+   * `targetMultiplier` then exists only to lift `profile.maxActors`, which is a
+   * cap on the placed population rather than on the cohort.
+   */
+  readonly cohortRadiusBonusM?: number;
 }
 
 export interface AmbientScreeningReason {
@@ -147,6 +159,12 @@ export interface AmbientTrafficProvenance {
   /** The authored corridor that was reserved, sorted. */
   readonly authoredCorridorLaneRsls: readonly string[];
   readonly eligibleLaneKm: number;
+  /**
+   * Actors an un-settled run would have placed: the profile's density over the
+   * profile's own radius, under its own cap. With no settle this equals the
+   * placed count's target; with a settle it is the post-settle budget.
+   */
+  readonly placementTarget: number;
   /** Compatibility summary. Ordinary materialization never executes a screening clip. */
   readonly screening: {
     readonly evaluated: boolean;
@@ -330,7 +348,8 @@ export function materializeAmbientCandidatePool(
   const baseInputHash = contentHash(base);
   const focus = base.actors.filter((actor) => !actor.static).map((actor) => actor.initial.pose);
   const allFocus = focus.length > 0 ? focus : base.actors.map((actor) => actor.initial.pose);
-  const roadLanes = eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM);
+  const cohortRadiusBonusM = Math.max(0, options.cohortRadiusBonusM ?? 0);
+  const roadLanes = eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM + cohortRadiusBonusM);
   // The authored corridor: every lane an authored actor is routed along, plus
   // whatever the caller reserved. Generated traffic may not spawn on it and may
   // not route through it, so it can never become an authored actor's leader or
@@ -350,9 +369,19 @@ export function materializeAmbientCandidatePool(
   const eligibleLaneKm = roadLanes
     .filter((lane) => eligibleRsls.has(lane.rsl))
     .reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
-  const placementTarget = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
+  // `placementTarget` is what an un-settled run would have placed: the density
+  // over the profile's OWN radius, under the profile's own actor cap. It is the
+  // budget the settle re-selects down to, and it is reported so the caller does
+  // not have to re-derive it.
+  const baseEligibleLaneKm = cohortRadiusBonusM === 0
+    ? eligibleLaneKm
+    : eligibleDirectedLanes(graph, ['driving'], allFocus, profile.radiusM)
+      .filter((lane) => eligibleRsls.has(lane.rsl))
+      .reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
+  const placementTarget = Math.min(profile.maxActors, Math.round(baseEligibleLaneKm * profile.densityVehiclesPerKm));
   const targetMultiplier = Math.max(1, Math.round(options.targetMultiplier ?? 1));
-  const target = placementTarget * targetMultiplier;
+  const target = targetMultiplier
+    * Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
   const reservations: AmbientReservation[] = [
     ...base.actors.map((actor) => ({
       x: actor.initial.pose.x,
@@ -470,6 +499,7 @@ export function materializeAmbientCandidatePool(
       authoredCorridorRejects,
       authoredCorridorLaneRsls: [...authoredCorridor].sort(),
       eligibleLaneKm,
+      placementTarget,
       screening: {
         evaluated: false,
         passes: 0,

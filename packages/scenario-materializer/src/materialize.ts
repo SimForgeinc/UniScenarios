@@ -355,15 +355,23 @@ export interface InitialInteractionOutcome {
 }
 
 /**
- * How much bigger the settle cohort is than the placed population.
+ * Cohort geometry for the ambient warm-up.
  *
  * A settled car travels `cruise x settleSeconds` — 260 m for 13 m/s over 20 s —
- * so the cars standing near the ego at t=0 are the ones that spawned that far
- * upstream, not the ones that spawned next to it. Selecting only the target
- * count and then settling it drove the measured median within 60 m of the ego
- * from 5 to 0. Four times the budget covers the upstream ring inside the
- * profile's own selection radius.
+ * so the cars standing near the ego at `t = 0` are the ones that spawned that
+ * far UPSTREAM, not the ones that spawned next to it. Selecting only the target
+ * count inside the profile's radius and then settling it drove the measured
+ * median within 60 m of the ego from 5 to 0: the whole population had driven
+ * off the site.
+ *
+ * The cohort is therefore a LARGER neighbourhood at the SAME density, never the
+ * same neighbourhood at a higher one — a denser cohort is a traffic jam, and a
+ * jam manufactures exactly the standing queues the measure is trying to detect.
+ * `MPS` is a nominal urban cruise used only to size the ring; `MULTIPLIER` only
+ * lifts `profile.maxActors`, which caps the placed population rather than the
+ * cohort.
  */
+const AMBIENT_SETTLE_COHORT_MPS = 15;
 const AMBIENT_SETTLE_COHORT_MULTIPLIER = 4;
 
 export interface MaterializeResult {
@@ -3760,14 +3768,23 @@ class Materializer {
     if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
       const resolvedAmbient = resolveAmbientTrafficProfile(ambientProfile);
       const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile, {
-        // Route runway has to cover the settle as well, or a car that spends
-        // `settleSeconds` driving reaches the end of its route and despawns
-        // before the clip it was generated for even starts.
-        extraTravelSeconds: ambientSettleSeconds,
+        // NOT `extraTravelSeconds: ambientSettleSeconds`. Requiring every
+        // candidate to own `cruise x (warmup + clip + settle)` of downstream
+        // route — 480 m for a 20 s settle — is unaffordable on these maps:
+        // measured on the 15-cell c15g probe it collapsed the cohort from ~32
+        // to 7-43 candidates because the pool ran out of long-enough routes,
+        // and the delivered population fell with it. An actor that does run out
+        // of route during the settle simply despawns and is dropped, which the
+        // oversized cohort already absorbs.
         // With a settle the placed population is a COHORT, not the answer: it is
         // settled and then re-selected against the positions it actually holds
         // at t=0. Without a settle the multiplier is 1 and nothing changes.
-        ...(ambientSettleSeconds > 0 ? { targetMultiplier: AMBIENT_SETTLE_COHORT_MULTIPLIER } : {}),
+        ...(ambientSettleSeconds > 0
+          ? {
+            targetMultiplier: AMBIENT_SETTLE_COHORT_MULTIPLIER,
+            cohortRadiusBonusM: ambientSettleSeconds * AMBIENT_SETTLE_COHORT_MPS,
+          }
+          : {}),
       });
       input = applied.input;
       ambientProvenance = applied.provenance;
@@ -3779,7 +3796,7 @@ class Materializer {
         const settled = settleAmbientTraffic(input, this.bundle.graph, {
           settleSeconds: ambientSettleSeconds,
           ambientActorIds: cohortIds,
-          keep: Math.ceil(cohortIds.length / AMBIENT_SETTLE_COHORT_MULTIPLIER),
+          keep: ambientProvenance.placementTarget,
           exclusionRadiusM: resolvedAmbient.exclusionRadiusM,
         });
         input = settled.input;
