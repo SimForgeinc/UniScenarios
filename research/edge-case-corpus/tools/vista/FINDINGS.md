@@ -1132,3 +1132,54 @@ The generated-brief corpus measured ~2,324 distinct training-grade scenarios/day
 generated briefs — it is dominated by intersection, control and adversarial cases, historically the
 worst-performing categories — so 0.214 admission against 0.32-0.39 on generated briefs is expected
 rather than a regression.
+
+---
+
+## 27. RETRACTION: "all 67 red-light-runner scenarios are at exact-match signalized junctions"
+
+Last turn I reported that the 67 `c15g-red-light-runner` scenarios sat at `score=1.0 verdict=exact`
+signalized junctions, and concluded that site selection was therefore *not* the problem and the engine
+must be failing to run signals at genuinely signalized junctions. **The first half of that is false and
+the conclusion was reached the wrong way.**
+
+The archetype's anchor clause is:
+```
+control: { value: ["signalized","uncontrolled","minor_stop","all_way_stop"], essentiality: "preferred" }
+```
+Every junction on every map satisfies that. `verdict=exact` did not mean "exactly a signalized
+junction"; it meant "exactly satisfied a clause that accepts anything". All 8 bound sites are
+`uncontrolled` or `minor_stop`, and their own manifests say `"uncontrolled junction as requested"`.
+
+I read a matcher verdict as a statement about the world when it is only a statement about a clause.
+The clause was vacuous, so the verdict was vacuous, and I built a confident inference on top of it.
+
+### What is actually true (diag-signals, with file:line evidence)
+- `ticks.signals` is non-empty **iff** `SimScenarioInput.signalPrograms` is non-empty
+  (`sim-engine/src/sim/engine.ts:363,2493,2590`).
+- Map-derived programs exist only where the OpenDRIVE `<junction>` element carries `<controller>`
+  children: **6 of 246 junctions** across all five dev maps.
+- `deriveControl` (`map-intel/src/build/junctions.ts:277-303`, `SIGNAL_RADIUS_PAD_M=22`) labels a
+  junction `signalized` when *any* `traffic_light` point falls within `sizeM/2 + 22 m` of its centre.
+  It never checks the head sits on one of the junction's own roads, that it is dynamic, or that a
+  `<controller>` references it. **17 of the 23 "signalized" junctions have zero signal records on
+  their own roads** — they inherited a neighbour's lights through the 22 m pad. Yale junction 387,
+  which map-intel's own tests call "a signalized four-way", is 51 m from the real signalized junction
+  345 and has 0 signal elements and 0 controllers.
+- `rules.obeySignals` is inert when both `signalPrograms` and `roadControls` are empty:
+  `distanceToStopLine` returns null on `signals.isEmpty` (`controllers.ts:461`). The `set(...)`
+  interaction fires a `state_set` event that nothing reads. That is the case for all 67 cells.
+- Downstream the absence is silent by design: intent-rubric signal criteria return `unchecked` rather
+  than `fail` (`trace/intent-rubric.ts:272`), `{kind:'signal'}` triggers never fire
+  (`sim/triggers.ts:129`), and `set(signal:*.phase)` overrides are dropped (`signals.ts:206`).
+
+### The part that changes the plan
+**A template can author a working signal today**, via the portable `trafficControls` block
+(`scenario-model/src/schema/v2/traffic-controls.ts`, lowered at `materialize.ts:2354-2391`). Proven on
+an *uncontrolled* belmont junction: an authored three-phase head produced 651 samples of signal state
+and brought the ego to a full standstill at the line (min speed 0.00 m/s, against 5.73 m/s in the
+unmodified control run). So signals are **not** blocked on upstream map fixes — the corpus simply never
+authored them. The RoadRunner gap is real and worth reporting upstream, but it is not the reason my
+scenarios have no lights. **My scenarios have no lights because they never asked for any.**
+
+This is the sixth instance of the recurring pattern: the capability existed and the default authoring
+path never reached it.
