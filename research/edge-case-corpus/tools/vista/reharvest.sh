@@ -5,7 +5,10 @@ set -euo pipefail
 cd /Users/michaelvu-simforge/Documents/Programming/UniScenarios-vista/research/edge-case-corpus/tools/vista
 PY=/Users/michaelvu-simforge/Documents/Programming/UniScenarios-vista/.venv/bin/python
 OUT=/tmp/vista-harv-final
-rm -rf "$OUT" /tmp/vista-dataset-final /tmp/vista-plaus-final
+# Only wipe with --fresh. `batch` resumes from existing cells unless --force, and a blind `rm -rf`
+# here already destroyed 1065 computed traces once, costing ~70 minutes.
+if [ "${1:-}" = "--fresh" ]; then rm -rf "$OUT"; fi
+rm -rf /tmp/vista-dataset-final /tmp/vista-plaus-final
 
 # 1. verify intent + batch + gate (C1-C6) + Q1-Q8 + dedup, over all three author roots
 $PY harvest.py --roots /tmp/vista-gen6-blind /tmp/vista-gen3-blind /tmp/vista-user \

@@ -234,7 +234,20 @@ def trace_facts(trace):
                               't': v['t']} for k, v in per_challenger.items()},
         'minTTC': min_ttc,
         'requiredDecelMaxEgo': round(decel or 0.0, 3),
-        'collisions': len(m.get('collisions') or []),
+        # A collision only condemns the SCENARIO if an AUTHORED actor is in it. Generated background
+        # cars colliding with each other are scenery, not scenario failure: measured on one archetype,
+        # 312 of 348 collisions (90%) were ambient-ambient, which made C5 unsatisfiable on 140/140
+        # cells and would have driven the whole ambient-traffic corpus to zero yield.
+        # This is NOT a loosening of the scenario standard:
+        #   * ego-involved and challenger-involved collisions still count, unchanged;
+        #   * an ambient car hit BY an authored actor still counts (one side authored is enough);
+        #   * `ambientActorIds` is absent from every trace written before ambient traffic existed, so
+        #     on all historical traces and on the gold set this is byte-identical to `len(collisions)`.
+        'collisions': sum(1 for c in (m.get('collisions') or [])
+                          if not ({c.get('a'), c.get('b')} <= ambient)),
+        'collisionsAll': len(m.get('collisions') or []),
+        'collisionsAmbientOnly': sum(1 for c in (m.get('collisions') or [])
+                                     if {c.get('a'), c.get('b')} <= ambient),
         'triggerNeverFired': list(m.get('triggerNeverFired') or []),
         'clipSeconds': hdr.get('clipSeconds'),
         'dt': dt,
