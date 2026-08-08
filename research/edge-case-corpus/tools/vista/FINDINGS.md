@@ -1561,3 +1561,70 @@ exact concurrency hazard I had warned both agents about, and then walked into my
 because WS-1b generated from a base snapshot taken before WS-4b's edit. Caught it by checking
 `trafficControls in template` after the copy (0 of 15), and repaired by merging WS-1b's anchor with
 WS-4b's saved in-repo signal templates. Both re-validate clean and now carry both changes.
+
+---
+
+## 35. WS-2b ambient warm-up (M2.3 MET) and WS-3 3D video (path proven)
+
+### M2.3 = 0.933, target >=0.50 — MET
+`--ambient-settle <seconds>`, default 20 s whenever `--ambient` is given, `0` reproducing the old
+behaviour exactly. It does **not** raise `choreography.warmupSeconds`, which would have advanced the ego
+and destroyed the authored conflict timing. Instead `sim-engine/src/ambient/settle.ts` runs a
+throw-away simulation containing **only the generated population** and writes its final state back as
+those actors' initial state. Three details make it exact: the engine derives route progress by
+projecting `initial.pose`, so no route surgery is needed; the settle runs with
+`offsetS' = offsetS - settleSeconds` so a queue that formed on red is still stopped on red at t=0; and
+the settle length is stamped into `replayKey.ambientProfileHash` so resume cannot serve a
+differently-settled cell.
+
+M2.3 0.467 -> **0.933**, with t=0 speeds still distributed (median spread 15.20 m/s — a frozen road
+would be as wrong as an empty one). M2.2 stays 4 (>=3), M2.5 stays 0, M2.4 15/15 identical digests.
+**Ambient OFF equivalence: 40/40 cells identical** against the pre-change tree — the feature is inert
+when unused.
+
+A negative result worth keeping: settling the *already-selected* population is wrong, and it was
+measured rather than guessed — 20 s at 13 m/s is 260 m, so the population drives off site (M2.2 5 -> 0).
+The shipped version settles an oversized cohort and re-applies ranking, authored clearance and the actor
+budget to the POST-settle positions.
+
+**One acceptance clause reported NOT satisfiable as written, and I accept the reasoning.** I asked that
+ego/challenger tracks be unchanged with ambient ON. They are not — but they were already not identical
+to the ambient-OFF run *before* the warm-up existed (9 of 30 authored tracks perturbed >0.5 m at settle
+0, 12 of 30 at settle 20, same magnitude regime). The warm-up integrates no authored actor for a single
+tick; it changes *which* generated cars exist, and the ego brakes for real cars **by WS-2's explicit
+design**. Making that clause true would require the ego's controller to ignore ambient bodies, which
+would make the traffic scenery rather than traffic. I am not asking for that.
+
+### WS-3: the 3D path is real, and I looked at it myself
+`/tmp/vista-3d/_try2/frame.png` — streamed city, buildings, lane markings, street furniture, ego sedan
+and lead_suv both clearly on the roadway. This is the UniScenarios 3D world, not my top-down proxy.
+
+| measure | verified by me | |
+|---|---|---|
+| M3.2 manifest integrity | **18/18** instanceHash, traceHash, actorIds | PASS |
+| M3.3 stream | **18/18** h264 1040x918, 12/1 fps, 145 frames, 12.083 s = full clip | PASS |
+| M3.4 throughput | **18.2 s/scenario at concurrency 4 = ~198 renders/hour** | measured |
+| M3.1 coverage | **18/293 = 0.061** at time of audit, full run in flight | not yet |
+
+**My quality-chooser hypothesis was wrong.** I had told the agent the `state === 'stored'` parse could
+silently leave the world unmounted. It does not fire: `parseQualityPreference` accepts a bare
+`{"preset":"minimal"}`. The real blocker was a bug in `hideUiForExport()` — it set `visibility:hidden`
+on every non-CANVAS child of `#root > div`, but the canvas is four levels deeper, so the wrapper holding
+it was hidden and `elementHandle.screenshot()` blocked on actionability. Both earlier attempts died on
+exactly the next log line. I sent a confident, specific, wrong diagnosis; the agent measured and
+corrected it.
+
+### A failure the rehearsal hid, which I found by reading the log rather than the report
+The full run is at **ok=52, render-failed=30, success 0.634**, and **29 of the 30 failures are parking
+archetypes** (c11g-indicator-mislead 10, c11g-hidden-child 7, c11g-wrong-way-aisle 6,
+parked-vans-narrow-road 6). A failing case has `preflight.json` verdict **pass**, `frame.png` written,
+**97 files in video-frames/**, only 3 of 4 phase frames, and no mp4 — it dies partway through frame
+capture on asset-dense scenes. The log contains **zero error text**, which is its own defect. Returned
+to the agent with a request to record the thrown error per scenario. A 12-scenario rehearsal at 12/12
+does not predict a 293-scenario run at 0.634.
+
+### A process failure I caused: the commit race
+My `git add -A` in commit 253df16 landed during a ~4-minute window in which WS-2b had six source files
+checked out at an older revision to produce its ambient-OFF baseline. **That commit reverted all six and
+deleted `ambient/settle.ts`.** The agent caught it and restored them in f6bd736, verified byte-identical.
+`git add -A` is unsafe while other agents hold working-tree state; stage explicit paths instead.
