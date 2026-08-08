@@ -137,7 +137,17 @@ const CAMERA_SEARCH_OFFSETS = [
   { azimuthDeg: 0, heightGain: 2.2 },
   { azimuthDeg: 45, heightGain: 2.2 },
   { azimuthDeg: -45, heightGain: 2.2 },
+  { azimuthDeg: 90, heightGain: 2.2 },
+  { azimuthDeg: -90, heightGain: 2.2 },
+  { azimuthDeg: 135, heightGain: 2.2 },
+  { azimuthDeg: -135, heightGain: 2.2 },
   { azimuthDeg: 180, heightGain: 2.2 },
+  // Last resort: a near-overhead viewpoint clears almost any facade at the
+  // cost of an unattractive shot, which still beats losing the scenario.
+  { azimuthDeg: 0, heightGain: 3.4 },
+  { azimuthDeg: 70, heightGain: 3.4 },
+  { azimuthDeg: -70, heightGain: 3.4 },
+  { azimuthDeg: 180, heightGain: 3.4 },
 ];
 
 /** Orbit a fitted camera around its own target without changing what it frames. */
@@ -614,6 +624,7 @@ async function exportScenario(page) {
       [...groundedPoses, ...grounded.props],
       [...evidence.actorModels, ...grounded.props],
     );
+    let composition;
     if (cameraSearch) {
       const ordered = [cameraOffset, ...CAMERA_SEARCH_OFFSETS.filter(
         (candidate) => candidate.azimuthDeg !== cameraOffset.azimuthDeg || candidate.heightGain !== cameraOffset.heightGain,
@@ -629,10 +640,16 @@ async function exportScenario(page) {
         );
         if (clearance.clearanceM < 2) continue;
         await setView(page, trial.eye, trial.target, trial.fovDeg);
+        // The candidate must be judged in the same fully-resident state the
+        // capture will use. Testing before stream-idle lets a not-yet-uploaded
+        // city tile read as clear line of sight, and the shot then fails the
+        // authoritative check after the tile lands.
+        await waitForStreamIdle(page, 60000);
+        await settleFrames(page, settleCount);
         const trialComposition = await inspectIncidentComposition(page, ...compositionArgs);
         lastComposition = trialComposition;
         if (trialComposition.passed) {
-          accepted = { camera: trial, clearance, candidate };
+          accepted = { camera: trial, clearance, candidate, composition: trialComposition };
           break;
         }
       }
@@ -645,24 +662,27 @@ async function exportScenario(page) {
       camera = accepted.camera;
       cameraClearance = accepted.clearance;
       cameraOffset = accepted.candidate;
+      composition = accepted.composition;
       stage('cameraSearch');
-    } else if (cameraClearance.clearanceM < 2) {
-      throw new Error(
-        `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
-      );
-    }
-    await setView(page, camera.eye, camera.target, camera.fovDeg);
-    stage('setView');
-    // Catalog evidence must fail closed if the incident view never reaches a
-    // fully resident state. Capturing after a swallowed timeout can make a
-    // missing city tile look like clear line of sight.
-    await waitForStreamIdle(page, 60000);
-    stage('streamIdle');
-    await settleFrames(page, settleCount);
-    stage('settle');
-    const composition = await inspectIncidentComposition(page, ...compositionArgs);
-    if (!composition.passed) {
-      throw new Error(`incident composition failed at t=${selected.t}: ${describeFailure(composition)}`);
+    } else {
+      if (cameraClearance.clearanceM < 2) {
+        throw new Error(
+          `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
+        );
+      }
+      await setView(page, camera.eye, camera.target, camera.fovDeg);
+      stage('setView');
+      // Catalog evidence must fail closed if the incident view never reaches a
+      // fully resident state. Capturing after a swallowed timeout can make a
+      // missing city tile look like clear line of sight.
+      await waitForStreamIdle(page, 60000);
+      stage('streamIdle');
+      await settleFrames(page, settleCount);
+      stage('settle');
+      composition = await inspectIncidentComposition(page, ...compositionArgs);
+      if (!composition.passed) {
+        throw new Error(`incident composition failed at t=${selected.t}: ${describeFailure(composition)}`);
+      }
     }
     stage('composition');
     if (includeUi) {
