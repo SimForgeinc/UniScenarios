@@ -385,6 +385,12 @@ export {
   promoteAmbientActor,
   resolveAmbientTrafficProfile,
 } from './ambient/traffic.js';
+export { settleAmbientTraffic } from './ambient/settle.js';
+export type {
+  AmbientSettleOptions,
+  AmbientSettleProvenance,
+  AmbientSettleResult,
+} from './ambient/settle.js';
 export type {
   AmbientActorProvenance,
   AmbientCandidate,
