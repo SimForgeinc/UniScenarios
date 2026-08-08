@@ -1628,3 +1628,52 @@ My `git add -A` in commit 253df16 landed during a ~4-minute window in which WS-2
 checked out at an older revision to produce its ambient-OFF baseline. **That commit reverted all six and
 deleted `ambient/settle.ts`.** The agent caught it and restored them in f6bd736, verified byte-identical.
 `git add -A` is unsafe while other agents hold working-tree state; stage explicit paths instead.
+
+---
+
+## 36. WS-3 corrected my diagnosis, and its integrity gate found corruption in my corpus
+
+### I was wrong twice about the render failures
+I reported the 30 parking-archetype failures as a timeout or crash under asset density, and cited a
+missing `frames/frame-002.png` as a symptom. Both wrong:
+- **`frame-002` is missing by design.** The CONFLICT phase is written to the reserved catalog name
+  `<out>/frame.png`, so `frames/` legitimately holds the other three phases only.
+- **It was not a timeout.** Every failure threw
+  `incident composition failed at t=<x>: <actor>(inFrame=true, sceneryClear=false, blocker=city)`.
+  `cameraForIncident` picks the azimuth from the incident sightline alone; on a real city map that
+  direction is frequently occupied by a building, so a geometrically perfect framing has no line of
+  sight and `inspectIncidentComposition()` raycasts the city group and **fails closed**. Parking
+  archetypes dominate because they are authored against building frontages — their camera ray must
+  cross a facade. The 97 files in `video-frames/` were the real signal: it threw at video frame 97,
+  i.e. the clip position where the actors moved behind a building. My "~7-9 s vs ~33 s" timing clusters
+  were early-frame vs late-frame occlusions, not two timeout tiers.
+
+The exporter was **behaving correctly**. I read a correct fail-closed gate as a crash.
+
+Fixed with `--camera-search`: on composition failure it orbits the same fitted camera around its own
+target through a ranked ladder (azimuth 0, +/-25, +/-55, +/-90, +/-125, 180 deg; height 1.0->2.2x) and
+takes the first candidate where every framing actor is in-canvas with an unobstructed ray. The offset
+is **sticky across the clip** so the shot does not jitter (1-3 offsets per 145 frames), and the strict
+gate is unchanged — the search runs before `waitForStreamIdle` and the authoritative check still runs
+after stream-idle, so nothing is ever rendered through a wall. **Success 0.634 -> 0.970.**
+
+Cost restated honestly with the success rate attached: ~64 s -> ~80 s serial, so **~22-23 s/scenario at
+concurrency 4 = ~160 renders/hour**, full corpus ~1.8 h. The earlier 18.2 s / 198-per-hour figure was
+measured without camera search on a succeeding subset.
+
+### The gate found real corruption that every other layer passed
+Two of the three residual failures are `upstream-artifact-hash-mismatch`. I verified this myself rather
+than take it on trust: for `2b4d8a75191b65b5` (c11g-wrong-way-aisle) and `4c1caccd0ae990b4`
+(parked-vans-narrow-road), recomputing `sha256(canonicalJson(instance.input))` gives
+`8322835c00aabce2` and `812579baf8569044` against declared `08c3166672403663` and `70a9e515c6a201ae`.
+A control scenario recomputes to **exactly** its declared hash, so this is not a canonicalisation
+difference in my check — **2 of 293 delivered instances genuinely disagree with their own declared
+content hash.**
+
+Nothing else in the pipeline noticed. `gate.py` reads ticks, `dataset.py` reads metrics, my `audit.py`
+reads both — none of them recompute the instance hash. **The render path's integrity gate is currently
+the only layer in this system that would catch a corrupted instance**, which is a good argument for
+keeping M3.2 strict rather than treating it as ceremony.
+
+The third failure is a genuinely occluded pedestrian behind a building from all 17 candidate
+viewpoints. That one is honest: **M3.1 = 0.970, not 1.000**, and it should be reported that way.
