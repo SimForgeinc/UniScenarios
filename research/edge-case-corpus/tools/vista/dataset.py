@@ -45,9 +45,13 @@ def build(harvest_files, out, test_frac=0.25, seed=7, holdout_map=None, copy_tra
                 if holdout_map and c['mapId'] != holdout_map and name == 'heldout_map':
                     continue
                 recs.append({
+                    # Include the TRACE PATH, which carries the draw index. Hashing only
+                    # (brief, map, site, closestT) collided for 44 of 293 scenarios: two draws at the
+                    # same site can reach closest approach on the same tick while differing in
+                    # clearance and TTC, so they are distinct scenarios with the same key.
                     'scenarioId': hashlib.sha1(
-                        (r['briefId'] + c['mapId'] + c['siteId']
-                         + str(c.get('closestT'))).encode()).hexdigest()[:16],
+                        (r['briefId'] + c['mapId'] + c['siteId'] + str(c.get('closestT'))
+                         + str(c.get('traceFile'))).encode()).hexdigest()[:16],
                     'archetypeId': r['briefId'], 'category': r.get('category'),
                     'brief': r['brief'], 'mapId': c['mapId'], 'siteId': c['siteId'],
                     'trace': c['traceFile'], 'instance': c.get('instanceFile'),
