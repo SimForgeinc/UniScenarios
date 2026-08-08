@@ -115,6 +115,53 @@ if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
 }
 const corpusMode = evidenceClassArg === 'corpus';
 const showProgress = args.has('progress');
+const cameraSearch = args.has('camera-search');
+// Orbit offsets tried, in order, when `--camera-search` is on. 0/1 is the
+// analytic camera itself, so an unobstructed scene keeps exactly the framing
+// the solver chose; later entries swing progressively further around the
+// framing centre and lift the eye to clear a building.
+const CAMERA_SEARCH_OFFSETS = [
+  { azimuthDeg: 0, heightGain: 1 },
+  { azimuthDeg: 0, heightGain: 1.45 },
+  { azimuthDeg: 25, heightGain: 1 },
+  { azimuthDeg: -25, heightGain: 1 },
+  { azimuthDeg: 25, heightGain: 1.45 },
+  { azimuthDeg: -25, heightGain: 1.45 },
+  { azimuthDeg: 55, heightGain: 1.2 },
+  { azimuthDeg: -55, heightGain: 1.2 },
+  { azimuthDeg: 90, heightGain: 1.2 },
+  { azimuthDeg: -90, heightGain: 1.2 },
+  { azimuthDeg: 125, heightGain: 1.3 },
+  { azimuthDeg: -125, heightGain: 1.3 },
+  { azimuthDeg: 180, heightGain: 1.3 },
+  { azimuthDeg: 0, heightGain: 2.2 },
+  { azimuthDeg: 45, heightGain: 2.2 },
+  { azimuthDeg: -45, heightGain: 2.2 },
+  { azimuthDeg: 180, heightGain: 2.2 },
+];
+
+/** Orbit a fitted camera around its own target without changing what it frames. */
+function reorientCamera(camera, offset) {
+  if (offset.azimuthDeg === 0 && offset.heightGain === 1) {
+    return { ...camera, searchOffset: { azimuthDeg: 0, heightGain: 1 } };
+  }
+  const [targetX, targetY, targetZ] = camera.target;
+  const dx = camera.eye[0] - targetX;
+  const dz = camera.eye[2] - targetZ;
+  const radians = (offset.azimuthDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    ...camera,
+    basis: `${camera.basis}+occlusion-search`,
+    searchOffset: { ...offset },
+    eye: [
+      targetX + dx * cos - dz * sin,
+      targetY + (camera.eye[1] - targetY) * offset.heightGain,
+      targetZ + dx * sin + dz * cos,
+    ],
+  };
+}
 const maps = args.has('all-maps')
   ? MAPS
   : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
@@ -488,6 +535,9 @@ async function exportScenario(page) {
     return declared || relation;
   }).map((prop) => prop.id));
 
+  // Sticky across the whole export: an accepted orbit offset is retried first
+  // on the next frame so the clip keeps one stable shot.
+  let cameraOffset = CAMERA_SEARCH_OFFSETS[0];
   const renderTraceFrame = async (selected, file, settleCount, clipCamera = false) => {
     // Stage timings on stderr make a stalled export diagnosable instead of a
     // silent multi-hour hang. They never enter the manifest.
@@ -525,7 +575,7 @@ async function exportScenario(page) {
       .filter((pose) => evidence.metricPair.includes(pose.id))
       .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
     const framingProps = grounded.props.filter((prop) => framingPropIds.has(prop.id));
-    const camera = (clipCamera ? cameraForClip : cameraForIncident)(
+    const baseCamera = (clipCamera ? cameraForClip : cameraForIncident)(
       trace,
       evidence.metricPair,
       selected.index,
@@ -533,12 +583,70 @@ async function exportScenario(page) {
       framingActorIds,
       framingProps,
     );
-    const cameraClearance = cameraActorClearance(
+    const compositionArgs = [
+      [...groundedPoses, ...framingProps],
+      [...framingActorIds, ...framingProps.map((prop) => prop.id)],
+      incident.conflictT,
+      selected.t,
+    ];
+    const describeFailure = (composition) => {
+      const failures = composition.actors
+        .filter((actor) => !actor.inFrame || !actor.sceneryClear)
+        .map((actor) => `${actor.id}(inFrame=${actor.inFrame},sceneryClear=${actor.sceneryClear},blocker=${actor.blockerLayer})`);
+      if (composition.minPairSeparationPx < composition.minimumRequiredSeparationPx) {
+        failures.push(
+          `${composition.closestPair?.join('/')} separation ${composition.minPairSeparationPx.toFixed(1)}px < ${composition.minimumRequiredSeparationPx}px`,
+        );
+      }
+      return failures.join(', ');
+    };
+
+    // The analytic camera solvers pick an azimuth from the incident sightline
+    // alone. On a real city map that direction is frequently occupied by a
+    // building, so a geometrically perfect framing still has no line of sight
+    // and the composition gate correctly rejects it. `--camera-search` orbits
+    // the same fitted camera around its own target until every framing actor
+    // is unobstructed. The offset is sticky across the clip so the shot stays
+    // stable instead of jittering frame to frame.
+    let camera = baseCamera;
+    let cameraClearance = cameraActorClearance(
       camera,
       [...groundedPoses, ...grounded.props],
       [...evidence.actorModels, ...grounded.props],
     );
-    if (cameraClearance.clearanceM < 2) {
+    if (cameraSearch) {
+      const ordered = [cameraOffset, ...CAMERA_SEARCH_OFFSETS.filter(
+        (candidate) => candidate.azimuthDeg !== cameraOffset.azimuthDeg || candidate.heightGain !== cameraOffset.heightGain,
+      )];
+      let accepted = null;
+      let lastComposition = null;
+      for (const candidate of ordered) {
+        const trial = reorientCamera(baseCamera, candidate);
+        const clearance = cameraActorClearance(
+          trial,
+          [...groundedPoses, ...grounded.props],
+          [...evidence.actorModels, ...grounded.props],
+        );
+        if (clearance.clearanceM < 2) continue;
+        await setView(page, trial.eye, trial.target, trial.fovDeg);
+        const trialComposition = await inspectIncidentComposition(page, ...compositionArgs);
+        lastComposition = trialComposition;
+        if (trialComposition.passed) {
+          accepted = { camera: trial, clearance, candidate };
+          break;
+        }
+      }
+      if (!accepted) {
+        throw new Error(
+          `incident composition failed at t=${selected.t} for every searched camera: ${
+            lastComposition ? describeFailure(lastComposition) : 'no candidate cleared the actor footprints'}`,
+        );
+      }
+      camera = accepted.camera;
+      cameraClearance = accepted.clearance;
+      cameraOffset = accepted.candidate;
+      stage('cameraSearch');
+    } else if (cameraClearance.clearanceM < 2) {
       throw new Error(
         `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
       );
@@ -552,23 +660,9 @@ async function exportScenario(page) {
     stage('streamIdle');
     await settleFrames(page, settleCount);
     stage('settle');
-    const composition = await inspectIncidentComposition(
-      page,
-      [...groundedPoses, ...framingProps],
-      [...framingActorIds, ...framingProps.map((prop) => prop.id)],
-      incident.conflictT,
-      selected.t,
-    );
+    const composition = await inspectIncidentComposition(page, ...compositionArgs);
     if (!composition.passed) {
-      const failures = composition.actors
-        .filter((actor) => !actor.inFrame || !actor.sceneryClear)
-        .map((actor) => `${actor.id}(inFrame=${actor.inFrame},sceneryClear=${actor.sceneryClear},blocker=${actor.blockerLayer})`);
-      if (composition.minPairSeparationPx < composition.minimumRequiredSeparationPx) {
-        failures.push(
-          `${composition.closestPair?.join('/')} separation ${composition.minPairSeparationPx.toFixed(1)}px < ${composition.minimumRequiredSeparationPx}px`,
-        );
-      }
-      throw new Error(`incident composition failed at t=${selected.t}: ${failures.join(', ')}`);
+      throw new Error(`incident composition failed at t=${selected.t}: ${describeFailure(composition)}`);
     }
     stage('composition');
     if (includeUi) {

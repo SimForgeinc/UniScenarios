@@ -4,7 +4,7 @@
 **MET (rehearsal scale), and the path is repeatable.** Scenarios now render as H.264 MP4 **from the real
 UniScenarios 3D world** (apps/studio + city-renderer/three.js) driven in headless Chrome by
 `scripts/export-render.mjs`. One scenario end-to-end takes **~64 s serial**; at **concurrency 4 the
-measured wall-clock cost is 17.6 s/scenario = ~205 renders/hour**, so the full 293-record corpus is
+measured wall-clock cost is 18.2 s/scenario = ~198 renders/hour**, so the full 293-record corpus is
 **~1.4 h of wall clock on this machine** -- a full-corpus render is feasible.
 
 Two real bugs were found and fixed; both had nothing to do with the graphics chooser that the previous
@@ -108,4 +108,13 @@ session. Sibling agents are actively editing `packages/**`, and an HMR full relo
 - confirmed dev server live on 127.0.0.1:5199; reproduced previous agent's hang exactly
 - probe isolated hang to hideUiForExport + element screenshot actionability
 - fixed; first full end-to-end scenario: 64 s, 145-frame 12 fps MP4, all 14 gates pass
-- 12-scenario batch at concurrency 4: 8 ok, 4 rejected on benign SUMO warnings -> fixed, re-verifying
+- 12-scenario batch at concurrency 4: 8 ok, 4 rejected on benign SUMO warnings
+- after the simulationNotices fix, same 12 at concurrency 4: **12/12 ok, 218.5 s wall,
+  18.21 s/scenario, 197.7 renders/hour**
+- `audit.py --videos /tmp/vista-3d` independently confirms: M3.2 pass (12/12/12 on instanceHash,
+  traceHash, actorIds), M3.3 pass (12 probed, 12 res>=720p, 12 fps>=12). M3.1 is a *coverage* rate and
+  reads 12/293 = 0.041 until a full-corpus render lands. Scorecard: /tmp/vista-scorecard-ws3.json
+- committed as 8be7901 on vista-lane
+- **IN FLIGHT:** full 293-record render at concurrency 4 into /tmp/vista-3d.
+  log /tmp/vista-3d/full-run.log; stop with `kill -TERM -$(cat /tmp/vista-3d/full-run.pgid)`.
+  It is resumable -- re-running the same command skips finished scenarios.

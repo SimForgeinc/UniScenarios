@@ -96,7 +96,8 @@ def triplet(instance: str) -> tuple[Path, Path, Path]:
 
 # --------------------------------------------------------------------------- render
 def render_one(rec: dict, out_root: Path, url: str, quality: str, fps: int,
-               width: int, height: int, timeout_s: int, force: bool) -> dict:
+               width: int, height: int, timeout_s: int, force: bool,
+               camera_search: bool = True) -> dict:
     instance, trace, result = triplet(rec["instance"])
     scenario_out = out_root / rec["scenarioId"]
     manifest_file = scenario_out / "manifest.json"
@@ -142,6 +143,10 @@ def render_one(rec: dict, out_root: Path, url: str, quality: str, fps: int,
         "--quality", quality,
         "--pin-page",
         "--progress",
+        # The analytic camera solvers aim along the incident sightline, which on
+        # a real city map is often occupied by a building. Without the search a
+        # third of the corpus is (correctly) rejected by the composition gate.
+        *(["--camera-search"] if camera_search else []),
     ]
     started = time.time()
     with log_file.open("w") as log:
@@ -255,6 +260,9 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--timeout", type=int, default=900, help="per-scenario exporter timeout (s)")
     ap.add_argument("--force", action="store_true", help="re-render even if manifest.json exists")
+    ap.add_argument("--no-camera-search", dest="camera_search", action="store_false",
+                    help="disable the occlusion-aware camera orbit search (on by default)")
+    ap.set_defaults(camera_search=True)
     args = ap.parse_args()
 
     if args.instance:
@@ -278,13 +286,14 @@ def main() -> int:
         "fps": args.fps,
         "viewport": {"width": args.width, "height": args.height},
         "concurrency": args.concurrency,
+        "cameraSearch": args.camera_search,
     }
     started = time.time()
     done = 0
     with ThreadPoolExecutor(max_workers=args.concurrency) as pool:
         futures = {
             pool.submit(render_one, rec, args.out, args.url, args.quality, args.fps,
-                        args.width, args.height, args.timeout, args.force): rec
+                        args.width, args.height, args.timeout, args.force, args.camera_search): rec
             for rec in records
         }
         for future in as_completed(futures):
