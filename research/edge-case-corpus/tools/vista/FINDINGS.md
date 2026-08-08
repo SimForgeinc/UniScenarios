@@ -1493,3 +1493,9 @@ The fix is NOT to raise `choreography.warmupSeconds`: the engine integrates the 
 `t = -warmupSeconds`, so that also advances the ego and the authored challenger along their routes and
 destroys the arrival-trigger timing the conflict depends on. It needs a settle that advances only the
 generated population. Handed to WS-2b.
+
+### M2.4 determinism: PASS, and checked against the trap
+Same seed twice: **4/4 identical trace digests** with `--ambient moderate`. A determinism test that
+only checks "same seed twice" cannot distinguish a working seed from an ignored one, so I also ran a
+**different** seed: **4/4 digests differ**. The seed genuinely drives ambient generation, and the
+determinism is real rather than an artifact of a constant population.
