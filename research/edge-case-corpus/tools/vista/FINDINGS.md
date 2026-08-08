@@ -1387,3 +1387,41 @@ loud rejection, and the repair was to make the scenario true rather than to weak
 
 WS-4 is now **4 of 4 measures met** (M4.1 diagnosis, M4.2 RoadRunner handoff, M4.3 authored signals,
 M4.4 gate clause C6).
+
+---
+
+## 32. Parent audit of WS-2's engine changes: equivalence proved, not asserted
+
+WS-2 modified six sim-engine files including `trace/metrics.ts` and `trace/monitored-pairs.ts` — the
+code that decides *which two bodies every criticality number describes*. This is the single highest-risk
+change in the project: get it wrong and every scenario's physics silently starts measuring the wrong
+pair, which is exactly the M2.5 hazard.
+
+### The design (and why it is right)
+Ambient actors are excluded from episode criticality pairs, but explicitly NOT from:
+- **collision detection, which stays global** — so an ambient body the ego actually hits still fails
+  the clip rather than vanishing from it;
+- **physics and control** — the ego really does follow, yield to, and queue behind ambient traffic;
+- **an authored occlusion/monitor pair** — declared intent still wins.
+
+The new branch sits *below* explicit-monitor and *above* the articulated-static escape hatch, so a
+generated actor can never become the subject of a criticality metric while an authored monitor
+survives.
+
+### The equivalence claim, checked two ways
+The code claims that with an empty ambient set the policy is byte-for-byte v1. **By inspection** the
+guard is `ambient !== undefined && ambient.size > 0 && (...)`, which short-circuits to false when the
+set is absent or empty, so control flows exactly as before. **By measurement**, I re-simulated eight
+delivered scenarios spanning eight archetypes through the modified engine and compared against their
+stored traces:
+
+**8 of 8 byte-identical trace digests, 8 of 8 identical `minTTC`.**
+
+Authored-only scenarios are unaffected. The physical-validity constraint holds.
+
+### Two incidental facts worth keeping
+- The CLI runs from TypeScript source, not a build artifact, so an agent's edit takes effect on the
+  next invocation with no build step. Convenient, and a hazard: a half-finished edit is live
+  immediately, which is why equivalence has to be re-checked rather than assumed stable.
+- `uniscenarios simulate --trace out.json` writes **gzip** regardless of the `.json` suffix. Reading it
+  with a plain `json.load` fails with a UnicodeDecodeError on byte 0x8b. Use `gzip.open`.
