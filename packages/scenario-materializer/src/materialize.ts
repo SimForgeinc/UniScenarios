@@ -354,6 +354,18 @@ export interface InitialInteractionOutcome {
   readonly basis: 'folded_initial_state';
 }
 
+/**
+ * How much bigger the settle cohort is than the placed population.
+ *
+ * A settled car travels `cruise x settleSeconds` — 260 m for 13 m/s over 20 s —
+ * so the cars standing near the ego at t=0 are the ones that spawned that far
+ * upstream, not the ones that spawned next to it. Selecting only the target
+ * count and then settling it drove the measured median within 60 m of the ego
+ * from 5 to 0. Four times the budget covers the upstream ring inside the
+ * profile's own selection radius.
+ */
+const AMBIENT_SETTLE_COHORT_MULTIPLIER = 4;
+
 export interface MaterializeResult {
   readonly input: SimScenarioInput;
   readonly manifest: InstanceManifest;
@@ -3746,11 +3758,16 @@ class Materializer {
     const ambientProfile = options.ambient;
     const ambientSettleSeconds = options.ambientSettleSeconds ?? 0;
     if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
+      const resolvedAmbient = resolveAmbientTrafficProfile(ambientProfile);
       const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile, {
         // Route runway has to cover the settle as well, or a car that spends
         // `settleSeconds` driving reaches the end of its route and despawns
         // before the clip it was generated for even starts.
         extraTravelSeconds: ambientSettleSeconds,
+        // With a settle the placed population is a COHORT, not the answer: it is
+        // settled and then re-selected against the positions it actually holds
+        // at t=0. Without a settle the multiplier is 1 and nothing changes.
+        ...(ambientSettleSeconds > 0 ? { targetMultiplier: AMBIENT_SETTLE_COHORT_MULTIPLIER } : {}),
       });
       input = applied.input;
       ambientProvenance = applied.provenance;
@@ -3758,12 +3775,24 @@ class Materializer {
       // already in motion — with standing queues where the network implies them
       // — at t=0, while every authored actor's initial state is untouched.
       if (ambientSettleSeconds > 0) {
+        const cohortIds = ambientProvenance.actors.map((a) => a.id);
         const settled = settleAmbientTraffic(input, this.bundle.graph, {
           settleSeconds: ambientSettleSeconds,
-          ambientActorIds: ambientProvenance.actors.map((a) => a.id),
+          ambientActorIds: cohortIds,
+          keep: Math.ceil(cohortIds.length / AMBIENT_SETTLE_COHORT_MULTIPLIER),
+          exclusionRadiusM: resolvedAmbient.exclusionRadiusM,
         });
         input = settled.input;
         ambientSettleProvenance = settled.provenance;
+        if (ambientSettleProvenance !== null) {
+          // The manifest must describe the population the clip records, not the
+          // cohort that was settled to produce it.
+          const kept = new Set(input.actors.map((a) => a.id));
+          ambientProvenance = {
+            ...ambientProvenance,
+            actors: ambientProvenance.actors.filter((a) => kept.has(a.id)),
+          };
+        }
       }
     }
 

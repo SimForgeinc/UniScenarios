@@ -98,6 +98,19 @@ export interface AmbientTrafficOptions {
    * it was generated for begins.
    */
   readonly extraTravelSeconds?: number;
+  /**
+   * Multiply the placement target to build an oversized SETTLE COHORT.
+   *
+   * With an ambient warm-up the population that matters is the one standing on
+   * the road at `t = 0`, not the one that was spawned `settleSeconds` earlier:
+   * measured on `c15g` with a 20 s settle, selecting the 32 candidates nearest
+   * the authored choreography and then settling them drove the median count
+   * within 60 m of the ego from 5 to 0, because 20 s at 13 m/s is 260 m of
+   * travel. The caller therefore selects a larger cohort here, settles it, and
+   * re-applies the ranking, the reservations and the budget to the settled
+   * positions. `1` (the default) is the un-settled behaviour exactly.
+   */
+  readonly targetMultiplier?: number;
 }
 
 export interface AmbientScreeningReason {
@@ -337,7 +350,9 @@ export function materializeAmbientCandidatePool(
   const eligibleLaneKm = roadLanes
     .filter((lane) => eligibleRsls.has(lane.rsl))
     .reduce((sum, lane) => sum + graph.lengthOf(lane.rsl), 0) / 1000;
-  const target = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
+  const placementTarget = Math.min(profile.maxActors, Math.round(eligibleLaneKm * profile.densityVehiclesPerKm));
+  const targetMultiplier = Math.max(1, Math.round(options.targetMultiplier ?? 1));
+  const target = placementTarget * targetMultiplier;
   const reservations: AmbientReservation[] = [
     ...base.actors.map((actor) => ({
       x: actor.initial.pose.x,

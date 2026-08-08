@@ -66,6 +66,29 @@ export interface AmbientSettleOptions {
   readonly ambientActorIds?: readonly string[];
   /** Integration step; defaults to the scenario `dt`. */
   readonly dt?: number;
+  /**
+   * POST-SETTLE SELECTION BUDGET.
+   *
+   * The generated population that matters is the one on the road at `t = 0`,
+   * not the one spawned `settleSeconds` earlier. Measured on `c15g` with a 20 s
+   * settle and no post-selection, the median number of ambient vehicles within
+   * 60 m of the ego fell from 5 to 0: the population had simply driven 260 m
+   * down the road. So the caller hands in an oversized COHORT and this pass
+   * re-applies the near-authored ranking and the actor budget to the SETTLED
+   * positions.
+   *
+   * Absent means "keep everything that survived", i.e. cohort == population.
+   */
+  readonly keep?: number;
+  /**
+   * Clearance the authored actors and props keep at `t = 0`.
+   *
+   * `AmbientTrafficOptions` enforces this at SPAWN. After a settle that is the
+   * wrong instant: a generated car that spawned clear can be sitting on the
+   * ego's spawn point twenty seconds later. Enforcing it here re-establishes it
+   * at the instant the recording actually begins.
+   */
+  readonly exclusionRadiusM?: number;
 }
 
 export interface AmbientSettleProvenance {
@@ -74,8 +97,16 @@ export interface AmbientSettleProvenance {
   readonly dt: number;
   /** Actors that entered the settle sim. */
   readonly settledActorIds: readonly string[];
+  /** Size of the cohort that entered the settle sim. */
+  readonly cohortSize: number;
+  /** Post-settle selection budget, or `null` when everything was kept. */
+  readonly keep: number | null;
   /** Settled actors that had left the world by the end of the settle. */
   readonly droppedActorIds: readonly string[];
+  /** Survivors dropped because they ended inside an authored clearance. */
+  readonly authoredClearanceRejects: number;
+  /** Survivors dropped because the post-settle budget was already full. */
+  readonly budgetRejects: number;
   /** Settled actors whose final state could not be read back. */
   readonly unresolvedActorIds: readonly string[];
   readonly signalProgramsShifted: number;
@@ -141,24 +172,28 @@ export function settleAmbientTraffic(
     return { input: base, provenance: null };
   }
 
+  const populationIds = new Set(population.map((actor) => actor.id));
+  const authored = base.actors.filter((actor) => !populationIds.has(actor.id));
   const dropped: string[] = [];
   const unresolved: string[] = [];
-  const settledById = new Map<string, SimActor>();
-  const finalSpeeds: number[] = [];
+  const survivors: Array<{ actor: SimActor; nearestAuthoredM: number; speedMps: number }> = [];
+  // Rank against the authored choreography, exactly as spawn-time selection
+  // does: the budget has to be spent where the ego and the camera can see it.
+  const focusPoses = (authored.some((actor) => !actor.static)
+    ? authored.filter((actor) => !actor.static)
+    : authored).map((actor) => actor.initial.pose);
+
   for (const actor of population) {
     const track = ticks.actors[actor.id];
     if (!track) { unresolved.push(actor.id); continue; }
-    // The last tick the actor was actually in the world. An actor that ran off
-    // the end of its route despawns; it is dropped rather than teleported.
-    let i = last;
-    while (i >= 0 && track.present[i] !== 1) i--;
-    if (i < 0) { dropped.push(actor.id); continue; }
-    if (i !== last) { dropped.push(actor.id); continue; }
+    // An actor that ran off the end of its route despawns during the settle. It
+    // is dropped rather than teleported back: it has physically left the scene.
+    if (track.present[last] !== 1) { dropped.push(actor.id); continue; }
 
-    const x = track.x[i];
-    const y = track.y[i];
-    const headingRad = track.headingRad[i];
-    const speedMps = track.speedMps[i];
+    const x = track.x[last];
+    const y = track.y[last];
+    const headingRad = track.headingRad[last];
+    const speedMps = track.speedMps[last];
     if (x === undefined || y === undefined || headingRad === undefined || speedMps === undefined) {
       unresolved.push(actor.id);
       continue;
@@ -170,24 +205,75 @@ export function settleAmbientTraffic(
         ...actor.initial,
         pose: { ...actor.initial.pose, x: pose.x, z: pose.z, headingRad },
         speedMps: Math.max(0, speedMps),
-        laneRef: settledLaneRef(base, graph, actor, track.laneRsl[i] ?? null, track.s[i], track.lateralOffsetM[i]),
+        laneRef: settledLaneRef(base, graph, actor, track.laneRsl[last] ?? null, track.s[last], track.lateralOffsetM[last]),
       },
     };
-    settledById.set(actor.id, settled);
-    finalSpeeds.push(Math.max(0, speedMps));
+    let nearest = Number.POSITIVE_INFINITY;
+    for (const point of focusPoses) {
+      const d = Math.hypot(pose.x - point.x, pose.z - point.z);
+      if (d < nearest) nearest = d;
+    }
+    survivors.push({ actor: settled, nearestAuthoredM: nearest, speedMps: Math.max(0, speedMps) });
   }
 
-  if (settledById.size === 0) {
+  // Total order, tie-broken on the stable actor id, so the selection is
+  // deterministic for a given seed.
+  survivors.sort((a, b) =>
+    a.nearestAuthoredM - b.nearestAuthoredM ||
+    (a.actor.id < b.actor.id ? -1 : a.actor.id > b.actor.id ? 1 : 0));
+
+  // Re-establish, at t = 0, the two spawn-time rules the settle invalidated:
+  // authored clearance and the actor budget.
+  const exclusionRadiusM = Math.max(0, options.exclusionRadiusM ?? 0);
+  const occupied: Array<{ x: number; z: number; radiusM: number }> = exclusionRadiusM === 0 ? [] : [
+    ...authored.map((actor) => ({
+      x: actor.initial.pose.x,
+      z: actor.initial.pose.z,
+      radiusM: exclusionRadiusM + Math.hypot(actor.dims.l, actor.dims.w) * 0.5,
+    })),
+    ...base.props.filter((prop) => prop.collidable && prop.attachment === undefined).map((prop) => ({
+      x: prop.pose.x,
+      z: prop.pose.z,
+      radiusM: exclusionRadiusM + Math.hypot(prop.dims.l * prop.scale, prop.dims.w * prop.scale) * 0.5,
+    })),
+  ];
+  const keep = options.keep === undefined ? null : Math.max(0, Math.round(options.keep));
+  const selected: SimActor[] = [];
+  const finalSpeeds: number[] = [];
+  let authoredClearanceRejects = 0;
+  let budgetRejects = 0;
+  for (const survivor of survivors) {
+    if (keep !== null && selected.length >= keep) { budgetRejects++; continue; }
+    const { x, z } = survivor.actor.initial.pose;
+    const footprintRadiusM = Math.hypot(survivor.actor.dims.l, survivor.actor.dims.w) * 0.5;
+    if (occupied.some((area) => Math.hypot(x - area.x, z - area.z) < area.radiusM + footprintRadiusM)) {
+      authoredClearanceRejects++;
+      continue;
+    }
+    // Bodies that ended the settle interpenetrating are separated the same way
+    // spawn selection separates them: the nearer-to-authored one wins the space.
+    if (selected.some((other) => Math.hypot(x - other.initial.pose.x, z - other.initial.pose.z)
+      < footprintRadiusM + Math.hypot(other.dims.l, other.dims.w) * 0.5)) {
+      authoredClearanceRejects++;
+      continue;
+    }
+    selected.push(survivor.actor);
+    finalSpeeds.push(survivor.speedMps);
+  }
+
+  if (selected.length === 0) {
     warnings.push('no ambient actor survived the settle; the population is unchanged');
     return { input: base, provenance: null };
   }
 
-  // Order is preserved, and an actor that despawned during the settle is
-  // removed rather than restarted: it has physically left the scene.
-  const droppedSet = new Set(dropped);
-  const actors = base.actors
-    .filter((actor) => !droppedSet.has(actor.id))
-    .map((actor) => settledById.get(actor.id) ?? actor);
+  // Authored actors keep their position AND their order; the settled population
+  // is appended in selection order, exactly as `applyAmbientTraffic` appends it.
+  const selectedIds = new Set(selected.map((actor) => actor.id));
+  const settledById = new Map(selected.map((actor) => [actor.id, actor] as const));
+  const actors = [
+    ...base.actors.filter((actor) => !populationIds.has(actor.id)),
+    ...base.actors.filter((actor) => selectedIds.has(actor.id)).map((actor) => settledById.get(actor.id)!),
+  ];
   const input = normalizeSimScenarioInput({ ...base, actors });
 
   const sorted = [...finalSpeeds].sort((a, b) => a - b);
@@ -210,7 +296,11 @@ export function settleAmbientTraffic(
       settleSeconds,
       dt,
       settledActorIds: [...settledById.keys()].sort(),
+      cohortSize: population.length,
+      keep,
       droppedActorIds: [...dropped].sort(),
+      authoredClearanceRejects,
+      budgetRejects,
       unresolvedActorIds: [...unresolved].sort(),
       signalProgramsShifted: base.signalPrograms.length,
       finalSpeedMps: median === null ? null : {
