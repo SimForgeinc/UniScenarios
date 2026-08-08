@@ -136,6 +136,11 @@ if __name__ == '__main__':
     ap.add_argument('--per-archetype', type=int, default=4)
     ap.add_argument('--workers', type=int, default=5)
     ap.add_argument('--seed', type=int, default=17)
+    ap.add_argument('--shuffle-briefs', action='store_true',
+                    help='NEGATIVE CONTROL: judge each scene against a brief from a DIFFERENT '
+                         'archetype. A useful instrument must say "implausible" far more often here '
+                         'than on real pairs; if it does not, it is not discriminating and its '
+                         'positive rate means nothing.')
     a = ap.parse_args()
     recs = []
     for f in a.dataset:
@@ -149,6 +154,14 @@ if __name__ == '__main__':
         rs = by[k][:]
         rng.shuffle(rs)
         sample += rs[:a.per_archetype]
+    if a.shuffle_briefs:
+        pool = sorted({(r['archetypeId'], r['brief']) for r in recs})
+        shuffled = []
+        for r in sample:
+            alt = [b for k, b in pool if k != r['archetypeId']]
+            r = dict(r, brief=rng.choice(alt), _trueArchetype=r['archetypeId'])
+            shuffled.append(r)
+        sample = shuffled
     os.makedirs(a.out, exist_ok=True)
     with ThreadPoolExecutor(max_workers=a.workers) as ex:
         out = [x for x in ex.map(_one, [(r, a.out) for r in sample]) if x]

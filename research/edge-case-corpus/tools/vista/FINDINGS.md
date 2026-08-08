@@ -1183,3 +1183,61 @@ scenarios have no lights. **My scenarios have no lights because they never asked
 
 This is the sixth instance of the recurring pattern: the capability existed and the default authoring
 path never reached it.
+
+---
+
+## 28. WS-1 baseline: locations, measured two independent ways
+
+Two instruments, built independently, agree.
+
+### Instrument A: blind VLM plausibility critic (`loccritic.py`, M1.4)
+Renders a WIDE-AREA context view (95 m span, with map-intel crosswalks, bus stops and building
+entrances overlaid) and asks one question only: *is this a sensible PLACE for the situation in the
+brief?* It never sees the archetype id, the site score, or the match verdict.
+
+**Baseline 45/78 = 0.577.** Negative control, judging each scene against a brief from a DIFFERENT
+archetype: **30/78 = 0.385**. Discrimination +19.2 points, z=2.40, p<0.05 — real, but noisy, and I
+should not over-read a single archetype's score.
+
+| archetype | plausible |
+|---|---|
+| c15g-red-light-runner, c4g-circulating, c9g-pedestrian-behind-bus, low-friction-stop-slide | 6/6 |
+| blind-crest-queue, c1g-cut-in-turn | 5/6, 5/5 |
+| c11g-wrong-way-aisle, child-from-parked-cars | 4/6 |
+| c11g-indicator-mislead | 1/6 |
+| **c11g-hidden-child, c12g-red-pedestrian-phase, parked-vans-narrow-road, c12g-suv-ignores-paddle, rideshare-door-pedestrian** | **0** |
+
+The critic's stated reasons are specific and repeatable: school briefs staged at *"a large isolated
+interchange with no buildings, entrances, or visible school surroundings"*; parking briefs at *"a
+large multilane interchange with ramps and no parking lot"*.
+
+### Instrument B: fact survey (`newcaps/DIAG-locations.md`)
+Independently, and without seeing the critic:
+- **Zero roundabouts exist on any of the five maps** (246 junctions: 179 uncontrolled, 41 minor_stop,
+  23 signalized, 3 all_way_stop). `c4g-circulating-sudden-stop` is 6/6 `exact` regardless. 24
+  delivered scenarios of a roundabout conflict with no roundabout anywhere.
+- `blind-crest-queue` asks for feature kind `crest`, which is **not in the matcher's
+  `FeatureKindSchema`**. `template validate` says *"feature kind \"crest\" is not matchable; feature
+  dropped"* — as a NOTE — then proceeds. All 5 sites score an identical 0.89 and sit 142-272 m from
+  the nearest real crest; 2 are on a map with no crest at all.
+- All four parking archetypes have their parking predicates **deleted by the adapter** with the note
+  *"the matcher has no parking-zone predicates"*. 0 of 20 sites have parking adjacent. One site is a
+  **1.14 m segment**; another a **105 kph 3-lane one-way**.
+- `c9g-pedestrian-behind-bus` binds a parked-car occluder rather than any of the 14 mapped bus stops:
+  0/7 sites, nearest stop 34-194 m.
+- **275 occlusion zones carry an already-computed `supported_scenario_templates` whitelist that
+  nothing reads** — `child_dartout_from_parked_cars` on 267 of them. A ready-made answer to one of my
+  worst archetypes, sitting unused in the index.
+
+### The two instruments agree on which archetypes are broken
+Every archetype the VLM scored 0 is one the fact survey shows has a deleted or vacuous predicate.
+That agreement is the reason I trust a p<0.05 instrument at all.
+
+### Why `--min-score 1.0` is the wrong lever
+It keeps only 5 of 15 archetypes alive — 7 have zero exact sites map-wide — and for 3 of the 5
+survivors it changes nothing semantically (exact-only still leaves c15g 33/57 uncontrolled). **Score
+1.00 / verdict `exact` means "every clause bound", and a clause listing all four control types as
+`preferred` binds everywhere.** An exact match against a vacuous requirement is vacuous.
+
+This is the same lesson as s27, one layer out: I keep reading a conformance verdict as a statement
+about the world.

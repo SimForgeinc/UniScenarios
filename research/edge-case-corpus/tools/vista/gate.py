@@ -5,11 +5,15 @@ C2 not a spawn artifact:       closest approach at t > warmupSeconds + 0.5
 C3 genuine proximity:          TRUE oriented-bounding-box clearance <= 5.0 m
 C4 genuine demand:             requiredDecelMax(ego) >= 1.5 OR minTTC <= 3.0
 C5 evaluate:                   verdict=accept AND band=critical AND 0 collisions AND no never-fired trigger
+C6 signal state is real:       if the BRIEF names a traffic signal, ticks.signals must be non-empty
 cells:                         >= 2 maps AND >= 3 distinct sites
 
-NEVER loosened. `minDistance` from the engine is a circumscribed-circle proxy and is not used here.
+NEVER loosened. C6 was ADDED (2026-08-08, WS-4) as a strict TIGHTENING: it can only ever turn a
+passing cell into a failing one, never the reverse, and it is inert for every brief that does not
+name a signal (so the gold `expA-child-dartout-two-cars` regression is untouched: 3/3 frozen, 3/3 HQ
+before and after). `minDistance` from the engine is a circumscribed-circle proxy and is not used here.
 """
-import gzip, json, math
+import gzip, json, math, os, re
 
 C1_SPEED, C1_DIST = 2.0, 10.0
 C2_MARGIN = 0.5
