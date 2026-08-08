@@ -85,6 +85,8 @@ import {
   toSceneXZ,
   applyAmbientTraffic,
   resolveAmbientTrafficProfile,
+  settleAmbientTraffic,
+  type AmbientSettleProvenance,
   type AmbientTrafficProfile,
   type AmbientTrafficProvenance,
   type ArrivalSolution,
@@ -331,6 +333,11 @@ export interface InstanceManifest {
    * byte-identical to the ones written before this existed.
    */
   readonly ambient?: AmbientTrafficProvenance;
+  /**
+   * Provenance of the ambient-only warm-up. Absent when no settle ran, so a
+   * manifest written without this feature is byte-identical.
+   */
+  readonly ambientSettle?: AmbientSettleProvenance;
   /** Commands already accepted into the concrete t=0 world rather than left
    * for the runtime trigger evaluator. Optional for manifest-v1 compatibility. */
   readonly initialInteractionOutcomes?: InitialInteractionOutcome[];
@@ -370,6 +377,19 @@ export interface MaterializeOptions {
    * `inputHash` is taken, so the instance/trace evidence join still holds.
    */
   readonly ambient?: AmbientTrafficProfile | undefined;
+  /**
+   * AMBIENT WARM-UP. Seconds of ambient-ONLY integration applied before `t = 0`.
+   *
+   * `choreography.warmupSeconds` cannot be used for this: the engine integrates
+   * the whole scene from `t = -warmupSeconds`, so raising it also advances the
+   * ego and the authored challenger and destroys the authored conflict timing.
+   * `settleAmbientTraffic` instead runs a throw-away simulation containing only
+   * the generated population and folds its final state back into those actors'
+   * initial state, leaving every authored actor's bytes untouched.
+   *
+   * `0` or absent reproduces the un-settled behaviour exactly.
+   */
+  readonly ambientSettleSeconds?: number | undefined;
 }
 
 export interface CatalogVariantApplication {
@@ -3722,11 +3742,29 @@ class Materializer {
     // so the instance, the trace and the evidence check all describe the same
     // populated world.
     let ambientProvenance: AmbientTrafficProvenance | null = null;
+    let ambientSettleProvenance: AmbientSettleProvenance | null = null;
     const ambientProfile = options.ambient;
+    const ambientSettleSeconds = options.ambientSettleSeconds ?? 0;
     if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
-      const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile);
+      const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile, {
+        // Route runway has to cover the settle as well, or a car that spends
+        // `settleSeconds` driving reaches the end of its route and despawns
+        // before the clip it was generated for even starts.
+        extraTravelSeconds: ambientSettleSeconds,
+      });
       input = applied.input;
       ambientProvenance = applied.provenance;
+      // AMBIENT WARM-UP. Advances ONLY the generated population, so the road is
+      // already in motion — with standing queues where the network implies them
+      // — at t=0, while every authored actor's initial state is untouched.
+      if (ambientSettleSeconds > 0) {
+        const settled = settleAmbientTraffic(input, this.bundle.graph, {
+          settleSeconds: ambientSettleSeconds,
+          ambientActorIds: ambientProvenance.actors.map((a) => a.id),
+        });
+        input = settled.input;
+        ambientSettleProvenance = settled.provenance;
+      }
     }
 
     const key: ReplayKey = {
@@ -3744,7 +3782,13 @@ class Materializer {
       // Part of the replay key, not decoration: two cells with the same seed
       // and different ambient populations are different worlds, and a resumable
       // batch that reused one for the other would be serving a stale answer.
-      ambientProfileHash: ambientProvenance?.profileHash ?? 'none',
+      // The settle length is part of the population's identity for the same
+      // reason: the same seed settled for 0 s and for 20 s are different worlds.
+      ambientProfileHash: ambientProvenance === null
+        ? 'none'
+        : ambientSettleSeconds > 0
+          ? `${ambientProvenance.profileHash}+settle${ambientSettleSeconds}`
+          : ambientProvenance.profileHash,
     };
 
     const manifest: InstanceManifest = {
@@ -3790,6 +3834,7 @@ class Materializer {
       feasible,
       issues,
       ...(ambientProvenance === null ? {} : { ambient: ambientProvenance }),
+      ...(ambientSettleProvenance === null ? {} : { ambientSettle: ambientSettleProvenance }),
       initialInteractionOutcomes: [...this.initialInteractionOutcomes],
       notes: [...this.notes],
     };

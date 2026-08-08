@@ -84,6 +84,8 @@ export interface CellOptions extends CellCoords {
    * this object crosses a `worker_threads` boundary.
    */
   readonly ambient?: AmbientTrafficProfile | undefined;
+  /** Seconds of ambient-ONLY warm-up applied before `t = 0`. */
+  readonly ambientSettleSeconds?: number | undefined;
 }
 
 export interface CellResult extends CellCoords {
@@ -194,6 +196,9 @@ export async function runCell(
       ...(options.seed === undefined ? {} : { seed: options.seed }),
       ...(options.catalogSlot === undefined ? {} : { variant: options.catalogSlot.variant }),
       ...(options.ambient === undefined ? {} : { ambient: options.ambient }),
+      ...(options.ambientSettleSeconds === undefined
+        ? {}
+        : { ambientSettleSeconds: options.ambientSettleSeconds }),
     });
     const instance = {
       kind: 'scenario-instance' as const,

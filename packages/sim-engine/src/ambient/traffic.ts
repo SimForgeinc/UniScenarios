@@ -88,6 +88,16 @@ export interface AmbientTrafficOptions {
    * drives generated traffic at the authored actors.
    */
   readonly allowAuthoredCorridor?: boolean;
+  /**
+   * Extra seconds of downstream route runway every candidate must own, on top
+   * of `warmupSeconds + clipSeconds`.
+   *
+   * Set to the ambient-settle length. The settle advances the generated
+   * population before `t = 0`, so a candidate sized only for the clip runs off
+   * the end of its route during the settle and despawns before the recording
+   * it was generated for begins.
+   */
+  readonly extraTravelSeconds?: number;
 }
 
 export interface AmbientScreeningReason {
@@ -322,6 +332,7 @@ export function materializeAmbientCandidatePool(
       if (laneRef) authoredCorridor.add(laneRef.rsl);
     }
   }
+  const extraTravelSeconds = Math.max(0, options.extraTravelSeconds ?? 0);
   const eligibleRsls = new Set(roadLanes.map((lane) => lane.rsl).filter((rsl) => !authoredCorridor.has(rsl)));
   const eligibleLaneKm = roadLanes
     .filter((lane) => eligibleRsls.has(lane.rsl))
@@ -385,7 +396,7 @@ export function materializeAmbientCandidatePool(
     // of the route is protected. The travel budget is the same figure the
     // downstream-runway check below already uses.
     const travelBudgetM = (candidate.actor.behavior.cruiseSpeedMps ?? candidate.actor.initial.speedMps)
-      * (base.warmupSeconds + base.clipSeconds) * 1.1;
+      * (base.warmupSeconds + base.clipSeconds + extraTravelSeconds) * 1.1;
     let travelledM = 0;
     let entersAuthoredCorridor = false;
     for (const rsl of candidate.routeLaneRsls) {
@@ -407,7 +418,7 @@ export function materializeAmbientCandidatePool(
     const laneRef = candidate.actor.initial.laneRef;
     const startOnRoute = builtRoute.ok && laneRef ? builtRoute.route.sOfLaneStorage(laneRef.rsl, laneRef.s) : null;
     const requiredDownstreamM = (candidate.actor.behavior.cruiseSpeedMps ?? candidate.actor.initial.speedMps)
-      * (base.warmupSeconds + base.clipSeconds) * 1.1;
+      * (base.warmupSeconds + base.clipSeconds + extraTravelSeconds) * 1.1;
     if (!builtRoute.ok || startOnRoute === null || builtRoute.route.lengthM - startOnRoute < requiredDownstreamM) {
       rejectedSpawnCount++;
       continue;

@@ -103,6 +103,41 @@ function filterMode(args: ParsedArgs): EvaluateFilterMode {
 const AMBIENT_PRESETS = ['off', 'light', 'moderate', 'city', 'heavy'] as const;
 
 /**
+ * Default ambient warm-up, seconds.
+ *
+ * Generated traffic spawns at cruise speed, so without a settle the road is
+ * populated but has visibly *just started*: nothing has closed on a leader and
+ * nothing is queued at a stop line. `choreography.warmupSeconds` cannot supply
+ * this because the engine integrates the whole scene from `-warmupSeconds` and
+ * would advance the ego and the authored challenger with it. `--ambient-settle`
+ * runs an ambient-ONLY prologue instead. 20 s is roughly two signal phases,
+ * which is what a standing queue needs; `--ambient-settle 0` restores the
+ * un-settled behaviour exactly.
+ */
+const DEFAULT_AMBIENT_SETTLE_S = 20;
+
+/** `--ambient-settle <seconds>`; only meaningful with `--ambient`. */
+function ambientSettleArg(args: ParsedArgs): number | undefined {
+  const preset = optionalString(args, 'ambient');
+  const settle = optionalNumber(args, 'ambient-settle');
+  if (preset === undefined || preset === 'off') {
+    if (settle !== undefined) {
+      throw new CliError('missing_argument', `--ambient-settle requires --ambient <${AMBIENT_PRESETS.join('|')}>`, {
+        path: '--ambient-settle',
+      });
+    }
+    return undefined;
+  }
+  if (settle === undefined) return DEFAULT_AMBIENT_SETTLE_S;
+  if (!(settle >= 0) || !Number.isFinite(settle) || settle > 300) {
+    throw new CliError('bad_value', '--ambient-settle must be between 0 and 300 seconds', {
+      path: '--ambient-settle',
+    });
+  }
+  return settle;
+}
+
+/**
  * `--ambient <preset>` and its overrides.
  *
  * Returns `undefined` when `--ambient` is absent, which is what keeps the empty
@@ -477,6 +512,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
           'ambient-max-actors',
           'ambient-radius-m',
           'ambient-seed',
+          'ambient-settle',
         ],
       });
       return batch({
@@ -496,6 +532,7 @@ async function dispatch(argv: readonly string[]): Promise<number> {
         trivialTtcS: optionalNumber(args, 'trivial-ttc'),
         force: boolFlag(args, 'force'),
         ...(ambientProfileArg(args) === undefined ? {} : { ambient: ambientProfileArg(args) }),
+        ...(ambientSettleArg(args) === undefined ? {} : { ambientSettleSeconds: ambientSettleArg(args) }),
         pretty: boolFlag(args, 'pretty'),
       });
     }

@@ -57,6 +57,12 @@ export interface BatchOptions {
   readonly pretty: boolean;
   /** Generated background road users; absent leaves the roads empty. */
   readonly ambient?: AmbientTrafficProfile | undefined;
+  /**
+   * AMBIENT WARM-UP: seconds of ambient-only integration before `t = 0`, so the
+   * road is already in motion (and already queued) when the clip starts.
+   * Authored actors are not advanced by it. `0` or absent is the old behaviour.
+   */
+  readonly ambientSettleSeconds?: number | undefined;
 }
 
 interface PlannedCell extends CellOptions {
@@ -78,11 +84,16 @@ export async function batch(options: BatchOptions): Promise<number> {
   // Resolve once so every cell, every worker and the replay key see one
   // canonical profile rather than re-defaulting per cell.
   const ambient = options.ambient === undefined ? undefined : options.ambient;
+  const ambientSettleSeconds = ambient === undefined ? 0 : options.ambientSettleSeconds ?? 0;
   const ambientProfileHash = ambient === undefined
     ? 'none'
     : resolveAmbientTrafficProfile(ambient).preset === 'off'
       ? 'none'
-      : contentHash(resolveAmbientTrafficProfile(ambient));
+      // Must match what `materialize` stamps into the manifest replay key, or a
+      // resumed cell settled for a different length would be served as fresh.
+      : ambientSettleSeconds > 0
+        ? `${contentHash(resolveAmbientTrafficProfile(ambient))}+settle${ambientSettleSeconds}`
+        : contentHash(resolveAmbientTrafficProfile(ambient));
 
   const cells: PlannedCell[] = [];
   const perMapSites: Array<{ mapId: string; sites: number; matcherIndexDigest: string; engineGraphDigest: string }> = [];
@@ -104,6 +115,7 @@ export async function batch(options: BatchOptions): Promise<number> {
           filter: options.filter,
           trivialTtcS: options.trivialTtcS,
           ...(ambient === undefined ? {} : { ambient }),
+          ...(ambientSettleSeconds > 0 ? { ambientSettleSeconds } : {}),
           expectedSeed: cellSeed(tid, pv, site.siteId, draw),
         });
       }
