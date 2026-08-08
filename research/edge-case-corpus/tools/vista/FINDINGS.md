@@ -1241,3 +1241,50 @@ survivors it changes nothing semantically (exact-only still leaves c15g 33/57 un
 
 This is the same lesson as s27, one layer out: I keep reading a conformance verdict as a statement
 about the world.
+
+---
+
+## 29. Full baseline scorecard, measured before any WS-1/2/3 change
+
+`audit.py` computes every mechanically checkable acceptance clause and reports **NOT MEASURED** rather
+than defaulting to a pass when an input is missing. A scorecard that degrades to "ok" when its input is
+absent is worse than no scorecard.
+
+| measure | baseline | target | pass |
+|---|---|---|---|
+| M1.1 place fit (mechanical) | NOT MEASURED (instrument is WS-1b's) | >=0.95 | - |
+| M1.2 delivered scenarios at `exact` sites | **112/293 = 0.382** | >=0.95 | no |
+| M1.3 archetypes with >=4 usable sites | **15/15** | 15/15 | yes |
+| M1.4 blind plausibility critic | **45/78 = 0.577** (neg control 0.385) | >=0.777 | no |
+| M2.2 median ambient within 60 m at t=0 | **0** | >=3 | no |
+| M2.3 queue formation | NOT MEASURED (no ambient actors exist) | >=0.50 | no |
+| M2.5 closest partner is ambient | **0/293** | 0 | yes (vacuously) |
+| M3.1 3D exports | NOT MEASURED (no INDEX.json) | 100% | no |
+| M4.4 briefs claiming an absent signal | **88/293 = 0.300** | 0 | no |
+
+### M2.5 passes only because there is nothing to hijack
+Zero ambient actors means zero chance one of them steals the metric subject. This clause is vacuous
+today and becomes load-bearing the moment WS-2 lands. I am recording it as a *vacuous* pass so that a
+later reader cannot mistake it for evidence the protection works.
+
+### C6 (M4.4) is live and correct on adversarial input
+The new clause rejects a scenario whose brief names a traffic signal when the trace carries none.
+It scores 10/10 on hand-written traps, including the three that matter:
+`"the lead car signals left but turns right"`, `"driver leaves the indicator on"`, and
+`"the bus driver signals to pull out"` are all correctly NOT signal intent. On real data
+`c11g-indicator-mislead` claims 0 signals across 14 scenarios, which is right — it is about a turn
+indicator, not a traffic light.
+
+**C6 rejects 88 of 293 delivered scenarios (30.0%)**: all 67 `c15g-red-light-runner` and 21 of 26
+`c12g-red-pedestrian-phase`. The gold regression is unchanged at 3/3 frozen, 3/3 HQ with C6 armed.
+
+### M1.2 is necessary but NOT sufficient, and I want that on the record
+`c4g-circulating-sudden-stop` has **261 exact sites and 24/24 delivered scenarios at `exact`** — for a
+roundabout scenario, on a map set containing **zero roundabouts**. `c15g-red-light-runner` is 67/67
+`exact` with no signalised junction anywhere in its bound set.
+
+An `exact` verdict certifies that every clause bound. It says nothing about whether the clauses asked
+for the right thing. Chasing M1.2 alone would let me "fix" locations by loosening clauses until
+everything matches exactly, which is the precise opposite of the goal. **M1.1 (declared context
+actually satisfied) and M1.4 (blind plausibility) are the measures with teeth; M1.2 is a guard against
+silent degradation, nothing more.**
