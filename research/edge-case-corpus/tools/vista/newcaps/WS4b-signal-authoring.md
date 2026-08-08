@@ -1,12 +1,28 @@
 # WS-4b — Signal Authoring (M4.3)
 
 ## BOTTOM LINE
-*(provisional — batch running; numbers below marked PENDING are not yet re-verified by me)*
 
-`c15g-red-light-runner` had **no traffic light at all**: 67/67 delivered scenarios carried an empty
-`ticks.signals`, so gate clause C6 rejects every one of them. The fix is entirely in the template —
-a portable `trafficControls` block authoring the ego's own signal head — and it requires no engine
-change, no map change, and no anchor change.
+**M4.3 DONE. `c15g-red-light-runner` now authors its own working traffic light: signal state goes
+from 100/671 simulated cells (14.9%) to 671/671 (100.0%), C6 losses from 571 to 0, and full frozen-gate
+admission from 0 cells to 95 cells (95 HQ, 3 maps x 8 sites, `admitted: True`) — with the physics
+unchanged.** The 95 cells that pass are cell-for-cell the same 95 that already passed C1–C5 in the
+base (symmetric difference 0); 591 of 671 cells have ego travel identical to within 5 cm. So the
+entire 0 → 95 swing is C6 and only C6: the fix repairs a mislabelling, it does not buy passes.
+`c12g-red-pedestrian-phase` was cheap and is fixed the same way: 60/598 → **598/598** signal state,
+C6 losses 538 → 0, ego travel **bit-identical on all 598 cells**. Between them that is the whole
+88-scenario, 30%-of-corpus C6 hole closed at the template layer — no engine change, no map change, no
+anchor change, no gate change. Gold regression re-verified **3/3 frozen, 3/3 HQ, every loss count 0**.
+
+The ego demonstrably obeys the authored phase (flip it to red and median ego travel drops 115.80 m →
+65.90 m, full halts 176 → 402 of 671, gate admission 95 → 0). **The violating van does not and cannot**:
+authored stop lines are bound to `site.frame.lateralLanes[laneOffset]` only, so a head can never be
+placed on the conflicting junction arm the van arrives from — a third limitation on top of the two
+DIAG-signals already named.
+
+`surface.md` rules 25–27 were already written by the previous agent; I verified them against the code,
+replaced rule 25's provisional draws=4 numbers with the full harvest-setting measurements above, and
+added two new bullets to rule 27 (you cannot give the violator a light + how to size phases to the
+clip, with the measured 95-vs-83 tradeoff). Deliverables B, C and D are mine.
 
 ## What was already in place when I picked this up
 - `surface.md` rules **25–27** were already appended (git diff: +93 lines, deletions 1, i.e. purely
@@ -142,10 +158,99 @@ scenario rather than a hidden defect, because the ego genuinely holds a green ri
 seen to have, and the van's `set(rules.obeySignals, false)` is a declaration of intent that the
 engine has no head to apply. C6 asks for signal state, and the scenario now carries it.
 
+## D. c12g-red-pedestrian-phase — YES, cheap, and it is done
+Same recipe, one difference: this template's `conflict-junction` feature is `preferred`, so binding a
+stop line to it would raise `control_feature_unbound` on any site where the feature does not match.
+**Omit `feature` entirely** — `buildTrafficControls` then uses offset 0, i.e. the frame origin
+(`materialize.ts:2345`), which every site has. Phases sized to the 8 s clip (ego spawns at s=-35 at
+45-58 kph and crosses a line at s=-20 about 1 s in):
+
+```json
+"trafficControls": [{
+  "id": "ego-approach-head", "kind": "normal_signal",
+  "pose": {"laneOffset": 0, "s": -20, "tFrac": 0, "headingOffsetRad": 0},
+  "stopLines": [{"pose": {"laneOffset": 0, "s": -20, "tFrac": 0, "headingOffsetRad": 0}}],
+  "phases": [{"indication": "green", "durationS": 6}, {"indication": "yellow", "durationS": 2},
+             {"indication": "red", "durationS": 30}],
+  "offsetS": 0, "loop": false
+}]
+```
+
+Measured, same `--all-maps --draws 20 --max-sites 8` on both arms (598 cells simulated of 800; the
+other 202 are `unknown_site`/`arrival_unconverged` in *both* arms):
+
+| | BASE | TREATMENT |
+|---|---:|---:|
+| cells with signal state | 60 / 598 = 10.0% | **598 / 598 = 100.0%** |
+| C6 losses | 538 | **0** |
+| cells with ego travel identical to base | — | **598 / 598** |
+| phases present in the trace | — | `green → yellow → red` on every cell |
+
+**Physics is bit-identical on every single cell** (median ego travel 37.1795 m in both arms, 598/598
+unchanged), because the line sits 20 m upstream of the conflict and the ego is through it on green
+before the child moves. c12g additionally shows a **complete three-colour cycle** inside the clip.
+
+Applied to `/tmp/vista-gen3-blind/c12g-red-pedestrian-phase-blind/template.json` (same discipline:
+re-read immediately before writing, only `trafficControls` and one `meta.tags` entry touched).
+
+Caveat, stated plainly: this template passes **0** cells of the frozen gate in *both* arms in this
+batch — it is dominated by C5 (`evaluate` verdict, 576 losses) and `Q8_noBodyOverlap` (424), which
+are pre-existing problems of the archetype and are **not** in WS-4b's scope. What the fix buys is
+that its 26 delivered scenarios stop being mislabelled: they no longer fail C6.
+
+## Phase-timing tradeoff, measured (why green 11 / yellow 3 / red 30 and not a full cycle)
+The 13 s clip cannot show all three colours *and* keep the ego on green through the conflict. Both
+variants measured over the same 671 cells:
+
+| c15g phase plan | phases in the trace | gate passes | sites | cells identical to base |
+|---|---|---:|---:|---:|
+| **green 11 / yellow 3 / red 30 (shipped)** | `green → yellow` | **95** | 8 | 591 / 671 |
+| green 9 / yellow 3 / red 30 | `green → yellow → red` | 83 | 7 | 479 / 671 |
+
+Pulling yellow 2 s earlier catches slower egos at the line and costs 12 cells and a site. C6 only
+requires signal *state*, so the shipped plan takes the 12 cells. (c12g's 8 s clip happens to fit a
+whole `green → yellow → red` cycle for free, and does.)
+
+## Limits of authored heads (three, not two)
+1. `stopLines[].connectingLaneRsls` is hard-coded `[]` (`materialize.ts:2379`) — a head stops **every**
+   movement over its line; a protected-turn-only head is inexpressible.
+2. `darkFallback` / `darkDwellS` are parsed (`traffic-controls.ts:64,66`) and never copied onto the
+   `SignalProgram` (`materialize.ts:2380-2390`) — an `off` phase always falls back to all-way-stop
+   with a 1 s dwell. Do not build a blackout scenario on them.
+3. **NEW (this measure).** Every stop line is projected onto `site.frame.lateralLanes[pose.laneOffset]`
+   (`materialize.ts:2352`). Those are the ego corridor's own lanes, so **an authored head cannot be
+   placed on a conflicting junction arm at all** — a violator arriving through a `conflicting_gate`
+   can never be governed by one, whatever its `rules.obeySignals` says. Verified directly: red head,
+   van forced `obeySignals: true`, van travel 96.0 m — identical to `obeySignals: false`.
+
+## Files
+- `/tmp/vista-gen3-blind/c15g-red-light-runner-blind/template.json` — **patched** (trafficControls +
+  one `meta.tags` entry; nothing else. Re-read immediately before write, so a concurrent ANCHOR edit
+  by `ws1b-placefit-2` is preserved. Post-write structural diff confirmed exactly two changed keys.)
+  `template validate --map belmont-research-center` → ok, 0 errors.
+- `/tmp/vista-gen3-blind/c12g-red-pedestrian-phase-blind/template.json` — **patched**, same discipline.
+  (Its `template validate` reports 1 error, `runway_insufficient` on one belmont site — **pre-existing**,
+  identical on the unpatched base.)
+- `newcaps/c15g-red-light-runner-signals.template.json`, `newcaps/c12g-red-pedestrian-phase-signals.template.json`
+  — in-repo copies of the patched templates.
+- `newcaps/ws4b-apply-signal-block.py` — idempotent, concurrency-safe patcher (re-reads before write,
+  mutates only `trafficControls` and `meta.tags`).
+- Batch artefacts: `/tmp/ws4b/batch-{base,treat,redhold,green9,c12-base,c12-treat}/`,
+  probe traces `/tmp/ws4b/t{0,1}.trace.json`, `/tmp/ws4b/t{2-redhold,3-redhold-vanobeys}.trace.json`,
+  probe script `/tmp/ws4b/probe.py`.
+
+## Constraints honoured
+- **No gate clause loosened.** `gate.py` untouched by me (`git diff` shows only the previous agent's
+  C6 addition). Every number above comes from `gate.gate_batch` as-is.
+- **No golden re-baselined.** `/tmp/vista-final-reg/batch-summary.json` re-gated: `passingCells 3/3`,
+  `passingCellsHQ 3/3`, `admitted True`, `admittedHQ True`, all C1–C6 losses 0, all Q1–Q8 losses 0,
+  `signalIntent False` (C6 correctly inert on the gold brief).
+- Nothing written under `/Users/maikyon/...`.
+
 ## Status log
 - [x] Read DIAG-signals.md / HANDOFF-roadrunner-signals.md
-- [x] A. surface.md rules 25-27 (found already written; verified, purely additive)
+- [x] A. surface.md rules 25-27 verified and extended (+28/-5 lines: real harvest-setting numbers in rule 25, two new limit/tradeoff bullets in rule 27)
 - [x] B. applied to /tmp/vista-gen3-blind/c15g-red-light-runner-blind/template.json (trafficControls + one meta tag only; re-read immediately before write)
 - [x] C. batch + gate_batch proof (see above)
-- [ ] D. c12g assessment
-- [ ] gold regression 3/3 frozen, 3/3 HQ
+- [x] D. c12g assessment — fixed, see above
+- [x] gold regression VERIFIED unchanged: `gate.gate_batch('/tmp/vista-final-reg/batch-summary.json')` -> passingCells 3/3, passingCellsHQ 3/3, admitted True, admittedHQ True, all lossCounts 0, all qualityLoss 0, signalIntent False (C6 inert on the gold, as designed)

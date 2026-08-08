@@ -8,9 +8,8 @@
 
 import path from 'node:path';
 
-import { runSimulation, traceDigest, type AmbientTrafficProfile, type SimTrace } from '@uniscenarios/sim-engine';
+import { runSimulation, traceDigest } from '@uniscenarios/sim-engine';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
-import type { InstanceManifest } from '@uniscenarios/scenario-materializer';
 
 import { criticalityBand, filtersFor, type EvaluateFilterMode } from './commands/evaluate.js';
 import { metricsSummary } from './commands/simulate.js';
@@ -79,13 +78,6 @@ export interface CellOptions extends CellCoords {
   readonly exactCatalogSiteResolution?: boolean | undefined;
   /** Explicit catalog eligibility rule. Catalog execution defaults to reject. */
   readonly collisionPolicy?: 'reject' | 'allow' | undefined;
-  /**
-   * Generated background road users. Structured-clone-safe plain data, because
-   * this object crosses a `worker_threads` boundary.
-   */
-  readonly ambient?: AmbientTrafficProfile | undefined;
-  /** Seconds of ambient-ONLY warm-up applied before `t = 0`. */
-  readonly ambientSettleSeconds?: number | undefined;
 }
 
 export interface CellResult extends CellCoords {
@@ -118,22 +110,6 @@ export interface CellResult extends CellCoords {
     readonly collisionPolicy: 'reject' | 'allow';
     readonly eligible: boolean;
     readonly hardFailureCodes: readonly string[];
-  };
-  /**
-   * Generated background traffic actually placed in this cell. Absent when no
-   * ambient profile was requested, so an empty-road result file is unchanged.
-   */
-  readonly ambient?: {
-    readonly actorCount: number;
-    readonly profileHash: string;
-    readonly eligibleLaneKm: number;
-    readonly rejectedSpawnCount: number;
-    readonly authoredCorridorRejects: number;
-    /** Ambient vehicles inside 60 m of the metric subject at t = 0. */
-    readonly nearSubjectAtT0: number;
-    /** Ambient road users at a standstill (< 0.5 m/s) at t = 0. */
-    readonly stoppedAtT0: number;
-    readonly warnings: readonly string[];
   };
 }
 
@@ -195,10 +171,6 @@ export async function runCell(
       drawIndex: options.drawIndex,
       ...(options.seed === undefined ? {} : { seed: options.seed }),
       ...(options.catalogSlot === undefined ? {} : { variant: options.catalogSlot.variant }),
-      ...(options.ambient === undefined ? {} : { ambient: options.ambient }),
-      ...(options.ambientSettleSeconds === undefined
-        ? {}
-        : { ambientSettleSeconds: options.ambientSettleSeconds }),
     });
     const instance = {
       kind: 'scenario-instance' as const,
@@ -308,7 +280,6 @@ export async function runCell(
         eligible: verdict === 'accept',
         hardFailureCodes,
       },
-      ...(manifest.ambient === undefined ? {} : { ambient: ambientCellReport(manifest.ambient, trace) }),
     };
     await writeJsonFile(paths.result, result);
     return result;
@@ -361,51 +332,6 @@ export async function runCell(
     await writeJsonFile(paths.result, result).catch(() => undefined);
     return result;
   }
-}
-
-/**
- * Measure the delivered background population from the TRACE, not from the
- * request. "We asked for 8" is not evidence that 8 cars are on the road at
- * t = 0 within sight of the ego; this reads the recorded tick.
- */
-export const AMBIENT_NEAR_SUBJECT_RADIUS_M = 60;
-const AMBIENT_STANDSTILL_MPS = 0.5;
-
-function ambientCellReport(
-  provenance: NonNullable<InstanceManifest['ambient']>,
-  trace: SimTrace,
-): NonNullable<CellResult['ambient']> {
-  const ambientIds = trace.header.ambientActorIds ?? [];
-  const t0 = trace.ticks.t.findIndex((value) => value >= 0);
-  const subjectId = trace.header.metricSubject ?? 'ego';
-  const subject = trace.ticks.actors[subjectId];
-  let nearSubjectAtT0 = 0;
-  let stoppedAtT0 = 0;
-  if (t0 >= 0) {
-    for (const id of ambientIds) {
-      const track = trace.ticks.actors[id];
-      if (!track || !track.present[t0]) continue;
-      const kind = trace.header.actorMetadata?.[id]?.kind;
-      const isVehicle = kind !== 'pedestrian' && kind !== 'bicycle' && kind !== 'animal';
-      if ((track.speedMps[t0] ?? 0) < AMBIENT_STANDSTILL_MPS) stoppedAtT0 += 1;
-      if (!subject || !subject.present[t0] || !isVehicle) continue;
-      const gap = Math.hypot(
-        (track.x[t0] ?? 0) - (subject.x[t0] ?? 0),
-        (track.y[t0] ?? 0) - (subject.y[t0] ?? 0),
-      );
-      if (gap <= AMBIENT_NEAR_SUBJECT_RADIUS_M) nearSubjectAtT0 += 1;
-    }
-  }
-  return {
-    actorCount: ambientIds.length,
-    profileHash: provenance.profileHash,
-    eligibleLaneKm: provenance.eligibleLaneKm,
-    rejectedSpawnCount: provenance.rejectedSpawnCount,
-    authoredCorridorRejects: provenance.authoredCorridorRejects,
-    nearSubjectAtT0,
-    stoppedAtT0,
-    warnings: [...provenance.warnings],
-  };
 }
 
 export { loadMap };

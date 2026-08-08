@@ -90,10 +90,14 @@ def _verify(a):
 
 
 def _mass(a):
-    ent, sites, draws, outroot = a
+    ent, sites, draws, outroot, ambient = a
     out = f"{outroot}/{ent['briefId']}"
+    # Ambient traffic is opt-in per run. It must be passed HERE, on the batch path, because that is
+    # the only path the corpus pipeline uses -- `debug --provider sumo` runs a separate comparison and
+    # never puts a background road user into ticks.actors.
+    amb = ['--ambient', ambient] if ambient and ambient != 'off' else []
     rc, bd, err = author.run_cli(['batch', ent['template'], '--all-maps', '--draws', str(draws),
-                                  '--max-sites', str(sites), '--out', out, '--concurrency', '2'])
+                                  '--max-sites', str(sites), '--out', out, '--concurrency', '2'] + amb)
     if not bd.get('results'):
         return {**ent, 'cells': 0, 'trainingGrade': 0, 'error': (err or '')[:200]}
     g = gate.gate_batch(out + '/batch-summary.json')
@@ -123,6 +127,8 @@ if __name__ == '__main__':
     ap.add_argument('--limit', type=int, default=2)
     ap.add_argument('--workers', type=int, default=4)
     ap.add_argument('--accept-uncertain', action='store_true')
+    ap.add_argument('--ambient', default='off',
+                    help="ambient traffic preset passed to `batch` (off|light|moderate|city|heavy)")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     recs = [f for r in a.roots for f in sorted(glob.glob(r + '/*/record.json'))]
@@ -145,7 +151,7 @@ if __name__ == '__main__':
     t1 = time.time()
     out_rows = []
     with ProcessPoolExecutor(max_workers=a.workers) as ex:
-        for fu in as_completed([ex.submit(_mass, (v, a.sites, a.draws, a.out)) for v in ok]):
+        for fu in as_completed([ex.submit(_mass, (v, a.sites, a.draws, a.out, a.ambient)) for v in ok]):
             r = fu.result()
             out_rows.append(r)
             print(f"  harvest {r['briefId']:28} {r['trainingGrade']:4} training-grade "

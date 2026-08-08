@@ -83,12 +83,6 @@ import {
   blockingOccluder,
   localFromScene,
   toSceneXZ,
-  applyAmbientTraffic,
-  resolveAmbientTrafficProfile,
-  settleAmbientTraffic,
-  type AmbientSettleProvenance,
-  type AmbientTrafficProfile,
-  type AmbientTrafficProvenance,
   type ArrivalSolution,
   type Condition as SimCondition,
   type Interaction as SimInteraction,
@@ -276,12 +270,6 @@ export interface ReplayKey {
   readonly solverVersion: string;
   readonly paramSeed: string;
   readonly drawIndex: number;
-  /**
-   * Hash of the resolved ambient-traffic profile, or the literal `'none'`.
-   * A cached cell generated with a different background population is not the
-   * same cell.
-   */
-  readonly ambientProfileHash: string;
 }
 
 export interface InstanceManifest {
@@ -327,17 +315,6 @@ export interface InstanceManifest {
   readonly inputHash: string;
   readonly feasible: boolean;
   readonly issues: SimIssue[];
-  /**
-   * Complete provenance of the generated background population. Absent — not
-   * null — when no ambient traffic was requested, so an empty-road manifest is
-   * byte-identical to the ones written before this existed.
-   */
-  readonly ambient?: AmbientTrafficProvenance;
-  /**
-   * Provenance of the ambient-only warm-up. Absent when no settle ran, so a
-   * manifest written without this feature is byte-identical.
-   */
-  readonly ambientSettle?: AmbientSettleProvenance;
   /** Commands already accepted into the concrete t=0 world rather than left
    * for the runtime trigger evaluator. Optional for manifest-v1 compatibility. */
   readonly initialInteractionOutcomes?: InitialInteractionOutcome[];
@@ -354,26 +331,6 @@ export interface InitialInteractionOutcome {
   readonly basis: 'folded_initial_state';
 }
 
-/**
- * Cohort geometry for the ambient warm-up.
- *
- * A settled car travels `cruise x settleSeconds` — 260 m for 13 m/s over 20 s —
- * so the cars standing near the ego at `t = 0` are the ones that spawned that
- * far UPSTREAM, not the ones that spawned next to it. Selecting only the target
- * count inside the profile's radius and then settling it drove the measured
- * median within 60 m of the ego from 5 to 0: the whole population had driven
- * off the site.
- *
- * The cohort is therefore a LARGER neighbourhood at the SAME density, never the
- * same neighbourhood at a higher one — a denser cohort is a traffic jam, and a
- * jam manufactures exactly the standing queues the measure is trying to detect.
- * `MPS` is a nominal urban cruise used only to size the ring; `MULTIPLIER` only
- * lifts `profile.maxActors`, which caps the placed population rather than the
- * cohort.
- */
-const AMBIENT_SETTLE_COHORT_MPS = 15;
-const AMBIENT_SETTLE_COHORT_MULTIPLIER = 4;
-
 export interface MaterializeResult {
   readonly input: SimScenarioInput;
   readonly manifest: InstanceManifest;
@@ -386,30 +343,6 @@ export interface MaterializeOptions {
   /** Operational conditions reserved by a catalog slot. These are applied to
    * the concrete engine input; they are not an evidence-only provenance stamp. */
   readonly variant?: CatalogVariantApplication | undefined;
-  /**
-   * Generated background road users.
-   *
-   * Absent, or `preset: 'off'`, reproduces the previous empty-road behaviour
-   * byte for byte — nothing is added to the input and nothing is added to the
-   * manifest. When present, ambient actors are appended to the concrete input
-   * AFTER the authored feasibility verdict has been decided, so background
-   * traffic can never turn an authored-feasible cell infeasible, and BEFORE
-   * `inputHash` is taken, so the instance/trace evidence join still holds.
-   */
-  readonly ambient?: AmbientTrafficProfile | undefined;
-  /**
-   * AMBIENT WARM-UP. Seconds of ambient-ONLY integration applied before `t = 0`.
-   *
-   * `choreography.warmupSeconds` cannot be used for this: the engine integrates
-   * the whole scene from `t = -warmupSeconds`, so raising it also advances the
-   * ego and the authored challenger and destroys the authored conflict timing.
-   * `settleAmbientTraffic` instead runs a throw-away simulation containing only
-   * the generated population and folds its final state back into those actors'
-   * initial state, leaving every authored actor's bytes untouched.
-   *
-   * `0` or absent reproduces the un-settled behaviour exactly.
-   */
-  readonly ambientSettleSeconds?: number | undefined;
 }
 
 export interface CatalogVariantApplication {
@@ -3754,65 +3687,6 @@ class Materializer {
     const issues = checkFeasibility(input, this.bundle.graph);
     const feasible = !issues.some((i) => i.severity === 'error');
 
-    // --- ambient traffic ----------------------------------------------------
-    // Deliberately LAST. The authored scenario is fully solved, its geometry is
-    // proved and its feasibility verdict is already fixed above, so generated
-    // background traffic cannot alter the authored answer in any direction.
-    // What it does alter, on purpose, is `input` — and therefore `inputHash` —
-    // so the instance, the trace and the evidence check all describe the same
-    // populated world.
-    let ambientProvenance: AmbientTrafficProvenance | null = null;
-    let ambientSettleProvenance: AmbientSettleProvenance | null = null;
-    const ambientProfile = options.ambient;
-    const ambientSettleSeconds = options.ambientSettleSeconds ?? 0;
-    if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
-      const resolvedAmbient = resolveAmbientTrafficProfile(ambientProfile);
-      const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile, {
-        // NOT `extraTravelSeconds: ambientSettleSeconds`. Requiring every
-        // candidate to own `cruise x (warmup + clip + settle)` of downstream
-        // route — 480 m for a 20 s settle — is unaffordable on these maps:
-        // measured on the 15-cell c15g probe it collapsed the cohort from ~32
-        // to 7-43 candidates because the pool ran out of long-enough routes,
-        // and the delivered population fell with it. An actor that does run out
-        // of route during the settle simply despawns and is dropped, which the
-        // oversized cohort already absorbs.
-        // With a settle the placed population is a COHORT, not the answer: it is
-        // settled and then re-selected against the positions it actually holds
-        // at t=0. Without a settle the multiplier is 1 and nothing changes.
-        ...(ambientSettleSeconds > 0
-          ? {
-            targetMultiplier: AMBIENT_SETTLE_COHORT_MULTIPLIER,
-            cohortRadiusBonusM: ambientSettleSeconds * AMBIENT_SETTLE_COHORT_MPS,
-          }
-          : {}),
-      });
-      input = applied.input;
-      ambientProvenance = applied.provenance;
-      // AMBIENT WARM-UP. Advances ONLY the generated population, so the road is
-      // already in motion — with standing queues where the network implies them
-      // — at t=0, while every authored actor's initial state is untouched.
-      if (ambientSettleSeconds > 0) {
-        const cohortIds = ambientProvenance.actors.map((a) => a.id);
-        const settled = settleAmbientTraffic(input, this.bundle.graph, {
-          settleSeconds: ambientSettleSeconds,
-          ambientActorIds: cohortIds,
-          keep: ambientProvenance.placementTarget,
-          exclusionRadiusM: resolvedAmbient.exclusionRadiusM,
-        });
-        input = settled.input;
-        ambientSettleProvenance = settled.provenance;
-        if (ambientSettleProvenance !== null) {
-          // The manifest must describe the population the clip records, not the
-          // cohort that was settled to produce it.
-          const kept = new Set(input.actors.map((a) => a.id));
-          ambientProvenance = {
-            ...ambientProvenance,
-            actors: ambientProvenance.actors.filter((a) => kept.has(a.id)),
-          };
-        }
-      }
-    }
-
     const key: ReplayKey = {
       templateId: templateId(this.template),
       templateVersion: this.template.scenarioVersion,
@@ -3825,16 +3699,6 @@ class Materializer {
       solverVersion: ENGINE_VERSION,
       paramSeed: this.draw.paramSeed,
       drawIndex: options.drawIndex ?? -1,
-      // Part of the replay key, not decoration: two cells with the same seed
-      // and different ambient populations are different worlds, and a resumable
-      // batch that reused one for the other would be serving a stale answer.
-      // The settle length is part of the population's identity for the same
-      // reason: the same seed settled for 0 s and for 20 s are different worlds.
-      ambientProfileHash: ambientProvenance === null
-        ? 'none'
-        : ambientSettleSeconds > 0
-          ? `${ambientProvenance.profileHash}+settle${ambientSettleSeconds}`
-          : ambientProvenance.profileHash,
     };
 
     const manifest: InstanceManifest = {
@@ -3866,21 +3730,17 @@ class Materializer {
       actors: input.actors.map((a) => ({
         id: a.id,
         actorKind: a.kind,
-        roleKind: this.roleById.get(a.id)?.kind
-          ?? (a.tags.includes('ambient') ? 'ambient' : 'unknown'),
+        roleKind: this.roleById.get(a.id)?.kind ?? 'unknown',
         laneRsl: a.initial.laneRef?.rsl ?? null,
         spawnS: this.spawnSByRole.get(a.id) ?? 0,
         initialSpeedMps: a.initial.speedMps,
-        bindingStatus: this.bindingByRole.get(a.id)?.status
-          ?? (a.tags.includes('ambient') ? 'generated' : 'unknown'),
+        bindingStatus: this.bindingByRole.get(a.id)?.status ?? 'unknown',
       })),
       props: input.props.map((prop) => ({ ...prop })),
       arrival: solutions,
       inputHash: contentHash(input),
       feasible,
       issues,
-      ...(ambientProvenance === null ? {} : { ambient: ambientProvenance }),
-      ...(ambientSettleProvenance === null ? {} : { ambientSettle: ambientSettleProvenance }),
       initialInteractionOutcomes: [...this.initialInteractionOutcomes],
       notes: [...this.notes],
     };

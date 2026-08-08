@@ -1499,3 +1499,65 @@ Same seed twice: **4/4 identical trace digests** with `--ambient moderate`. A de
 only checks "same seed twice" cannot distinguish a working seed from an ignored one, so I also ran a
 **different** seed: **4/4 digests differ**. The seed genuinely drives ambient generation, and the
 determinism is real rather than an artifact of a constant population.
+
+---
+
+## 34. WS-1b place fit: the root cause of "exact score, wrong place"
+
+**A feature marked `essentiality: "required"` does NOT constrain the site if its `atM` /
+`lateralDistanceM` clauses are `preferred`.** It binds the nearest thing of that kind at any distance,
+or nothing at all, and loses a few score points. Proven mechanically: `c11g-hidden-child` declares a
+REQUIRED `driveway` feature and returns 397 sites, while a probe whose only feature is a driveway with
+`atM` REQUIRED returns **0 sites on all five maps** — there is not one mapped driveway anywhere.
+
+That single fact explains every wrong verdict in DIAG-locations. "Required" was being read as a
+statement about the site when it is only a statement about the *feature reference*; the distance is
+what does the constraining.
+
+### Site counts after tightening (M1.3 = PASS, 0 archetypes below 4)
+| archetype | before | after | | archetype | before | after |
+|---|---:|---:|---|---|---:|---:|
+| c1g-illegal-u-turn | 388 | 286 | | c12g-suv-ignores-paddle | 113 | 27 |
+| c11g-wrong-way-aisle | 272 | 143 | | c1g-cut-in-turn | 67 | 26 |
+| parked-vans-narrow-road | 431 | 118 | | low-friction-stop-slide | 132 | 24 |
+| c15g-red-light-runner | 200 | 83 | | blind-crest-queue | 377 | **7** |
+| c4g-circulating-sudden-stop | 389 | 78 | | c11g-hidden-child | 397 | **7** |
+| c11g-indicator-mislead | 156 | 65 | | c9g / child-from-parked-cars / c12g-red-ped | 463/463/360 | **6/5/5** |
+
+**The 45-99% collapse IS the deliverable.** Those were sites being certified `exact` in places the
+brief does not describe. All 15 stay portable v2 — I re-verified independently: no coordinates, no road
+ids, no map names, 15/15 clean.
+
+### M1.1 mechanical place fit = 0.3993 (117/293), target 0.95 — FAIL, and correctly so
+`placefit.py` uses no LLM: every judgement is a distance, a count, a lane width, or an enum lookup in
+`dev-assets/<map>/derived/*.json.gz`. Requirements are read from the archetype's OWN tightened
+template, and **only clauses marked `required`** — grading against a "preferred" wish is precisely the
+conflation that caused the bug. Nothing defaults to pass: unreadable input is unmeasurable, which is a
+failure.
+
+**Negative control:** the same instrument scored against the ORIGINAL loose templates gives **0.4573 —
+higher**, as it must, proving the tightened declaration is strictly harder to satisfy.
+
+This number measures the DAMAGE, not the fix: it grades the *already-delivered* corpus, which was
+harvested against the loose anchors, using the *new* strict requirements. It can only improve after a
+re-harvest.
+
+### Two conventions verified rather than assumed, and one bug caught by doing so
+`plot_y = -scene_z` for locations; topology junctions carry plot `centerXY`. Distance is measured
+**laterally to the driven path**, not from the ego spawn — a spawn-relative window wrongly rejected
+**53 of 67 correctly-placed c15g sites** before the agent caught it.
+
+### c4g-circulating-sudden-stop: re-briefed, not faked and not retired
+Zero roundabouts exist on any map, yet all 6 delivered sites scored 1.00 `exact` and one was a 2-arm
+road link. The test the brief actually buys is not circular geometry — it is **the lead stopping dead
+while the ego is committed inside the junction box with no lane to escape into**, which a large
+multi-arm intersection does provide. New anchor: arms>=4, sizeM>=20 m, egoTurn straight, all REQUIRED;
+78 sites; meta name/description/tags rewritten so nothing downstream still claims a roundabout.
+**19 of its 24 delivered instances do not satisfy the new brief and will be replaced.** Honest number.
+
+### A collision I caused and had to repair
+Applying WS-1b's tightened templates **silently overwrote WS-4b's `trafficControls` blocks** — the
+exact concurrency hazard I had warned both agents about, and then walked into myself at the merge step
+because WS-1b generated from a base snapshot taken before WS-4b's edit. Caught it by checking
+`trafficControls in template` after the copy (0 of 15), and repaired by merging WS-1b's anchor with
+WS-4b's saved in-repo signal templates. Both re-validate clean and now carry both changes.

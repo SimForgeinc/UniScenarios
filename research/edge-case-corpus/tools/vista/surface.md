@@ -555,11 +555,16 @@ actor that needed it.
     ```
 
     The program appears in the trace as `control:<id>` and is what makes `set(rules.obeySignals, …)`
-    mean anything at all (see rule 26). Measured, `c15g-red-light-runner` on 5 maps x 8 sites x 4 draws:
-    the unmodified template produced signal state in **20 of 136** simulated cells (14.7%, only the six
-    real map junctions); with the block above, **136 of 136 (100%)**, and the physics was unchanged —
-    the same 18 cells passed the frozen gate and the quality layer either way. Adding the head costs
-    nothing and is the difference between an admitted scenario and a rejected one.
+    mean anything at all (see rule 26). Measured, `c15g-red-light-runner` at the full harvest setting
+    (`batch --all-maps --draws 20 --max-sites 8`, 800 cells, 671 simulated): the unmodified template
+    produced signal state in **100 of 671** cells (14.9%, and only on the two maps that have a real
+    signalized junction); with the block above, **671 of 671 (100.0%)** on all five maps, with a phase
+    sample on every recorded tick (median 651 of 651). The physics did not move — the 95 cells that
+    passed C1–C5 in the base are cell for cell the **same 95** that pass the whole gate with the head,
+    and 591 of 671 cells have ego travel identical to within 5 cm — but C6 losses went 571 → 0 and gate
+    admission went **0 → 95 cells (95 HQ, 3 maps x 8 sites)**. Adding the head costs nothing and is the
+    difference between an admitted scenario and a rejected one. `c12g-red-pedestrian-phase`, same
+    recipe: 60/598 → **598/598** with ego travel bit-identical on every cell.
 
 26. **Without a signal or a stop line in the scenario, `set(rules.obeySignals, …)` is a pure no-op.**
     The engine consults `obeySignals` in exactly one place, and that code returns immediately when the
@@ -598,6 +603,24 @@ actor that needed it.
         emitted empty, so an authored head stops **every** movement across its line — a
         protected-turn-only or single-movement head is not expressible. Never place an authored line
         where a second actor must cross it unless you intend to stop that actor too.
+      - **You cannot give the VIOLATOR a light.** Every authored stop line is projected onto
+        `site.frame.lateralLanes[pose.laneOffset]` — the ego corridor's own lanes — so a head cannot be
+        placed on a conflicting junction arm at all. Measured: with the head held red and the van's
+        `rules.obeySignals` forced to `true`, the van travelled 96.0 m, identical to the metre with
+        `false`, because its route contains none of the frame's RSLs and no stop-line authority is ever
+        evaluated against it. So author the EGO's indication and express the other party's violation
+        with `set(rules.obeySignals, false)` + `set(rules.yieldToVehicles, false)`; do not add a second
+        head expecting it to bind to the side road. If your brief needs a `preferred` feature's station
+        and that feature may not match, omit `feature` from the stop line entirely — the offset then
+        falls back to the frame origin, which every site has, instead of throwing `control_feature_unbound`.
+      - **Size the phases to the clip, and expect a tradeoff.** Measured on `c15g` over 671 cells:
+        `green 11 / yellow 3` (13 s clip) shows only `green → yellow` but keeps **95** gate passes across
+        8 sites and leaves 591/671 cells physically identical to the no-head run; pulling it to
+        `green 9 / yellow 3 / red 30` buys a full `green → yellow → red` cycle on every cell and costs
+        **12 passes and a site** (83, 7 sites), because the earlier yellow catches slower egos at the
+        line. C6 wants signal *state*, not a complete cycle — favour the ego's green. A shorter clip may
+        fit a whole cycle for free: `c12g` at 8 s with `green 6 / yellow 2 / red 30` records all three
+        colours with **598/598 cells bit-identical** to the base.
       - **Place the line upstream of the junction in the frame** (`s` negative, e.g. -6) on
         `laneOffset` 0. It is projected onto the frame's lateral lane, and on a mirrored site that is
         the frame lane rather than the ego's — if the ego seems to ignore the light, check

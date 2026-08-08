@@ -27,12 +27,7 @@ import path from 'node:path';
 import { Worker } from 'node:worker_threads';
 
 import { MATCH_SEMANTICS_VERSION } from '@uniscenarios/anchor-matcher';
-import {
-  ENGINE_VERSION,
-  contentHash,
-  resolveAmbientTrafficProfile,
-  type AmbientTrafficProfile,
-} from '@uniscenarios/sim-engine';
+import { ENGINE_VERSION, contentHash } from '@uniscenarios/sim-engine';
 
 import { cellPaths, runCell, type CellOptions, type CellResult } from '../batch-cell.js';
 import { EXIT } from '../errors.js';
@@ -55,14 +50,6 @@ export interface BatchOptions {
   readonly trivialTtcS?: number | undefined;
   readonly force: boolean;
   readonly pretty: boolean;
-  /** Generated background road users; absent leaves the roads empty. */
-  readonly ambient?: AmbientTrafficProfile | undefined;
-  /**
-   * AMBIENT WARM-UP: seconds of ambient-only integration before `t = 0`, so the
-   * road is already in motion (and already queued) when the clip starts.
-   * Authored actors are not advanced by it. `0` or absent is the old behaviour.
-   */
-  readonly ambientSettleSeconds?: number | undefined;
 }
 
 interface PlannedCell extends CellOptions {
@@ -80,20 +67,6 @@ export async function batch(options: BatchOptions): Promise<number> {
   const tid = templateId(template);
   const pv = paramsVersion(template);
   const templateDigest = contentHash(template).slice(0, 16);
-
-  // Resolve once so every cell, every worker and the replay key see one
-  // canonical profile rather than re-defaulting per cell.
-  const ambient = options.ambient === undefined ? undefined : options.ambient;
-  const ambientSettleSeconds = ambient === undefined ? 0 : options.ambientSettleSeconds ?? 0;
-  const ambientProfileHash = ambient === undefined
-    ? 'none'
-    : resolveAmbientTrafficProfile(ambient).preset === 'off'
-      ? 'none'
-      // Must match what `materialize` stamps into the manifest replay key, or a
-      // resumed cell settled for a different length would be served as fresh.
-      : ambientSettleSeconds > 0
-        ? `${contentHash(resolveAmbientTrafficProfile(ambient))}+settle${ambientSettleSeconds}`
-        : contentHash(resolveAmbientTrafficProfile(ambient));
 
   const cells: PlannedCell[] = [];
   const perMapSites: Array<{ mapId: string; sites: number; matcherIndexDigest: string; engineGraphDigest: string }> = [];
@@ -114,8 +87,6 @@ export async function batch(options: BatchOptions): Promise<number> {
           writeTrace: options.writeTrace,
           filter: options.filter,
           trivialTtcS: options.trivialTtcS,
-          ...(ambient === undefined ? {} : { ambient }),
-          ...(ambientSettleSeconds > 0 ? { ambientSettleSeconds } : {}),
           expectedSeed: cellSeed(tid, pv, site.siteId, draw),
         });
       }
@@ -142,7 +113,6 @@ export async function batch(options: BatchOptions): Promise<number> {
         solverVersion: ENGINE_VERSION,
         matcherIndexDigest: matches.find((m) => m.mapId === cell.mapId)?.bundle.index.topologyDigest ?? '',
         engineGraphDigest: matches.find((m) => m.mapId === cell.mapId)?.bundle.graph.topologyDigest ?? '',
-        ambientProfileHash,
       });
       if (reused) {
         results.set(key, reused);
@@ -175,13 +145,6 @@ export async function batch(options: BatchOptions): Promise<number> {
     .map((r) => (r.metrics?.['minTTC'] as { value: number } | null | undefined)?.value)
     .filter((v): v is number => typeof v === 'number');
 
-  const ambientCounts = ordered
-    .map((r) => r.ambient?.actorCount)
-    .filter((v): v is number => typeof v === 'number');
-  const ambientNear = ordered
-    .map((r) => r.ambient?.nearSubjectAtT0)
-    .filter((v): v is number => typeof v === 'number');
-
   const summary = {
     kind: 'scenario-batch-summary',
     version: 1,
@@ -195,23 +158,6 @@ export async function batch(options: BatchOptions): Promise<number> {
     negativeControl: template.meta.negativeControl,
     maps: perMapSites,
     draws: options.draws,
-    // Present only when ambient traffic was requested, so an empty-road summary
-    // is byte-identical to the ones this command wrote before.
-    ...(ambient === undefined ? {} : {
-      ambient: {
-        profile: resolveAmbientTrafficProfile(ambient),
-        profileHash: ambientProfileHash,
-        cellsWithAmbient: ambientCounts.filter((v) => v > 0).length,
-        actorsPerCell: ambientCounts.length
-          ? { min: Math.min(...ambientCounts), median: median(ambientCounts), max: Math.max(...ambientCounts) }
-          : null,
-        // The measure that matters: how much traffic the metric subject can
-        // actually see at t = 0, not how much was placed somewhere on the map.
-        nearSubjectAtT0: ambientNear.length
-          ? { min: Math.min(...ambientNear), median: median(ambientNear), max: Math.max(...ambientNear) }
-          : null,
-      },
-    }),
     cells: ordered.length,
     resumed,
     concurrency,
@@ -292,14 +238,7 @@ function median(values: readonly number[]): number {
  */
 async function tryResume(
   cell: PlannedCell,
-  expect: {
-    templateDigest: string;
-    matcherVersion: string;
-    solverVersion: string;
-    matcherIndexDigest: string;
-    engineGraphDigest: string;
-    ambientProfileHash: string;
-  },
+  expect: { templateDigest: string; matcherVersion: string; solverVersion: string; matcherIndexDigest: string; engineGraphDigest: string },
 ): Promise<CellResult | null> {
   const paths = cellPaths(cell.outDir, cell);
   if (!existsSync(paths.result) || !existsSync(paths.instance)) return null;
@@ -317,10 +256,6 @@ async function tryResume(
     if (key['matcherIndexDigest'] !== expect.matcherIndexDigest) return null;
     if (key['engineGraphDigest'] !== expect.engineGraphDigest) return null;
     if (key['paramSeed'] !== cell.expectedSeed) return null;
-    // A cell simulated on an empty road is not the answer to the same question
-    // as a cell simulated in traffic. An instance predating this field has no
-    // recorded ambient population, so it can only be reused for `'none'`.
-    if ((key['ambientProfileHash'] ?? 'none') !== expect.ambientProfileHash) return null;
     if (cell.writeTrace && !existsSync(paths.trace)) return null;
     return result;
   } catch {

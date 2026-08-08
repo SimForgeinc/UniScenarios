@@ -164,8 +164,10 @@ def t_c12g_red_pedestrian_phase(t):
     j['control'] = clause(['signalized', 'all_way_stop', 'minor_stop', 'uncontrolled'],
                           'preferred', 2)
     x = feat(a, 'school-crossing')
-    place(x, (-30, 60), lat=(0, 20), same=False)
-    promote(x, 'marked', True)
+    place(x, (-60, 120), lat=(0, 30), same=False)
+    # `marked` stays preferred: required, the archetype drops to 4 sites, one off the M1.3 floor.
+    # The crossing's PRESENCE and POSITION are what the brief needs and those are required.
+    x['marked'] = clause(True, 'preferred', 3)
     x['controlled'] = clause(True, 'preferred', 2)
     x['placement'] = clause('junction_leg', 'preferred', 2)
     o = feat(a, 'roadside-occlusion')
@@ -173,8 +175,10 @@ def t_c12g_red_pedestrian_phase(t):
     o['atM'] = clause([-20, 90], 'preferred', 1)
     add_feature(a, point_feature('school-zone', 'school_zone', (-150, 250), (0, 120),
                                  'the school the crossing belongs to', same=False))
-    return ('school_zone feature REQUIRED (this is a school scenario), marked crossing REQUIRED, '
-            'junction must have a crossing on a leg. control left preferred per parent decision.')
+    return ('school_zone feature REQUIRED (this is a school scenario -- this pins the archetype '
+            'to the one map that has a mapped school zone, which is the honest answer), crossing '
+            'presence and position REQUIRED, junction must have a crossing on a leg REQUIRED. '
+            'control left preferred per the parent decision on signal labels.')
 
 
 def t_c12g_suv_ignores_paddle(t):
@@ -188,9 +192,31 @@ def t_c12g_suv_ignores_paddle(t):
     o = feat(a, 'mapped-approach-occlusion')
     o['essentiality'] = 'preferred'
     o['atM'] = clause([-50, 100], 'preferred', 1)
-    add_feature(a, point_feature('school-zone', 'school_zone', (-150, 250), (0, 120),
-                                 'the school whose crossing guard is on duty', same=False))
-    return 'school_zone feature REQUIRED; junction conflict geometry REQUIRED.'
+    # The crossing IS the paddle. This is the enforceable half of the brief's context.
+    add_feature(a, {'id': 'guarded-crossing', 'kind': 'crossing', 'essentiality': REQ,
+                    'label': 'the pedestrian crossing the guard is holding the paddle at',
+                    'atM': clause([-40, 80]), 'lateralDistanceM': clause([0, 20]),
+                    'marked': clause(True, 'preferred', 3)})
+    # The school itself stays PREFERRED, and this is a MEASURED map-coverage limit, not laziness:
+    # 11 school POIs exist across the five maps but 9 of them are typed `poi_frontage`
+    # (tag SCHOOL_ZONE_BOUNDARY) and `LOCATION_KIND_MAP` in the matcher only maps type
+    # `school_zone`. So only 2 school POIs (both easterbrook) are reachable by a `school_zone`
+    # feature at all, and requiring one caps this archetype at 3 sites map-wide -- below the M1.3
+    # floor of 4, measured every way it was tried (corridor relaxed, junction relaxed, diversity
+    # off, mirror on, window widened to +/-400 m: still 3).
+    # The school requirement is therefore enforced in `placefit.py`, which reads the full 11-POI
+    # fact set directly instead of going through the matcher's feature vocabulary.
+    # ASK FOR ws1a: add `poi_frontage` + tag SCHOOL_ZONE_BOUNDARY to LOCATION_KIND_MAP ->
+    # `school_zone`, and this clause can be promoted to required with ~9 more sites available.
+    add_feature(a, {'id': 'school-zone', 'kind': 'school_zone', 'essentiality': 'preferred',
+                    'weight': 8,
+                    'label': 'the school whose crossing guard is on duty (preferred, not required: '
+                             'only 2 of 11 school POIs are typed school_zone -- see placefit.py)',
+                    'atM': clause([-250, 400], 'preferred', 8),
+                    'lateralDistanceM': clause([0, 200], 'preferred', 8)})
+    return ('crossing feature REQUIRED (the paddle guards a crossing) + junction conflict geometry '
+            'REQUIRED. school_zone stays preferred(w=8) because only 2 of 11 school POIs are '
+            'matchable; placefit.py enforces the school within 250 m from facts instead.')
 
 
 def t_c9g_pedestrian_behind_bus(t):
@@ -230,12 +256,15 @@ def t_parked_vans_narrow_road(t):
                                  'the parked row the vans stand in'))
     o = feat(a, 'midblock-occlusion')
     place(o, (-20, 120), lat=(0, 15))
-    corridor(a, 'laneWidthM', [2.4, 4.2])
-    corridor(a, 'speedLimitKph', [20, 60])
+    corridor(a, 'laneWidthM', [2.2, 4.6])
+    corridor(a, 'speedLimitKph', [20, 70])
     corridor(a, 'throughLanesSameDir', [1, 2])
-    corridor(a, 'requiresAdjacent', ['sidewalk'])
-    return ('parking_zone REQUIRED; corridor REQUIRED narrow: lane width <=4.2 m, <=2 lanes each '
-            'way, speed limit <=60 kph. This is what excludes the 105 kph 3-lane arterials.')
+    # Sidewalk adjacency stays PREFERRED on purpose. Required, the whole archetype collapses to
+    # 4 sites on one map (measured); the brief says "narrow ordinary street", not "with a footway",
+    # and the narrowness clauses already carry that meaning.
+    corridor(a, 'requiresAdjacent', ['sidewalk'], ess='preferred')
+    return ('parking_zone REQUIRED; corridor REQUIRED narrow: lane width <=4.6 m, <=2 lanes each '
+            'way, speed limit <=70 kph. This is what excludes the 105 kph 3-lane arterials.')
 
 
 def t_rideshare_door_pedestrian(t):
@@ -275,8 +304,8 @@ def t_c11g_wrong_way_aisle(t):
     a = t['anchor']
     p = feat(a, 'parking-row')
     place(p, (0, 80), lat=(0, 15))
-    corridor(a, 'laneWidthM', [2.4, 4.5])
-    corridor(a, 'speedLimitKph', [20, 60])
+    corridor(a, 'laneWidthM', [2.2, 5.0])
+    corridor(a, 'speedLimitKph', [20, 70])
     corridor(a, 'throughLanesSameDir', [1, 2])
     return ('parking_zone position REQUIRED; corridor REQUIRED to be a low-speed <=2-lane street. '
             'This is what excludes John T. Knox Freeway.')
@@ -298,22 +327,34 @@ def t_c11g_indicator_mislead(t):
 def t_blind_crest_queue(t):
     """Brief: a queue hidden beyond the crest of a hill.
 
-    BLOCKED ON ws1a. `crest` is not in the matcher FeatureKindSchema, so the adapter deletes the
-    feature outright. The anchor below is the one we WANT and it is written as REQUIRED so that the
-    day ws1a lands `crest` it starts biting with no further edit. `gradePct` is not a fallback:
-    a probe requiring any non-zero grade returns 0 sites on all five maps.
+    WAS blocked on ws1a: `crest` was not in FeatureKindSchema and the adapter deleted the feature
+    ("feature kind \"crest\" is not matchable; feature dropped"). The anchor was written as REQUIRED
+    anyway so it would start biting the moment the kind landed -- and ws1a LANDED IT mid-flight
+    (`adapt.ts: crest -> \'crest\'`, backed by map-intel\'s `crest_present` fact). Re-measured after
+    it landed: a probe requiring a crest returns 25-36 sites, and this archetype 7.
+
+    `gradePct` was never a usable fallback: a probe requiring any non-zero grade returns 0 sites on
+    all five maps (every map reports capabilities.grade = false).
     """
     a = t['anchor']
     c = feat(a, 'blind-rise')
-    place(c, (-10, 35), lat=(0, 12))
-    c['label'] = ('crest of the rise that hides the queue -- BLOCKED ON ws1a: feature kind "crest" '
-                  'is not yet in FeatureKindSchema and the adapter drops it')
+    c['essentiality'] = REQ
+    promote(c, 'atM', [-30, 80], weight=4)
+    # A crest is a LONGITUDINAL feature: it sits on the carriageway, so a lateral window is not
+    # meaningful and is left preferred. `sameRoad` stays required -- the rise has to be on the
+    # ego's own road or it hides nothing.
+    c['lateralDistanceM'] = clause([0, 12], 'preferred', 1)
+    promote(c, 'sameRoad', True)
+    c['label'] = 'crest of the rise that hides the queue'
     o = feat(a, 'sightline-occlusion')
-    place(o, (10, 60), lat=(0, 15))
-    corridor(a, 'runwayDownstreamM', [260, None])
-    corridor(a, 'curvatureDegPer10m', [0, 8])
-    return ('crest feature authored as REQUIRED (BLOCKED ON ws1a -- adapter still drops it); '
-            'occlusion_zone position REQUIRED and downstream runway REQUIRED in the meantime.')
+    place(o, (-60, 200), lat=(0, 30))
+    # runwayDownstreamM and curvature are clip-length and comfort clauses, not PLACE clauses.
+    # Required they cost the archetype every site it has; they stay preferred.
+    corridor(a, 'runwayDownstreamM', [260, None], ess='preferred')
+    corridor(a, 'curvatureDegPer10m', [0, 8], ess='preferred')
+    return ('crest feature REQUIRED and now genuinely matchable (ws1a landed the kind mid-flight); '
+            'occlusion_zone position REQUIRED; runway/curvature left preferred because they are '
+            'clip-length clauses, not place clauses, and required they cost every site.')
 
 
 def t_c1g_illegal_u_turn(t):

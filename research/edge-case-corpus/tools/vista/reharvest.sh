@@ -9,7 +9,7 @@ rm -rf "$OUT" /tmp/vista-dataset-final /tmp/vista-plaus-final
 
 # 1. verify intent + batch + gate (C1-C6) + Q1-Q8 + dedup, over all three author roots
 $PY harvest.py --roots /tmp/vista-gen6-blind /tmp/vista-gen3-blind /tmp/vista-user \
-  --out "$OUT" --sites 8 --draws 20 --reps 3 --limit 2 --workers 4
+  --out "$OUT" --sites 8 --draws 20 --reps 3 --limit 2 --workers 4 --ambient moderate
 
 # 2. dataset, split by archetype
 $PY dataset.py --harvest "$OUT/HARVEST.json" --out /tmp/vista-dataset-final --test-frac 0.25

@@ -66,6 +66,38 @@ Per-cell delivered populations are unchanged (32/32, 9/9, ...); only their state
   That is ~24 veh/km of settle flow (a normal urban headway, not a jam) thinned back to the
   profile's own budget after settling.
 
+## EQUIVALENCE PROOFS
+
+### 1. Ambient OFF is byte-identical (the strong claim, and it holds)
+Ran 8 archetypes x 5 maps x `--max-sites 1` = **40 cells**, no ambient flags, twice:
+once on this branch, once with my six changed files reverted to commit `43fe99f`
+(pre-WS2 *and* pre-WS2b) and `ambient/settle.ts` deleted.
+
+**40 of 40 cells agree; 37 traceDigests byte-identical, 3 cells infeasible in both.**
+Archetypes: c1-lead-stopped, c2-ramp-merge, c3-allway-stop, c5-cpna, c6-dooring, c7-hedge-corner,
+c8-narrowing, c9-debris. So neither the ambient wiring nor the warm-up can touch an empty-road
+scenario: `settleAmbientTraffic` is never called and `applyAmbientTraffic` is never called.
+
+### 2. Ambient ON: authored tracks are NOT unchanged, and they were not unchanged before the settle either
+This is the one acceptance clause I must report as **not satisfiable as written**, and it is not a
+property my change removed. Ambient traffic is real physics by design (WS-2 kept collision detection
+global and kept the ego's braking real; only the *metric attribution* is excluded). Max |xy|
+deviation of the authored `ego` and `violatingVan` tracks against the SAME cell run with ambient OFF,
+over the 15-cell c15g probe (30 authored tracks):
+
+| | exactly 0 | > 0.5 m | median | max |
+|---|---|---|---|---|
+| ambient ON, settle 0 (the pre-existing behaviour) | 21/30 | 9/30 | 0.000 m | 100.28 m |
+| ambient ON, settle 20 (this work) | 18/30 | 12/30 | 0.000 m | 101.22 m |
+
+The settle changes WHICH cells are perturbed; it does not change the magnitude regime, and it does
+not introduce the perturbation. The honest statement is: **the warm-up advances only the generated
+population — no authored actor is integrated for one extra tick — but the generated population it
+produces is a different population, and authored actors respond to real cars.** If authored
+trajectories must be bit-stable under ambient traffic, that is a separate (and larger) piece of work
+than the warm-up: it needs the ego's controller to ignore ambient bodies, which contradicts WS-2's
+deliberate decision to keep the physics real.
+
 ## Status log
 - [t0] Stub created.
 - [t1] Read WS2-ambient.md, engine spawn path, SignalBook, ambient/traffic.ts. Design above fixed.

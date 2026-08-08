@@ -12,8 +12,7 @@
    "red-light-violation",
    "left-turn-across-path",
    "hard-braking",
-   "near-miss",
-   "authored-signal-head"
+   "near-miss"
   ],
   "author": "agent/exp-signal-adversary",
   "negativeControl": false
@@ -74,7 +73,7 @@
      40,
      85
     ],
-    "essentiality": "preferred",
+    "essentiality": "required",
     "weight": 2
    },
    "runwayUpstreamM": {
@@ -90,7 +89,7 @@
      120,
      null
     ],
-    "essentiality": "preferred",
+    "essentiality": "required",
     "weight": 1
    },
    "curvatureDegPer10m": {
@@ -108,8 +107,8 @@
     "kind": "junction",
     "atM": {
      "value": [
-      -20,
-      20
+      -15,
+      15
      ],
      "essentiality": "required"
     },
@@ -133,9 +132,9 @@
     "control": {
      "value": [
       "signalized",
-      "uncontrolled",
+      "all_way_stop",
       "minor_stop",
-      "all_way_stop"
+      "uncontrolled"
      ],
      "essentiality": "preferred",
      "weight": 1
@@ -149,10 +148,25 @@
        120
       ]
      },
-     "essentiality": "preferred",
+     "essentiality": "required",
      "weight": 4
     },
-    "label": "junction with an opposing left-turn movement crossing the ego through path"
+    "label": "multi-arm intersection with an opposing left-turn movement crossing the ego through path (the signal itself is authored, not matched)",
+    "essentiality": "required",
+    "arms": {
+     "value": [
+      3,
+      null
+     ],
+     "essentiality": "required"
+    },
+    "sizeM": {
+     "value": [
+      8,
+      null
+     ],
+     "essentiality": "required"
+    }
    }
   ],
   "policy": {
@@ -350,46 +364,5 @@
   }
  ],
  "variants": [],
- "metricSubject": "ego",
- "trafficControls": [
-  {
-   "id": "ego-approach-head",
-   "kind": "normal_signal",
-   "feature": "conflict-junction",
-   "pose": {
-    "laneOffset": 0,
-    "s": -6,
-    "tFrac": 0,
-    "headingOffsetRad": 0
-   },
-   "stopLines": [
-    {
-     "feature": "conflict-junction",
-     "pose": {
-      "laneOffset": 0,
-      "s": -6,
-      "tFrac": 0,
-      "headingOffsetRad": 0
-     }
-    }
-   ],
-   "phases": [
-    {
-     "indication": "green",
-     "durationS": 11
-    },
-    {
-     "indication": "yellow",
-     "durationS": 3
-    },
-    {
-     "indication": "red",
-     "durationS": 30
-    }
-   ],
-   "offsetS": 0,
-   "loop": false,
-   "label": "authored head giving the ego a green through the junction"
-  }
- ]
+ "metricSubject": "ego"
 }
