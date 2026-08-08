@@ -1288,3 +1288,23 @@ for the right thing. Chasing M1.2 alone would let me "fix" locations by loosenin
 everything matches exactly, which is the precise opposite of the goal. **M1.1 (declared context
 actually satisfied) and M1.4 (blind plausibility) are the measures with teeth; M1.2 is a guard against
 silent degradation, nothing more.**
+
+### Audit of WS-4's C6 change (parent second eye, verified not assumed)
+`git diff` on `gate.py` shows **8 deletions, none of which touch a C1-C5 clause body** — they are the
+two function signatures, the result-dict assembly, and the `lossCounts` key tuple, all rewritten to
+carry C6. The clause computations are byte-identical, and `pass` is a pure conjunction
+`c1 and c2 and c3 and c4 and c5 and c6`, so C6 can only ever turn a pass into a fail. **Strictly a
+tightening, as required.** `c6 = (not wants_signal) or hasSignalState`, so it is inert on any brief
+that does not name a signal. Gold regression after the change: 3/3 frozen, 3/3 HQ, all six loss counts
+zero.
+
+### Audit of WS-3's export-render-lib change
+`validateCorpusScenarioResult` drops 5 checks from `validateScenarioResult`. Three are catalog
+reservation provenance, as its comment claims. **Two are not** — `artifactHashes.instanceSha256` and
+`.traceSha256` are exact file-byte bindings, so the comment "deliberately NOT a weaker check" was
+stronger than the code justified. I then checked the artifacts: batch-produced `result.json` carries
+neither `artifactHashes` nor `catalogSlot` (0 of 60 sampled), because those are written by the catalog
+batch writer, which this pipeline does not use. The checks are therefore unenforceable on our corpus
+and dropping them is the only option; the semantic bindings that DO exist (`inputHash`, `instanceId`,
+`mapId`, `traceDigest` vs `sha256Json(trace)`) are checked. Design stands. **M3.2 must be reported as
+"semantic hash equality + actor-id equality", never as "full catalog integrity".**
