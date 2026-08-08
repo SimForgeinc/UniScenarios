@@ -96,8 +96,12 @@ def _mass(a):
     # the only path the corpus pipeline uses -- `debug --provider sumo` runs a separate comparison and
     # never puts a background road user into ticks.actors.
     amb = ['--ambient', ambient] if ambient and ambient != 'off' else []
+    # Ambient traffic with a settle prologue makes each cell far more expensive: the default 1200 s
+    # run_cli timeout killed a real run at 67 min with 1065 traces already on disk. `batch` resumes
+    # from existing cells unless --force, so a longer budget costs nothing on a warm directory.
     rc, bd, err = author.run_cli(['batch', ent['template'], '--all-maps', '--draws', str(draws),
-                                  '--max-sites', str(sites), '--out', out, '--concurrency', '2'] + amb)
+                                  '--max-sites', str(sites), '--out', out, '--concurrency', '2'] + amb,
+                                 timeout=10800)
     if not bd.get('results'):
         return {**ent, 'cells': 0, 'trainingGrade': 0, 'error': (err or '')[:200]}
     g = gate.gate_batch(out + '/batch-summary.json')

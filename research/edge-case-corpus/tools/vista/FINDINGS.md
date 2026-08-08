@@ -1677,3 +1677,26 @@ keeping M3.2 strict rather than treating it as ceremony.
 
 The third failure is a genuinely occluded pedestrian behind a building from all 17 candidate
 viewpoints. That one is honest: **M3.1 = 0.970, not 1.000**, and it should be reported that way.
+
+### WS-3 final measured numbers (verified by me from INDEX-meta.json and ffprobe)
+| | |
+|---|---|
+| renders | **183 ok / 189 attempted = 0.968** |
+| M3.2 among successful renders | **183/183** instanceHash, traceHash, actorIds |
+| M3.3 spot-check | 40/40 probed: h264, 1040x918 (min dim 918 >= 720), 12/1 fps, durations 10.08-13.08 s matching each clip |
+| M3.4 | **14.18 s/scenario wall-clock at concurrency 4 = ~254 renders/hour**; median 80.0 s serial |
+
+The measured 14.18 s/scenario is *better* than the agent's own ~22-23 s estimate, because that estimate
+was extrapolated from serial cost rather than measured at concurrency.
+
+### Two operational failures on my side this cycle
+1. **The re-harvest died at 67 min** with `TimeoutExpired` after 1200 s on a single `batch`. Ambient
+   traffic plus the 20 s settle prologue makes a cell far more expensive than the `run_cli` default
+   assumed. Raised to 10800 s.
+2. **I then destroyed 1065 already-computed traces.** `reharvest.sh` opens with `rm -rf "$OUT"`, so
+   relaunching it wiped the partial harvest instead of resuming — `batch` resumes from existing cells
+   unless `--force`, so the work was recoverable and I threw it away. The `rm -rf` should be behind a
+   `--fresh` flag; it is not, and that cost ~70 minutes.
+3. **An orphaned `export-render.mjs` (PPID=1, 80 minutes)** survived run 1's teardown. Killed by its own
+   process group after confirming its PGID (56932) was distinct from the live render's (73295), so the
+   in-flight run was untouched. Verified zero PPID=1 strays afterwards.
