@@ -3,7 +3,7 @@
 One rule throughout: a measure that cannot be computed reports NOT MEASURED and never a default pass.
 A scorecard that degrades to "ok" when its input is missing is worse than no scorecard.
 """
-import os, sys, json, gzip, math, glob, argparse, subprocess, collections, statistics as st
+import os, sys, json, gzip, math, glob, argparse, subprocess, collections, tempfile, statistics as st
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
@@ -177,6 +177,46 @@ def m1_2(recs, workers=4):
             'caveat': 'NECESSARY NOT SUFFICIENT -- an exact match against a vacuous clause is vacuous'}
 
 
+def instance_hash_integrity(recs):
+    """Does every delivered instance agree with its own declared inputHash?
+
+    Found only because the 3D export path recomputes it and failed closed. Nothing else in this
+    pipeline does: gate.py reads ticks, dataset.py reads metrics, the rest of audit.py reads both.
+    A corrupted instance would otherwise ship silently. 4 of 293 failed on the first corpus (1.4%),
+    two of them at the SAME site, which points at a write race under `batch --concurrency 2` rather
+    than at random bit-rot.
+    """
+    import subprocess as sp
+    script = (
+        "const {createHash}=require('crypto'); const fs=require('fs');\n"
+        "function canon(v){ if(Array.isArray(v)) return v.map(canon);\n"
+        "  if(v&&typeof v==='object') return Object.fromEntries(Object.keys(v).sort().map(k=>[k,canon(v[k])]));\n"
+        "  return v; }\n"
+        "const paths=JSON.parse(fs.readFileSync(process.argv[2],'utf8'));\n"
+        "let bad=[], n=0;\n"
+        "for(const p of paths){ try{ const d=JSON.parse(fs.readFileSync(p,'utf8')); n++;\n"
+        "  const rec=createHash('sha256').update(JSON.stringify(canon(d.input))).digest('hex');\n"
+        "  if(rec!==d.manifest.inputHash) bad.push(p); }catch(e){ bad.push(p+' ERR'); } }\n"
+        "console.log(JSON.stringify({checked:n, mismatched:bad.length, sample:bad.slice(0,6)}));\n"
+    )
+    paths = sorted({r['instance'] for r in recs if r.get('instance')})
+    if not paths:
+        return {'pass': False, 'note': 'NOT MEASURED -- no instance paths in the dataset'}
+    with tempfile.TemporaryDirectory() as td:
+        sp_path = os.path.join(td, 'h.cjs')
+        pl_path = os.path.join(td, 'p.json')
+        open(sp_path, 'w').write(script)
+        json.dump(paths, open(pl_path, 'w'))
+        try:
+            out = sp.run(['node', sp_path, pl_path], capture_output=True, text=True, timeout=1800).stdout
+            d = json.loads(out)
+        except Exception as e:                                        # noqa: BLE001
+            return {'pass': False, 'note': f'NOT MEASURED -- {type(e).__name__}: {str(e)[:120]}'}
+    return {**d, 'rate': round(1 - d['mismatched'] / max(d['checked'], 1), 4),
+            'pass': d['mismatched'] == 0,
+            'target': '0 instances disagreeing with their own declared inputHash'}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--dataset', nargs='+', required=True)
@@ -190,6 +230,7 @@ def main():
     recs = _load(a.dataset)
     card = {'corpus': len(recs), 'archetypes': len({r['archetypeId'] for r in recs})}
     card['M4.4'] = m4_4(recs)
+    card['INTEGRITY.instanceHash'] = instance_hash_integrity(recs)
     card.update(m2_2_2_3_2_5(recs))
     card.update(m3(recs, a.videos))
     card['M1.3'] = m1_3(a.sitecounts)

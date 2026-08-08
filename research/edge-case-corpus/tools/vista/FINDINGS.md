@@ -1700,3 +1700,34 @@ was extrapolated from serial cost rather than measured at concurrency.
 3. **An orphaned `export-render.mjs` (PPID=1, 80 minutes)** survived run 1's teardown. Killed by its own
    process group after confirming its PGID (56932) was distinct from the live render's (73295), so the
    in-flight run was untouched. Verified zero PPID=1 strays afterwards.
+
+---
+
+## 37. A corruption check that now runs on every corpus
+
+The 3D export path recomputes `sha256(canonicalJson(instance.input))` and compares it to the
+instance's own declared `manifest.inputHash`. It failed closed on two scenarios. I scanned the whole
+corpus rather than accept the count it happened to reach:
+
+**4 of 293 delivered instances (1.4%) disagree with their own declared `inputHash`.**
+```
+c11g-wrong-way-aisle   / richmond-field-station / c1f9657e645d1a52 / draw-000
+c9g-pedestrian-behind-bus / belmont-research-center / a712ec1393ec9de5 / draw-001
+c9g-pedestrian-behind-bus / belmont-research-center / a712ec1393ec9de5 / draw-012
+parked-vans-narrow-road / yale-street / 7c5af00861a5263e / draw-008
+```
+**Two of the four are at the same site**, which points at a write race under
+`batch --concurrency 2` rather than at random corruption. A control instance recomputes to exactly its
+declared hash, so this is not an artifact of my canonicalisation.
+
+Nothing else in the pipeline would have caught this. `gate.py` reads ticks, `dataset.py` reads
+metrics, the rest of `audit.py` reads both — none recompute the instance hash. These four cells passed
+the frozen gate, passed Q1-Q8, passed intent verification, and were shipped in the delivered dataset.
+
+`audit.py` now runs `instance_hash_integrity()` on every corpus as a standing check, so this class of
+defect is measured from here on rather than discovered by accident. It is reported separately from
+M1.1-M4.4 because it is not one of the goal's acceptance clauses — but a corpus with a nonzero count
+should not ship without an explanation.
+
+**A one-off discovery has been converted into a permanent instrument.** That is the only durable
+response to finding a defect by luck.
