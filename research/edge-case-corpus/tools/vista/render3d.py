@@ -30,8 +30,10 @@ INDEX.json shape (matches what audit.py consumes):
 from __future__ import annotations
 
 import argparse
+import collections
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -94,6 +96,40 @@ def triplet(instance: str) -> tuple[Path, Path, Path]:
     return Path(instance), Path(base + ".trace.json.gz"), Path(base + ".result.json")
 
 
+# --------------------------------------------------------------------------- errors
+ANSI = re.compile(r"\x1b\[[0-9;]*m|\[[0-9]{1,3}m")
+
+FAILURE_KINDS = (
+    ("upstream-artifact-hash-mismatch", re.compile(r"evidence integrity failed")),
+    ("composition-occluded", re.compile(r"incident composition failed")),
+    ("camera-clearance", re.compile(r"camera intersects actor clearance")),
+    ("preflight-rejected", re.compile(r"scenario render preflight rejected")),
+    ("browser-diagnostics", re.compile(r"browser-diagnostics-empty")),
+    ("evidence-gate-rejected", re.compile(r"scenario visual evidence rejected")),
+    ("quality-preference", re.compile(r"render-quality preference is")),
+    ("map-mismatch", re.compile(r"Studio loaded map")),
+    ("playwright-timeout", re.compile(r"TimeoutError|Timeout \d+ms exceeded")),
+    ("studio-unreachable", re.compile(r"net::ERR_|ECONNREFUSED")),
+    ("ffmpeg", re.compile(r"encoded video mismatch|ffmpeg")),
+)
+
+
+def extract_error(log_text: str) -> tuple[str, str]:
+    """Return (failureKind, one-line error message) from an exporter log.
+
+    The exporter prints thousands of `[progress]` lines, so a raw tail is
+    useless for auditing. Pull the actual thrown `Error:` line out and bucket
+    it, and keep the buckets stable so a partial corpus can be grouped.
+    """
+    text = ANSI.sub("", log_text)
+    thrown = re.findall(r"^\s*(?:Uncaught )?Error: .*$", text, re.M)
+    message = thrown[-1].strip() if thrown else text.strip().splitlines()[-1][:400] if text.strip() else "no output"
+    for kind, pattern in FAILURE_KINDS:
+        if pattern.search(message) or pattern.search(text[-4000:]):
+            return kind, message[:600]
+    return "unknown", message[:600]
+
+
 # --------------------------------------------------------------------------- render
 def render_one(rec: dict, out_root: Path, url: str, quality: str, fps: int,
                width: int, height: int, timeout_s: int, force: bool,
@@ -115,13 +151,16 @@ def render_one(rec: dict, out_root: Path, url: str, quality: str, fps: int,
         "manifest": None,
         "integrity": None,
         "status": "pending",
+        "failureKind": None,
         "error": None,
+        "log": str(log_file),
         "seconds": None,
     }
 
     for path in (instance, trace, result):
         if not path.exists():
-            entry.update(status="missing-input", error=f"missing {path}")
+            entry.update(status="missing-input", failureKind="missing-input",
+                         error=f"missing {path}")
             return entry
 
     if manifest_file.exists() and not force:
@@ -157,18 +196,38 @@ def render_one(rec: dict, out_root: Path, url: str, quality: str, fps: int,
                                   timeout=timeout_s)
             code = proc.returncode
         except subprocess.TimeoutExpired:
-            entry.update(status="timeout", error=f"exporter exceeded {timeout_s}s",
+            entry.update(status="timeout", failureKind="driver-timeout",
+                         error=f"exporter exceeded {timeout_s}s",
                          seconds=round(time.time() - started, 2))
+            record_failure(scenario_out, entry)
             return entry
     elapsed = round(time.time() - started, 2)
     if code != 0 or not manifest_file.exists():
-        tail = log_file.read_text()[-1500:]
-        entry.update(status="render-failed", error=f"exit {code}: ...{tail[-400:]}", seconds=elapsed)
+        kind, message = extract_error(log_file.read_text())
+        entry.update(status="render-failed", failureKind=kind,
+                     error=f"exit {code}: {message}", seconds=elapsed)
+        record_failure(scenario_out, entry)
         return entry
     return finalise(entry, manifest_file, scenario_out, elapsed)
 
 
-def finalise(entry: dict, manifest_file: Path, scenario_out: Path, elapsed: float) -> dict:
+def record_failure(scenario_out: Path, entry: dict) -> None:
+    """A failed scenario keeps a readable error next to whatever it did write."""
+    try:
+        scenario_out.mkdir(parents=True, exist_ok=True)
+        (scenario_out / "error.json").write_text(json.dumps({
+            "scenarioId": entry["scenarioId"],
+            "status": entry["status"],
+            "failureKind": entry.get("failureKind"),
+            "error": entry.get("error"),
+            "seconds": entry.get("seconds"),
+            "log": entry.get("log"),
+        }, indent=2) + "\n")
+    except OSError:
+        pass
+
+
+def finalise(entry: dict, manifest_file: Path, scenario_out: Path, elapsed: float | None) -> dict:
     manifest = json.loads(manifest_file.read_text())
     integrity = dict(manifest.get("integrity") or {})
     assessment = manifest.get("machineAssessment") or {}
@@ -204,8 +263,13 @@ def finalise(entry: dict, manifest_file: Path, scenario_out: Path, elapsed: floa
         "manifest": str(manifest_file),
         "integrity": integrity,
         "status": "ok" if passed else "integrity-failed",
-        "seconds": elapsed,
+        "failureKind": None if passed else "integrity-failed",
+        "error": None if passed else f"failed gates: {integrity['failedGates']}",
     })
+    if elapsed is not None:
+        entry["seconds"] = elapsed
+    if not passed:
+        record_failure(scenario_out, entry)
     return entry
 
 
@@ -235,7 +299,14 @@ def write_index(index_file: Path, entries: dict, meta: dict) -> None:
             "total": len(records),
             "ok": len(ok),
             "failed": len(records) - len(ok),
+            "successRate": round(len(ok) / len(records), 4) if records else None,
             "medianSecondsPerScenario": durations[len(durations) // 2] if durations else None,
+            "failureKinds": dict(sorted(collections.Counter(
+                r.get("failureKind") for r in records if r["status"] != "ok"
+            ).items(), key=lambda kv: -kv[1])),
+            "failuresByArchetype": dict(sorted(collections.Counter(
+                r.get("archetypeId") for r in records if r["status"] != "ok"
+            ).items(), key=lambda kv: -kv[1])),
         },
     }, indent=2) + "\n")
     meta_tmp.replace(meta_file)
@@ -263,6 +334,8 @@ def main() -> int:
     ap.add_argument("--no-camera-search", dest="camera_search", action="store_false",
                     help="disable the occlusion-aware camera orbit search (on by default)")
     ap.set_defaults(camera_search=True)
+    ap.add_argument("--reindex", action="store_true",
+                    help="rebuild INDEX.json from artifacts already on disk; render nothing")
     args = ap.parse_args()
 
     if args.instance:
@@ -280,6 +353,40 @@ def main() -> int:
     args.out.mkdir(parents=True, exist_ok=True)
     index_file = args.out / "INDEX.json"
     entries: dict[str, dict] = {}
+
+    if args.reindex:
+        # Rebuild INDEX.json from whatever is already on disk, with the real
+        # thrown error for every failure. Renders nothing.
+        prior = {}
+        if index_file.exists():
+            try:
+                prior = {e["scenarioId"]: e for e in json.loads(index_file.read_text())
+                         if isinstance(e, dict) and e.get("scenarioId")}
+            except (ValueError, KeyError):
+                prior = {}
+        for rec in records:
+            entry = {
+                "scenarioId": rec["scenarioId"], "archetypeId": rec.get("archetypeId"),
+                "mapId": rec.get("mapId"), "siteId": rec.get("siteId"), "split": rec.get("split"),
+                "instance": rec["instance"], "mp4": None, "manifest": None, "integrity": None,
+                "status": "not-attempted", "failureKind": None, "error": None,
+                "log": str(args.out / "_logs" / f"{rec['scenarioId']}.log"),
+                "seconds": (prior.get(rec["scenarioId"]) or {}).get("seconds"),
+            }
+            scenario_out = args.out / rec["scenarioId"]
+            manifest_file = scenario_out / "manifest.json"
+            log_file = args.out / "_logs" / f"{rec['scenarioId']}.log"
+            if manifest_file.exists():
+                entry = finalise(entry, manifest_file, scenario_out, None)
+            elif log_file.exists():
+                kind, message = extract_error(log_file.read_text())
+                entry.update(status="render-failed", failureKind=kind, error=message)
+                record_failure(scenario_out, entry)
+            entries[entry["scenarioId"]] = entry
+        write_index(index_file, entries, {"mode": "reindex", "url": args.url})
+        print(json.dumps(json.loads((args.out / "INDEX-meta.json").read_text())["summary"], indent=2))
+        return 0
+
     meta = {
         "url": args.url,
         "quality": args.quality,
