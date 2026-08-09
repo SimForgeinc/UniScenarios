@@ -21,7 +21,7 @@
     "release:manifest": "node scripts/release/generate-stack-manifest.mjs --out artifacts/release/uniscenarios-stack.json",
     "release:verify-artifacts": "node scripts/release/verify-package-artifacts.mjs",
     "release:smoke-packages": "node scripts/release/smoke-packed-stack.mjs",
-    "test:release": "node --test scripts/release/stack-manifest.test.mjs",
+    "test:release": "node --test scripts/release/*.test.mjs",
     "integration:audit": "node scripts/integration/audit-simcloud-divergence.mjs",
     "integration:compare-engine": "tsx scripts/integration/compare-engine-behavior.ts",
     "test:integration": "node --test scripts/integration/divergence-audit.test.mjs"
