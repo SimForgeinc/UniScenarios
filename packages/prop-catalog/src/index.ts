@@ -32,6 +32,7 @@ export { PROP_CLASSES, PROP_TAGS } from './types';
 export {
   CATALOG,
   CATALOG_IDS,
+  AUTHORING_CATALOG,
   type CatalogId,
   type CatalogQuery,
   getEntry,

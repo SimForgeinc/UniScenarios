@@ -812,7 +812,8 @@
     "defaultParams": {
       "height": 1.75,
       "pose": "standing"
-    }
+    },
+    "legacyAliasOf": "pedestrian.adult"
   },
   {
     "id": "pedestrian.adult_walking",
@@ -832,7 +833,8 @@
     "defaultParams": {
       "height": 1.75,
       "pose": "walking"
-    }
+    },
+    "legacyAliasOf": "pedestrian.adult"
   },
   {
     "id": "pedestrian.child_standing",
@@ -852,7 +854,8 @@
     "defaultParams": {
       "height": 1.2,
       "pose": "standing"
-    }
+    },
+    "legacyAliasOf": "pedestrian.child"
   },
   {
     "id": "pedestrian.child_walking",
@@ -872,7 +875,8 @@
     "defaultParams": {
       "height": 1.2,
       "pose": "walking"
-    }
+    },
+    "legacyAliasOf": "pedestrian.child"
   },
   {
     "id": "pedestrian.traffic_marshal",

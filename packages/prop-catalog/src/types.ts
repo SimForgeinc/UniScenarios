@@ -144,6 +144,11 @@ export interface CatalogEntry {
   readonly tags: readonly PropTag[];
   /** Parameters the builder is called with when none are supplied. */
   readonly defaultParams: Readonly<Record<string, ParamValue>>;
+  /**
+   * Canonical replacement for a compatibility-only id. Legacy aliases remain
+   * resolvable for saved scenarios but are omitted from new-authoring pickers.
+   */
+  readonly legacyAliasOf?: string;
   /** Present for every actor whose authored model must ship with animation. */
   readonly animation?: CatalogAnimationProfile;
 }

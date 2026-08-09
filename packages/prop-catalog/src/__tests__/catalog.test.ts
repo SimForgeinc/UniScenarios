@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
-import { CATALOG, CATALOG_IDS, getEntry, isCatalogId, queryCatalog } from '../catalog.js';
+import { AUTHORING_CATALOG, CATALOG, CATALOG_IDS, getEntry, isCatalogId, queryCatalog } from '../catalog.js';
 import { BUILDER_IDS } from '../registry.js';
 import { catalogSchema, parseCatalog } from '../schema.js';
 import { PROP_CLASSES } from '../types.js';
@@ -50,6 +50,12 @@ describe('catalog', () => {
     expect(isCatalogId('vehicle.sedan')).toBe(true);
     expect(isCatalogId('vehicle.hovercraft')).toBe(false);
     expect(() => getEntry('vehicle.hovercraft' as never)).toThrow();
+  });
+
+  it('keeps legacy ids loadable but out of new-authoring choices', () => {
+    expect(getEntry('pedestrian.adult_walking').legacyAliasOf).toBe('pedestrian.adult');
+    expect(AUTHORING_CATALOG).toHaveLength(CATALOG.length - 4);
+    expect(AUTHORING_CATALOG.some((entry) => entry.legacyAliasOf)).toBe(false);
   });
 
   it('queries by class and by tag', () => {

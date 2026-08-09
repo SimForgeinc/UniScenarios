@@ -401,6 +401,7 @@ export const CATALOG = [
     dims: { l: 0.32, w: 0.5, h: 1.75 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.75, pose: 'standing' },
+    legacyAliasOf: 'pedestrian.adult',
   },
   {
     id: 'pedestrian.adult_walking',
@@ -411,6 +412,7 @@ export const CATALOG = [
     dims: { l: 0.85, w: 0.5, h: 1.75 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.75, pose: 'walking' },
+    legacyAliasOf: 'pedestrian.adult',
   },
   {
     id: 'pedestrian.child_standing',
@@ -421,6 +423,7 @@ export const CATALOG = [
     dims: { l: 0.24, w: 0.35, h: 1.2 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.2, pose: 'standing' },
+    legacyAliasOf: 'pedestrian.child',
   },
   {
     id: 'pedestrian.child_walking',
@@ -431,6 +434,7 @@ export const CATALOG = [
     dims: { l: 0.58, w: 0.35, h: 1.2 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.2, pose: 'walking' },
+    legacyAliasOf: 'pedestrian.child',
   },
   {
     id: 'pedestrian.traffic_marshal',
@@ -905,6 +909,11 @@ export type CatalogId = (typeof CATALOG)[number]['id'];
 const BY_ID = new Map<string, CatalogEntry>(CATALOG.map((entry) => [entry.id, entry]));
 
 export const CATALOG_IDS = CATALOG.map((entry) => entry.id) as readonly CatalogId[];
+
+/** Canonical choices for new scenarios; compatibility aliases remain in `CATALOG`. */
+export const AUTHORING_CATALOG = CATALOG.filter(
+  (entry) => !('legacyAliasOf' in entry),
+) as readonly CatalogEntry[];
 
 export function isCatalogId(id: string): id is CatalogId {
   return BY_ID.has(id);

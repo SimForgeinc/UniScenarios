@@ -40,6 +40,7 @@ const catalogEntrySchema = z.object({
   dims: dimsSchema,
   tags: z.array(z.enum(PROP_TAGS as unknown as [string, ...string[]])).min(1),
   defaultParams: z.record(z.string(), paramValueSchema),
+  legacyAliasOf: z.string().regex(/^[a-z_]+\.[a-z0-9_]+$/).optional(),
   animation: animationProfileSchema.optional(),
 });
 
@@ -48,11 +49,15 @@ export const catalogSchema = z
   .min(1)
   .superRefine((entries, ctx) => {
     const seen = new Set<string>();
+    const allIds = new Set(entries.map((entry) => entry.id));
     for (const entry of entries) {
       if (seen.has(entry.id)) {
         ctx.addIssue({ code: 'custom', message: `duplicate catalog id: ${entry.id}` });
       }
       seen.add(entry.id);
+      if (entry.legacyAliasOf && (!allIds.has(entry.legacyAliasOf) || entry.legacyAliasOf === entry.id)) {
+        ctx.addIssue({ code: 'custom', message: `${entry.id} has invalid legacyAliasOf ${entry.legacyAliasOf}` });
+      }
       if (!entry.id.startsWith(`${entry.class}.`)) {
         // `street` and `occluder` props are addressed by their own prefix, so
         // the id prefix must agree with the class it is filed under.
