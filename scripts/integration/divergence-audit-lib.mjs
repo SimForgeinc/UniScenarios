@@ -3,6 +3,15 @@ import { execFileSync } from 'node:child_process';
 import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
+const IGNORED_GENERATED_DIRECTORIES = new Set([
+  '.git',
+  '.pytest_cache',
+  '.venv',
+  '__pycache__',
+  'dist',
+  'node_modules',
+]);
+
 async function readJson(file) {
   return JSON.parse(await readFile(file, 'utf8'));
 }
@@ -37,6 +46,7 @@ async function collectFiles(root, relative = '', result = []) {
 
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
+    if (entry.isDirectory() && IGNORED_GENERATED_DIRECTORIES.has(entry.name)) continue;
     const child = relative ? path.posix.join(relative, entry.name) : entry.name;
     if (entry.isDirectory()) await collectFiles(root, child, result);
     if (entry.isFile() || entry.isSymbolicLink()) result.push(child);
