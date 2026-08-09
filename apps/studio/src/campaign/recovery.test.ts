@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { dashCameras, type ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
+import { DashCameraSensorSchema, dashCameras, type ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { simulationSourceHash } from './recovery';
 
 function template(): ScenarioTemplateV2 {
@@ -30,11 +30,11 @@ describe('verified materialization recovery identity', () => {
     const decorated = template();
     decorated.roles[0]!.label = 'Response unit';
     decorated.roles[0]!.actor.catalogId = 'vehicle.van';
-    decorated.roles[0]!.actor.sensors = [{
+    decorated.roles[0]!.actor.sensors = [DashCameraSensorSchema.parse({
       id: 'dash-1', type: 'dash_camera', enabled: true,
       mount: { position: { x: 2, y: 1.5, z: 0 }, rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 } },
       camera: { horizontalFovDeg: 90, aspectRatio: 16 / 9, nearM: 0.05, farM: 2_000 },
-    }];
+    })];
     decorated.roles[0]!.extensions = { 'studio.presentation.bodyColor': '#ff0000' };
     decorated.extensions = {
       'studio.presentation.cameras.v1': { cameras: [{ id: 'dash-1' }] },
@@ -72,7 +72,7 @@ describe('verified materialization recovery identity', () => {
     const baseline = template();
 
     const environmentEdit = structuredClone(baseline);
-    environmentEdit.environment = { weather: 'heavy_rain', timeOfDay: 'noon', frictionScale: 0.72 };
+    environmentEdit.environment = { weather: 'heavy_rain', timeOfDay: 'noon', frictionScale: 0.72, surfacePatches: [] };
     expect(simulationSourceHash(environmentEdit)).not.toBe(simulationSourceHash(baseline));
 
     const controlEdit = structuredClone(baseline);
@@ -81,7 +81,7 @@ describe('verified materialization recovery identity', () => {
       pose: { s: 0, laneOffset: 0, tFrac: 0, headingOffsetRad: 0 },
       stopLines: [{ pose: { s: -5, laneOffset: 0, tFrac: 0, headingOffsetRad: 0 } }],
       phases: [{ indication: 'red_x', durationS: 5 }],
-      offsetS: 0, loop: false,
+      offsetS: 0, loop: false, darkFallback: 'all_way_stop', darkDwellS: 1,
     }];
     expect(simulationSourceHash(controlEdit)).not.toBe(simulationSourceHash(baseline));
 

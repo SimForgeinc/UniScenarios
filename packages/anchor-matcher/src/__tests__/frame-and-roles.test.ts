@@ -114,18 +114,22 @@ describe('role binding', () => {
     expect(missing!.status).toBe('failed');
   });
 
-  it('binds relative_to against an earlier role and clamps when it runs out of lanes', () => {
+  it('binds relative_to against an earlier role and fails when it runs out of lanes', () => {
     const bindings = bindRoles(index, frame, parseRoleBindings([
       { role: 'lead', kind: 'on_reference', dsM: -30 },
       { role: 'follower', kind: 'relative_to', ref: 'lead', dLane: -1, dsM: -25 },
       { role: 'stray', kind: 'relative_to', ref: 'lead', dLane: 4 },
+      { role: 'clamper', kind: 'relative_to', ref: 'lead', dLane: 4, onMissing: 'clamp' },
       { role: 'orphan', kind: 'relative_to', ref: 'nobody', dLane: 0 },
     ]), evaluation.featureMatches);
     const follower = bindings.find((b) => b.role === 'follower')!;
     expect(follower.status).toBe('bound');
     expect(follower.pose).toMatchObject({ k: -1, s: -55 });
     expect(follower.laneRsl).toBe('1:0:-2');
-    expect(bindings.find((b) => b.role === 'stray')!.status).toBe('clamped');
+    // `dLane` is a lane request, so the default is to fail rather than to
+    // relocate the actor into a lane the author did not ask for.
+    expect(bindings.find((b) => b.role === 'stray')!.status).toBe('failed');
+    expect(bindings.find((b) => b.role === 'clamper')!.status).toBe('clamped');
     expect(bindings.find((b) => b.role === 'orphan')!.status).toBe('failed');
   });
 

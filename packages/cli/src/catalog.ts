@@ -32,7 +32,7 @@ import { CliError, EXIT } from './errors.js';
 import { DEV_ASSETS, KNOWN_MAPS, REPO_ROOT, loadMap } from './maps.js';
 import { adaptTemplate } from './adapt.js';
 import { materialize, templateId as canonicalTemplateId } from './materialize.js';
-import { catalogExactMatcherPolicy } from './sites.js';
+import { assertMatchableAnchor, catalogExactMatcherPolicy } from './sites.js';
 import { readTemplate } from './template-io.js';
 
 export const CATALOG_KIND = 'uniscenarios-scenario-catalog' as const;
@@ -806,7 +806,10 @@ export async function createScenarioCatalog(
       // This must remain identical to executor replay.  A persisted site is
       // an exact reservation, not a request to re-run the interactive site's
       // diversity/truncation policy.
-      const { anchor, roles } = adaptTemplate(template);
+      const { anchor, roles, notes } = adaptTemplate(template);
+      // Same rule as `matchOnMap`: a catalog entry built from a template whose
+      // requirement was discarded is a reservation of the wrong place.
+      assertMatchableAnchor(notes);
       const matched = matchAnchorReport({
         ...anchor,
         policy: catalogExactMatcherPolicy(anchor.policy ?? {}),

@@ -24,6 +24,17 @@
  *     --result artifacts/qa/golden-yale-bus-stop-20260801-corrected/result.json \
  *     --out artifacts/qa/golden-yale-bus-stop-20260801-corrected/studio-render \
  *     --headless --fps 2
+ *
+ * Corpus mode (`--evidence-class corpus`) renders a research corpus artifact
+ * that was never reserved in the 500-slot evidence catalog. It keeps every
+ * instance/trace/result hash and actor-id binding, frames every authored actor
+ * instead of only the metric pair, and encodes the FULL recorded clip instead
+ * of the seconds around the reveal:
+ *
+ *   node scripts/export-render.mjs --url http://127.0.0.1:5199 \
+ *     --instance <dir>/draw-000.instance.json --trace <dir>/draw-000.trace.json.gz \
+ *     --result <dir>/draw-000.result.json --out /tmp/vista-3d/<scenarioId> \
+ *     --headless --fps 12 --evidence-class corpus
  */
 import { chromium } from 'playwright-core';
 import { createHash } from 'node:crypto';
@@ -38,10 +49,14 @@ import {
   buildIncidentRenderPreflight,
   buildScenarioManifest,
   cameraActorClearance,
+  cameraForClip,
   cameraForIncident,
+  incidentWindow,
+  selectClipVideoFrames,
   selectIncidentVideoFrames,
   renderViewsAtTraceIndex,
   sha256Bytes,
+  validateCorpusScenarioResult,
   validateScenarioPair,
   validateScenarioResult,
 } from './export-render-lib.mjs';
@@ -94,6 +109,69 @@ const scenarioMode = Boolean(instancePath && tracePath);
 if (scenarioMode && !resultPath) {
   throw new Error('--result is required for bound scenario evidence');
 }
+const evidenceClassArg = args.get('evidence-class') ?? 'catalog';
+if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
+  throw new Error(`--evidence-class must be catalog or corpus, got ${evidenceClassArg}`);
+}
+const corpusMode = evidenceClassArg === 'corpus';
+const showProgress = args.has('progress');
+const cameraSearch = args.has('camera-search');
+// Orbit offsets tried, in order, when `--camera-search` is on. 0/1 is the
+// analytic camera itself, so an unobstructed scene keeps exactly the framing
+// the solver chose; later entries swing progressively further around the
+// framing centre and lift the eye to clear a building.
+const CAMERA_SEARCH_OFFSETS = [
+  { azimuthDeg: 0, heightGain: 1 },
+  { azimuthDeg: 0, heightGain: 1.45 },
+  { azimuthDeg: 25, heightGain: 1 },
+  { azimuthDeg: -25, heightGain: 1 },
+  { azimuthDeg: 25, heightGain: 1.45 },
+  { azimuthDeg: -25, heightGain: 1.45 },
+  { azimuthDeg: 55, heightGain: 1.2 },
+  { azimuthDeg: -55, heightGain: 1.2 },
+  { azimuthDeg: 90, heightGain: 1.2 },
+  { azimuthDeg: -90, heightGain: 1.2 },
+  { azimuthDeg: 125, heightGain: 1.3 },
+  { azimuthDeg: -125, heightGain: 1.3 },
+  { azimuthDeg: 180, heightGain: 1.3 },
+  { azimuthDeg: 0, heightGain: 2.2 },
+  { azimuthDeg: 45, heightGain: 2.2 },
+  { azimuthDeg: -45, heightGain: 2.2 },
+  { azimuthDeg: 90, heightGain: 2.2 },
+  { azimuthDeg: -90, heightGain: 2.2 },
+  { azimuthDeg: 135, heightGain: 2.2 },
+  { azimuthDeg: -135, heightGain: 2.2 },
+  { azimuthDeg: 180, heightGain: 2.2 },
+  // Last resort: a near-overhead viewpoint clears almost any facade at the
+  // cost of an unattractive shot, which still beats losing the scenario.
+  { azimuthDeg: 0, heightGain: 3.4 },
+  { azimuthDeg: 70, heightGain: 3.4 },
+  { azimuthDeg: -70, heightGain: 3.4 },
+  { azimuthDeg: 180, heightGain: 3.4 },
+];
+
+/** Orbit a fitted camera around its own target without changing what it frames. */
+function reorientCamera(camera, offset) {
+  if (offset.azimuthDeg === 0 && offset.heightGain === 1) {
+    return { ...camera, searchOffset: { azimuthDeg: 0, heightGain: 1 } };
+  }
+  const [targetX, targetY, targetZ] = camera.target;
+  const dx = camera.eye[0] - targetX;
+  const dz = camera.eye[2] - targetZ;
+  const radians = (offset.azimuthDeg * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return {
+    ...camera,
+    basis: `${camera.basis}+occlusion-search`,
+    searchOffset: { ...offset },
+    eye: [
+      targetX + dx * cos - dz * sin,
+      targetY + (camera.eye[1] - targetY) * offset.heightGain,
+      targetZ + dx * sin + dz * cos,
+    ],
+  };
+}
 const maps = args.has('all-maps')
   ? MAPS
   : [MAPS.find((m) => m.id === (args.get('map') ?? 'yale-street')) ?? MAPS[0]];
@@ -140,10 +218,21 @@ async function settleFrames(page, count = 8) {
 async function hideUiForExport(page) {
   if (includeUi) return;
   await page.evaluate(() => {
-    const root = document.querySelector('#root > div');
-    if (!root) return;
-    for (const child of root.children) {
-      if (child.tagName !== 'CANVAS') child.style.visibility = 'hidden';
+    // The viewer canvas is nested several layout wrappers below `#root > div`
+    // (#root > div > div > div > div > canvas). Hiding every non-CANVAS child
+    // of `#root > div` therefore hid the canvas itself: the element became
+    // non-visible and `elementHandle.screenshot()` blocked on actionability
+    // forever. Walk the canvas ancestor chain instead and hide only its
+    // siblings at each level, which removes the chrome while leaving the
+    // canvas visible and its layout box unchanged.
+    const canvas = document.querySelector('canvas');
+    if (!canvas) return;
+    let node = canvas;
+    while (node.parentElement && node.parentElement !== document.documentElement) {
+      for (const sibling of node.parentElement.children) {
+        if (sibling !== node) sibling.style.visibility = 'hidden';
+      }
+      node = node.parentElement;
     }
   });
 }
@@ -344,14 +433,31 @@ async function exportScenario(page) {
   const evidence = validateScenarioPair(instanceDoc, trace, canonicalBytes);
   let resultDoc = null;
   let resultBytes = null;
+  let resultBinding = null;
   if (resultPath) {
     const loaded = await readJsonMaybeGzip(path.resolve(resultPath));
     resultDoc = loaded.value;
     resultBytes = loaded.bytes;
-    validateScenarioResult(instanceDoc, trace, resultDoc, canonicalBytes, {
-      instanceFileBytes: instanceBytes,
-      traceFileBytes,
-    });
+    if (corpusMode) {
+      const bound = validateCorpusScenarioResult(instanceDoc, trace, resultDoc, {
+        instanceFileBytes: instanceBytes,
+        traceFileBytes,
+      });
+      resultBinding = {
+        mode: 'corpus-semantic',
+        catalogSlot: null,
+        collisionPolicy: bound.collisionPolicy,
+        recordedCollisions: bound.recordedCollisions,
+        resultDigest: bound.resultDigest,
+        instanceFileSha256: bound.instanceFileSha256,
+        traceFileSha256: bound.traceFileSha256,
+      };
+    } else {
+      validateScenarioResult(instanceDoc, trace, resultDoc, canonicalBytes, {
+        instanceFileBytes: instanceBytes,
+        traceFileBytes,
+      });
+    }
   }
   const preflight = buildIncidentRenderPreflight(trace, evidence);
   const preflightFile = path.join(outDir, 'preflight.json');
@@ -391,6 +497,22 @@ async function exportScenario(page) {
 
   const pageUrl = withMap(url, evidence.mapId);
   await page.goto(pageUrl, { waitUntil: 'load' });
+  // Studio defers mounting the 3D world until a render-quality preference is
+  // *stored*. An unparsable value silently degrades to `invalid`, the chooser
+  // still disappears, and every captured frame would be empty. Fail loudly.
+  const qualityState = await page.evaluate(() => {
+    try {
+      const raw = window.localStorage.getItem('uniscenarios.studio.render-quality.v1');
+      if (!raw) return { state: 'missing', raw: null };
+      const parsed = JSON.parse(raw);
+      return { state: typeof parsed?.preset === 'string' ? 'stored' : 'invalid', raw };
+    } catch (error) {
+      return { state: 'unavailable', raw: String(error) };
+    }
+  });
+  if (qualityState.state !== 'stored') {
+    throw new Error(`render-quality preference is ${qualityState.state}; the 3D world would never mount`);
+  }
   await waitForApp(page);
   await waitForStreamIdle(page);
   await page.evaluate(() => {
@@ -405,10 +527,24 @@ async function exportScenario(page) {
     throw new Error(`Studio loaded map ${loadedMapId}, expected ${evidence.mapId}`);
   }
 
+  const incident = incidentWindow(trace);
   const occluderActorIds = (trace.metrics.revealToConflict?.relevantOccluderIds ?? [])
     .filter((id) => id.startsWith('actor:'))
     .map((id) => id.slice('actor:'.length));
-  const framingActorIds = [...new Set([...evidence.metricPair, ...occluderActorIds])];
+  // A corpus clip has to show the ego and every authored challenger, not just
+  // the two actors that produced the criticality metric.
+  //
+  // AUTHORED ONLY. `evidence.actorIds` also lists generated background road users once ambient
+  // traffic is on, and requiring all ~40 of them to be simultaneously in-frame and unoccluded is
+  // unsatisfiable -- it rejected 60 of 62 corpus scenarios with
+  // `ambient:v1:...(inFrame=false)`. Ambient traffic is scenery: it must be VISIBLE IN the shot,
+  // never a CONSTRAINT ON the shot. The strict composition gate is unchanged for every authored
+  // actor, and on traces written before ambient traffic existed `ambientActorIds` is absent, so this
+  // filter is a no-op.
+  const ambientActorIdSet = new Set(trace?.header?.ambientActorIds ?? []);
+  const framingActorIds = corpusMode
+    ? [...evidence.actorIds].filter((id) => !ambientActorIdSet.has(id))
+    : [...new Set([...evidence.metricPair, ...occluderActorIds])].filter((id) => !ambientActorIdSet.has(id));
   const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
   const framingPropIds = new Set(evidence.props.filter((prop) => {
     const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
@@ -418,7 +554,20 @@ async function exportScenario(page) {
     return declared || relation;
   }).map((prop) => prop.id));
 
-  const renderTraceFrame = async (selected, file, settleCount) => {
+  // Sticky across the whole export: an accepted orbit offset is retried first
+  // on the next frame so the clip keeps one stable shot.
+  let cameraOffset = CAMERA_SEARCH_OFFSETS[0];
+  const renderTraceFrame = async (selected, file, settleCount, clipCamera = false) => {
+    // Stage timings on stderr make a stalled export diagnosable instead of a
+    // silent multi-hour hang. They never enter the manifest.
+    const stageStart = Date.now();
+    let lastStage = stageStart;
+    const stage = (name) => {
+      if (!showProgress) return;
+      const now = Date.now();
+      process.stderr.write(`[progress] t=${selected.t} ${name} ${now - lastStage}ms total=${now - stageStart}ms\n`);
+      lastStage = now;
+    };
     const views = renderViewsAtTraceIndex(instanceDoc, trace, evidence, selected.index);
     const grounded = await page.evaluate(({ actors, props }) => {
       const overlays = window.__overlays;
@@ -439,12 +588,13 @@ async function exportScenario(page) {
       editor.renderer.setSelection([]);
       return { actors: groundedActors, props: groundedProps };
     }, views);
+    stage('sync');
     const groundedPoses = grounded.actors;
     const pairGround = groundedPoses
       .filter((pose) => evidence.metricPair.includes(pose.id))
       .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
     const framingProps = grounded.props.filter((prop) => framingPropIds.has(prop.id));
-    const camera = cameraForIncident(
+    const baseCamera = (clipCamera ? cameraForClip : cameraForIncident)(
       trace,
       evidence.metricPair,
       selected.index,
@@ -452,30 +602,13 @@ async function exportScenario(page) {
       framingActorIds,
       framingProps,
     );
-    const cameraClearance = cameraActorClearance(
-      camera,
-      [...groundedPoses, ...grounded.props],
-      [...evidence.actorModels, ...grounded.props],
-    );
-    if (cameraClearance.clearanceM < 2) {
-      throw new Error(
-        `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
-      );
-    }
-    await setView(page, camera.eye, camera.target, camera.fovDeg);
-    // Catalog evidence must fail closed if the incident view never reaches a
-    // fully resident state. Capturing after a swallowed timeout can make a
-    // missing city tile look like clear line of sight.
-    await waitForStreamIdle(page, 60000);
-    await settleFrames(page, settleCount);
-    const composition = await inspectIncidentComposition(
-      page,
+    const compositionArgs = [
       [...groundedPoses, ...framingProps],
       [...framingActorIds, ...framingProps.map((prop) => prop.id)],
-      trace.metrics.revealToConflict.conflictT,
+      incident.conflictT,
       selected.t,
-    );
-    if (!composition.passed) {
+    ];
+    const describeFailure = (composition) => {
       const failures = composition.actors
         .filter((actor) => !actor.inFrame || !actor.sceneryClear)
         .map((actor) => `${actor.id}(inFrame=${actor.inFrame},sceneryClear=${actor.sceneryClear},blocker=${actor.blockerLayer})`);
@@ -484,8 +617,83 @@ async function exportScenario(page) {
           `${composition.closestPair?.join('/')} separation ${composition.minPairSeparationPx.toFixed(1)}px < ${composition.minimumRequiredSeparationPx}px`,
         );
       }
-      throw new Error(`incident composition failed at t=${selected.t}: ${failures.join(', ')}`);
+      return failures.join(', ');
+    };
+
+    // The analytic camera solvers pick an azimuth from the incident sightline
+    // alone. On a real city map that direction is frequently occupied by a
+    // building, so a geometrically perfect framing still has no line of sight
+    // and the composition gate correctly rejects it. `--camera-search` orbits
+    // the same fitted camera around its own target until every framing actor
+    // is unobstructed. The offset is sticky across the clip so the shot stays
+    // stable instead of jittering frame to frame.
+    let camera = baseCamera;
+    let cameraClearance = cameraActorClearance(
+      camera,
+      [...groundedPoses, ...grounded.props],
+      [...evidence.actorModels, ...grounded.props],
+    );
+    let composition;
+    if (cameraSearch) {
+      const ordered = [cameraOffset, ...CAMERA_SEARCH_OFFSETS.filter(
+        (candidate) => candidate.azimuthDeg !== cameraOffset.azimuthDeg || candidate.heightGain !== cameraOffset.heightGain,
+      )];
+      let accepted = null;
+      let lastComposition = null;
+      for (const candidate of ordered) {
+        const trial = reorientCamera(baseCamera, candidate);
+        const clearance = cameraActorClearance(
+          trial,
+          [...groundedPoses, ...grounded.props],
+          [...evidence.actorModels, ...grounded.props],
+        );
+        if (clearance.clearanceM < 2) continue;
+        await setView(page, trial.eye, trial.target, trial.fovDeg);
+        // The candidate must be judged in the same fully-resident state the
+        // capture will use. Testing before stream-idle lets a not-yet-uploaded
+        // city tile read as clear line of sight, and the shot then fails the
+        // authoritative check after the tile lands.
+        await waitForStreamIdle(page, 60000);
+        await settleFrames(page, settleCount);
+        const trialComposition = await inspectIncidentComposition(page, ...compositionArgs);
+        lastComposition = trialComposition;
+        if (trialComposition.passed) {
+          accepted = { camera: trial, clearance, candidate, composition: trialComposition };
+          break;
+        }
+      }
+      if (!accepted) {
+        throw new Error(
+          `incident composition failed at t=${selected.t} for every searched camera: ${
+            lastComposition ? describeFailure(lastComposition) : 'no candidate cleared the actor footprints'}`,
+        );
+      }
+      camera = accepted.camera;
+      cameraClearance = accepted.clearance;
+      cameraOffset = accepted.candidate;
+      composition = accepted.composition;
+      stage('cameraSearch');
+    } else {
+      if (cameraClearance.clearanceM < 2) {
+        throw new Error(
+          `camera intersects actor clearance at t=${selected.t}: ${cameraClearance.actorId} ${cameraClearance.clearanceM.toFixed(3)}m`,
+        );
+      }
+      await setView(page, camera.eye, camera.target, camera.fovDeg);
+      stage('setView');
+      // Catalog evidence must fail closed if the incident view never reaches a
+      // fully resident state. Capturing after a swallowed timeout can make a
+      // missing city tile look like clear line of sight.
+      await waitForStreamIdle(page, 60000);
+      stage('streamIdle');
+      await settleFrames(page, settleCount);
+      stage('settle');
+      composition = await inspectIncidentComposition(page, ...compositionArgs);
+      if (!composition.passed) {
+        throw new Error(`incident composition failed at t=${selected.t}: ${describeFailure(composition)}`);
+      }
     }
+    stage('composition');
     if (includeUi) {
       await page.screenshot({ path: file, fullPage: false });
     } else {
@@ -493,6 +701,7 @@ async function exportScenario(page) {
       if (!canvas) throw new Error('viewer canvas not found');
       await canvas.screenshot({ path: file });
     }
+    stage('screenshot');
     return {
       requestedT: selected.targetT,
       index: selected.index,
@@ -531,14 +740,16 @@ async function exportScenario(page) {
   let videoSequence = null;
   if (!args.has('no-video')) {
     const videoFps = Math.max(8, fps);
-    const selection = selectIncidentVideoFrames(trace, videoFps);
+    const selection = corpusMode
+      ? selectClipVideoFrames(trace, videoFps)
+      : selectIncidentVideoFrames(trace, videoFps);
     const videoFramesDir = path.join(outDir, 'video-frames');
     await clearGeneratedFrames(videoFramesDir, /^frame-\d{5}\.png$/);
     const records = [];
     for (let frameNo = 0; frameNo < selection.frames.length; frameNo += 1) {
       const selected = selection.frames[frameNo];
       const file = path.join(videoFramesDir, `frame-${String(frameNo).padStart(5, '0')}.png`);
-      const record = await renderTraceFrame(selected, file, 3);
+      const record = await renderTraceFrame(selected, file, 3, corpusMode);
       records.push({
         sequenceIndex: frameNo,
         index: record.index,
@@ -607,6 +818,7 @@ async function exportScenario(page) {
       startT: selection.startT,
       endT: selection.endT,
       fps: videoFps,
+      ...(corpusMode ? { coverage: 'full-clip' } : {}),
       frameCount: records.length,
       frames: records,
     };
@@ -648,7 +860,11 @@ async function exportScenario(page) {
     },
     rendererStats,
     diagnostics,
+    ...(corpusMode
+      ? { evidenceClass: 'corpus-scenario-clip', resultBinding }
+      : {}),
   });
+  manifest.simulationNotices = simulationNotices;
   const manifestFile = path.join(outDir, 'manifest.json');
   await writeJsonAtomic(manifestFile, manifest);
   // Preserve the rejected manifest for diagnosis, but never report a strict
@@ -775,9 +991,53 @@ const browser = await chromium.launch({
   args: ['--ignore-gpu-blocklist', `--window-size=${width + 80},${height + 120}`],
 });
 const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
+// A fresh browser profile has no stored render-quality preference, so Studio
+// shows its first-run graphics chooser and never mounts the viewer. Seed the
+// same preference a human would pick (default: the app's own `balanced`
+// preset, i.e. full city + vegetation) before the app boots.
+const qualityPreset = args.get('quality') ?? 'balanced';
+if (args.has('pin-page')) {
+  // A long batch export can run while the Vite dev server is still hot-reloading
+  // from unrelated source edits. A full page reload mid-sequence destroys
+  // window.__viewer and the run dies with a confusing error. `--pin-page`
+  // neutralises the dev-client's `location.reload()` for the export session only.
+  await context.addInitScript(() => {
+    try {
+      const reload = window.location.reload.bind(window.location);
+      Object.defineProperty(window.location, 'reload', {
+        configurable: true,
+        value: () => { console.warn('[export-render] suppressed dev-server reload'); void reload; },
+      });
+    } catch {
+      // Non-configurable location in some engines; the export simply stays exposed.
+    }
+  });
+}
+await context.addInitScript((preset) => {
+  try {
+    const key = 'uniscenarios.studio.render-quality.v1';
+    if (!window.localStorage.getItem(key)) {
+      window.localStorage.setItem(key, JSON.stringify({ preset }));
+    }
+  } catch {
+    // A privacy-restricted store simply leaves the chooser visible.
+  }
+}, qualityPreset);
 const page = await context.newPage();
 const diagnostics = [];
-page.on('console', (m) => { if (m.type() === 'error') diagnostics.push({ type: 'console', text: m.text() }); });
+// The bundled SUMO-derived traffic model emits its own advisory channel through
+// console.error, e.g. "Warning: Vehicle 'sumo-...' performs emergency braking on
+// lane ...". Those are simulation-quality notices about ambient traffic, not
+// browser or renderer faults, and they must not be able to reject a visual
+// evidence bundle. They are still recorded, just in a non-blocking bucket.
+const simulationNotices = [];
+const SIMULATION_NOTICE = /^Warning: /;
+page.on('console', (m) => {
+  if (m.type() !== 'error') return;
+  const text = m.text();
+  if (SIMULATION_NOTICE.test(text)) simulationNotices.push({ type: 'console', text });
+  else diagnostics.push({ type: 'console', text });
+});
 page.on('pageerror', (e) => diagnostics.push({ type: 'pageerror', text: String(e) }));
 
 const results = [];

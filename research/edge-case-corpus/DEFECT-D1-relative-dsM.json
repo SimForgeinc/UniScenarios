@@ -99,7 +99,7 @@
  ],
  "whyItMattersForTheGoal": "Requirement A needs ~45-55% admission to reach ~100 archetypes from 208 briefs. The current rate is ~32%, and this defect alone accounts for the largest single share of failures.",
  "notedForVisualLane": "This is invisible to a blind agent but obvious in one glance at a top-down render at t=0 \u2014 the challenger is plainly on the wrong side of the ego.",
- "sha256": "cbe6b21635d9a4953723b7b3c5826e9412525571f0d827a4634a1b8f336052af",
+ "sha256": "323e8b592f132f45a81124ed968c9f61d2d698c5d74c32764f3499a56e270001",
  "RETRACTED_CLAIM": "An earlier version of this report claimed the challenger is placed BEHIND the ego ~2/3 of the time. That claim was FALSE and is retracted. It came from comparing lane stations `s` across actors; `s` restarts on each lane of a chain, so a challenger on a successor lane appears \"behind\" when it is not.",
  "correctedFinding": "Direction is CORRECT (aheadFrac 1.00, 43/43, geometric forward-projection test). DISTANCE is not honoured: requested mean 18.1 m (range 9-30) yields actual mean 8.9 m (range 1.4-19.5), correlation requested-vs-actual = 0.162.",
  "correctMetric": "project (other.pos - ego.pos) onto the ego heading unit vector at t=0; never compare lane `s`.",
@@ -112,28 +112,5 @@
  },
  "contributingAuthoringCause": "the ego role spawns at pose.s = \"0 - (clamp(0.7*lane.speedLimitKph,18,42))/3.6*8\", a NEGATIVE site-dependent expression (~-62 m). materialize.ts:665-680 documents exactly this hazard: the structural pass evaluates such an expression as 0, so the chain is built too short and the real station clamps.",
  "patchAttempted": "I made coverTarget() extension symmetric (append successors when the projection clamps to the route END, not just prepend predecessors). tsc clean, but placement stayed capped at ~17 m, so it did NOT fix this. REVERTED - the tree is clean. Recording it so nobody re-attempts the same wrong fix.",
- "consequence": "Every authored \"N metres ahead of the ego\" collapses to ~9 m. Statistically linked to the dominant admission loss: C2 failures start a median 8.1 m ahead vs 11.0 m for passing traces (Mann-Whitney p=0.0001).",
- "attemptsThatFAILED": [
-  {
-   "attempt": "coverTarget() symmetric extension (append successors when the projection clamps to the route END)",
-   "result": "no measurable change; placement still capped. REVERTED."
-  },
-  {
-   "attempt": "extendReferenceRouteForward() \u2014 grow site.frame.referencePath downstream so framePoint() can resolve stations past the frame",
-   "result": "maxInst rose ~17 -> 22 m so the route WAS longer, but requested-vs-realised correlation stayed ~0 and median error for a 32 m request stayed ~22 m. REVERTED."
-  },
-  {
-   "attempt": "both patches together",
-   "result": "medErr 24.5 m, corr 0.114 for [25,40]. REVERTED."
-  },
-  {
-   "attempt": "corridor runwayUpstreamM >= 120/160",
-   "result": "made it WORSE; actors landed behind, sites collapsed 51 -> 7."
-  },
-  {
-   "attempt": "shortening the ego spawn offset (speed x 8s -> 5s -> 3s)",
-   "result": "traded C2 for C3; overall PASS fell 0.229 -> 0.128. Not a fix."
-  }
- ],
- "statusNow": "OPEN. Root cause is a clamp somewhere between sampledFrameS() and the actor spawn, but it is NOT (a) coverTarget backward-only extension, (b) reference-route length, or (c) the ego spawn offset. Five measured attempts failed. Whoever picks this up should instrument the actual resolved station inside materialize.ts rather than inferring it from instance poses."
+ "consequence": "Every authored \"N metres ahead of the ego\" collapses to ~9 m. Statistically linked to the dominant admission loss: C2 failures start a median 8.1 m ahead vs 11.0 m for passing traces (Mann-Whitney p=0.0001)."
 }

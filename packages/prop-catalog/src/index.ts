@@ -31,6 +31,7 @@ export { PROP_CLASSES, PROP_TAGS } from './types';
 
 export {
   CATALOG,
+  CATALOG_ALIASES,
   CATALOG_IDS,
   AUTHORING_CATALOG,
   type CatalogId,
@@ -38,6 +39,7 @@ export {
   getEntry,
   isCatalogId,
   queryCatalog,
+  resolveCatalogId,
 } from './catalog';
 
 export { BUILDER_IDS, buildProp, type PropParamMap } from './registry';

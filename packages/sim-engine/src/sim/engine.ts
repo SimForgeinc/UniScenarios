@@ -24,8 +24,10 @@ import { angleDelta, clamp, obbCorners, obbOverlap, normalizeAngle, type Obb, ty
 import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
 import { localFromScene, toSceneXZ } from '../frames.js';
+import { SurfaceField } from '../environment.js';
 import { issue, SimEngineError, type SimIssue } from '../errors.js';
 import type { LaneGraph } from '../map/lane-graph.js';
+import type { LaneRsl } from '../map/topology.js';
 import {
   buildRoute,
   retargetToLane,
@@ -61,6 +63,16 @@ import {
 } from './controllers.js';
 import { transitionDuration, transitionValue } from './dynamics.js';
 import {
+  GEAR_ENGAGE_SPEED_MPS,
+  MOTION_GEAR_ENGAGED_KEY,
+  MOTION_GEAR_KEY,
+  REVERSE_SPAWN_HEADING_TOL_RAD,
+  gearOfMotionDirection,
+  governSpeedForGear,
+  initialMotionDirection,
+  motionDirectionOfGear,
+} from './gear.js';
+import {
   ACTOR_PHYSICS_PROFILES,
   DynamicV1Backend,
   DYNAMIC_V1_DEFAULT_SUBSTEP_S,
@@ -90,6 +102,8 @@ import {
 import { makeTriggerRuntime, shouldFire, type ConditionContext, type TriggerRuntime } from './triggers.js';
 import { evaluateCondition } from './triggers.js';
 import { buildOccluders, hasLineOfSight, type OccluderShape } from './visibility.js';
+import { DEFAULT_PERCEPTION_CONFIG } from '../perception/schema.js';
+import { PerceptionRuntime, type PerceptionActorView } from '../perception/runtime.js';
 import { TRACE_FORMAT_VERSION, type ActorTrack, type SignalTrack, type SimEvent, type SimTrace } from '../trace/trace.js';
 import { computeMetrics, type MetricAccumulator, newMetricAccumulator, observeTick } from '../trace/metrics.js';
 import { checkFeasibility } from '../solve/guards.js';
@@ -138,6 +152,8 @@ export interface FixedStepSimulationSession {
 
 /** Moving actors this close to the end are clamped to the terminal pose. */
 const ROUTE_END_SLACK_M = 0.01;
+/** How far a freeform-routed body must move before its lane binding is re-solved. */
+const FREEFORM_LANE_REBIND_M = 1;
 /** Lookahead used for the stop-line search and the crossing-conflict scan. */
 const LOOKAHEAD_M = 80;
 /** Conflict scan: samples per actor, and the spacing between them. */
@@ -282,6 +298,8 @@ class Simulation {
   private readonly triggers: TriggerRuntime[] = [];
   private readonly triggerById = new Map<string, TriggerRuntime>();
   private readonly signals: SignalBook;
+  /** Grip as a field over the road, not one number for the whole scene. */
+  private readonly surface: SurfaceField;
   private readonly occluders: OccluderShape[];
   private readonly actorOccluderIds: ReadonlySet<string>;
   private readonly collidableProps: StaticCollisionShape[];
@@ -305,8 +323,22 @@ class Simulation {
   private readonly dynamicActorIds = new Set<string>();
   private readonly physicsTelemetry = new Map<string, PhysicsTelemetrySample>();
   private readonly arrivalSolutions: ArrivalSolution[];
+  /**
+   * The perception pass. `null` when nothing declares a sensor or a map
+   * divergence, so a document that never mentions perception produces exactly
+   * the trace it produced before this layer existed.
+   */
+  private readonly perception: PerceptionRuntime | null;
   /** Preserve the authored-only engine path byte-for-byte unless ambient traffic exists. */
   private readonly hasAmbientTraffic: boolean;
+  /**
+   * Generated background road users, sorted. They are ordinary physical bodies
+   * — followed, yielded to, and collidable — but they are never a subject of
+   * episode criticality metrics, and the trace header publishes this set so an
+   * external recomputation can make the same distinction.
+   */
+  private readonly ambientActorIds: string[];
+  private readonly ambientActorIdSet: ReadonlySet<string>;
   private world: WorldState;
   private conflictSamples = new Map<string, Vec2[]>();
   private conflictCandidates = new Map<string, ActorRuntime[]>();
@@ -358,6 +390,10 @@ class Simulation {
     this.clipTicks = Math.round(input.clipSeconds / input.dt);
     this.rng = new Rng(input.seed);
     this.signals = new SignalBook(input.signalPrograms, input.warmupSeconds, input.roadControls);
+    this.surface = new SurfaceField(
+      input.operationalConditions.effects.frictionScale,
+      input.surfacePatches,
+    );
     for (const id of this.signals.ids()) this.signalTracks.set(id, { phase: [] });
     this.attachedOccluderIds = new Set(
       input.props
@@ -429,7 +465,12 @@ class Simulation {
       }
     }
 
-    this.hasAmbientTraffic = input.actors.some((actor) => actor.tags.includes('ambient'));
+    this.ambientActorIds = input.actors
+      .filter((actor) => actor.tags.includes('ambient'))
+      .map((actor) => actor.id)
+      .sort();
+    this.ambientActorIdSet = new Set(this.ambientActorIds);
+    this.hasAmbientTraffic = this.ambientActorIds.length > 0;
     for (const spec of [...input.actors].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       const rt = this.buildActor(spec);
       this.actors.push(rt);
@@ -482,10 +523,28 @@ class Simulation {
       this.triggerById.set(it.id, tr);
     }
 
+    // Perception is built after the actors so it can be keyed by concrete ids.
+    // It stays `null` unless something actually declares a sensor or a map
+    // divergence, which is what keeps every pre-existing trace byte-identical.
+    const observers = [...input.actors]
+      .filter((spec) => (spec.sensors?.length ?? 0) > 0)
+      .map((spec) => ({ actorId: spec.id, sensors: spec.sensors! }));
+    const perceptionConfig = input.perception ?? DEFAULT_PERCEPTION_CONFIG;
+    this.perception =
+      observers.length > 0 || perceptionConfig.mapDivergences.length > 0
+        ? new PerceptionRuntime(
+            perceptionConfig,
+            observers,
+            this.actors.map((a) => a.id),
+            this.dt,
+          )
+        : null;
+
     this.metrics = newMetricAccumulator(
       this.actors.map((a) => a.id),
       input.occlusionPairs,
       input.metricSubject ?? null,
+      this.ambientActorIds,
     );
     this.world = {
       t: -input.warmupSeconds,
@@ -542,6 +601,31 @@ class Simulation {
       }
     }
 
+    // Reverse is a gear, and the route is the path the body travels: a reversing
+    // body traverses that same path rear-first, so its heading is the route
+    // tangent + PI. The authored pose is the t=0 source of truth for *position*,
+    // but a spawn heading that contradicts the declared gear is simply wrong,
+    // and keeping it silently is expensive: dynamic-v1 tracks a reversing body
+    // by `yaw + PI`, so a heading left equal to the route tangent starts pure
+    // pursuit 180 degrees out, saturates the steering, and detaches the body
+    // from its route for the whole clip. Derive the heading, and report it.
+    const motionDirection = initialMotionDirection(spec.tags);
+    let spawnHeadingRad = normalizeAngle(spec.initial.pose.headingRad);
+    if (motionDirection === -1) {
+      const travelHeadingRad = normalizeAngle(route.poseAt(routeS).headingRad + Math.PI);
+      const headingErrorRad = Math.abs(angleDelta(travelHeadingRad, spawnHeadingRad));
+      if (headingErrorRad > REVERSE_SPAWN_HEADING_TOL_RAD) {
+        this.issues.push(issue(
+          'reverse_spawn_heading_adjusted',
+          `actors.${spec.id}.initial.pose.headingRad`,
+          `actor spawns in reverse gear, so its heading is the route tangent + PI; the authored heading differed by ${((headingErrorRad * 180) / Math.PI).toFixed(1)}° and was corrected`,
+          { authoredRad: spawnHeadingRad, correctedRad: travelHeadingRad, errorRad: headingErrorRad },
+          'warning',
+        ));
+      }
+      spawnHeadingRad = travelHeadingRad;
+    }
+
     const rules = { ...spec.behavior.rules };
     const rt: ActorRuntime = {
       id: spec.id,
@@ -570,7 +654,9 @@ class Simulation {
       lateralRateMps: 0,
       lateralAccelMps2: 0,
       position: posePoint,
-      headingRad: normalizeAngle(spec.initial.pose.headingRad),
+      headingRad: spawnHeadingRad,
+      motionDirection,
+      pendingMotionDirection: null,
       present: spec.presentAtStart,
       retired: false,
       longCmd: null,
@@ -582,8 +668,13 @@ class Simulation {
       requiredDecelMax: 0,
       crashDisabledAtS: null,
       crashDisabledReason: null,
+      hasMoved: false,
     };
     rt.cruiseSpeedMps = spec.static ? 0 : cruiseSpeed(rt, this.speedLimitAt(rt));
+    // Seed both gear keys so a trace consumer can read the gear at t = 0 without
+    // having to know that "absent means forward".
+    rt.stateKeys.set(MOTION_GEAR_KEY, gearOfMotionDirection(motionDirection));
+    rt.stateKeys.set(MOTION_GEAR_ENGAGED_KEY, gearOfMotionDirection(motionDirection));
     return rt;
   }
 
@@ -664,11 +755,23 @@ class Simulation {
       this.world = { ...this.world, t };
       this.updateDoorTransitions(t);
       const collisions = this.detectCollisions(t);
+      // Perception runs before the triggers that read it, from the same frozen
+      // snapshot, and under exactly the guard that `record` uses — so the
+      // per-sensor channel is index-aligned with `ticks.t` by construction.
+      if (this.perception && (t >= 0 || this.opts.includeWarmupTrace === true)) {
+        this.observePerception(t);
+      }
       if (t >= 0) {
         this.evaluateWindowEnds(t);
         this.evaluateTriggers(t, collisions);
         this.evaluateUntil(t, collisions);
         this.evaluateWindowEnds(t);
+      }
+      // A gear change is a request held until the body is at rest, so retry it
+      // every tick. That is what lets an author write `speed(stop)` followed by
+      // `set(motion.gear = reverse)` without having to guess the stopping time.
+      for (const a of this.actors) {
+        if (a.pendingMotionDirection !== null) this.engagePendingGear(a, t);
       }
       if (t >= 0 || this.opts.includeWarmupTrace === true) {
         // Record the state *at* `t`, before this tick's integration step, so
@@ -1003,7 +1106,54 @@ class Simulation {
       occluders: this.occludersForTick(),
       collisions,
       visibilityRangeM: this.resolvedInput.operationalConditions.effects.visibilityRangeM,
+      ...(this.perception ? { perception: this.perception } : {}),
     };
+  }
+
+  /* -------------------------------------------------------------- perception */
+
+  /**
+   * One perception tick.
+   *
+   * The line-of-sight test is the engine's own occluder layer — perception does
+   * not get a second, disagreeing notion of geometry — and the operational
+   * visibility range still applies, so a sensor cannot see further than the
+   * scenario's declared conditions allow. Everything past that gate is the
+   * sensor model's own optics.
+   */
+  private observePerception(t: number): void {
+    const occluders = this.occludersForTick();
+    const views: PerceptionActorView[] = this.actors.map((a) => {
+      const pose = a.route.poseAt(a.routeS);
+      return {
+        id: a.id,
+        position: a.position,
+        headingRad: a.headingRad,
+        heightM: a.dims.h,
+        present: a.present,
+        stateKeys: a.stateKeys,
+        laneRsl: pose.rsl ?? null,
+        laneS: pose.laneS,
+      };
+    });
+    this.perception!.observe(t, views, (from, to, observerId, targetId) => {
+      // Neither endpoint occludes the segment between them. The engine promotes
+      // every static actor to an occluder, so without this the pedestrian being
+      // looked for would hide behind itself.
+      const selfIds = new Set([`actor:${observerId}`, `actor:${targetId}`]);
+      // Occluders ONLY — deliberately not `operationalConditions.effects
+      // .visibilityRangeM`. That field is the pre-perception stand-in for
+      // weather: a single hard range that a fog preset shortens. Applying it
+      // here as well would attenuate the same fog twice, and worse, it would be
+      // recorded as `occluded` — blaming geometry for what is actually the air.
+      // A declared sensor makes its own optics the single authority on range,
+      // through `aperture.farM` and the contrast model.
+      return hasLineOfSight(
+        from,
+        to,
+        occluders.filter((occluder) => !selfIds.has(occluder.id)),
+      );
+    });
   }
 
   private evaluateTriggers(t: number, collisions: ReadonlySet<string>): void {
@@ -1372,12 +1522,131 @@ class Simulation {
           a.cruiseSpeedMps = cruiseSpeed(a, this.speedLimitAt(a));
         }
         break;
+      case MOTION_GEAR_KEY: {
+        // Gear selection is a *request*, not an assignment. A gearbox cannot
+        // pick reverse at road speed, and forcing it would teleport momentum:
+        // the dynamic solver clamps `direction * v < 0` straight to zero. Hold
+        // the request until the body is at rest and engage it there.
+        //
+        // The request and the engagement are published as two separate state
+        // keys — `motion.gear` is what the author asked for, `motion.gearEngaged`
+        // is what the gearbox actually did. A shift that never engages is then
+        // visible in the trace as a disagreement between them, instead of being
+        // a silent no-op.
+        const requested = motionDirectionOfGear(value);
+        if (requested === null) break;
+        a.pendingMotionDirection = requested === a.motionDirection ? null : requested;
+        this.engagePendingGear(a, t);
+        break;
+      }
       default:
         // `lights.*`, `audio.*`, `doors.*`, `pose.*`, `env.*`, `signal:*.phase` are
         // recorded state only — the renderer and exporter read them back out of
         // the event log; no controller consumes them yet.
         break;
     }
+  }
+
+  /**
+   * Last resolved lane for each actor whose route carries no lane identity,
+   * with the position it was resolved at. See `freeformLaneRsl`.
+   */
+  private readonly freeformLaneBindings = new Map<string, { at: Vec2; rsl: LaneRsl | null }>();
+
+  /**
+   * Lane membership for an actor whose route is a freeform polyline.
+   *
+   * A car backing out of a driveway or a bay starts *off* the corridor and
+   * crosses into the ego's lane part way through the manoeuvre; its authored
+   * path is a polyline, which carries no `rsl` at all, so without this the whole
+   * manoeuvre reports `laneRsl: null` and every lane-scoped consumer — conflict
+   * pairing, the invariant checker, the exporters — concludes the actor was
+   * never on the road. Resolving membership from the lane graph at the body's
+   * actual position is what makes "it entered my lane" observable.
+   *
+   * `nearestLane` is a full scan, so the result is cached and only recomputed
+   * once the body has moved a metre. That bounds a 20 s clip to a few dozen
+   * queries per freeform actor rather than one per tick.
+   */
+  private freeformLaneRsl(a: ActorRuntime): LaneRsl | null {
+    const cached = this.freeformLaneBindings.get(a.id);
+    if (cached && Math.hypot(cached.at.x - a.position.x, cached.at.y - a.position.y) < FREEFORM_LANE_REBIND_M) {
+      return cached.rsl;
+    }
+    const found = this.graph.nearestLane(a.position, { maxDistM: Math.max(a.dims.w, 1.5) });
+    const rsl = found ? found.rsl : null;
+    this.freeformLaneBindings.set(a.id, { at: { x: a.position.x, y: a.position.y }, rsl });
+    return rsl;
+  }
+
+  /**
+   * Engage an outstanding gear change, if the body is slow enough to allow it.
+   *
+   * Called on the shift request and again every tick, so an author who commands
+   * `speed(stop)` and then `set(motion.gear = reverse)` gets the shift the
+   * moment the car actually comes to rest, without having to guess the stopping
+   * time.
+   *
+   * Selecting the opposite gear **reverses the route** rather than rotating the
+   * body. That is the physically honest model of backing down the lane you just
+   * came up: the heading is continuous (`newTangent + PI` is the old tangent),
+   * `routeS` re-bases to `lengthM - s`, and the lateral offset negates because
+   * "left" is measured relative to the direction of travel. Because the flipped
+   * route is still a lane chain, `laneRsl`, lane width and the leader search go
+   * on working throughout the manoeuvre.
+   */
+  private engagePendingGear(a: ActorRuntime, t: number): void {
+    const next = a.pendingMotionDirection;
+    if (next === null) return;
+    if (next === a.motionDirection) {
+      a.pendingMotionDirection = null;
+      return;
+    }
+    if (Math.abs(a.speedMps) > GEAR_ENGAGE_SPEED_MPS) return;
+
+    if (a.hasMoved) {
+      const flipped = a.route.reversedRoute();
+      a.routeS = clamp(a.route.lengthM - a.routeS, 0, flipped.lengthM);
+      a.route = flipped;
+      a.remainingTurns = [];
+      // "Left" is measured relative to the direction of travel, so flipping the
+      // traversal negates every lateral quantity with it.
+      a.lateralOffsetM = -a.lateralOffsetM;
+      a.lateralReferenceOffsetM = -a.lateralReferenceOffsetM;
+      a.lateralRestOffsetM = -(a.lateralRestOffsetM ?? 0);
+      a.lateralReferenceRateMps = -a.lateralReferenceRateMps;
+      a.lateralRateMps = -a.lateralRateMps;
+    } else {
+      // The body has never driven, so its heading is a placement rather than a
+      // physical outcome: this is a car parked nose-in being told to come out
+      // backwards. Keep the authored path — it is the escape path the author
+      // drew — and re-derive the heading from it, which is the same
+      // `routeTangent + PI` rule spawn-in-reverse actors already obey. The
+      // dynamic body is re-seeded at the new yaw so pure pursuit does not start
+      // 180 degrees out, which is precisely the failure this whole mechanism
+      // used to exhibit.
+      a.headingRad = normalizeAngle(
+        a.route.poseAt(a.routeS).headingRad + (next === -1 ? Math.PI : 0),
+      );
+      if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
+        this.motionBackend.register({
+          actorId: a.id,
+          kind: a.kind,
+          dimensions: { l: a.dims.l, w: a.dims.w },
+          motionDirection: next,
+          state: { x: a.position.x, y: a.position.y, yawRad: a.headingRad, longitudinalVelocityMps: 0 },
+          profile: this.physicsConfig.vehicleProfiles?.[a.id],
+        });
+      }
+    }
+    a.motionDirection = next;
+    a.pendingMotionDirection = null;
+    // A retired actor has finished *this* route; a fresh one in the other gear
+    // is new motion, so let it drive again.
+    a.retired = false;
+    const gear = gearOfMotionDirection(next);
+    a.stateKeys.set(MOTION_GEAR_ENGAGED_KEY, gear);
+    this.events.push({ t, kind: 'state_set', actorId: a.id, key: MOTION_GEAR_ENGAGED_KEY, value: gear });
   }
 
   private applyDoorState(a: ActorRuntime, name: DoorName, value: boolean | number | string, t: number): void {
@@ -1614,13 +1883,30 @@ class Simulation {
     return plans;
   }
 
+  /**
+   * The grip under one actor on this tick.
+   *
+   * This is the whole point of the surface field: friction is a property of
+   * *where the actor is*, not of the episode. With no patches it is the
+   * scene-wide weather scalar and costs one boolean.
+   */
+  private frictionScaleFor(a: ActorRuntime): number {
+    if (this.surface.isUniform) return this.surface.baselineFrictionScale;
+    const pose = a.route.isFreeform ? null : a.route.poseAt(a.routeS);
+    return this.surface.frictionScaleAt({
+      position: a.position,
+      lane: pose?.rsl != null ? { rsl: pose.rsl, laneS: pose.laneS } : null,
+    });
+  }
+
   /** All-way-stop arbitration: first complete arrival wins; actor id is the
    * stable same-tick tie break. Only one movement enters during the short
    * intersection-clearance window. */
   private canReleaseStop(controlId: string, coordinationId: string, actorId: string, t: number): boolean {
     const coordinatedControlIds = new Set(
       this.signals.stopLines
-        .filter((line) => line.kind === 'stop' && line.coordinationId === coordinationId)
+        .filter((line) =>
+          line.coordinationId === coordinationId && this.signals.authorityAt(line, t).kind === 'stop')
         .map((line) => line.controlId),
     );
     for (const actor of this.actors) {
@@ -1770,7 +2056,7 @@ class Simulation {
     }
 
     if (a.crashDisabledAtS != null) {
-      const frictionScale = this.resolvedInput.operationalConditions.effects.frictionScale;
+      const frictionScale = this.frictionScaleFor(a);
       const emergencyDecel = Math.min(limitsFor(a).brakeHard * frictionScale, Math.max(0, a.speedMps / this.dt));
       const speed = Math.max(0, a.speedMps - emergencyDecel * this.dt);
       plan.accel = -emergencyDecel;
@@ -1852,14 +2138,34 @@ class Simulation {
     const conflict = a.bestEffortWorldPath ? null : this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
-    const frictionScale = this.resolvedInput.operationalConditions.effects.frictionScale;
+    const frictionScale = this.frictionScaleFor(a);
     accel = Math.max(accel, -lim.brakeHard * frictionScale);
-    plan.requiredDecel = gov.requiredDecel;
+    // The body still brakes for a generated car in front — `accel` above is
+    // untouched — but the *evidence* figure `requiredDecelMax` must keep
+    // meaning "how hard the authored scenario made this actor brake". Crediting
+    // background traffic with the ego's braking demand would let ambient
+    // traffic manufacture the criticality the scenario is supposed to prove.
+    // Ambient actors keep the full figure: it is their own honest telemetry.
+    const leaderIsAmbient = nearestLeader !== null && this.ambientActorIdSet.has(nearestLeader.id);
+    plan.requiredDecel = leaderIsAmbient && !this.ambientActorIdSet.has(a.id)
+      ? gov.requiredDecelExcludingLeader
+      : gov.requiredDecel;
 
     let speed = a.speedMps + accel * this.dt;
     if (speed < 0) {
       speed = 0;
       accel = -a.speedMps / this.dt;
+    }
+    // Reverse gear has a single ratio and runs out of engine speed well below
+    // road speed. Govern the magnitude here, at the one choke point every
+    // longitudinal source funnels through, so an authored target, a free-flow
+    // cruise speed and a car-following output are all bounded identically —
+    // rather than special-casing the authored one and letting the others
+    // through.
+    const gearedSpeed = governSpeedForGear(speed, a.motionDirection);
+    if (gearedSpeed < speed) {
+      accel = Math.max((gearedSpeed - a.speedMps) / this.dt, -lim.brakeHard * frictionScale);
+      speed = Math.max(a.speedMps + accel * this.dt, 0);
     }
     plan.accel = accel;
     plan.speed = speed;
@@ -2087,6 +2393,9 @@ class Simulation {
       } else {
         a.standstillSinceS = null;
       }
+      // Latched once the body has actually driven. A gear change means something
+      // different before and after this point — see `engagePendingGear`.
+      if (a.speedMps > GEAR_ENGAGE_SPEED_MPS) a.hasMoved = true;
 
       if (plan.lateralTrackingExpired && a.latCmd) {
         const cmd = a.latCmd;
@@ -2247,7 +2556,11 @@ class Simulation {
       track.speedMps.push(a.speedMps);
       track.lateralOffsetM.push(a.lateralOffsetM);
       track.motionDirection!.push(isReverseMotion(a) ? -1 : 1);
-      track.laneRsl.push(pose.rsl);
+      // A freeform (polyline) route carries no lane identity, so a body backing
+      // out of a driveway would otherwise report `null` for the whole manoeuvre
+      // — including the part where it is squarely in the ego's lane. Fall back
+      // to lane-graph membership at the body's actual position.
+      track.laneRsl.push(pose.rsl ?? (a.route.isFreeform ? this.freeformLaneRsl(a) : null));
       track.s.push(a.routeS);
       // `retired` means motion/interaction has finished. Pedestrians remain
       // visibly present at their terminal pose until an explicit despawn.
@@ -2347,6 +2660,10 @@ class Simulation {
         actorIds: [...actorIds].sort(),
         actorMetadata,
         propMetadata,
+        // Optional on purpose: a scenario with no ambient traffic writes the
+        // exact bytes it wrote before this channel existed, so every historical
+        // trace digest still reproduces.
+        ...(this.ambientActorIds.length > 0 ? { ambientActorIds: [...this.ambientActorIds] } : {}),
         metricSubject: input.metricSubject ?? null,
         operationalConditions: input.operationalConditions,
         physics: {
@@ -2371,9 +2688,22 @@ class Simulation {
             })),
         },
       },
-      ticks: { t: this.tArray, actors, signals },
+      ticks: {
+        t: this.tArray,
+        actors,
+        signals,
+        ...(this.perception
+          ? {
+              sensors: this.perception.sensorTracks(),
+              mapDivergence: this.perception.divergenceTracks(),
+            }
+          : {}),
+      },
       events: this.events,
-      metrics: computeMetrics(this.metrics, input.clipSeconds),
+      metrics: {
+        ...computeMetrics(this.metrics, input.clipSeconds),
+        ...(this.perception ? { perception: this.perception.metrics() } : {}),
+      },
     };
   }
 }

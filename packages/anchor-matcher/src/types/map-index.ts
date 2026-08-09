@@ -156,14 +156,22 @@ export interface Segment {
  */
 export interface PointFeature {
   id: string;
-  kind: 'crossing' | 'parking_zone' | 'bus_stop' | 'driveway' | 'school_zone' | 'work_zone_suitable' | 'occlusion_zone';
+  kind: 'crossing' | 'parking_zone' | 'bus_stop' | 'driveway' | 'school_zone' | 'work_zone_suitable' | 'occlusion_zone' | 'crest';
   laneRsl: LaneRsl;
   s: number;
   /** Feature world point in xodr-local metres, when the source catalog carries it. */
   point?: Point2;
   side?: 'left' | 'right' | 'both';
   junctionId?: string;
-  facts?: Record<string, string | number | boolean>;
+  /**
+   * The location's published facts.
+   *
+   * String arrays are carried through rather than flattened away because the
+   * single most useful fact in the catalog — an occlusion zone's
+   * `supported_scenario_templates` whitelist — is one, and the old scalar-only
+   * filter discarded it before any clause could ask.
+   */
+  facts?: Record<string, string | number | boolean | readonly string[]>;
 }
 
 /** Inverted maps for selectivity-ordered candidate generation. */

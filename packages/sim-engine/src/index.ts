@@ -53,6 +53,7 @@ export {
   routeSpecSchema,
   roadControlSchema,
   signalProgramSchema,
+  surfacePatchSchema,
   staticPropSchema,
   triggerSchema,
   verbSchema,
@@ -89,6 +90,7 @@ export type {
   SimScenarioInputSpec,
   SpeedTarget,
   StaticProp,
+  SurfacePatch,
   Trigger,
   TurnRelation,
   VerbSpec,
@@ -133,8 +135,12 @@ export { evaluateCondition } from './sim/triggers.js';
 export type { ConditionContext } from './sim/triggers.js';
 export { buildOccluders, hasLineOfSight, blockingOccluder } from './sim/visibility.js';
 export type { OccluderShape } from './sim/visibility.js';
-export { SignalBook } from './sim/signals.js';
-export type { SignalPhase, SignalState } from './sim/signals.js';
+export { SignalBook, phaseForbidsEntry } from './sim/signals.js';
+export type { SignalPhase, SignalState, StopLineAuthority, StopLineBinding } from './sim/signals.js';
+
+/* ----------------------------------------------------- localised conditions */
+export { SURFACE_KINDS, SURFACE_KIND_FRICTION_SCALE, SurfaceField } from './environment.js';
+export type { SurfaceKind, SurfacePatchSpec, SurfaceQuery, SurfaceSample } from './environment.js';
 export {
   MOTION_LIMITS_BY_KIND,
   PEDESTRIAN_LIMITS,
@@ -267,6 +273,72 @@ export type {
   TraceEvidence,
 } from './trace/intent-rubric.js';
 
+/* -------------------------------------------------------------- perception */
+export {
+  atmosphereSchema,
+  detectionModelSchema,
+  emissiveGlareSchema,
+  mapDivergenceSchema,
+  mapDivergenceKindSchema,
+  perceptionConfigSchema,
+  simSensorSchema,
+  sensorApertureSchema,
+  sensorMountSchema,
+  DEFAULT_PERCEPTION_CONFIG,
+  MAP_DIVERGENCE_KINDS,
+} from './perception/schema.js';
+export type {
+  Atmosphere,
+  DetectionModel,
+  EmissiveGlare,
+  MapDivergence,
+  MapDivergenceExtent,
+  MapDivergenceKind,
+  PerceptionConfig,
+  SensorAperture,
+  SensorMount,
+  SimSensor,
+} from './perception/schema.js';
+export {
+  angularSeparationRad,
+  contrastLimitedRangeM,
+  detectionReasonCode,
+  koschmiederContrast,
+  observeTarget,
+  resolutionLimitedRangeM,
+  sensorPose,
+  DETECTION_REASONS,
+  DETECTION_STATUS,
+  KOSCHMIEDER_K,
+} from './perception/model.js';
+export type {
+  DetectionObservation,
+  DetectionReason,
+  DetectionStatusCode,
+  GlareSource,
+  PerceivedTarget,
+  SensorPose,
+} from './perception/model.js';
+export { PerceptionRuntime, inExtent } from './perception/runtime.js';
+export type { LineOfSightFn, PerceptionActorView, PerceptionObserverSpec } from './perception/runtime.js';
+export {
+  quantizeSensorTracks,
+  sensorChannelKey,
+  SENSOR_TRACE_PRECISION,
+  SENSOR_TRACE_REASON_LEGEND,
+  SENSOR_TRACE_STATUS_LEGEND,
+} from './trace/sensor-track.js';
+export type {
+  DetectionGap,
+  MapDivergenceMetric,
+  MapDivergenceTrack,
+  PerceptionMetrics,
+  SensorPerceptionMetric,
+  SensorTargetTrack,
+  SensorTrack,
+} from './trace/sensor-track.js';
+export type { PerceptionQuery } from './sim/triggers.js';
+
 /* ------------------------------------------------------------------ errors */
 export { SimEngineError, issue } from './errors.js';
 export type { SimIssue, SimIssueCode, SimIssueSeverity } from './errors.js';
@@ -356,6 +428,12 @@ export type {
   MaterializedTrafficSignal,
   MaterializedTrafficSignalState,
 } from './ambient/materialized-traffic.js';
+export { settleAmbientTraffic } from './ambient/settle.js';
+export type {
+  AmbientSettleOptions,
+  AmbientSettleProvenance,
+  AmbientSettleResult,
+} from './ambient/settle.js';
 export type {
   AmbientActorProvenance,
   AmbientCandidate,

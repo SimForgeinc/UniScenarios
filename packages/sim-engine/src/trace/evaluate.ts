@@ -34,6 +34,20 @@ export interface EvaluateFilters {
   readonly negativeControl?: boolean;
   /** Only apply the never-fired filter to these interaction ids. */
   readonly requiredTriggers?: readonly string[];
+  /**
+   * Generated background road users, excluded from the `physically_unavoidable`
+   * scan.
+   *
+   * WHY. That filter takes a maximum of `requiredDecelMax` over EVERY actor and
+   * rejects the whole clip when it exceeds the friction ceiling. Left alone, one
+   * background car braking hard for another background car — an event with no
+   * relation whatsoever to the authored conflict — rejects the scenario.
+   * Measured on `c3-allway-stop`: 3 of 4 accepted cells flipped
+   * `critical -> unavoidable` for exactly this reason before the exclusion.
+   * `evaluateTrace` fills this in from `trace.header.ambientActorIds`, so the
+   * default stays empty and authored-only evaluation is unchanged.
+   */
+  readonly ambientActorIds?: readonly string[];
 }
 
 export type RejectCode =
@@ -203,7 +217,9 @@ export function evaluateMetrics(
 
   let worstDecel = 0;
   let worstActor = '';
+  const ambientActorIds = new Set(filters.ambientActorIds ?? []);
   for (const id of Object.keys(metrics.requiredDecelMax).sort()) {
+    if (ambientActorIds.has(id)) continue;
     const v = metrics.requiredDecelMax[id]!;
     if (v > worstDecel) {
       worstDecel = v;
@@ -294,6 +310,7 @@ export function evaluateTrace(trace: SimTrace, filters: EvaluateFilters = {}): T
   const frictionScale = trace.header.operationalConditions?.effects.frictionScale ?? 1;
   return evaluateMetrics(trace.metrics, trace.header.clipSeconds, {
     ...filters,
+    ambientActorIds: filters.ambientActorIds ?? trace.header.ambientActorIds ?? [],
     maxAchievableDecelMps2:
       filters.maxAchievableDecelMps2 ?? DEFAULT_MAX_DECEL_MPS2 * frictionScale,
   });

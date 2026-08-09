@@ -908,6 +908,32 @@
                 "value"
               ],
               "additionalProperties": false
+            },
+            "supportsScenario": {
+              "type": "object",
+              "properties": {
+                "value": {
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/$defs/__schema15"
+                  }
+                },
+                "essentiality": {
+                  "default": "required",
+                  "$ref": "#/$defs/Essentiality"
+                },
+                "weight": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 100
+                }
+              },
+              "required": [
+                "value"
+              ],
+              "additionalProperties": false
             }
           },
           "required": [
@@ -1043,6 +1069,11 @@
         "straight",
         "uturn"
       ]
+    },
+    "__schema15": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
     }
   }
 }

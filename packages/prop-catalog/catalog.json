@@ -1262,9 +1262,9 @@
     "class": "animal",
     "description": "Medium dog with idle, walk, run and sit clips for domestic-animal crossings and owner-separation scenarios.",
     "dims": {
-      "l": 1.1,
-      "w": 0.42,
-      "h": 0.78
+      "l": 1.07,
+      "w": 0.3,
+      "h": 0.75
     },
     "tags": [
       "occlusion:low",
@@ -1274,7 +1274,7 @@
       "domestic"
     ],
     "defaultParams": {
-      "coatColor": "#9b6d45"
+      "color": "#a8834f"
     },
     "animation": {
       "rig": "quadruped",
@@ -1294,9 +1294,9 @@
     "class": "animal",
     "description": "Domestic cat with idle, walk, run and crouch clips for small, easily occluded sidewalk and roadway conflicts.",
     "dims": {
-      "l": 0.72,
-      "w": 0.28,
-      "h": 0.42
+      "l": 0.63,
+      "w": 0.15,
+      "h": 0.35
     },
     "tags": [
       "occlusion:low",
@@ -1306,7 +1306,7 @@
       "domestic"
     ],
     "defaultParams": {
-      "coatColor": "#6f747a"
+      "color": "#5c5750"
     },
     "animation": {
       "rig": "quadruped",
@@ -1326,9 +1326,9 @@
     "class": "animal",
     "description": "Adult deer with alert-idle, walk and bound clips for high-severity wildlife incursions on suburban and rural roads.",
     "dims": {
-      "l": 1.8,
-      "w": 0.55,
-      "h": 1.75
+      "l": 1.76,
+      "w": 0.46,
+      "h": 1.62
     },
     "tags": [
       "occlusion:medium",
@@ -1338,7 +1338,7 @@
       "wildlife"
     ],
     "defaultParams": {
-      "coatColor": "#9a6842"
+      "color": "#9c7b52"
     },
     "animation": {
       "rig": "quadruped",
@@ -1358,8 +1358,8 @@
     "description": "Raccoon with sniff-idle, walk and scurry clips for nocturnal curbside, refuse-area and sudden-crossing scenarios.",
     "dims": {
       "l": 0.85,
-      "w": 0.35,
-      "h": 0.5
+      "w": 0.22,
+      "h": 0.45
     },
     "tags": [
       "occlusion:low",
@@ -1369,7 +1369,7 @@
       "wildlife"
     ],
     "defaultParams": {
-      "coatColor": "#666b70"
+      "color": "#666b70"
     },
     "animation": {
       "rig": "quadruped",
@@ -1400,7 +1400,7 @@
       "wildlife"
     ],
     "defaultParams": {
-      "coatColor": "#d8d8cf"
+      "color": "#d8d8cf"
     },
     "animation": {
       "rig": "avian",
@@ -1898,6 +1898,57 @@
       "l": 2.44,
       "w": 1.2,
       "h": 0.45
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.ladder",
+    "label": "Fallen ladder",
+    "class": "hazard",
+    "description": "Aluminium extension ladder shed from a roof rack, lying across the carriageway. Long, thin and low: too long to straddle and hard to see at range.",
+    "dims": {
+      "l": 3.55,
+      "w": 0.44,
+      "h": 0.08
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.mattress",
+    "label": "Shed mattress",
+    "class": "hazard",
+    "description": "Double mattress lost from a load and lying folded in the lane. Large, soft and completely undrivable-over: it fills a lane despite weighing almost nothing.",
+    "dims": {
+      "l": 1.86,
+      "w": 1.32,
+      "h": 0.3
+    },
+    "tags": [
+      "debris",
+      "roadway",
+      "occlusion:low"
+    ],
+    "defaultParams": {}
+  },
+  {
+    "id": "hazard.debris",
+    "label": "Unidentified debris",
+    "class": "hazard",
+    "description": "Scatter of broken material in the travelled way with no recognisable identity. The generic obstacle for briefs that say \"there is debris in the lane\" without naming the object.",
+    "dims": {
+      "l": 0.88,
+      "w": 0.85,
+      "h": 0.24
     },
     "tags": [
       "debris",

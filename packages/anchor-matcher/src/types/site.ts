@@ -114,6 +114,14 @@ export interface FeatureBinding {
   };
   arrival?: { relativeTo: string; deltaT: number };
   onMissing?: OnMissing;
+  /**
+   * The signed lane index the role actually asked for, when the binding is
+   * lane-indexed. `pose.k` is where the actor ended up; these differ exactly
+   * when `onMissing: 'clamp'` moved it. `relative_to` needs this recorded
+   * because its request is `ref.pose.k + dLane` and cannot be recovered from
+   * the role alone.
+   */
+  requestedK?: number;
   notes: string[];
 }
 
