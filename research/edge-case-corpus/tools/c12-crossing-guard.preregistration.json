@@ -1,11 +1,11 @@
 {
  "rubric": "c12-crossing-guard.rubric.json",
  "sha256": "d98fb235659cfe684f271414bddab71d30794d688c45592e993d58c67cc6e181",
- "registeredAt": "2026-08-06T18:37:51.940627+00:00",
+ "registeredAt": "2026-08-07T03:37:04.680711+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::016011e14fda56b1"
+   "yale-street::007b7001d1afa0c5"
   ],
   [
    "place_actor",
@@ -35,19 +35,7 @@
    "add_interaction",
    "crossing_guard",
    "wave_traffic",
-   "on_approach"
-  ],
-  [
-   "add_interaction",
-   "child1",
-   "cross_road",
-   "at_conflict"
-  ],
-  [
-   "add_interaction",
-   "child2",
-   "cross_road",
-   "after"
+   "scenario_start"
   ],
   [
    "require",
@@ -57,8 +45,8 @@
     "child1"
    ],
    [
-    0.2,
-    1.5
+    0,
+    3
    ]
   ]
  ]

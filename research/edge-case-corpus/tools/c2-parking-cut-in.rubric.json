@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "pulling_vehicle"
+    "parking_vehicle"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "pulling_vehicle"
+    "parking_vehicle"
    ],
    "maxCount": 0
   }

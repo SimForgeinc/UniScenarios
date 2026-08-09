@@ -1,7 +1,7 @@
 {
  "rubric": "c2-cut-in-brake.rubric.json",
- "sha256": "530f1f9145362ad674f9904464ba3f21a93a4df5d19fc3016cea382c2f29f89e",
- "registeredAt": "2026-08-06T19:41:14.193715+00:00",
+ "sha256": "b9c08d0bb0688e1f02a0256d06c43b81982eced2d7384a1da5b08b20e6abab3d",
+ "registeredAt": "2026-08-07T07:21:08.039108+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,7 +9,7 @@
   ],
   [
    "place_actor",
-   "cutter",
+   "cut_in_vehicle",
    "vehicle.sedan",
    "adjacent_lane"
   ],
@@ -21,13 +21,13 @@
   ],
   [
    "add_interaction",
-   "cutter",
+   "cut_in_vehicle",
    "change_lane",
    "on_approach"
   ],
   [
    "add_interaction",
-   "cutter",
+   "cut_in_vehicle",
    "brake_to_stop",
    "after"
   ],
@@ -36,11 +36,11 @@
    "near_miss",
    [
     "ego",
-    "cutter"
+    "cut_in_vehicle"
    ],
    [
-    0,
-    2
+    0.1,
+    1.0
    ]
   ]
  ]

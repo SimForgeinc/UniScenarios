@@ -1,7 +1,7 @@
 {
  "rubric": "c5-bus-stop-emergence.rubric.json",
  "sha256": "5f1f39808217a4976da55f0160bf58769187187c49ee54da633fcf59698eb69a",
- "registeredAt": "2026-08-06T18:30:23.748996+00:00",
+ "registeredAt": "2026-08-07T03:12:18.074417+00:00",
  "authorLog": [
   [
    "use_site",
@@ -27,12 +27,6 @@
   ],
   [
    "add_interaction",
-   "pedestrian",
-   "cross_road",
-   "at_conflict"
-  ],
-  [
-   "add_interaction",
    "ego",
    "hold_course",
    "on_approach"
@@ -45,8 +39,8 @@
     "pedestrian"
    ],
    [
-    0.1,
-    1.0
+    0.2,
+    1.2
    ]
   ]
  ]

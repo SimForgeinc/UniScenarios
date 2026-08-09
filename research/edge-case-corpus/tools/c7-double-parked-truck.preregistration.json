@@ -1,17 +1,24 @@
 {
  "rubric": "c7-double-parked-truck.rubric.json",
  "sha256": "06bcc62fd011e50453bccb99ebedef1a3d48350fd03356d99c64420fd5444e86",
- "registeredAt": "2026-08-06T18:40:40.124143+00:00",
+ "registeredAt": "2026-08-07T07:07:33.056325+00:00",
  "authorLog": [
   [
    "use_site",
    "yale-street::016011e14fda56b1"
   ],
   [
-   "place_actor",
-   "double_parked_truck",
+   "narrow_lane",
+   "right",
+   "drum",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
    "vehicle.box_truck",
-   "ahead_same_lane"
+   "activity",
+   2
   ],
   [
    "place_actor",
@@ -27,14 +34,14 @@
   ],
   [
    "add_interaction",
-   "double_parked_truck",
-   "hold_course",
-   "scenario_start"
+   "pedestrian",
+   "ignore_right_of_way",
+   "at_conflict"
   ],
   [
    "add_interaction",
    "pedestrian",
-   "cross_road",
+   "hold_course",
    "at_conflict"
   ],
   [
@@ -46,7 +53,7 @@
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

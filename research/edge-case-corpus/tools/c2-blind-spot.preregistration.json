@@ -1,7 +1,7 @@
 {
  "rubric": "c2-blind-spot.rubric.json",
  "sha256": "2d0b501fcca71752d811e8b6f2723c3904f825d195b75f1e680e7647712440b5",
- "registeredAt": "2026-08-06T19:36:48.830370+00:00",
+ "registeredAt": "2026-08-07T07:21:09.487960+00:00",
  "authorLog": [
   [
    "use_site",
@@ -17,12 +17,12 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "scenario_start"
+   "on_approach"
   ],
   [
    "add_interaction",
    "challenger",
-   "change_lane",
+   "hold_course",
    "on_approach"
   ],
   [

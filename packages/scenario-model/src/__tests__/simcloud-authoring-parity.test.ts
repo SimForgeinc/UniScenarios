@@ -33,7 +33,7 @@ describe('SimCloud authoring parity', () => {
 
   it('supports the full product actor and authoring operation vocabulary', () => {
     const document = TemplateDocument.create({ name: 'Editor parity' });
-    document.setEnvironment({ weather: 'heavy_rain', timeOfDay: 'dusk' });
+    document.setEnvironment({ weather: 'heavy_rain', timeOfDay: 'dusk', surfacePatches: [] });
     document.addParam({ id: 'speed_factor', type: 'continuous', range: [0.8, 1.2], default: 1, distribution: 'uniform', tier: 1 });
     document.addProp({
       id: 'barrier', catalogId: 'construction.barrier',

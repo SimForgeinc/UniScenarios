@@ -11,7 +11,17 @@
 import { z } from 'zod';
 import { EssentialitySchema, TurnSchema, ApproachRelationSchema } from './anchor.js';
 
-/** What to do when the requested lane offset does not exist at a site. */
+/**
+ * What to do when the requested lane offset does not exist at a site.
+ *
+ * The default is `fail` everywhere, deliberately. `clamp` moves an actor to the
+ * nearest lane that does exist, which on a one-lane-per-direction corridor —
+ * ~70% of the driving lanes on the dev maps — is the *reference* lane, i.e. the
+ * ego's own. That silently converts "a car in the next lane over" into "a car
+ * interpenetrating the ego", and it does so with a note rather than a failure,
+ * so the cell still runs and still reports a metric. Relocation has to be
+ * something an author asks for, never something they get by omission.
+ */
 export const OnMissingSchema = z.enum(['clamp', 'drop', 'fail']);
 export type OnMissing = z.infer<typeof OnMissingSchema>;
 
@@ -43,7 +53,7 @@ export const RoleBindingSchema = z.discriminatedUnion('kind', [
     kind: z.literal('lane_offset'),
     /** Signed same-direction lane index; +1 is one lane to the left of travel. */
     k: z.number().int(),
-    onMissing: OnMissingSchema.default('clamp'),
+    onMissing: OnMissingSchema.default('fail'),
     dsM: z.number().default(0),
     tFrac: z.number().default(0),
   }),
@@ -99,6 +109,12 @@ export const RoleBindingSchema = z.discriminatedUnion('kind', [
     ref: z.string().min(1),
     /** Lane delta relative to the referenced role, in signed same-direction k. */
     dLane: z.number().int().default(0),
+    /**
+     * What to do when `ref`'s lane plus `dLane` is not a lane at this site.
+     * Same vocabulary and same loud default as {@link OnMissingSchema} on
+     * `lane_offset`: a `dLane` is a lane request, not a hint.
+     */
+    onMissing: OnMissingSchema.default('fail'),
     dsM: z.number().default(0),
     tFrac: z.number().optional(),
   }),

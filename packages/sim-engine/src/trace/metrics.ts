@@ -74,6 +74,12 @@ interface OcclusionMonitor {
 export interface MetricAccumulator {
   /** When set, only pairs containing this actor enter episode criticality. */
   readonly metricSubject: string | null;
+  /**
+   * Generated background road users. Any pair touching one of these is not
+   * scored, so ambient traffic can never take `minTTC`/`minPET`/`minDistance`
+   * away from the authored pair. Collisions remain global.
+   */
+  readonly ambientActorIds: ReadonlySet<string>;
   readonly pairs: Map<string, PairAccumulator>;
   readonly occlusionMonitors: OcclusionMonitor[];
   readonly requiredDecelMax: Record<string, number>;
@@ -92,11 +98,13 @@ export function newMetricAccumulator(
   actorIds: readonly string[],
   occlusionPairs: readonly OcclusionPair[] = [],
   metricSubject: string | null = null,
+  ambientActorIds: readonly string[] = [],
 ): MetricAccumulator {
   const requiredDecelMax: Record<string, number> = {};
   for (const id of [...actorIds].sort()) requiredDecelMax[id] = 0;
   return {
     metricSubject,
+    ambientActorIds: new Set(ambientActorIds),
     pairs: new Map(),
     occlusionMonitors: occlusionPairs
       .map((p) => ({
@@ -175,8 +183,12 @@ export function observeTick(
         version: MONITORED_PAIR_POLICY_VERSION,
         metricSubject: acc.metricSubject,
         explicitPairs,
+        ambientActorIds: acc.ambientActorIds,
       }, a.id, b.id, hasArticulatedShape);
       const { monitored, scored } = selection;
+      // Hard stop: an ambient pair is never scored, not even through the
+      // articulated-static escape hatch below.
+      if (selection.reason === 'ambient-excluded') continue;
       if (!scored && !monitored && !hasArticulatedShape) continue;
       const staticPaths = staticActor && movingActor
         ? [...(staticShapes?.values() ?? [])]

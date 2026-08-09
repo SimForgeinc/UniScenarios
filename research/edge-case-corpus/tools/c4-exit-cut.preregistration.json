@@ -1,7 +1,7 @@
 {
  "rubric": "c4-exit-cut.rubric.json",
- "sha256": "bb65eae050eedffcfeb67cba1021e295815d3b3705d2daeadc5be43040152ae0",
- "registeredAt": "2026-08-06T18:38:37.703789+00:00",
+ "sha256": "014b361c8851c763291b04f7f06d95594ed93615d2d20bb3d2780d78358e33fe",
+ "registeredAt": "2026-08-07T03:42:42.722295+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,7 +9,7 @@
   ],
   [
    "place_actor",
-   "circulating_vehicle",
+   "circulator",
    "vehicle.sedan",
    "conflicting"
   ],
@@ -21,13 +21,13 @@
   ],
   [
    "add_interaction",
-   "circulating_vehicle",
+   "circulator",
    "ignore_right_of_way",
    "at_conflict"
   ],
   [
    "add_interaction",
-   "circulating_vehicle",
+   "circulator",
    "hold_course",
    "at_conflict"
   ],
@@ -36,11 +36,11 @@
    "near_miss",
    [
     "ego",
-    "circulating_vehicle"
+    "circulator"
    ],
    [
     0.1,
-    1.0
+    2.0
    ]
   ]
  ]

@@ -21,7 +21,7 @@
 
 import type { ClauseResult, DegradationReport, FeatureBinding, Repair } from './types/site.js';
 import type { LogicalAnchor } from './types/anchor.js';
-import type { RoleBinding } from './types/roles.js';
+import type { OnMissing, RoleBinding } from './types/roles.js';
 import { passesRequired } from './scoring.js';
 
 /** Score multipliers for repairs whose cost is not already in a clause score. */
@@ -55,6 +55,19 @@ function clauseByPath(clauses: ClauseResult[], path: string): ClauseResult | und
 
 const fmt = (v: unknown): string =>
   typeof v === 'number' ? String(Math.round(v * 100) / 100) : Array.isArray(v) ? v.join('|') : String(v);
+
+/**
+ * The author's stated instruction for an unsatisfiable lane request.
+ *
+ * Read from the binding first (the matcher records what it acted on) and from
+ * the role as a fallback, so a caller that assembles bindings by hand — the
+ * degradation tests do — still gets the author's intent rather than a silent
+ * `undefined` that would recategorise a sanctioned clamp as a violation.
+ */
+function onMissingOf(binding: FeatureBinding, role: RoleBinding | undefined): OnMissing | undefined {
+  if (binding.onMissing !== undefined) return binding.onMissing;
+  return role !== undefined && 'onMissing' in role ? role.onMissing : undefined;
+}
 
 /**
  * Apply the ordered repair attempts and produce the report.
@@ -115,13 +128,16 @@ export function degrade(input: DegradeInput): DegradeResult {
   // 3. lane-offset clamp --------------------------------------------------
   // `onMissing: 'clamp' | 'drop'` is an *author instruction*, not a matcher
   // liberty: a clamp the author asked for does not touch intent even on a
-  // required role. An unsanctioned clamp (e.g. a `relative_to` that ran out of
-  // lanes) does.
+  // required role. Every lane-indexed binding now carries that instruction, so
+  // "sanctioned" is a property of what the author wrote rather than of which
+  // role kind happened to have the field.
   for (const binding of bindings) {
     if (binding.status !== 'clamped') continue;
     const role = roleByName.get(binding.role);
-    const sanctioned = role?.kind === 'lane_offset' && role.onMissing === 'clamp';
-    const requestedK = role && role.kind === 'lane_offset' ? role.k : (binding.pose?.k ?? 0);
+    const onMissing = onMissingOf(binding, role);
+    const sanctioned = onMissing === 'clamp';
+    const requestedK =
+      binding.requestedK ?? (role?.kind === 'lane_offset' ? role.k : (binding.pose?.k ?? 0));
     repairs.push({
       kind: 'lane_offset_clamp',
       role: binding.role,
@@ -157,8 +173,7 @@ export function degrade(input: DegradeInput): DegradeResult {
     // An author-sanctioned `onMissing: 'drop'` is a rendition choice, not a
     // relaxation of intent. `onMissing: 'fail'` is the opposite: the author
     // said this site should be rejected.
-    const sanctionedDrop =
-      binding.status === 'dropped' && role?.kind === 'lane_offset' && role.onMissing === 'drop';
+    const sanctionedDrop = binding.status === 'dropped' && onMissingOf(binding, role) === 'drop';
     const touchesRequired = !sanctionedDrop && essentiality !== 'cosmetic';
     repairs.push({
       kind: 'actor_drop',

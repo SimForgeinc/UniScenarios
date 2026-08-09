@@ -1,7 +1,7 @@
 {
  "rubric": "c1-tailgated-brake.rubric.json",
  "sha256": "396ab78f0ed9dd7f75231ecfdc5e8ccc66589c88ddbf40854e8a91def251065a",
- "registeredAt": "2026-08-06T17:46:52.250642+00:00",
+ "registeredAt": "2026-08-07T02:58:53.339566+00:00",
  "authorLog": [
   [
    "use_site",
@@ -21,6 +21,12 @@
   ],
   [
    "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "add_interaction",
    "lead",
    "brake_to_stop",
    "on_approach"
@@ -30,12 +36,6 @@
    "tailgater",
    "hold_course",
    "on_approach"
-  ],
-  [
-   "add_interaction",
-   "ego",
-   "hold_course",
-   "scenario_start"
   ],
   [
    "require",

@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "challenger"
+    "oncoming_car"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "challenger"
+    "oncoming_car"
    ],
    "maxCount": 0
   }

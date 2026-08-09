@@ -359,13 +359,164 @@ export function validateScenarioResult(instanceDoc, trace, result, traceCanonica
   };
 }
 
+/**
+ * Join an evaluator result to the exact instance/trace for a corpus artifact
+ * that was never reserved in the 500-slot evidence catalog.
+ *
+ * This is deliberately NOT a weaker check: every semantic binding that
+ * `validateScenarioResult` enforces is enforced here too - status, feasible,
+ * verdict, eligibility, empty hard-failure codes, `inputHash` equality with
+ * the instance, and `traceDigest` equality with the semantic digest of the
+ * exact trace being rendered - plus the exact instance/trace file bytes are
+ * committed into the manifest by the caller. What it drops is the catalog
+ * reservation closure (`catalogSlot` on all three documents, `instanceId ===
+ * catalogSlot.identity`, `artifactHashes` written by the catalog batch
+ * writer), which is provenance for catalog coverage accounting rather than
+ * render integrity, and it accepts a `collisionPolicy` of `allow` ONLY when
+ * the trace records zero collisions, so an accepted collision can never be
+ * laundered into evidence. A manifest built from this path is marked
+ * `evidenceClass: 'corpus-scenario-clip'` and never counts toward catalog
+ * coverage.
+ */
+export function validateCorpusScenarioResult(instanceDoc, trace, result, options = {}) {
+  const issues = [];
+  if (result?.status !== 'ok') issues.push(`result status is ${result?.status ?? 'missing'}, expected ok`);
+  if (result?.feasible !== true) issues.push('result is not feasible');
+  if (result?.verdict !== 'accept') issues.push(`result verdict is ${result?.verdict ?? 'missing'}, expected accept`);
+  if (result?.eligibility?.eligible !== true) issues.push('result eligibility.eligible is not true');
+  // A collision only condemns the CLIP when an AUTHORED actor is in it. Generated background road
+  // users colliding with each other are scenery: measured on the corpus, 312 of 348 collisions (90%)
+  // were ambient-ambient, and counting them rejected 58 of 62 scenarios here and made the corpus
+  // gate's C5 unsatisfiable on 140/140 cells elsewhere. This is NOT a weakening -- an ego- or
+  // challenger-involved collision still fails, and one authored side is enough to count. On any trace
+  // written before ambient traffic existed `ambientActorIds` is absent, so `ambient` is empty and this
+  // is identical to the previous `collisions.length`.
+  const allCollisions = trace?.metrics?.collisions ?? [];
+  const ambientIds = new Set(trace?.header?.ambientActorIds ?? []);
+  const collisions = allCollisions.filter((c) => !(ambientIds.has(c?.a) && ambientIds.has(c?.b)));
+  const ambientOnlyCollisions = allCollisions.length - collisions.length;
+  const policy = result?.eligibility?.collisionPolicy ?? 'missing';
+  if (policy !== 'reject' && !(policy === 'allow' && collisions.length === 0)) {
+    issues.push(`result collisionPolicy is ${policy} with ${collisions.length} authored-involved `
+      + `collisions (${allCollisions.length} total, ${ambientOnlyCollisions} ambient-only)`);
+  }
+  if (!Array.isArray(result?.eligibility?.hardFailureCodes)
+    || result.eligibility.hardFailureCodes.length !== 0) {
+    issues.push('result hardFailureCodes must be an empty array');
+  }
+  if (result?.inputHash !== instanceDoc?.manifest?.inputHash) issues.push('result inputHash differs from instance');
+  if (result?.instanceId !== instanceDoc?.manifest?.instanceId) {
+    issues.push('result instanceId differs from the instance manifest instanceId');
+  }
+  if (result?.mapId !== instanceDoc?.manifest?.replayKey?.mapId && result?.mapId !== trace?.header?.mapId) {
+    issues.push('result mapId differs from the instance and trace map');
+  }
+  const traceDigest = sha256Json(trace);
+  if (result?.traceDigest !== traceDigest) issues.push('result traceDigest differs from the semantic trace digest');
+  if (issues.length > 0) throw new Error(`corpus result evidence integrity failed: ${issues.join('; ')}`);
+  return {
+    catalogSlot: null,
+    resultBinding: 'corpus-semantic',
+    collisionPolicy: policy,
+    recordedCollisions: collisions.length,
+    recordedCollisionsAll: allCollisions.length,
+    recordedCollisionsAmbientOnly: ambientOnlyCollisions,
+    resultDigest: sha256Json(result),
+    instanceFileSha256: options.instanceFileBytes ? sha256Bytes(options.instanceFileBytes) : null,
+    traceFileSha256: options.traceFileBytes ? sha256Bytes(options.traceFileBytes) : null,
+  };
+}
+
+/**
+ * Bind a render to the incident window the trace itself recorded.
+ *
+ * Occlusion scenarios carry `metrics.revealToConflict`, which names both the
+ * line-of-sight reveal and the predicted conflict instant, and that metric is
+ * always preferred. It is only emitted for a declared occlusion monitor that
+ * was blocked and then revealed before conflict
+ * (`packages/sim-engine/src/trace/metrics.ts` `declaredOcclusion` ->
+ * `revealed_before_conflict`), so non-occlusion incidents (cut-in, illegal
+ * U-turn, hard brake, stalled lead) never produce it. For those traces the
+ * window is derived from the same trace's own recorded facts and nothing
+ * else: the conflict instant is the observed closest approach of the
+ * criticality pair, and the onset is the last authored trigger that fires
+ * before it. Nothing here relaxes an integrity check; it only widens frame
+ * selection past the occlusion-only assumption.
+ */
+export function incidentWindow(trace) {
+  const times = trace?.ticks?.t;
+  if (!Array.isArray(times) || times.length === 0) {
+    throw new Error('cannot derive an incident window from an empty trace');
+  }
+  const reveal = trace.metrics?.revealToConflict;
+  if (reveal && Number.isFinite(reveal.losOpenT) && Number.isFinite(reveal.conflictT)) {
+    return {
+      basis: 'declared-occlusion-reveal',
+      losOpenT: reveal.losOpenT,
+      conflictT: reveal.conflictT,
+      pair: [...(reveal.pair ?? [])],
+      relevantOccluderIds: [...(reveal.relevantOccluderIds ?? [])],
+    };
+  }
+  const first = times[0];
+  const last = times[times.length - 1];
+  const dt = Number.isFinite(trace.header?.dt) && trace.header.dt > 0
+    ? trace.header.dt
+    : (times.length > 1 ? times[1] - times[0] : 0.02);
+  const minTTC = trace.metrics?.minTTC ?? null;
+  const minPathTTC = trace.metrics?.minPathTTC ?? null;
+  const criticality = minPathTTC && Number.isFinite(minPathTTC.value) && (
+    !minTTC
+    || !Number.isFinite(minTTC.value)
+    || minPathTTC.value < minTTC.value
+    || (minPathTTC.value === minTTC.value && minPathTTC.t < minTTC.t)
+  ) ? minPathTTC : minTTC;
+  if (!criticality || !Array.isArray(criticality.pair) || criticality.pair.length !== 2) {
+    throw new Error('trace carries neither revealToConflict nor a criticality pair to frame');
+  }
+  const pair = [...criticality.pair];
+  const key = [...pair].sort().join('\u0000');
+  const closest = (trace.metrics?.minDistance ?? []).find(
+    (entry) => Array.isArray(entry?.pair) && [...entry.pair].sort().join('\u0000') === key,
+  );
+  const predictedConflictT = Number.isFinite(criticality.value)
+    ? criticality.t + criticality.value
+    : criticality.t;
+  const rawConflictT = Number.isFinite(closest?.t) ? closest.t : predictedConflictT;
+  const conflictLow = first + Math.max(0.5, 4 * dt);
+  const conflictHigh = last - Math.max(0.25, 4 * dt);
+  if (!(conflictHigh > conflictLow)) {
+    throw new Error('trace is too short to carry a derived incident window');
+  }
+  const conflictT = Math.max(conflictLow, Math.min(conflictHigh, rawConflictT));
+  const triggers = (trace.events ?? [])
+    .filter((event) => event?.kind === 'trigger_fired'
+      && Number.isFinite(event.t)
+      && event.t > first
+      && event.t < conflictT)
+    .map((event) => event.t)
+    .sort((left, right) => left - right);
+  const onsetT = triggers.length > 0 ? triggers[triggers.length - 1] : conflictT - 2;
+  const losOpenT = Math.min(
+    conflictT - Math.max(0.25, 4 * dt),
+    Math.max(first + Math.max(0.25, 4 * dt), onsetT),
+  );
+  return {
+    basis: triggers.length > 0 ? 'derived-trigger-onset-to-closest-approach' : 'derived-criticality-window',
+    losOpenT,
+    conflictT,
+    pair,
+    relevantOccluderIds: [],
+  };
+}
+
 /** Four named incident samples, snapped to real recorded ticks. */
 export function selectIncidentFrames(trace) {
   const times = trace.ticks.t;
   if (!Array.isArray(times) || times.length === 0) throw new Error('cannot select frames from an empty trace');
-  const reveal = trace.metrics?.revealToConflict;
-  const conflictT = reveal?.conflictT ?? trace.metrics?.minTTC?.t;
-  const revealT = reveal?.losOpenT;
+  const window = incidentWindow(trace);
+  const conflictT = window.conflictT;
+  const revealT = window.losOpenT;
   if (!Number.isFinite(revealT) || !Number.isFinite(conflictT)) {
     throw new Error('trace must carry revealToConflict.losOpenT and a conflict timestamp');
   }
@@ -391,7 +542,7 @@ export function selectIncidentFrames(trace) {
 /** Uniform trace samples for motion playback around the complete reveal. */
 export function selectIncidentVideoFrames(trace, fps = 12) {
   if (!Number.isFinite(fps) || fps < 1) throw new Error('video fps must be a positive number');
-  const reveal = trace.metrics?.revealToConflict;
+  const reveal = incidentWindow(trace);
   if (!reveal || !Number.isFinite(reveal.losOpenT) || !Number.isFinite(reveal.conflictT)) {
     throw new Error('trace must carry revealToConflict for incident video selection');
   }
@@ -409,6 +560,34 @@ export function selectIncidentVideoFrames(trace, fps = 12) {
   if (selected.at(-1)?.t !== times[nearestIndex(times, endT)]) {
     const index = nearestIndex(times, endT);
     selected.push({ index, targetT: endT, t: times[index] });
+  }
+  return { fps, startT, endT, frames: selected };
+}
+
+/**
+ * Uniform trace samples across the complete recorded clip.
+ *
+ * The incident-window sequence above is deliberately short: it exists to prove
+ * the reveal. A corpus video instead has to show the entire authored clip, so
+ * this walks every recorded tick window at the requested frame rate from the
+ * first tick to the last one.
+ */
+export function selectClipVideoFrames(trace, fps = 12) {
+  if (!Number.isFinite(fps) || fps < 1) throw new Error('video fps must be a positive number');
+  const times = trace?.ticks?.t;
+  if (!Array.isArray(times) || times.length === 0) throw new Error('cannot select frames from an empty trace');
+  const startT = times[0];
+  const endT = times[times.length - 1];
+  const count = Math.ceil((endT - startT) * fps);
+  const selected = [];
+  for (let frame = 0; frame <= count; frame += 1) {
+    const targetT = Math.min(endT, startT + frame / fps);
+    const index = nearestIndex(times, targetT);
+    if (selected.at(-1)?.index === index) continue;
+    selected.push({ index, targetT, t: times[index] });
+  }
+  if (selected.at(-1)?.index !== times.length - 1) {
+    selected.push({ index: times.length - 1, targetT: endT, t: endT });
   }
   return { fps, startT, endT, frames: selected };
 }
@@ -563,7 +742,8 @@ export function cameraForIncident(
   framingPropPoses = [],
 ) {
   const sampleT = trace.ticks.t[index];
-  const conflictT = trace.metrics?.revealToConflict?.conflictT ?? sampleT;
+  const window = incidentWindow(trace);
+  const conflictT = window.conflictT ?? sampleT;
   const conflictIndex = nearestIndex(trace.ticks.t, conflictT);
   // The conflict composition is already known-good and all relevant actors are
   // present there. Freeze it for the tail instead of allowing a following
@@ -595,7 +775,7 @@ export function cameraForIncident(
     : { x: -Math.cos(subject.headingRad), z: Math.sin(subject.headingRad) };
   const side = { x: -away.z, z: away.x };
   const radius = Math.max(...poses.map((pose) => Math.hypot(pose.x - centerX, pose.z - centerZ)));
-  const revealT = trace.metrics?.revealToConflict?.losOpenT ?? cameraT;
+  const revealT = window.losOpenT ?? cameraT;
   const baseDistance = Math.max(11, Math.min(15, radius * 0.45 + 8));
   const revealProgress = conflictT > revealT
     ? Math.max(0, Math.min(1, (cameraT - revealT) / (conflictT - revealT)))
@@ -623,6 +803,73 @@ export function cameraForIncident(
       trailingEye.x,
       groundY + 3.3 + 1.5 * revealProgress,
       trailingEye.z,
+    ],
+    target: [centerX, groundY + 1.35, centerZ],
+  };
+}
+
+/**
+ * Full-clip camera that keeps every framing actor inside the viewport.
+ *
+ * `cameraForIncident` is tuned for the seconds around a reveal, where the pair
+ * is already close together. A whole-clip video starts with the actors tens of
+ * metres apart, so the stand-off distance and elevation are solved per frame
+ * from the bounding radius of the present framing actors while the azimuth is
+ * frozen at the conflict sightline so the camera never spins mid-clip.
+ */
+export function cameraForClip(
+  trace,
+  pair,
+  index,
+  groundY = 0,
+  framingActorIds = pair,
+  framingPropPoses = [],
+) {
+  const window = incidentWindow(trace);
+  const conflictIndex = nearestIndex(trace.ticks.t, window.conflictT);
+  const subjectId = pair.includes(trace.header.metricSubject) ? trace.header.metricSubject : pair[0];
+  const otherId = pair.find((id) => id !== subjectId);
+  const subjectAtConflict = tracePose(trace, subjectId, conflictIndex);
+  const targetAtConflict = tracePose(trace, otherId, conflictIndex);
+  const sightline = Math.hypot(
+    subjectAtConflict.x - targetAtConflict.x,
+    subjectAtConflict.z - targetAtConflict.z,
+  );
+  const away = sightline > 1e-6
+    ? {
+        x: (subjectAtConflict.x - targetAtConflict.x) / sightline,
+        z: (subjectAtConflict.z - targetAtConflict.z) / sightline,
+      }
+    : { x: -Math.cos(subjectAtConflict.headingRad), z: Math.sin(subjectAtConflict.headingRad) };
+  const side = { x: -away.z, z: away.x };
+  const poses = [
+    ...framingActorIds.map((id) => tracePose(trace, id, index)),
+    ...framingPropPoses.map((pose) => ({ ...pose, present: pose.present !== false })),
+  ].filter((pose) => pose.present);
+  if (poses.length === 0) throw new Error(`no framing actors are present at trace index ${index}`);
+  const centerX = poses.reduce((sum, pose) => sum + pose.x, 0) / poses.length;
+  const centerZ = poses.reduce((sum, pose) => sum + pose.z, 0) / poses.length;
+  const radius = Math.max(...poses.map((pose) => Math.hypot(pose.x - centerX, pose.z - centerZ)));
+  const fovDeg = 45;
+  // Solve the stand-off from the vertical half-angle with margin so every
+  // framing actor projects well inside the |ndc| bounds the composition gate
+  // enforces, then keep a fixed oblique elevation above that.
+  const halfAngle = (fovDeg / 2) * (Math.PI / 180);
+  const fitDistance = (radius + 6) / (Math.tan(halfAngle) * 0.8);
+  const distance = Math.max(16, fitDistance);
+  const height = groundY + Math.max(7, distance * 0.42);
+  return {
+    basis: 'clip-fit-frozen-azimuth',
+    frozenAtT: null,
+    pair: [...pair],
+    framingActorIds: [...framingActorIds],
+    framingPropIds: framingPropPoses.map((pose) => pose.id),
+    visibleFramingActorIds: poses.map((pose) => pose.id),
+    fovDeg,
+    eye: [
+      centerX + away.x * distance + side.x * (distance * 0.12),
+      height,
+      centerZ + away.z * distance + side.z * (distance * 0.12),
     ],
     target: [centerX, groundY + 1.35, centerZ],
   };
@@ -705,8 +952,9 @@ export function buildScenarioEvidenceGates({
     distinctTickCount,
   }));
 
-  const revealT = trace.metrics?.revealToConflict?.losOpenT;
-  const conflictT = trace.metrics?.revealToConflict?.conflictT;
+  const incident = incidentWindow(trace);
+  const revealT = incident.losOpenT;
+  const conflictT = incident.conflictT;
   const byPhase = new Map(frameRecords.map((frame) => [frame.phase, frame]));
   const phaseTimesValid = Number.isFinite(revealT)
     && Number.isFinite(conflictT)
@@ -822,6 +1070,50 @@ export function buildScenarioEvidenceGates({
     endT: videoSequence?.endT ?? null,
   }));
 
+  // Corpus renders declare full-clip coverage. The catalog incident export
+  // never sets this, so these two gates are additive: they only ever run for a
+  // sequence that claims to cover the whole recorded clip.
+  if (videoSequence?.coverage === 'full-clip') {
+    const times = trace.ticks.t;
+    const firstT = times[0];
+    const lastT = times[times.length - 1];
+    const coversClip = videoSequence.startT === firstT
+      && videoSequence.endT === lastT
+      && videoSequence.frames?.[0]?.t === firstT
+      && videoSequence.frames?.[videoSequence.frames.length - 1]?.t === lastT
+      && videoSequence.frameCount >= Math.floor((lastT - firstT) * videoSequence.fps);
+    gates.push((coversClip ? pass : fail)('video-covers-full-clip-duration', {
+      clipStartT: firstT,
+      clipEndT: lastT,
+      startT: videoSequence.startT ?? null,
+      endT: videoSequence.endT ?? null,
+      fps: videoSequence.fps ?? null,
+      frameCount: videoSequence.frameCount ?? null,
+      minimumFrameCount: Math.floor((lastT - firstT) * videoSequence.fps),
+    }));
+
+    // AUTHORED actors only. Generated background road users are scenery: they must be visible IN the
+    // shot, never a CONSTRAINT ON it. Demanding that all ~40 ambient cars be simultaneously composed
+    // in every frame is unsatisfiable and rejected 59 of 62 corpus scenarios that had already
+    // rendered a complete video. The gate is unchanged in strength for every authored actor, and
+    // `ambientActorIds` is absent from every pre-ambient trace, so this is a no-op on them.
+    const ambientIdSet = new Set(trace?.header?.ambientActorIds ?? []);
+    const authoredOnly = (ids) => ids.filter((id) => !ambientIdSet.has(id));
+    const allActorsComposed = videoSequence.frames.every((frame) => {
+      if (frame.composition?.passed !== true) return false;
+      const present = authoredOnly((frame.poses ?? []).filter((pose) => pose.present).map((pose) => pose.id)).sort();
+      const composed = authoredOnly((frame.composition.actors ?? []).map((actor) => actor.id)).sort();
+      return present.length === composed.length && present.every((id, at) => id === composed[at]);
+    });
+    const offenders = videoSequence.frames.filter((frame) => frame.composition?.passed !== true).length;
+    gates.push((allActorsComposed ? pass : fail)('every-video-frame-shows-every-present-actor', {
+      frameCount: videoSequence.frameCount,
+      actorIds: authoredOnly(evidence.actorIds ?? []),
+      ambientExcluded: ambientIdSet.size,
+      failedCompositionFrames: offenders,
+    }));
+  }
+
   const topologyKeys = ['authoringMatcherTopology', 'simulationRoadGraph', 'studioRenderScene'];
   const topologyValid = topologyKeys.every((key) => isSha256(topologyDomains?.[key]?.digest));
   gates.push((topologyValid ? pass : fail)('three-domain-topology-provenance', {
@@ -859,6 +1151,8 @@ export function buildScenarioManifest({
   inputArtifacts,
   rendererStats,
   diagnostics = [],
+  evidenceClass = 'scenario-instance-incident',
+  resultBinding = null,
 }) {
   const identity = scenarioIdentity(instanceDoc);
   const machineAssessment = buildScenarioEvidenceGates({
@@ -874,7 +1168,8 @@ export function buildScenarioManifest({
     schema: SCENARIO_EVIDENCE_SCHEMA,
     generatedAt: null,
     deterministic: true,
-    evidenceClass: 'scenario-instance-incident',
+    evidenceClass,
+    ...(resultBinding === null ? {} : { resultBinding }),
     coverageEligibility: machineAssessment.verdict === 'pass' ? 'pending-human-review' : 'rejected',
     countsTowardScenarioCoverage: false,
     renderer: {

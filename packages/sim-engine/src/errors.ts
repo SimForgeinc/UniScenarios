@@ -22,6 +22,8 @@ export type SimIssueCode =
   | 'spawn_lane_pose_mismatch'
   | 'traffic_control_route_unbound'
   | 'traffic_control_binding_repaired'
+  // gear
+  | 'reverse_spawn_heading_adjusted'
   // binding
   | 'actor_unknown'
   | 'interaction_unknown'

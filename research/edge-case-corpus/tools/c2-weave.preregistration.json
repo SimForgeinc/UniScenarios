@@ -1,7 +1,7 @@
 {
  "rubric": "c2-weave.rubric.json",
  "sha256": "421e9d85d0fa8e4679bcae3e9cce15da3cab65e885bdb042ca4df181d4da7977",
- "registeredAt": "2026-08-06T18:43:33.850227+00:00",
+ "registeredAt": "2026-08-07T07:23:17.688252+00:00",
  "authorLog": [
   [
    "use_site",
@@ -38,6 +38,18 @@
    "on_approach"
   ],
   [
+   "add_interaction",
+   "left_cutter",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "right_cutter",
+   "hold_course",
+   "on_approach"
+  ],
+  [
    "require",
    "near_miss",
    [
@@ -46,7 +58,7 @@
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

@@ -1,7 +1,7 @@
 {
  "rubric": "c6-contraflow.rubric.json",
  "sha256": "073e2c70472dfee9efa226638bba40e8456d10a3625633742fc7f4ecd8aad9ad",
- "registeredAt": "2026-08-06T17:49:08.412841+00:00",
+ "registeredAt": "2026-08-07T03:18:57.098308+00:00",
  "authorLog": [
   [
    "use_site",
@@ -17,13 +17,7 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "on_approach"
-  ],
-  [
-   "add_interaction",
-   "cyclist",
-   "ignore_right_of_way",
-   "on_approach"
+   "scenario_start"
   ],
   [
    "add_interaction",
@@ -39,8 +33,8 @@
     "cyclist"
    ],
    [
-    0.5,
-    2.0
+    0.1,
+    2
    ]
   ]
  ]

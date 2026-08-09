@@ -1,23 +1,17 @@
 {
  "rubric": "c5-crossing-far-side.rubric.json",
  "sha256": "e2b3642db0343ec63e0cf92b53cbb0100968c05e11b1c4506aa5e3650de4f4e1",
- "registeredAt": "2026-08-06T21:01:18.832173+00:00",
+ "registeredAt": "2026-08-07T03:14:00.244619+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::1239713a0473a495"
+   "yale-street::016011e14fda56b1"
   ],
   [
    "place_actor",
    "pedestrian",
    "pedestrian.adult_walking",
    "ego_lane"
-  ],
-  [
-   "add_interaction",
-   "pedestrian",
-   "cross_road",
-   "at_conflict"
   ],
   [
    "add_interaction",
@@ -33,8 +27,8 @@
     "pedestrian"
    ],
    [
-    0.1,
-    1.0
+    0,
+    1
    ]
   ]
  ]

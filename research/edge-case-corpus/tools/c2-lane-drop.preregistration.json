@@ -1,34 +1,22 @@
 {
  "rubric": "c2-lane-drop.rubric.json",
- "sha256": "74af09191b8aae6e0d4629d9c88e876752b79d226a1c353940aa8e03bb3d396c",
- "registeredAt": "2026-08-06T19:36:47.999620+00:00",
+ "sha256": "7f5ecdfa32acc1d525de9e6cfcd36b09154e20446c29ea88c94b1cc1323d6f43",
+ "registeredAt": "2026-08-07T07:21:28.482666+00:00",
  "authorLog": [
   [
    "use_site",
    "yale-street::016011e14fda56b1"
   ],
   [
-   "narrow_lane",
-   "right",
+   "close_lane",
+   "adjacent_right",
    "drum",
-   8.2,
-   4
-  ],
-  [
-   "place_prop",
-   "construction.channelizer_drum",
-   "activity",
-   6
-  ],
-  [
-   "place_prop",
-   "construction.sign_road_work",
-   "advance_warning",
-   1
+   33.0,
+   5
   ],
   [
    "place_actor",
-   "challenger",
+   "late_merger",
    "vehicle.sedan",
    "adjacent_lane"
   ],
@@ -40,7 +28,7 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "late_merger",
    "change_lane",
    "on_approach"
   ],
@@ -49,11 +37,11 @@
    "near_miss",
    [
     "ego",
-    "challenger"
+    "late_merger"
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

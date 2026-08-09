@@ -1,7 +1,7 @@
 {
  "rubric": "c5-hesitate.rubric.json",
  "sha256": "fe8fa89ca4bb756940916656c50d747f6df6d2e0785f098f6b27e8f72a6b0f0c",
- "registeredAt": "2026-08-06T18:32:28.093565+00:00",
+ "registeredAt": "2026-08-07T03:13:32.612149+00:00",
  "authorLog": [
   [
    "use_site",
@@ -22,12 +22,6 @@
   [
    "add_interaction",
    "pedestrian",
-   "cross_road",
-   "scenario_start"
-  ],
-  [
-   "add_interaction",
-   "pedestrian",
    "brake_to_stop",
    "at_conflict"
   ],
@@ -39,8 +33,8 @@
     "pedestrian"
    ],
    [
-    0,
-    2
+    0.1,
+    1.0
    ]
   ]
  ]

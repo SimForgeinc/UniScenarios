@@ -1,15 +1,15 @@
 {
  "rubric": "c4-entry-yield.rubric.json",
- "sha256": "522e91d37fb194bcd6a0e29baf07347db52d46c06a670eedb11eecb8d79eb10c",
- "registeredAt": "2026-08-06T21:15:02.655915+00:00",
+ "sha256": "bbd56089923a9133426ab0e6384b1178d5f0ba4d6fc6db26924143eb9a7a1b39",
+ "registeredAt": "2026-08-07T03:42:16.158632+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::007b7001d1afa0c5"
+   "yale-street::086d587d6a7a45e8"
   ],
   [
    "place_actor",
-   "circulating_vehicle",
+   "circulating",
    "vehicle.sedan",
    "conflicting"
   ],
@@ -21,14 +21,14 @@
   ],
   [
    "add_interaction",
-   "circulating_vehicle",
-   "ignore_right_of_way",
-   "at_conflict"
+   "circulating",
+   "hold_course",
+   "scenario_start"
   ],
   [
    "add_interaction",
-   "circulating_vehicle",
-   "hold_course",
+   "circulating",
+   "ignore_right_of_way",
    "at_conflict"
   ],
   [
@@ -36,11 +36,11 @@
    "near_miss",
    [
     "ego",
-    "circulating_vehicle"
+    "circulating"
    ],
    [
-    0.5,
-    3.0
+    0.1,
+    1.0
    ]
   ]
  ]

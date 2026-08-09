@@ -58,9 +58,72 @@ import {
  */
 export const OPEN_END_M = 1e9;
 
+/**
+ * How much a discarded clause matters.
+ *
+ * `note` is genuine information — "I mapped `same` onto `merge`", "no `sRange`
+ * given so I checked the whole approach". `error` means the adapter **threw
+ * away a stated requirement**: the author said the scenario needs something,
+ * the matcher cannot express it, and every site it then binds is unchecked
+ * against that requirement while still reporting score 1.00 / `exact`.
+ */
+export type AdaptSeverity = 'note' | 'error';
+
 export interface AdaptNote {
   readonly path: string;
   readonly reason: string;
+  /** Defaults to `note`. `error` is a discarded requirement. */
+  readonly severity?: AdaptSeverity;
+  /** Stable machine code, present on every `error`. */
+  readonly code?: string;
+}
+
+/**
+ * The one code every "the matcher cannot express this" failure carries.
+ *
+ * Deliberately in the style of `lane_offset_unavailable`: a lane the site does
+ * not have, and a clause the matcher does not have, are the same defect seen
+ * from two ends — a scenario measuring something it never described.
+ */
+export const CLAUSE_UNMATCHABLE = 'clause_unmatchable';
+
+/**
+ * Should discarding this clause be fatal?
+ *
+ * `cosmetic` is the escape hatch, and it is the one the schema already ships:
+ * `EssentialitySchema` defines `cosmetic` as "freely relaxable", so an author
+ * who genuinely means "nice to have, drop it if you must" already has a word
+ * for that and does not need a new flag. `required` and `preferred` both make a
+ * claim about the site — `required` pass/fail, `preferred` weighted into the
+ * score — and silently deleting either one inflates the score of a site that
+ * was never checked.
+ */
+function dropSeverity(essentiality: 'required' | 'preferred' | 'cosmetic'): AdaptSeverity {
+  return essentiality === 'cosmetic' ? 'note' : 'error';
+}
+
+/** Record a discarded requirement: loud unless the author marked it cosmetic. */
+function dropped(
+  notes: AdaptNote[],
+  path: string,
+  essentiality: 'required' | 'preferred' | 'cosmetic',
+  reason: string,
+): void {
+  const severity = dropSeverity(essentiality);
+  notes.push({
+    path,
+    reason:
+      severity === 'error'
+        ? `${reason} — this ${essentiality} clause is unmatchable, so no site can be checked against it`
+        : reason,
+    severity,
+    ...(severity === 'error' ? { code: CLAUSE_UNMATCHABLE } : {}),
+  });
+}
+
+/** The discarded-requirement subset of an adaptation's notes. */
+export function unmatchableNotes(notes: readonly AdaptNote[]): AdaptNote[] {
+  return notes.filter((n) => n.severity === 'error');
 }
 
 export interface AdaptedAnchor {
@@ -153,7 +216,11 @@ const FEATURE_KIND_MAP: Record<string, MFeatureKind | null> = {
   school_zone: 'school_zone',
   work_zone_suitable: 'work_zone_suitable',
   occlusion_zone: 'occlusion_zone',
-  crest: null,
+  // map-intel publishes `crest_present` on a driving corridor, so the matcher
+  // can find one. There is no `sag_present` / `trough` fact anywhere in the
+  // catalog, and `curve` / `rail_crossing` have no location layer either, so
+  // those three stay unmatchable — and now say so loudly.
+  crest: 'crest',
   curve: null,
   rail_crossing: null,
 };
@@ -189,7 +256,7 @@ function adaptCorridor(
     for (const kind of clause.value) {
       const mapped = ADJACENT_MAP[kind];
       if (mapped) kept.push(mapped);
-      else notes.push({ path, reason: `adjacent kind "${kind}" is not evaluable by the matcher` });
+      else dropped(notes, path, clause.essentiality, `adjacent kind "${kind}" is not evaluable by the matcher`);
     }
     if (kept.length === 0) return undefined;
     return {
@@ -206,7 +273,7 @@ function adaptCorridor(
     if (!clause) return undefined;
     const [lo] = clause.value;
     if (lo === null) {
-      notes.push({ path, reason: 'open-ended runway range has no minimum; clause dropped' });
+      dropped(notes, path, clause.essentiality, 'an open-ended runway range states no minimum, and a minimum is the only thing the matcher can check');
       return undefined;
     }
     return {
@@ -297,7 +364,12 @@ function adaptFeature(
   const path = `anchor.features.${feature.id}`;
   const kind = FEATURE_KIND_MAP[feature.kind];
   if (!kind) {
-    notes.push({ path, reason: `feature kind "${feature.kind}" is not matchable; feature dropped` });
+    dropped(
+      notes,
+      path,
+      feature.essentiality,
+      `feature kind "${feature.kind}" is not matchable; the whole feature is dropped`,
+    );
     return null;
   }
 
@@ -401,17 +473,49 @@ function adaptFeature(
     if (feature.placement) crossing.placement = { ...feature.placement };
     if (Object.keys(crossing).length > 0) out.crossing = crossing;
   } else if (feature.kind === 'parking_zone') {
-    for (const key of ['orientation', 'capacity', 'occupancy', 'lengthM'] as const) {
-      if (feature[key] !== undefined) {
-        notes.push({
-          path: `${path}.${key}`,
-          reason: 'the matcher has no parking-zone predicates; clause not evaluated',
-        });
-      }
-    }
+    // These four used to be deleted here with the note "the matcher has no
+    // parking-zone predicates". It does now, for the three map-intel can
+    // answer; `occupancy` is passed through so the matcher can say
+    // `supported: false` about it against a *named candidate*, which is a more
+    // useful failure than a note on the document.
+    const parking: NonNullable<MAnchor['features'][number]['parking']> = {};
+    const orientation = clauseOf(feature.orientation, (v) => v);
+    if (orientation) parking.orientation = orientation;
+    const capacity = clauseOf(feature.capacity, closeRange);
+    if (capacity) parking.capacity = capacity;
+    const occupancy = clauseOf(feature.occupancy, closeRange);
+    if (occupancy) parking.occupancy = occupancy;
+    const parkingLengthM = clauseOf(feature.lengthM, closeRange);
+    if (parkingLengthM) parking.lengthM = parkingLengthM;
+    if (Object.keys(parking).length > 0) out.parking = parking;
+  }
+
+  if ('supportsScenario' in feature && feature.supportsScenario) {
+    out.supportsScenario = {
+      value: [...feature.supportsScenario.value],
+      essentiality: feature.supportsScenario.essentiality,
+      ...(feature.supportsScenario.weight === undefined ? {} : { weight: feature.supportsScenario.weight }),
+    };
   }
 
   return out;
+}
+
+/**
+ * The lane index an authored role actually names, or 0.
+ *
+ * `lane_offset` states it as `k` and the schema says `pose.laneOffset` is
+ * ignored for that kind, so `k` wins there. Every other posed kind states it
+ * only through `pose.laneOffset`. `relative_to`, `on_crossing` and
+ * `in_parking_zone` carry no `FramePose` at all, and `scene_absolute`'s pose is
+ * in world coordinates rather than frame coordinates — neither has a lane index
+ * to read.
+ */
+function authoredLaneOffset(role: V2Role): number {
+  if (role.kind === 'lane_offset') return role.k;
+  if (role.kind === 'scene_absolute') return 0;
+  if (role.kind === 'conflicting_gate') return role.fallbackPose?.laneOffset ?? 0;
+  return 'pose' in role ? role.pose.laneOffset : 0;
 }
 
 function adaptRole(
@@ -431,14 +535,55 @@ function adaptRole(
       : { requiredHeadingRelation: { ...role.requiredHeadingRelation } }),
   } as const;
 
+  // `pose.laneOffset` is part of every `FramePose`, so it is authorable on
+  // every posed role kind, but only `lane_offset` has somewhere to put it. It
+  // used to be dropped here in silence, which is the worst possible outcome:
+  // the document validates, the matcher binds `k = 0`, and the actor the author
+  // asked for "one lane over" spawns inside the reference actor. See
+  // `authoredLaneOffset`.
+  const authoredK = authoredLaneOffset(role);
+  if (authoredK !== 0 && role.kind !== 'on_reference' && role.kind !== 'lane_offset') {
+    // The remaining kinds resolve their lane structurally — from a gate, a
+    // taper, a crossing, a parking zone, the opposing carriageway. An offset
+    // cannot be applied on top of that without contradicting the binding, so
+    // say so rather than let the author believe it moved the actor.
+    notes.push({
+      path: `${path}.pose.laneOffset`,
+      reason:
+        `laneOffset ${authoredK} is not applied: a "${role.kind}" role's lane is resolved ` +
+        'structurally by the matcher; use kind "lane_offset" to name a lane index',
+    });
+  }
+
   switch (role.kind) {
-    case 'on_reference':
+    case 'on_reference': {
+      if (authoredK !== 0) {
+        // The author described a lane, not the reference lane. Carry it into
+        // the one binding that can express a lane index, and resolve it
+        // strictly: a site without that lane is the wrong site, not an excuse
+        // to re-park the actor.
+        notes.push({
+          path: `${path}.pose.laneOffset`,
+          reason:
+            `on_reference carries laneOffset ${authoredK}, which names a lane rather than the ` +
+            `reference lane; bound as lane_offset k=${authoredK} with onMissing: "fail"`,
+        });
+        return {
+          ...base,
+          kind: 'lane_offset',
+          k: authoredK,
+          onMissing: 'fail',
+          dsM: numberish(role.pose.s, scope, 0),
+          tFrac: numberish(role.pose.tFrac, scope, 0),
+        };
+      }
       return {
         ...base,
         kind: 'on_reference',
         dsM: numberish(role.pose.s, scope, 0),
         tFrac: numberish(role.pose.tFrac, scope, 0),
       };
+    }
     case 'lane_offset':
       return {
         ...base,
@@ -516,6 +661,12 @@ function adaptRole(
         kind: 'relative_to',
         ref: role.ref,
         dLane: role.dLane,
+        // v2 has no `onMissing` on this kind, so the adapter has to pick one,
+        // and the one thing it must not pick is the old silent clamp: on a
+        // one-lane corridor that resolves `dLane: -1` to the reference actor's
+        // own lane. A `required` actor whose lane is absent means the site is
+        // wrong; a non-required one is honestly absent rather than misplaced.
+        onMissing: role.essentiality === 'required' ? 'fail' : 'drop',
         dsM: numberish(role.dsM, scope, 0),
         tFrac: role.tFrac,
       };

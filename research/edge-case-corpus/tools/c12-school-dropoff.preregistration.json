@@ -1,30 +1,25 @@
 {
  "rubric": "c12-school-dropoff.rubric.json",
- "sha256": "c65976b820911d2935aafa64ca30ce4579da3f355de4b60d483d4e8be889ce2c",
- "registeredAt": "2026-08-06T21:15:57.968657+00:00",
+ "sha256": "3fc2d11466d379872f476f392399ed5f0855bcb70aa9798f13881aa39c99129b",
+ "registeredAt": "2026-08-07T03:38:06.469539+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::007b7001d1afa0c5"
+   "yale-street::2e971b2c765f8a9d"
   ],
   [
    "narrow_lane",
    "right",
-   "cone",
+   "drum",
    8.2,
    4
   ],
   [
-   "place_prop",
-   "street.bus_shelter",
-   "junction",
-   1
-  ],
-  [
-   "place_prop",
-   "construction.channelizer_drum",
-   "advance_warning",
-   3
+   "close_lane",
+   "adjacent_right",
+   "barricade",
+   33.0,
+   5
   ],
   [
    "place_prop",
@@ -33,16 +28,22 @@
    1
   ],
   [
-   "place_actor",
-   "school_bus",
-   "vehicle.bus",
-   "ahead_same_lane"
+   "place_prop",
+   "construction.channelizer_drum",
+   "advance_warning",
+   4
   ],
   [
-   "place_actor",
-   "dropoff_suv",
-   "vehicle.suv",
-   "conflicting"
+   "place_prop",
+   "construction.barricade_type3",
+   "junction",
+   2
+  ],
+  [
+   "place_prop",
+   "street.bus_shelter",
+   "junction",
+   1
   ],
   [
    "place_actor",
@@ -52,9 +53,27 @@
   ],
   [
    "place_actor",
+   "waiting_child",
+   "pedestrian.child_walking",
+   "ego_lane"
+  ],
+  [
+   "place_actor",
+   "school_bus",
+   "vehicle.bus",
+   "ahead_same_lane"
+  ],
+  [
+   "place_actor",
+   "dropoff_van",
+   "vehicle.van",
+   "adjacent_lane"
+  ],
+  [
+   "place_actor",
    "traffic_marshal",
    "pedestrian.traffic_marshal",
-   "adjacent_lane"
+   "ego_lane"
   ],
   [
    "add_interaction",
@@ -64,38 +83,38 @@
   ],
   [
    "add_interaction",
+   "crossing_child",
+   "ignore_right_of_way",
+   "at_conflict"
+  ],
+  [
+   "add_interaction",
    "school_bus",
    "brake_to_stop",
    "on_approach"
   ],
   [
    "add_interaction",
-   "dropoff_suv",
-   "ignore_right_of_way",
-   "at_conflict"
-  ],
-  [
-   "add_interaction",
-   "crossing_child",
-   "cross_road",
-   "at_conflict"
+   "dropoff_van",
+   "change_lane",
+   "on_approach"
   ],
   [
    "add_interaction",
    "traffic_marshal",
    "wave_traffic",
-   "on_approach"
+   "at_conflict"
   ],
   [
    "require",
    "near_miss",
    [
     "ego",
-    "dropoff_suv"
+    "crossing_child"
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

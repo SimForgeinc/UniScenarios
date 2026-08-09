@@ -1,11 +1,11 @@
 {
  "rubric": "c3-red-light-late.rubric.json",
  "sha256": "f1ce2efb22067c4a198b228475555139c4d472cece055e3b9fc55bea260b169a",
- "registeredAt": "2026-08-06T19:36:47.354354+00:00",
+ "registeredAt": "2026-08-07T03:11:29.210083+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::016011e14fda56b1"
+   "yale-street::086d587d6a7a45e8"
   ],
   [
    "place_actor",
@@ -23,13 +23,13 @@
    "add_interaction",
    "challenger",
    "ignore_right_of_way",
-   "on_approach"
+   "at_conflict"
   ],
   [
    "add_interaction",
    "challenger",
    "hold_course",
-   "on_approach"
+   "at_conflict"
   ],
   [
    "require",
@@ -40,7 +40,7 @@
    ],
    [
     0.1,
-    1.0
+    2.0
    ]
   ]
  ]

@@ -1,7 +1,7 @@
 {
  "rubric": "c1-queue-tail.rubric.json",
- "sha256": "67db38d0bd293179f3210c5abc2a9c6e56767bbc727bb2c79cc930e744d0f468",
- "registeredAt": "2026-08-06T19:36:49.289757+00:00",
+ "sha256": "177564e5d9e973037ff6fbdeaa6dc134906e13f5d13334861f5e0fe8e2f30861",
+ "registeredAt": "2026-08-07T02:58:52.976274+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,25 +9,13 @@
   ],
   [
    "place_actor",
-   "tail",
+   "lead",
    "vehicle.sedan",
    "ahead_same_lane"
   ],
   [
-   "place_actor",
-   "queue_vehicle",
-   "vehicle.suv",
-   "ahead_same_lane"
-  ],
-  [
    "add_interaction",
-   "tail",
-   "brake_to_stop",
-   "scenario_start"
-  ],
-  [
-   "add_interaction",
-   "queue_vehicle",
+   "lead",
    "brake_to_stop",
    "scenario_start"
   ],
@@ -35,18 +23,18 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "on_approach"
+   "scenario_start"
   ],
   [
    "require",
    "near_miss",
    [
     "ego",
-    "tail"
+    "lead"
    ],
    [
-    0,
-    2
+    0.1,
+    1.5
    ]
   ]
  ]

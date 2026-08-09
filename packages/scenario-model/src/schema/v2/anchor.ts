@@ -202,6 +202,18 @@ export const SimpleFeatureSchema = z.strictObject({
   kind: z.enum(SIMPLE_FEATURE_KINDS),
   /** Length of the feature along the corridor where that is meaningful. */
   lengthM: clause(RangeSchema).optional(),
+  /**
+   * Require the bound location's own `supported_scenario_templates` whitelist
+   * to name one of these templates.
+   *
+   * `map-intel` records, on every occlusion zone it derives, which scenario
+   * templates that occluder was actually built to serve
+   * (`child_dartout_from_parked_cars`, `pedestrian_emerging_around_bus`,
+   * `double_parked_delivery_truck`, …). It is the strongest statement of author
+   * intent in the whole location catalog, and this clause is how an anchor asks
+   * for it instead of binding whichever occluder happens to be nearest.
+   */
+  supportsScenario: clause(z.array(z.string().min(1).max(120)).min(1).max(8)).optional(),
 });
 
 /** Any anchor feature. */

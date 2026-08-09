@@ -1,11 +1,11 @@
 {
  "rubric": "c7-bus-occludes-cyclist.rubric.json",
  "sha256": "fc337b9dd942d0df4839ea4ad9440a66ed6b993b37dea321dd1142a27a39a935",
- "registeredAt": "2026-08-06T21:15:54.413955+00:00",
+ "registeredAt": "2026-08-07T07:07:44.632232+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::007b7001d1afa0c5"
+   "yale-street::016011e14fda56b1"
   ],
   [
    "place_actor",
@@ -23,19 +23,13 @@
    "add_interaction",
    "stopped_bus",
    "brake_to_stop",
-   "scenario_start"
+   "on_approach"
   ],
   [
    "add_interaction",
    "ego",
    "hold_course",
    "on_approach"
-  ],
-  [
-   "add_interaction",
-   "cyclist",
-   "cross_road",
-   "at_conflict"
   ],
   [
    "require",
@@ -45,8 +39,8 @@
     "cyclist"
    ],
    [
-    0.1,
-    2.0
+    0,
+    1
    ]
   ]
  ]

@@ -1,7 +1,7 @@
 {
  "rubric": "c8-worker-intrusion.rubric.json",
  "sha256": "817105d62982ba62995c95456e4645db643a19214c9bda953a5c8236dbf34b51",
- "registeredAt": "2026-08-06T21:01:47.230179+00:00",
+ "registeredAt": "2026-08-07T03:25:55.749431+00:00",
  "authorLog": [
   [
    "use_site",
@@ -16,14 +16,8 @@
   ],
   [
    "place_prop",
-   "construction.sign_road_work",
-   "advance_warning",
-   1
-  ],
-  [
-   "place_prop",
    "construction.traffic_cone",
-   "taper",
+   "activity",
    4
   ],
   [
@@ -39,12 +33,6 @@
    "on_approach"
   ],
   [
-   "add_interaction",
-   "road_worker",
-   "cross_road",
-   "on_approach"
-  ],
-  [
    "require",
    "near_miss",
    [
@@ -52,8 +40,8 @@
     "road_worker"
    ],
    [
-    0,
-    2
+    0.1,
+    2.0
    ]
   ]
  ]

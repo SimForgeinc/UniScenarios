@@ -1,7 +1,7 @@
 {
  "rubric": "c10-overtake-oncoming.rubric.json",
  "sha256": "dce5925a28cc0852decda51533398e23e44bf84245aae5eee5f1833e345b3440",
- "registeredAt": "2026-08-06T21:14:46.756454+00:00",
+ "registeredAt": "2026-08-07T07:22:13.302782+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,14 +9,8 @@
   ],
   [
    "place_actor",
-   "slow_vehicle",
-   "vehicle.sedan",
-   "ahead_same_lane"
-  ],
-  [
-   "place_actor",
    "overtaker",
-   "vehicle.suv",
+   "vehicle.sedan",
    "oncoming"
   ],
   [
@@ -35,7 +29,13 @@
    "add_interaction",
    "overtaker",
    "hold_course",
-   "at_conflict"
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "overtaker",
+   "ignore_right_of_way",
+   "on_approach"
   ],
   [
    "require",
@@ -45,8 +45,8 @@
     "overtaker"
    ],
    [
-    0,
-    3
+    0.1,
+    2.0
    ]
   ]
  ]

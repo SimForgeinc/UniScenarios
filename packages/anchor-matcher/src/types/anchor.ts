@@ -136,6 +136,14 @@ export const FeatureKindSchema = z.enum([
   'school_zone',
   'work_zone_suitable',
   'occlusion_zone',
+  /**
+   * A vertical crest — the top of a rise, where sight distance over the brow is
+   * the whole point of the scenario. Backed by map-intel's `crest_present` fact
+   * on a driving corridor. There is deliberately no `sag`: no map-intel fact
+   * asserts one, and a kind with no evidence behind it would match nothing
+   * while looking as if it might.
+   */
+  'crest',
 ]);
 export type FeatureKind = z.infer<typeof FeatureKindSchema>;
 
@@ -167,6 +175,31 @@ export type JunctionPredicate = {
   hasCrossingOnLeg?: Clause<boolean>;
 };
 
+/**
+ * Parking-zone predicates on a `kind: 'parking_zone'` feature.
+ *
+ * These used to be dropped by the adapter with the note "the matcher has no
+ * parking-zone predicates", which is how four parking archetypes came to bind
+ * arterials and a freeway at score 1.00. map-intel does publish the evidence:
+ * `is_parallel_parking` / the `angled|parallel` subtype for `orientation`,
+ * `space_count` for `capacity`, `parking_length_m` (or the zone extent) for
+ * `lengthM`. It publishes **nothing** for `occupancy` — how full the bays are
+ * is a runtime dressing decision, not a map fact — so that clause reports
+ * `supported: false` and fails loudly when it is `required`.
+ */
+export const ParkingPredicateSchema = z.strictObject({
+  orientation: clause(z.enum(['parallel', 'angled', 'perpendicular'])).optional(),
+  capacity: clause(RangeSchema).optional(),
+  occupancy: clause(RangeSchema).optional(),
+  lengthM: clause(RangeSchema).optional(),
+});
+export type ParkingPredicate = {
+  orientation?: Clause<'parallel' | 'angled' | 'perpendicular'>;
+  capacity?: Clause<Range>;
+  occupancy?: Clause<Range>;
+  lengthM?: Clause<Range>;
+};
+
 export const CrossingPredicateSchema = z.strictObject({
   marked: clause(z.boolean()).optional(),
   controlled: clause(z.boolean()).optional(),
@@ -190,8 +223,20 @@ export const AnchorFeatureSchema = z.strictObject({
   /** Require semantic road/section association rather than proximity alone. */
   sameRoad: clause(z.boolean()).optional(),
   side: clause(SideSchema).optional(),
+  /**
+   * Require the bound point feature's own `supported_scenario_templates`
+   * whitelist to contain one of these template names.
+   *
+   * map-intel computes this on every occlusion zone — "this occluder was built
+   * for `child_dartout_from_parked_cars`" — and until now nothing read it, so a
+   * pedestrian-behind-a-bus scenario happily bound a parked-car occluder. Any
+   * listed name matching is a pass; the clause is `supported: false` (and so
+   * loud when required) on a feature that publishes no whitelist.
+   */
+  supportsScenario: clause(z.array(z.string().min(1)).min(1)).optional(),
   junction: JunctionPredicateSchema.optional(),
   crossing: CrossingPredicateSchema.optional(),
+  parking: ParkingPredicateSchema.optional(),
 });
 export interface AnchorFeature {
   id: string;
@@ -200,8 +245,10 @@ export interface AnchorFeature {
   lateralDistanceM?: Clause<Range>;
   sameRoad?: Clause<boolean>;
   side?: Clause<Side>;
+  supportsScenario?: Clause<string[]>;
   junction?: JunctionPredicate;
   crossing?: CrossingPredicate;
+  parking?: ParkingPredicate;
 }
 
 export const MatchPolicySchema = z.strictObject({

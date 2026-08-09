@@ -1,30 +1,23 @@
 {
  "rubric": "c11-double-park.rubric.json",
- "sha256": "8c8bddb1010af7a257a8ad5b61a9dd3179a65c9d64a3a041e33db2c425418ada",
- "registeredAt": "2026-08-06T17:58:18.869037+00:00",
+ "sha256": "2f6940c91ae800b8b10dbfef7774f9998a84d49536f5c3877e019a046d3bd7af",
+ "registeredAt": "2026-08-07T03:36:29.366508+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::1239713a0473a495"
-  ],
-  [
-   "narrow_lane",
-   "right",
-   "cone",
-   8.2,
-   4
-  ],
-  [
-   "place_prop",
-   "vehicle.box_truck",
-   "activity",
-   1
+   "yale-street::016011e14fda56b1"
   ],
   [
    "place_actor",
-   "passing_vehicle",
-   "vehicle.sedan",
-   "adjacent_lane"
+   "delivery_vehicle",
+   "vehicle.box_truck",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "delivery_vehicle",
+   "hold_course",
+   "scenario_start"
   ],
   [
    "add_interaction",
@@ -33,21 +26,15 @@
    "on_approach"
   ],
   [
-   "add_interaction",
-   "passing_vehicle",
-   "hold_course",
-   "on_approach"
-  ],
-  [
    "require",
    "near_miss",
    [
     "ego",
-    "passing_vehicle"
+    "delivery_vehicle"
    ],
    [
     0,
-    2
+    5
    ]
   ]
  ]

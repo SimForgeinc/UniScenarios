@@ -1,7 +1,7 @@
 {
  "rubric": "c7-queue-occludes.rubric.json",
- "sha256": "88d5c0c8e9accec7b2bc79cd942faddaea0c0b4c070ca24d3520b1c1a0c20094",
- "registeredAt": "2026-08-06T21:14:48.825828+00:00",
+ "sha256": "f052fd8d2f0eb0b3f0ff500526748fb0f83f3e40675ddce1dd82f613d4dd485b",
+ "registeredAt": "2026-08-07T07:07:25.877423+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,19 +9,19 @@
   ],
   [
    "place_actor",
-   "queue_bus",
-   "vehicle.bus",
+   "queue_front",
+   "vehicle.suv",
    "adjacent_lane"
   ],
   [
    "place_actor",
-   "queue_van",
-   "vehicle.van",
+   "queue_rear",
+   "vehicle.suv",
    "adjacent_lane"
   ],
   [
    "place_actor",
-   "crossing_pedestrian",
+   "challenger",
    "pedestrian.adult_walking",
    "ego_lane"
   ],
@@ -32,17 +32,11 @@
    "on_approach"
   ],
   [
-   "add_interaction",
-   "crossing_pedestrian",
-   "cross_road",
-   "at_conflict"
-  ],
-  [
    "require",
    "near_miss",
    [
     "ego",
-    "crossing_pedestrian"
+    "challenger"
    ],
    [
     0.1,

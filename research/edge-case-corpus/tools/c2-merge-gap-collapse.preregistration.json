@@ -1,7 +1,7 @@
 {
  "rubric": "c2-merge-gap-collapse.rubric.json",
- "sha256": "31cfb812db253367a6b3e279165519d39d3ab1c79562c6ac69407b38c246859f",
- "registeredAt": "2026-08-06T19:36:48.358642+00:00",
+ "sha256": "85ed25ea85157a71af1a48706935df7a56f627dc2ab89bb537769e45b8ce3c56",
+ "registeredAt": "2026-08-07T07:21:12.816118+00:00",
  "authorLog": [
   [
    "use_site",
@@ -9,16 +9,16 @@
   ],
   [
    "close_lane",
-   "adjacent_right",
+   "adjacent_left",
    "cone",
    33.0,
    5
   ],
   [
    "place_actor",
-   "challenger",
+   "merging_vehicle",
    "vehicle.sedan",
-   "adjacent_lane"
+   "closed_lane"
   ],
   [
    "add_interaction",
@@ -28,7 +28,7 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "merging_vehicle",
    "change_lane",
    "on_approach"
   ],
@@ -37,11 +37,11 @@
    "near_miss",
    [
     "ego",
-    "challenger"
+    "merging_vehicle"
    ],
    [
-    0.1,
-    2.0
+    0.2,
+    1.0
    ]
   ]
  ]

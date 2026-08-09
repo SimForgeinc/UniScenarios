@@ -1,7 +1,7 @@
 {
  "rubric": "c9-disabled-vehicle.rubric.json",
  "sha256": "7b5e3ecb77b4220d91ca15415ddd464edb59ac358afc7afdbf883c5654680cbe",
- "registeredAt": "2026-08-06T21:01:22.701229+00:00",
+ "registeredAt": "2026-08-07T03:26:56.239896+00:00",
  "authorLog": [
   [
    "use_site",
@@ -33,8 +33,8 @@
     "disabled_vehicle"
    ],
    [
-    0.1,
-    2.0
+    0,
+    2
    ]
   ]
  ]

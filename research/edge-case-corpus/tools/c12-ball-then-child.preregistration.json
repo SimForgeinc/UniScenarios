@@ -1,23 +1,16 @@
 {
  "rubric": "c12-ball-then-child.rubric.json",
  "sha256": "b01c7509478510ccf6ee39e2eadc6e9ae887367ac5525caf3a47223357555e63",
- "registeredAt": "2026-08-06T21:14:47.391664+00:00",
+ "registeredAt": "2026-08-07T03:36:43.087470+00:00",
  "authorLog": [
   [
    "use_site",
    "yale-street::016011e14fda56b1"
   ],
   [
-   "narrow_lane",
-   "right",
-   "cone",
-   8.2,
-   4
-  ],
-  [
    "place_prop",
-   "hazard.tire_debris",
-   "activity",
+   "hazard.cardboard_box",
+   "approach",
    1
   ],
   [
@@ -30,13 +23,7 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "on_approach"
-  ],
-  [
-   "add_interaction",
-   "child",
-   "cross_road",
-   "after"
+   "scenario_start"
   ],
   [
    "require",

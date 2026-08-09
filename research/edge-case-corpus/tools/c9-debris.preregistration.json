@@ -1,11 +1,11 @@
 {
  "rubric": "c9-debris.rubric.json",
- "sha256": "6b7feb1b792f68b391a56bdb88faaa126194af3ebd5cdf68aeab7cae795c0d8e",
- "registeredAt": "2026-08-06T21:17:54.136124+00:00",
+ "sha256": "c25a604c3972fb25ebd99126712f46764951ec9f4c0c318092a39cb15d04f802",
+ "registeredAt": "2026-08-07T03:27:37.217533+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::086d587d6a7a45e8"
+   "yale-street::016011e14fda56b1"
   ],
   [
    "narrow_lane",
@@ -22,7 +22,7 @@
   ],
   [
    "place_actor",
-   "challenger",
+   "lead",
    "vehicle.sedan",
    "ahead_same_lane"
   ],
@@ -34,7 +34,7 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "lead",
    "hold_course",
    "on_approach"
   ],
@@ -43,11 +43,11 @@
    "near_miss",
    [
     "ego",
-    "challenger"
+    "lead"
    ],
    [
     0,
-    1
+    5
    ]
   ]
  ]

@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "lead_vehicle"
+    "lead"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "lead_vehicle"
+    "lead"
    ],
    "maxCount": 0
   }

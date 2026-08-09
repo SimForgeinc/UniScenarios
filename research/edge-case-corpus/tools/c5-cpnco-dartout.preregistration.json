@@ -1,23 +1,23 @@
 {
  "rubric": "c5-cpnco-dartout.rubric.json",
  "sha256": "014f62f0837d21e6098ef7d29c15194b550c7e2c3e18efcf0552e5e387799a42",
- "registeredAt": "2026-08-06T21:02:15.740299+00:00",
+ "registeredAt": "2026-08-07T03:11:29.802997+00:00",
  "authorLog": [
   [
    "use_site",
    "yale-street::016011e14fda56b1"
   ],
   [
-   "place_prop",
+   "place_actor",
+   "parked_vehicle_1",
    "vehicle.sedan",
-   "approach",
-   1
+   "ahead_same_lane"
   ],
   [
-   "place_prop",
+   "place_actor",
+   "parked_vehicle_2",
    "vehicle.suv",
-   "departure",
-   1
+   "adjacent_lane"
   ],
   [
    "place_actor",
@@ -29,13 +29,7 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "on_approach"
-  ],
-  [
-   "add_interaction",
-   "child",
-   "cross_road",
-   "at_conflict"
+   "scenario_start"
   ],
   [
    "require",
@@ -46,7 +40,7 @@
    ],
    [
     0,
-    3
+    2
    ]
   ]
  ]

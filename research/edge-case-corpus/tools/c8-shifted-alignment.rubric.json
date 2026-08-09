@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "crossing_pedestrian"
+    "lead"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "crossing_pedestrian"
+    "lead"
    ],
    "maxCount": 0
   }

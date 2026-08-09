@@ -1,11 +1,11 @@
 {
  "rubric": "c3-allway-stop.rubric.json",
  "sha256": "d1b0d1ba503a38951129a54ba61a360119d86b912f31e73285d0087bd3780b1e",
- "registeredAt": "2026-08-06T18:30:40.685250+00:00",
+ "registeredAt": "2026-08-07T03:11:41.529977+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::086d587d6a7a45e8"
+   "yale-street::2e971b2c765f8a9d"
   ],
   [
    "place_actor",
@@ -17,12 +17,6 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "on_approach"
-  ],
-  [
-   "add_interaction",
-   "challenger",
-   "ignore_right_of_way",
    "on_approach"
   ],
   [

@@ -31,7 +31,10 @@ import {
 import type { TrashBagParams } from './builders/hazards';
 import {
   buildCardboardBox,
+  buildDebrisPile,
   buildDownedBranch,
+  buildLadder,
+  buildMattress,
   buildTireDebris,
   buildTrashBags,
 } from './builders/hazards';
@@ -173,6 +176,9 @@ export interface PropParamMap {
   'hazard.cardboard_box': Record<string, never>;
   'hazard.trash_bags': TrashBagParams;
   'hazard.downed_branch': Record<string, never>;
+  'hazard.ladder': Record<string, never>;
+  'hazard.mattress': Record<string, never>;
+  'hazard.debris': Record<string, never>;
 }
 
 type Builders = { [K in CatalogId]: (params: PropParamMap[K]) => Group };
@@ -269,6 +275,9 @@ const BUILDERS: Builders = {
   'hazard.cardboard_box': buildCardboardBox,
   'hazard.trash_bags': buildTrashBags,
   'hazard.downed_branch': buildDownedBranch,
+  'hazard.ladder': buildLadder,
+  'hazard.mattress': buildMattress,
+  'hazard.debris': buildDebrisPile,
 };
 
 /**

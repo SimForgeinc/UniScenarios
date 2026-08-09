@@ -1,35 +1,23 @@
 {
  "rubric": "c7-parked-row-veh.rubric.json",
  "sha256": "6b561e9e26788e5ddab9ea15ed26312ab81259ecf2cacc1e00055f31cd2eeab9",
- "registeredAt": "2026-08-06T18:40:00.070298+00:00",
+ "registeredAt": "2026-08-07T03:42:57.772078+00:00",
  "authorLog": [
   [
    "use_site",
    "yale-street::016011e14fda56b1"
   ],
   [
-   "place_actor",
-   "parked_car_1",
+   "place_prop",
    "vehicle.sedan",
-   "adjacent_lane"
-  ],
-  [
-   "place_actor",
-   "parked_car_2",
-   "vehicle.suv",
-   "adjacent_lane"
-  ],
-  [
-   "place_actor",
-   "parked_car_3",
-   "vehicle.hatchback",
-   "adjacent_lane"
+   "approach",
+   3
   ],
   [
    "place_actor",
    "emerging_vehicle",
-   "vehicle.van",
-   "adjacent_lane"
+   "vehicle.suv",
+   "oncoming"
   ],
   [
    "add_interaction",
@@ -40,7 +28,7 @@
   [
    "add_interaction",
    "emerging_vehicle",
-   "change_lane",
+   "hold_course",
    "on_approach"
   ],
   [
@@ -52,7 +40,7 @@
    ],
    [
     0.1,
-    2
+    1.0
    ]
   ]
  ]

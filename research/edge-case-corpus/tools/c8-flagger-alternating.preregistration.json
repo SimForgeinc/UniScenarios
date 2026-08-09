@@ -1,7 +1,7 @@
 {
  "rubric": "c8-flagger-alternating.rubric.json",
- "sha256": "95aaaec87920bc863a4051cfbd85ce6ccf8438db61b517e5382a17c12c685b7f",
- "registeredAt": "2026-08-06T21:01:36.662301+00:00",
+ "sha256": "b0090c3727fa75f65d0b4828ca5d4c3806acd8d9b31346e1c61f67ef7d587e9c",
+ "registeredAt": "2026-08-07T03:23:29.602506+00:00",
  "authorLog": [
   [
    "use_site",
@@ -40,15 +40,15 @@
   ],
   [
    "place_actor",
-   "challenger",
-   "vehicle.pickup",
+   "oncoming_car",
+   "vehicle.suv",
    "oncoming"
   ],
   [
    "add_interaction",
    "flagger",
    "wave_traffic",
-   "scenario_start"
+   "on_approach"
   ],
   [
    "add_interaction",
@@ -58,26 +58,26 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "oncoming_car",
    "ignore_right_of_way",
-   "at_conflict"
+   "on_approach"
   ],
   [
    "add_interaction",
-   "challenger",
+   "oncoming_car",
    "hold_course",
-   "at_conflict"
+   "on_approach"
   ],
   [
    "require",
    "near_miss",
    [
     "ego",
-    "challenger"
+    "oncoming_car"
    ],
    [
-    0.5,
-    2.0
+    0.1,
+    1.0
    ]
   ]
  ]

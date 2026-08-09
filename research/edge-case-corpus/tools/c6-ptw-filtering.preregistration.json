@@ -1,15 +1,15 @@
 {
  "rubric": "c6-ptw-filtering.rubric.json",
- "sha256": "cd4ee7eac5bc5e3a6c6b426290a77f3d4ef2c5cc05335f319bb75592bdff5761",
- "registeredAt": "2026-08-06T21:02:19.391676+00:00",
+ "sha256": "72847ee6b8c31c6e8e39d024abd73c29975984029e4374472e277fe05052a9ce",
+ "registeredAt": "2026-08-07T03:20:40.516739+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::007b7001d1afa0c5"
+   "yale-street::1239713a0473a495"
   ],
   [
    "place_actor",
-   "motorcycle",
+   "filtering_motorcycle",
    "vehicle.motorcycle",
    "adjacent_lane"
   ],
@@ -21,7 +21,7 @@
   ],
   [
    "add_interaction",
-   "motorcycle",
+   "filtering_motorcycle",
    "hold_course",
    "on_approach"
   ],
@@ -30,7 +30,7 @@
    "near_miss",
    [
     "ego",
-    "motorcycle"
+    "filtering_motorcycle"
    ],
    [
     0.1,

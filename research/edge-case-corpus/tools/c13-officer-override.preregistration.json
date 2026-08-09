@@ -1,7 +1,7 @@
 {
  "rubric": "c13-officer-override.rubric.json",
  "sha256": "51374a29f96416dc900228d262e6c172e77632f5b6133dfbf8ec4a387230d237",
- "registeredAt": "2026-08-06T21:16:00.792147+00:00",
+ "registeredAt": "2026-08-07T07:23:00.728894+00:00",
  "authorLog": [
   [
    "use_site",
@@ -15,27 +15,27 @@
   ],
   [
    "place_actor",
-   "challenger",
-   "vehicle.suv",
-   "conflicting"
-  ],
-  [
-   "place_actor",
-   "marshal",
+   "officer",
    "pedestrian.traffic_marshal",
    "conflicting"
   ],
   [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "conflicting"
+  ],
+  [
    "add_interaction",
-   "marshal",
+   "officer",
    "wave_traffic",
-   "scenario_start"
+   "on_approach"
   ],
   [
    "add_interaction",
    "challenger",
    "ignore_right_of_way",
-   "at_conflict"
+   "on_approach"
   ],
   [
    "add_interaction",
@@ -51,7 +51,7 @@
     "challenger"
    ],
    [
-    0.5,
+    0.1,
     2.0
    ]
   ]

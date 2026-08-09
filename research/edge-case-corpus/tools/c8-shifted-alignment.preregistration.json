@@ -1,7 +1,7 @@
 {
  "rubric": "c8-shifted-alignment.rubric.json",
- "sha256": "0fdac0347a180f986e4fdfe0488d34b9a49adcabdb844e1e337be5ca0ee688ac",
- "registeredAt": "2026-08-06T21:01:48.470413+00:00",
+ "sha256": "674e1a16c8076a28a3ca44ef4cf1f351ec9f3ba3ac07fa68287f04fe60d7ad48",
+ "registeredAt": "2026-08-07T03:25:18.468678+00:00",
  "authorLog": [
   [
    "use_site",
@@ -16,27 +16,27 @@
   ],
   [
    "place_prop",
-   "construction.arrow_board",
+   "construction.sign_road_work",
    "advance_warning",
+   1
+  ],
+  [
+   "place_prop",
+   "construction.excavator",
+   "activity",
    1
   ],
   [
    "place_prop",
    "construction.channelizer_drum",
    "taper",
-   4
-  ],
-  [
-   "place_prop",
-   "construction.barricade_type3",
-   "activity",
-   1
+   6
   ],
   [
    "place_actor",
-   "crossing_pedestrian",
-   "pedestrian.adult_walking",
-   "ego_lane"
+   "lead",
+   "vehicle.sedan",
+   "ahead_same_lane"
   ],
   [
    "add_interaction",
@@ -46,16 +46,16 @@
   ],
   [
    "add_interaction",
-   "crossing_pedestrian",
-   "cross_road",
-   "at_conflict"
+   "lead",
+   "hold_course",
+   "on_approach"
   ],
   [
    "require",
    "near_miss",
    [
     "ego",
-    "crossing_pedestrian"
+    "lead"
    ],
    [
     0.1,

@@ -1,7 +1,7 @@
 {
  "rubric": "c1-lead-stopped.rubric.json",
  "sha256": "bafc1062389d223c4762accc3183388247b4de2a28081a019a410c498c2b8100",
- "registeredAt": "2026-08-06T17:46:47.972433+00:00",
+ "registeredAt": "2026-08-07T02:58:50.416898+00:00",
  "authorLog": [
   [
    "use_site",
@@ -34,7 +34,7 @@
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

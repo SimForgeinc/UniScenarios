@@ -33,6 +33,8 @@ export const ISSUE_CODES = [
   'interaction_ref_unknown',
   'param_ref_unknown',
   'control_ref_unknown',
+  'sensor_ref_unknown',
+  'divergence_ref_unknown',
   'feature_kind_mismatch',
   'self_reference',
   // --- timeline structure ---------------------------------------------------
@@ -58,6 +60,12 @@ export const ISSUE_CODES = [
   'derived_param_cycle',
   'expr_error',
   'anchor_unconstrained',
+  /**
+   * An authored anchor clause the matcher cannot express, and therefore
+   * discards. The template would otherwise bind sites that were never checked
+   * against the requirement and still report score 1.00 / `exact`.
+   */
+  'clause_unmatchable',
   'occluder_pair_missing',
   'occluder_dropped',
   'attached_prop_repeat_unsupported',

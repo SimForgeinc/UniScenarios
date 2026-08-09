@@ -154,6 +154,44 @@ export interface ActorRuntime {
   /** Static stop-sign progress keyed by RoadControl.id. */
   roadControlStates: Map<string, RoadControlRuntimeState>;
 
+  /**
+   * Selected gear. `1` = forward, `-1` = reverse.
+   *
+   * Reverse is a *gear*, not a negative speed. `speedMps` is a magnitude
+   * everywhere downstream — TTC, required-decel, min-clearance, the exporters —
+   * so signing it would quietly corrupt all of them. The direction of travel
+   * lives here instead, and the whole engine reads it through
+   * `isReverseMotion()`.
+   *
+   * The governing invariant: **the route is the path the body travels**. In
+   * reverse the body traverses that same path rear-first, so `routeS` still
+   * advances and the body heading is `routeTangent + PI`. The heading is never
+   * flipped away from that — an oriented bounding box, a clearance measurement
+   * and a render all read `headingRad` directly.
+   */
+  motionDirection: 1 | -1;
+  /**
+   * Whether this body has ever actually driven.
+   *
+   * Before it has, its heading is a *placement* — whichever way the author or
+   * the materializer happened to point a parked car — and selecting reverse
+   * means "you are parked nose-in, come out backwards", so the heading is
+   * re-derived from the route. After it has driven, the heading is a physical
+   * outcome that cannot be rewritten, and selecting reverse means "back down
+   * the path you just came up", so the route is reversed instead. Both give
+   * `heading == routeTangent + PI`; only one of them is legal at a time.
+   */
+  hasMoved: boolean;
+  /**
+   * A gear selection that has been requested but not yet engaged.
+   *
+   * A gearbox cannot select reverse at road speed. Applying the request
+   * immediately would teleport momentum (the dynamic solver clamps
+   * `direction * v < 0` to zero), so the request is held here until the body is
+   * at rest and engaged then. `null` means no shift is outstanding.
+   */
+  pendingMotionDirection: 1 | -1 | null;
+
   standstillSinceS: number | null;
   /** Running max of the decel that would have been required to stay safe. */
   requiredDecelMax: number;

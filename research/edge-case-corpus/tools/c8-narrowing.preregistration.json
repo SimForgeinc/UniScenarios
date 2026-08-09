@@ -1,7 +1,7 @@
 {
  "rubric": "c8-narrowing.rubric.json",
- "sha256": "6bc94b735854db4404eff89aff939b12638135c61d74c439d5e291ea376e9ee0",
- "registeredAt": "2026-08-06T18:51:29.421316+00:00",
+ "sha256": "6b4b2915f8819888095edc0a29aed679806cd38f7431edbc04de31e345fe7350",
+ "registeredAt": "2026-08-07T04:28:24.351931+00:00",
  "authorLog": [
   [
    "use_site",
@@ -16,13 +16,13 @@
   ],
   [
    "place_prop",
-   "construction.jersey_barrier",
+   "construction.jersey_barrier_run",
    "activity",
-   3
+   1
   ],
   [
    "place_actor",
-   "challenger",
+   "lead",
    "vehicle.sedan",
    "ahead_same_lane"
   ],
@@ -34,7 +34,7 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "lead",
    "hold_course",
    "on_approach"
   ],
@@ -43,11 +43,11 @@
    "near_miss",
    [
     "ego",
-    "challenger"
+    "lead"
    ],
    [
     0.1,
-    2
+    2.0
    ]
   ]
  ]

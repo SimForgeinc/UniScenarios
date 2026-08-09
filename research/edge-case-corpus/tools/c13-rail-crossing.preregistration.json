@@ -1,7 +1,7 @@
 {
  "rubric": "c13-rail-crossing.rubric.json",
- "sha256": "e7406189480e19a03817df37f14f57feaa7d204d0c73bf5083f3f7ece2d53041",
- "registeredAt": "2026-08-06T18:52:08.834247+00:00",
+ "sha256": "e37d769ce483f0023ba6cb9d9e8f7c4b8d1bbc34dd1d84ae079cb5aabac5b6de",
+ "registeredAt": "2026-08-07T07:25:43.864962+00:00",
  "authorLog": [
   [
    "use_site",
@@ -15,7 +15,7 @@
   ],
   [
    "place_actor",
-   "lead_vehicle",
+   "lead",
    "vehicle.sedan",
    "ahead_same_lane"
   ],
@@ -23,11 +23,11 @@
    "add_interaction",
    "ego",
    "hold_course",
-   "scenario_start"
+   "on_approach"
   ],
   [
    "add_interaction",
-   "lead_vehicle",
+   "lead",
    "brake_to_stop",
    "on_approach"
   ],
@@ -36,11 +36,11 @@
    "near_miss",
    [
     "ego",
-    "lead_vehicle"
+    "lead"
    ],
    [
-    0,
-    2
+    0.2,
+    2.0
    ]
   ]
  ]

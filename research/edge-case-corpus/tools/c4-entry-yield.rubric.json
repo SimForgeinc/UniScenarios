@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "circulating_vehicle"
+    "circulating"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "circulating_vehicle"
+    "circulating"
    ],
    "maxCount": 0
   }

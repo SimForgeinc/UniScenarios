@@ -10,7 +10,7 @@
    "required": true,
    "pair": [
     "ego",
-    "dropoff_suv"
+    "crossing_child"
    ],
    "measure": "centre_distance",
    "minM": 0.5
@@ -21,7 +21,7 @@
    "required": true,
    "pair": [
     "ego",
-    "dropoff_suv"
+    "crossing_child"
    ],
    "maxCount": 0
   }

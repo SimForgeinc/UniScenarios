@@ -18,6 +18,7 @@ function state(time: number, playing: boolean): PlaybackState {
     signalPhases: {
       green: 0, yellow: 0, red: 0, flashing_yellow: 0, flashing_red: 0,
       green_arrow: 0, yellow_arrow: 0, red_x: 0, proceed: 0, stop: 0, off: 0,
+      flashing_yellow_arrow: 0, flashing_red_arrow: 0,
     },
     signalTimingSources: [],
     instanceId: 'verified-instance',

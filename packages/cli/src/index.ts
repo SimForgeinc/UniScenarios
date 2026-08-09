@@ -55,12 +55,15 @@ export {
 export { loadMapSignalCatalog } from './map-signals-loader.js';
 
 export {
+  CLAUSE_UNMATCHABLE,
   OPEN_END_M,
   adaptTemplate,
   numberish,
   templateCrossingAngle,
   templateStaticScope,
+  unmatchableNotes,
   type AdaptNote,
+  type AdaptSeverity,
   type AdaptedAnchor,
 } from './adapt.js';
 
@@ -88,6 +91,7 @@ export {
 export { createMapContext } from './map-context.js';
 
 export {
+  assertMatchableAnchor,
   findSite,
   matchOnMap,
   matchOnMaps,

@@ -1,7 +1,7 @@
 {
  "rubric": "c2-cut-out-reveals.rubric.json",
  "sha256": "5ca95e595c19655974514ba8b9ef9e0f594b596361ec3722e5bd900ec727f584",
- "registeredAt": "2026-08-06T17:46:46.266917+00:00",
+ "registeredAt": "2026-08-07T07:21:08.415605+00:00",
  "authorLog": [
   [
    "use_site",
@@ -10,13 +10,13 @@
   [
    "place_actor",
    "lead",
-   "vehicle.sedan",
+   "vehicle.suv",
    "ahead_same_lane"
   ],
   [
    "place_actor",
    "stopped",
-   "vehicle.box_truck",
+   "vehicle.sedan",
    "ahead_same_lane"
   ],
   [

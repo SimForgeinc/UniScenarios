@@ -1,7 +1,7 @@
 {
  "rubric": "c10-bend-encroach.rubric.json",
  "sha256": "12476db8b4cab7bbac69c34e01773637209f73b0faaf416e6c2d2d13d857555d",
- "registeredAt": "2026-08-06T17:53:20.129345+00:00",
+ "registeredAt": "2026-08-07T07:21:06.502367+00:00",
  "authorLog": [
   [
    "use_site",
@@ -34,7 +34,7 @@
    ],
    [
     0.1,
-    2.0
+    1.0
    ]
   ]
  ]

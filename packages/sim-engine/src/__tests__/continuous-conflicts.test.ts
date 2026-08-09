@@ -65,6 +65,9 @@ function pathActor(
     untilByAxis: new Map(),
     stateKeys: new Map(),
     roadControlStates: new Map(),
+    motionDirection: 1,
+    pendingMotionDirection: null,
+    hasMoved: false,
     standstillSinceS: null,
     requiredDecelMax: 0,
   };

@@ -1,7 +1,7 @@
 {
  "rubric": "c1-ccrm.rubric.json",
  "sha256": "4d3b48f64d8c8fb4e6f0dcfd83b8e10b5cce2825eb42518d15ee37816d3de560",
- "registeredAt": "2026-08-06T18:41:28.243815+00:00",
+ "registeredAt": "2026-08-07T04:03:31.085636+00:00",
  "authorLog": [
   [
    "use_site",
@@ -10,20 +10,20 @@
   [
    "place_actor",
    "lead",
-   "vehicle.sedan",
+   "vehicle.box_truck",
    "ahead_same_lane"
-  ],
-  [
-   "add_interaction",
-   "lead",
-   "brake_to_stop",
-   "on_approach"
   ],
   [
    "add_interaction",
    "ego",
    "hold_course",
    "on_approach"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "hold_course",
+   "scenario_start"
   ],
   [
    "require",
@@ -33,8 +33,8 @@
     "lead"
    ],
    [
-    0,
-    2
+    0.1,
+    1.0
    ]
   ]
  ]

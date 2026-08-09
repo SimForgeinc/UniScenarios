@@ -35,7 +35,13 @@ import {
   type Range,
   type ScenarioTemplateV2,
 } from '@uniscenarios/scenario-model';
-import { criticalityMetricsInWindow, verifyNearMissOutcome, type ArrivalSolution, type SimTrace } from '@uniscenarios/sim-engine';
+import {
+  criticalityMetricsInWindow,
+  verifyNearMissOutcome,
+  type ArrivalSolution,
+  type SensorPerceptionMetric,
+  type SimTrace,
+} from '@uniscenarios/sim-engine';
 
 export interface InvariantResidualReport {
   readonly id: string;
@@ -93,6 +99,45 @@ function pairSeries(trace: SimTrace, a: string, b: string): TrackPair | null {
     prevT = now;
   }
   return t.length > 0 ? { t, distance, speedOf, closing } : null;
+}
+
+/**
+ * Per-sensor summaries for one observer/target pair, or `null` when the pair is
+ * not in the channel at all. Omitting `sensorId` returns the whole suite, which
+ * the callers reduce over — a suite detects when its earliest sensor does.
+ */
+function perceptionEntries(
+  trace: SimTrace,
+  observer: string,
+  target: string,
+  sensorId: string | undefined,
+): SensorPerceptionMetric[] | null {
+  const all = trace.metrics.perception?.sensors;
+  if (all === undefined) return null;
+  const entries = all.filter(
+    (entry) => entry.observer === observer
+      && entry.target === target
+      && (sensorId === undefined || entry.sensorId === sensorId),
+  );
+  return entries.length > 0 ? entries : null;
+}
+
+/** Why a perception invariant could not be checked, in the author's terms. */
+function perceptionMissingReason(
+  trace: SimTrace,
+  observer: string,
+  target: string,
+  sensorId: string | undefined,
+): string {
+  if (trace.metrics.perception === undefined) {
+    return 'the trace carries no perception channel: no actor declared a sensor';
+  }
+  const forObserver = trace.metrics.perception.sensors.filter((entry) => entry.observer === observer);
+  if (forObserver.length === 0) return `${observer} declares no sensors`;
+  if (sensorId !== undefined && !forObserver.some((entry) => entry.sensorId === sensorId)) {
+    return `${observer} has no sensor "${sensorId}"`;
+  }
+  return `${observer} never observed ${target}`;
 }
 
 function windowOf(inv: Invariant, scope: ExprScope, clipSeconds: number): [number, number] {
@@ -456,6 +501,116 @@ export function checkInvariants(ctx: InvariantContext): InvariantResidualReport[
             achieved,
             'metrics.requiredDecelMax',
             `peak required decel ${achieved.toFixed(2)} m/s² against a ${max} m/s² budget`,
+          ),
+        );
+        break;
+      }
+      /* ------------------------------------------------------- perception --
+       * These read `metrics.perception`, the per-sensor channel's episode
+       * summary. An invariant that silently grades nothing is the failure this
+       * layer exists to prevent, so a missing summary is reported `unchecked`
+       * with the reason rather than passing by default.
+       */
+      case 'detection_gap': {
+        const entries = perceptionEntries(trace, inv.of, inv.to, inv.sensor);
+        if (entries === null) {
+          out.push(unchecked(inv, perceptionMissingReason(trace, inv.of, inv.to, inv.sensor)));
+          break;
+        }
+        const gaps = entries.flatMap((entry) => entry.gaps)
+          .filter((gap) => inv.reason === undefined || gap.reason === inv.reason)
+          .filter((gap) => inWindow(gap.startS) || inWindow(gap.endS));
+        const achieved = inv.metric === 'total'
+          ? gaps.reduce((sum, gap) => sum + gap.durationS, 0)
+          : gaps.reduce((max, gap) => Math.max(max, gap.durationS), 0);
+        const qualifier = inv.reason === undefined ? '' : ` caused by ${inv.reason}`;
+        out.push(
+          report(
+            inv,
+            inv.range,
+            achieved,
+            'metrics.perception.gaps',
+            `${inv.metric} detection gap${qualifier} ${achieved.toFixed(2)} s over ${gaps.length} dropout(s), wanted ${fmtRange(inv.range)}`,
+          ),
+        );
+        break;
+      }
+      case 'time_to_first_detection': {
+        const entries = perceptionEntries(trace, inv.of, inv.to, inv.sensor);
+        if (entries === null) {
+          out.push(unchecked(inv, perceptionMissingReason(trace, inv.of, inv.to, inv.sensor)));
+          break;
+        }
+        // A suite detects when its *earliest* sensor does.
+        const times = entries.map((entry) => entry.timeToFirstDetectionS).filter((t): t is number => t !== null);
+        if (times.length === 0) {
+          out.push(unchecked(inv, `${inv.of} never detected ${inv.to} at all`));
+          break;
+        }
+        const achieved = Math.min(...times);
+        out.push(
+          report(
+            inv,
+            inv.range,
+            achieved,
+            'metrics.perception.timeToFirstDetectionS',
+            `${inv.of} first detected ${inv.to} at t=${achieved.toFixed(2)} s, wanted ${fmtRange(inv.range)}`,
+          ),
+        );
+        break;
+      }
+      case 'perception_lag': {
+        const entries = perceptionEntries(trace, inv.of, inv.to, inv.sensor);
+        if (entries === null) {
+          out.push(unchecked(inv, perceptionMissingReason(trace, inv.of, inv.to, inv.sensor)));
+          break;
+        }
+        const lags = entries.map((entry) => entry.perceptionLagS).filter((v): v is number => v !== null);
+        if (lags.length === 0) {
+          const sawLos = entries.some((entry) => entry.firstLineOfSightT !== null);
+          out.push(unchecked(
+            inv,
+            sawLos
+              ? `${inv.of} had line of sight to ${inv.to} but never detected it, so the lag is unbounded`
+              : `${inv.of} never had line of sight to ${inv.to}, so there is no lag to measure`,
+          ));
+          break;
+        }
+        const achieved = Math.min(...lags);
+        out.push(
+          report(
+            inv,
+            inv.range,
+            achieved,
+            'metrics.perception.perceptionLagS',
+            `line of sight opened ${achieved.toFixed(2)} s before ${inv.of} reported ${inv.to}, wanted ${fmtRange(inv.range)}`,
+          ),
+        );
+        break;
+      }
+      case 'map_divergence': {
+        const entries = (trace.metrics.perception?.mapDivergence ?? []).filter(
+          (entry) => entry.observer === inv.of
+            && (entry.id === inv.divergence || entry.id.startsWith(`${inv.divergence}:`)),
+        );
+        if (entries.length === 0) {
+          out.push(unchecked(
+            inv,
+            trace.metrics.perception === undefined
+              ? 'the trace carries no perception channel'
+              : `divergence "${inv.divergence}" was not materialized for observer ${inv.of}`,
+          ));
+          break;
+        }
+        // Segmented extents are one divergence to the author; sum the exposure.
+        const achieved = entries.reduce((sum, entry) => sum + entry.activeS, 0);
+        out.push(
+          report(
+            inv,
+            inv.range,
+            achieved,
+            'metrics.perception.mapDivergence',
+            `${inv.of} spent ${achieved.toFixed(2)} s inside "${inv.divergence}" (${entries[0]!.kind}), wanted ${fmtRange(inv.range)}`,
           ),
         );
         break;

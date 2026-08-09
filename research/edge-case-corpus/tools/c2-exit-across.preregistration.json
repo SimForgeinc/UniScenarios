@@ -1,23 +1,16 @@
 {
  "rubric": "c2-exit-across.rubric.json",
- "sha256": "f07e462435bc9798f27d565112b89dd0abc83ca7e34426f7ab8ecc3285018b1b",
- "registeredAt": "2026-08-06T18:47:19.340791+00:00",
+ "sha256": "bd6ddd72736e99331d3033d96ebd2548750adc79410bf06737cd413f38b6def7",
+ "registeredAt": "2026-08-07T07:23:41.307385+00:00",
  "authorLog": [
   [
    "use_site",
-   "yale-street::0530f396b16b483b"
-  ],
-  [
-   "close_lane",
-   "adjacent_right",
-   "drum",
-   33.0,
-   5
+   "yale-street::016011e14fda56b1"
   ],
   [
    "place_actor",
-   "challenger",
-   "vehicle.suv",
+   "exiting_vehicle",
+   "vehicle.sedan",
    "adjacent_lane"
   ],
   [
@@ -28,7 +21,7 @@
   ],
   [
    "add_interaction",
-   "challenger",
+   "exiting_vehicle",
    "change_lane",
    "on_approach"
   ],
@@ -37,11 +30,11 @@
    "near_miss",
    [
     "ego",
-    "challenger"
+    "exiting_vehicle"
    ],
    [
     0.1,
-    1.0
+    2.0
    ]
   ]
  ]
