@@ -127,7 +127,56 @@ async function auditPackages({ uniscenariosRoot, simcloudRoot, config, sourceRev
   for (const name of lockedByName.keys()) {
     if (!expectedNames.has(name)) violations.push(violation('UNEXPECTED_PACKAGE', `${name} is not in the canonical public stack.`, { package: name }));
   }
-  return { stack, vendorLock, packages };
+
+  const expectedPythonVersion = stack.stackVersion.replace(/-rc\.(\d+)$/u, 'rc$1');
+  const lockedPythonByName = new Map((vendorLock.pythonPackages ?? []).map((entry) => [entry.name, entry]));
+  const expectedPythonNames = new Set();
+  const pythonPackages = [];
+  const pythonConsumer = config.pythonConsumerManifest
+    ? await readFile(path.join(simcloudRoot, config.pythonConsumerManifest), 'utf8')
+    : '';
+  const pythonConsumerLock = config.pythonConsumerLock
+    ? await readFile(path.join(simcloudRoot, config.pythonConsumerLock), 'utf8')
+    : '';
+  for (const source of stack.pythonPackages ?? []) {
+    expectedPythonNames.add(source.name);
+    const locked = lockedPythonByName.get(source.name);
+    const packageViolations = [];
+    if (source.version !== expectedPythonVersion) packageViolations.push('source-version');
+    if (!locked) {
+      packageViolations.push('missing-vendor-lock-entry');
+      violations.push(violation('PYTHON_PACKAGE_MISSING', `${source.name} is absent from the SimCloud vendor lock.`, { package: source.name }));
+      pythonPackages.push({ name: source.name, role: source.role, status: 'fail', violations: packageViolations });
+      continue;
+    }
+    if (locked.version !== source.version || locked.version !== expectedPythonVersion) packageViolations.push('version');
+    if (locked.role !== source.role || locked.registry !== source.registry) packageViolations.push('publication');
+    const wheelPath = path.join(simcloudRoot, 'vendor/uniscenarios', locked.wheel);
+    if (!(await exists(wheelPath))) {
+      packageViolations.push('missing-wheel');
+    } else if (digest('sha256', await readFile(wheelPath)) !== locked.sha256) {
+      packageViolations.push('sha256');
+    }
+    if (!pythonConsumer.includes(`${source.name}==${source.version}`)) packageViolations.push('consumer-version');
+    if (!pythonConsumerLock.includes(locked.wheel)) packageViolations.push('consumer-lock');
+    if (packageViolations.length > 0) {
+      violations.push(violation('PYTHON_PACKAGE_CONTRACT_MISMATCH', `${source.name} violates: ${packageViolations.join(', ')}.`, { package: source.name }));
+    }
+    pythonPackages.push({
+      name: source.name,
+      role: source.role,
+      version: source.version,
+      wheel: locked.wheel,
+      status: packageViolations.length === 0 ? 'pass' : 'fail',
+      violations: packageViolations,
+    });
+  }
+  for (const name of lockedPythonByName.keys()) {
+    if (!expectedPythonNames.has(name)) {
+      violations.push(violation('UNEXPECTED_PYTHON_PACKAGE', `${name} is not in the canonical public stack.`, { package: name }));
+    }
+  }
+  return { stack, vendorLock, packages, pythonPackages };
 }
 
 async function auditOwnership({ simcloudRoot, config, violations }) {
@@ -194,7 +243,7 @@ export async function auditDivergence({ uniscenariosRoot, simcloudRoot, includeG
 
   const sourceRevision = includeGitRevisions ? revision(uniscenariosRoot) : undefined;
   const violations = [];
-  const { stack, vendorLock, packages } = await auditPackages({
+  const { stack, vendorLock, packages, pythonPackages } = await auditPackages({
     uniscenariosRoot,
     simcloudRoot,
     config,
@@ -221,6 +270,7 @@ export async function auditDivergence({ uniscenariosRoot, simcloudRoot, includeG
       },
     },
     packages,
+    pythonPackages,
     ownership,
     forbiddenImports,
     violations,

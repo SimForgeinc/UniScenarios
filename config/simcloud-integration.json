@@ -5,6 +5,8 @@
   "vendorLock": "vendor/uniscenarios/stack-lock.json",
   "consumerManifest": "package.json",
   "consumerLock": "package-lock.json",
+  "pythonConsumerManifest": "services/uniscenario-render-worker/pyproject.toml",
+  "pythonConsumerLock": "services/uniscenario-render-worker/uv.lock",
   "requireExactSourceRevision": true,
   "forbiddenPaths": [
     "packages/uniscenario-model",
@@ -72,6 +74,15 @@
         "CameraPanel.tsx",
         "index.ts",
         "useCameras.ts"
+      ]
+    },
+    {
+      "id": "carla-cloud-control-plane-adapters",
+      "path": "services/uniscenario-render-worker/uniscenario_render_worker",
+      "allowedFiles": [
+        "__init__.py",
+        "api.py",
+        "main.py"
       ]
     }
   ],
