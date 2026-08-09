@@ -17,7 +17,11 @@
     "verify:naming": "node scripts/verify-repository-naming.mjs",
     "verify:fresh-sumo": "node scripts/verify-fresh-launch-sumo.mjs",
     "maps:derivatives": "node scripts/build-map-derivatives.mjs",
-    "maps:derivatives:smoke": "node scripts/smoke-map-derivative-toolchain.mjs"
+    "maps:derivatives:smoke": "node scripts/smoke-map-derivative-toolchain.mjs",
+    "release:manifest": "node scripts/release/generate-stack-manifest.mjs --out artifacts/release/uniscenarios-stack.json",
+    "test:release": "node --test scripts/release/stack-manifest.test.mjs",
+    "integration:audit": "node scripts/integration/audit-simcloud-divergence.mjs",
+    "test:integration": "node --test scripts/integration/divergence-audit.test.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1",

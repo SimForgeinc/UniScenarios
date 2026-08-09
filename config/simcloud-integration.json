@@ -1,0 +1,91 @@
+{
+  "schema": "uniscenarios.simcloud-integration/v1",
+  "platformRepository": "https://github.com/SimForgeinc/simcloud-platform",
+  "ignoredNames": [
+    ".turbo",
+    "dist",
+    "node_modules",
+    "package.json",
+    "README.md",
+    "tsconfig.json"
+  ],
+  "surfaces": [
+    {
+      "id": "scenario-model",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/scenario-model",
+      "simcloudPath": "packages/uniscenario-model"
+    },
+    {
+      "id": "simulation-engine",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/sim-engine",
+      "simcloudPath": "packages/uniscenario-sim-engine"
+    },
+    {
+      "id": "scenario-materializer",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/scenario-materializer",
+      "simcloudPath": "packages/uniscenario-materializer"
+    },
+    {
+      "id": "map-intelligence",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/map-intel",
+      "simcloudPath": "packages/uniscenario-map-intel"
+    },
+    {
+      "id": "anchor-matcher",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/anchor-matcher",
+      "simcloudPath": "packages/uniscenario-anchor-matcher"
+    },
+    {
+      "id": "opendrive-tools",
+      "owner": "uniscenarios",
+      "policy": "must-converge",
+      "uniscenariosPath": "packages/xodr-tools",
+      "simcloudPath": "packages/uniscenario-xodr-tools"
+    },
+    {
+      "id": "openscenario",
+      "owner": "uniscenarios",
+      "policy": "extract-public-package",
+      "uniscenariosPath": "packages/cli/src/asam",
+      "simcloudPath": "packages/uniscenario-openscenario/src"
+    },
+    {
+      "id": "playback",
+      "owner": "uniscenarios",
+      "policy": "extract-public-package",
+      "uniscenariosPath": "apps/studio/src/playback",
+      "simcloudPath": "apps/web/app/lib/uniscenario/playback"
+    },
+    {
+      "id": "ambient-traffic",
+      "owner": "uniscenarios",
+      "policy": "extract-public-package",
+      "uniscenariosPath": "apps/studio/src/ambient",
+      "simcloudPath": "apps/web/app/lib/uniscenario/ambient"
+    },
+    {
+      "id": "cameras",
+      "owner": "uniscenarios",
+      "policy": "extract-public-package",
+      "uniscenariosPath": "apps/studio/src/cameras",
+      "simcloudPath": "apps/web/app/lib/uniscenario/cameras"
+    },
+    {
+      "id": "editor-core",
+      "owner": "uniscenarios",
+      "policy": "extract-public-package",
+      "uniscenariosPath": "apps/studio/src/editor",
+      "simcloudPath": "apps/web/app/lib/uniscenario/editor/core"
+    }
+  ]
+}

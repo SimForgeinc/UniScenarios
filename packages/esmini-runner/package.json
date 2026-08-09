@@ -1,6 +1,8 @@
 {
   "name": "@uniscenarios/esmini-runner",
   "version": "0.0.1",
+  "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/esmini-runner" },
+  "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
   "type": "module",
   "main": "src/index.ts",
