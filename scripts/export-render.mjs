@@ -533,9 +533,18 @@ async function exportScenario(page) {
     .map((id) => id.slice('actor:'.length));
   // A corpus clip has to show the ego and every authored challenger, not just
   // the two actors that produced the criticality metric.
+  //
+  // AUTHORED ONLY. `evidence.actorIds` also lists generated background road users once ambient
+  // traffic is on, and requiring all ~40 of them to be simultaneously in-frame and unoccluded is
+  // unsatisfiable -- it rejected 60 of 62 corpus scenarios with
+  // `ambient:v1:...(inFrame=false)`. Ambient traffic is scenery: it must be VISIBLE IN the shot,
+  // never a CONSTRAINT ON the shot. The strict composition gate is unchanged for every authored
+  // actor, and on traces written before ambient traffic existed `ambientActorIds` is absent, so this
+  // filter is a no-op.
+  const ambientActorIdSet = new Set(trace?.header?.ambientActorIds ?? []);
   const framingActorIds = corpusMode
-    ? [...evidence.actorIds]
-    : [...new Set([...evidence.metricPair, ...occluderActorIds])];
+    ? [...evidence.actorIds].filter((id) => !ambientActorIdSet.has(id))
+    : [...new Set([...evidence.metricPair, ...occluderActorIds])].filter((id) => !ambientActorIdSet.has(id));
   const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
   const framingPropIds = new Set(evidence.props.filter((prop) => {
     const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);

@@ -1789,3 +1789,69 @@ roads are populated, and the population is not yet well-behaved.**
 already destroyed 1065 computed traces once. And the doomed run was stopped correctly: `kill -TERM` on
 the process group, then confirmed zero PPID=1 strays and zero remaining `uniscenarios.js batch`
 processes before relaunching.
+
+---
+
+## 39. FINAL SCORECARD — the regenerated corpus
+
+`/tmp/vista-dataset-final/` — **62 distinct training-grade scenarios**, 7 archetypes, 4 maps,
+57 train / 5 test, split by archetype. 3D videos in `/tmp/vista-3d-final/`.
+
+| measure | value | target | verdict |
+|---|---|---|---|
+| M1.1 place fit (mechanical) | **0.9839** | >=0.95 | **PASS** (was 0.3993) |
+| M1.2 scenarios at `exact` sites | 0.5323 | >=0.95 | **FAIL** (was 0.382) |
+| M1.3 archetypes with >=4 sites | 15/15 | all | **PASS** |
+| M1.4 blind plausibility | 0.6538 | >=0.7769 | **FAIL** (was 0.5769, +7.7 not +20) |
+| M2.1 ambient on the batch path | proven | reachable | **PASS** |
+| M2.2 ambient within 60 m at t=0 | **3.0** | >=3 | **PASS** (was 0) |
+| M2.3 standing queues at t=0 | **1.00** | >=0.50 | **PASS** (was 0.00) |
+| M2.4 determinism | identical / differs on new seed | identical | **PASS** |
+| M2.5 subject pair never hijacked | **0/62** | 0 | **PASS**, non-vacuously |
+| M3.1 3D export coverage | **62/62 = 1.000** | 100% | **PASS** (was 0) |
+| M3.2 manifest integrity | 59/62 | all | **FAIL** — 3 rejects, see below |
+| M3.3 stream properties | 40/40 probed | all | **PASS** |
+| M3.4 render throughput | **15.33 s/scenario at c=4 = 235/hour** | report | **PASS** |
+| M4.1 signal diagnosis | DIAG-signals.md | written | **PASS** |
+| M4.2 RoadRunner handoff | HANDOFF-roadrunner-signals.md | ships | **PASS** |
+| M4.3 authored signal state | 671/671 simulated cells | >=90% | **PASS** |
+| M4.4 no scenario claims an absent signal | **0/62** | 0 | **PASS** (was 88/293) |
+| INTEGRITY instance hash | 61/62 | 62/62 | **FAIL** — 1 corrupt instance |
+
+**14 of 18 pass.** M1.2, M1.4, M3.2 and the integrity check do not.
+
+### Throughput, measured and stated rather than avoided
+**62 distinct scenarios in 2.24 h at 4 workers = 27.7/hour = ~664/day**, against a 2,324/day baseline —
+a **3.5x drop**. Verify 378 s (5%), mass harvest 7,685 s (95%). 5,000 cells simulated -> 103 gate-passing
+-> 62 distinct, i.e. **1.24% of simulated cells survive**. The cost is exactly what was bought: ambient
+traffic with a 20 s settle prologue per cell, and anchors tight enough that most sites no longer match.
+
+### The same bug, six times
+Ambient traffic introduced a new CLASS of actor, and **six independent layers each assumed "every actor
+in the trace belongs to the scenario"**:
+1. criticality metric pairs (`monitored-pairs.ts`) — fixed by WS-2 up front;
+2. the gate's closest-approach search (`gate.py trace_facts`) — fixed by WS-2's requested patch;
+3. **gate clause C5's collision count** — 312 of 348 collisions were ambient-ambient; C5 was
+   unsatisfiable on 140/140 cells;
+4. **the exporter's `collisionPolicy` check** — rejected 58 of 62;
+5. **`framingActorIds`** — demanded all ~40 background cars be in-frame and unoccluded; rejected 60 of 62;
+6. **the `every-video-frame-shows-every-present-actor` gate** — rejected 59 of 62 clips that had
+   already rendered complete videos.
+
+I fixed the first two proactively and still walked into four more, each discovered only by running the
+thing end to end and reading the error. Every fix follows one rule — *an ambient actor is scenery: it
+must be visible IN the shot and free to be hit, but never a CONSTRAINT ON the scenario* — and every fix
+is a no-op on traces written before ambient traffic existed.
+
+### The four failures, stated plainly
+- **M1.2 = 0.5323.** `c4g-circulating-sudden-stop` is 31/32 exact and `low-friction-stop-slide` only
+  1/14. As recorded in s29 and s34 this measure is *necessary but not sufficient*, and I will not chase
+  it by loosening clauses — that is precisely the defect it was meant to detect. M1.1 at 0.9839 is the
+  measure with teeth and it passes.
+- **M1.4 = 0.6538 vs 0.5769 baseline: +7.7 points, target +20.** Real improvement, honestly short.
+  `parked-vans-narrow-road` scores 0/5 and `c11g-hidden-child` 0/1; `c4g` 6/6 and `blind-crest` 1/1.
+  n=26 on a 62-scenario corpus, so the confidence interval is wide.
+- **M3.2 = 59/62.** Two instances disagree with their own `inputHash` and one pedestrian is genuinely
+  occluded from all 17 searched viewpoints. The renderer is correct to refuse all three.
+- **INTEGRITY = 61/62.** One corrupt instance survived into the final corpus, same class as the 4/293
+  found earlier — consistent with a write race under `batch --concurrency 2`.
