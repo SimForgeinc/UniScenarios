@@ -1,91 +1,64 @@
 {
-  "schema": "uniscenarios.simcloud-integration/v1",
+  "schema": "uniscenarios.simcloud-integration/v2",
   "platformRepository": "https://github.com/SimForgeinc/simcloud-platform",
-  "ignoredNames": [
-    ".turbo",
-    "dist",
-    "node_modules",
-    "package.json",
-    "README.md",
-    "tsconfig.json"
+  "sourceStackConfig": "config/uniscenarios-stack.json",
+  "vendorLock": "vendor/uniscenarios/stack-lock.json",
+  "consumerManifest": "package.json",
+  "consumerLock": "package-lock.json",
+  "requireExactSourceRevision": true,
+  "forbiddenPaths": [
+    "packages/uniscenario-model",
+    "packages/uniscenario-sim-engine",
+    "packages/uniscenario-materializer",
+    "packages/uniscenario-map-intel",
+    "packages/uniscenario-anchor-matcher",
+    "packages/uniscenario-xodr-tools",
+    "packages/uniscenario-openscenario",
+    "apps/web/app/dashboard/scenarios/editor-native",
+    "apps/web/app/lib/uniscenario/editor/core",
+    "apps/web/app/lib/uniscenario/editor/catalog",
+    "apps/web/app/lib/uniscenario/editor/renderer",
+    "apps/web/app/lib/uniscenario/openscenario/model.ts",
+    "apps/web/app/lib/uniscenario/session/StudioTransport.ts"
   ],
-  "surfaces": [
+  "adapterSurfaces": [
     {
-      "id": "scenario-model",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/scenario-model",
-      "simcloudPath": "packages/uniscenario-model"
+      "id": "editor-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/editor",
+      "allowedFiles": [
+        "anchored-popover.ts",
+        "api.ts",
+        "profile-map-cache.ts",
+        "use-editor-runtime.ts"
+      ]
     },
     {
-      "id": "simulation-engine",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/sim-engine",
-      "simcloudPath": "packages/uniscenario-sim-engine"
-    },
-    {
-      "id": "scenario-materializer",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/scenario-materializer",
-      "simcloudPath": "packages/uniscenario-materializer"
-    },
-    {
-      "id": "map-intelligence",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/map-intel",
-      "simcloudPath": "packages/uniscenario-map-intel"
-    },
-    {
-      "id": "anchor-matcher",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/anchor-matcher",
-      "simcloudPath": "packages/uniscenario-anchor-matcher"
-    },
-    {
-      "id": "opendrive-tools",
-      "owner": "uniscenarios",
-      "policy": "must-converge",
-      "uniscenariosPath": "packages/xodr-tools",
-      "simcloudPath": "packages/uniscenario-xodr-tools"
-    },
-    {
-      "id": "openscenario",
-      "owner": "uniscenarios",
-      "policy": "extract-public-package",
-      "uniscenariosPath": "packages/cli/src/asam",
-      "simcloudPath": "packages/uniscenario-openscenario/src"
-    },
-    {
-      "id": "playback",
-      "owner": "uniscenarios",
-      "policy": "extract-public-package",
-      "uniscenariosPath": "apps/studio/src/playback",
-      "simcloudPath": "apps/web/app/lib/uniscenario/playback"
-    },
-    {
-      "id": "ambient-traffic",
-      "owner": "uniscenarios",
-      "policy": "extract-public-package",
-      "uniscenariosPath": "apps/studio/src/ambient",
-      "simcloudPath": "apps/web/app/lib/uniscenario/ambient"
-    },
-    {
-      "id": "cameras",
-      "owner": "uniscenarios",
-      "policy": "extract-public-package",
-      "uniscenariosPath": "apps/studio/src/cameras",
-      "simcloudPath": "apps/web/app/lib/uniscenario/cameras"
-    },
-    {
-      "id": "editor-core",
-      "owner": "uniscenarios",
-      "policy": "extract-public-package",
-      "uniscenariosPath": "apps/studio/src/editor",
-      "simcloudPath": "apps/web/app/lib/uniscenario/editor/core"
+      "id": "playback-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/playback",
+      "allowedFiles": [
+        "PlaybackPanel.tsx",
+        "scenario-worker.ts",
+        "scenarioWorkerClient.ts",
+        "simulationPreview.ts",
+        "usePlayback.ts"
+      ]
     }
+  ],
+  "sourceScanRoots": [
+    "apps",
+    "docker",
+    "infra",
+    "packages",
+    "scripts",
+    "services"
+  ],
+  "importScanIgnoreFiles": [
+    "scripts/verify-uniscenarios-vendor.mjs"
+  ],
+  "forbiddenImportPatterns": [
+    "@simforge/uniscenario-(model|sim-engine|materializer|map-intel|anchor-matcher|xodr-tools|openscenario)",
+    "@/app/lib/uniscenario/editor/(core|catalog|renderer)(/|[\"'])",
+    "@/app/lib/uniscenario/playback/(controller|model|physics|liveSimulationPlan|mapRuntime|site-selection|staticMapColliders|canonicalPreview|traffic-provider)",
+    "dashboard/scenarios/editor-native|NativeScenarioEditor"
   ]
 }

@@ -33,3 +33,4 @@ if (outputArg) {
 } else {
   process.stdout.write(serialized);
 }
+if (report.status !== 'pass') process.exitCode = 1;

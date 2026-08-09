@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { readdir, readFile, stat } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 async function readJson(file) {
@@ -11,11 +11,21 @@ function revision(root) {
   return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim();
 }
 
-function digest(bytes) {
-  return createHash('sha256').update(bytes).digest('hex');
+function digest(algorithm, bytes, encoding = 'hex') {
+  return createHash(algorithm).update(bytes).digest(encoding);
 }
 
-async function collectFiles(root, ignoredNames, relative = '', result = new Map()) {
+async function exists(target) {
+  try {
+    await access(target);
+    return true;
+  } catch (error) {
+    if (error?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+async function collectFiles(root, relative = '', result = []) {
   const directory = path.join(root, relative);
   let entries;
   try {
@@ -27,82 +37,192 @@ async function collectFiles(root, ignoredNames, relative = '', result = new Map(
 
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    if (ignoredNames.has(entry.name)) continue;
     const child = relative ? path.posix.join(relative, entry.name) : entry.name;
-    if (entry.isDirectory()) {
-      await collectFiles(root, ignoredNames, child, result);
-    } else if (entry.isFile()) {
-      const bytes = await readFile(path.join(root, child));
-      result.set(child, digest(bytes));
-    }
+    if (entry.isDirectory()) await collectFiles(root, child, result);
+    if (entry.isFile() || entry.isSymbolicLink()) result.push(child);
   }
   return result;
 }
 
-function compareFiles(uniscenarios, simcloud) {
-  const paths = [...new Set([...uniscenarios.keys(), ...simcloud.keys()])].sort();
-  return paths.map((file) => {
-    const uniscenariosSha256 = uniscenarios.get(file);
-    const simcloudSha256 = simcloud.get(file);
-    if (!uniscenariosSha256) return { path: file, status: 'simcloud-only', simcloudSha256 };
-    if (!simcloudSha256) return { path: file, status: 'uniscenarios-only', uniscenariosSha256 };
-    if (uniscenariosSha256 === simcloudSha256) {
-      return { path: file, status: 'identical', uniscenariosSha256, simcloudSha256 };
-    }
-    return { path: file, status: 'changed', uniscenariosSha256, simcloudSha256 };
-  });
+function allDependencies(packageJson) {
+  return {
+    ...(packageJson.dependencies ?? {}),
+    ...(packageJson.devDependencies ?? {}),
+    ...(packageJson.optionalDependencies ?? {}),
+  };
 }
 
-function counts(files) {
-  const result = { identical: 0, changed: 0, uniscenariosOnly: 0, simcloudOnly: 0 };
-  for (const file of files) {
-    if (file.status === 'identical') result.identical += 1;
-    if (file.status === 'changed') result.changed += 1;
-    if (file.status === 'uniscenarios-only') result.uniscenariosOnly += 1;
-    if (file.status === 'simcloud-only') result.simcloudOnly += 1;
+function violation(code, message, details = {}) {
+  return { code, message, ...details };
+}
+
+async function auditPackages({ uniscenariosRoot, simcloudRoot, config, sourceRevision, violations }) {
+  const stack = await readJson(path.join(uniscenariosRoot, config.sourceStackConfig));
+  if (stack.schema !== 'uniscenarios.stack-config/v1') {
+    throw new Error(`Unsupported stack config schema: ${String(stack.schema)}`);
   }
-  return result;
+  const vendorLock = await readJson(path.join(simcloudRoot, config.vendorLock));
+  if (vendorLock.schema !== 'simcloud.uniscenarios-vendor/v1') {
+    throw new Error(`Unsupported SimCloud vendor lock schema: ${String(vendorLock.schema)}`);
+  }
+  const consumerManifest = await readJson(path.join(simcloudRoot, config.consumerManifest));
+  const consumerLock = await readJson(path.join(simcloudRoot, config.consumerLock));
+  const dependencies = allDependencies(consumerManifest);
+  const lockedByName = new Map(vendorLock.packages.map((entry) => [entry.name, entry]));
+  const expectedNames = new Set();
+  const packages = [];
+
+  if (vendorLock.stackVersion !== stack.stackVersion) {
+    violations.push(violation('STACK_VERSION_MISMATCH', `SimCloud stack ${vendorLock.stackVersion} does not match UniScenarios ${stack.stackVersion}.`));
+  }
+  if (vendorLock.source?.repository !== stack.repository) {
+    violations.push(violation('SOURCE_REPOSITORY_MISMATCH', 'SimCloud vendor lock does not name the canonical UniScenarios repository.'));
+  }
+  if (config.requireExactSourceRevision && vendorLock.source?.revision !== sourceRevision) {
+    violations.push(violation('SOURCE_REVISION_MISMATCH', `SimCloud consumes ${vendorLock.source?.revision ?? 'no revision'}, not UniScenarios HEAD ${sourceRevision}.`));
+  }
+
+  for (const packageEntry of stack.packages) {
+    const packageJson = await readJson(path.join(uniscenariosRoot, packageEntry.path, 'package.json'));
+    const name = packageJson.name;
+    expectedNames.add(name);
+    const locked = lockedByName.get(name);
+    const packageViolations = [];
+    if (packageJson.version !== stack.stackVersion) packageViolations.push('source-version');
+    if (!locked) {
+      packageViolations.push('missing-vendor-lock-entry');
+      violations.push(violation('PACKAGE_MISSING', `${name} is absent from the SimCloud vendor lock.`, { package: name }));
+      packages.push({ name, role: packageEntry.role, status: 'fail', violations: packageViolations });
+      continue;
+    }
+    if (locked.version !== packageJson.version || locked.version !== vendorLock.stackVersion) packageViolations.push('version');
+    if (locked.role !== packageEntry.role) packageViolations.push('role');
+    const expectedReference = `file:vendor/uniscenarios/${locked.tarball}`;
+    if (dependencies[name] !== expectedReference) packageViolations.push('consumer-reference');
+
+    const tarballPath = path.join(simcloudRoot, 'vendor/uniscenarios', locked.tarball);
+    if (!(await exists(tarballPath))) {
+      packageViolations.push('missing-tarball');
+    } else {
+      const bytes = await readFile(tarballPath);
+      if (digest('sha256', bytes) !== locked.sha256) packageViolations.push('sha256');
+      const installedLock = consumerLock.packages?.[`node_modules/${name}`];
+      const expectedIntegrity = `sha512-${digest('sha512', bytes, 'base64')}`;
+      if (!installedLock?.resolved?.endsWith(`vendor/uniscenarios/${locked.tarball}`)) packageViolations.push('lock-resolution');
+      if (installedLock?.integrity !== expectedIntegrity) packageViolations.push('lock-integrity');
+    }
+    if (packageViolations.length > 0) {
+      violations.push(violation('PACKAGE_CONTRACT_MISMATCH', `${name} violates: ${packageViolations.join(', ')}.`, { package: name }));
+    }
+    packages.push({
+      name,
+      role: packageEntry.role,
+      version: packageJson.version,
+      tarball: locked.tarball,
+      status: packageViolations.length === 0 ? 'pass' : 'fail',
+      violations: packageViolations,
+    });
+  }
+
+  for (const name of lockedByName.keys()) {
+    if (!expectedNames.has(name)) violations.push(violation('UNEXPECTED_PACKAGE', `${name} is not in the canonical public stack.`, { package: name }));
+  }
+  return { stack, vendorLock, packages };
+}
+
+async function auditOwnership({ simcloudRoot, config, violations }) {
+  const ownership = [];
+  for (const relativePath of config.forbiddenPaths) {
+    const absolutePath = path.join(simcloudRoot, relativePath);
+    let files = [];
+    if (await exists(absolutePath)) {
+      const metadata = await stat(absolutePath);
+      files = metadata.isDirectory() ? await collectFiles(absolutePath) : [path.basename(relativePath)];
+    }
+    const status = files.length === 0 ? 'pass' : 'fail';
+    if (status === 'fail') {
+      violations.push(violation('FORBIDDEN_IMPLEMENTATION', `Shared implementation returned at ${relativePath}.`, { path: relativePath, files }));
+    }
+    ownership.push({ type: 'forbidden-path', path: relativePath, status, files });
+  }
+
+  for (const adapter of config.adapterSurfaces) {
+    const files = await collectFiles(path.join(simcloudRoot, adapter.path));
+    const allowed = new Set(adapter.allowedFiles);
+    const unexpected = files.filter((file) => !allowed.has(file));
+    const status = unexpected.length === 0 ? 'pass' : 'fail';
+    if (status === 'fail') {
+      violations.push(violation('UNAPPROVED_ADAPTER_FILE', `${adapter.id} contains shared or unapproved files.`, { path: adapter.path, files: unexpected }));
+    }
+    ownership.push({ type: 'adapter-surface', id: adapter.id, path: adapter.path, status, files, unexpected });
+  }
+  return ownership;
+}
+
+async function auditImports({ simcloudRoot, config, violations }) {
+  const patterns = config.forbiddenImportPatterns.map((pattern) => new RegExp(pattern, 'u'));
+  const ignoredFiles = new Set(config.importScanIgnoreFiles ?? []);
+  const findings = [];
+  for (const root of config.sourceScanRoots) {
+    for (const relativeFile of await collectFiles(path.join(simcloudRoot, root))) {
+      const file = path.posix.join(root, relativeFile);
+      if (ignoredFiles.has(file)) continue;
+      let source;
+      try {
+        source = await readFile(path.join(simcloudRoot, file), 'utf8');
+      } catch (error) {
+        if (error?.code === 'EISDIR') continue;
+        throw error;
+      }
+      for (const pattern of patterns) {
+        if (pattern.test(source)) findings.push({ file, pattern: pattern.source });
+      }
+    }
+  }
+  if (findings.length > 0) {
+    violations.push(violation('FORBIDDEN_IMPORT', 'SimCloud source still references retired private implementations.', { findings }));
+  }
+  return findings;
 }
 
 export async function auditDivergence({ uniscenariosRoot, simcloudRoot, includeGitRevisions = true }) {
   const config = await readJson(path.join(uniscenariosRoot, 'config/simcloud-integration.json'));
-  if (config.schema !== 'uniscenarios.simcloud-integration/v1') {
+  if (config.schema !== 'uniscenarios.simcloud-integration/v2') {
     throw new Error(`Unsupported integration config schema: ${String(config.schema)}`);
   }
   if (!(await stat(simcloudRoot)).isDirectory()) throw new Error('simcloudRoot must be a directory');
 
-  const ignoredNames = new Set(config.ignoredNames);
-  const surfaces = [];
-  for (const surface of config.surfaces) {
-    const uniscenarios = await collectFiles(path.join(uniscenariosRoot, surface.uniscenariosPath), ignoredNames);
-    const simcloud = await collectFiles(path.join(simcloudRoot, surface.simcloudPath), ignoredNames);
-    const files = compareFiles(uniscenarios, simcloud);
-    surfaces.push({
-      id: surface.id,
-      owner: surface.owner,
-      policy: surface.policy,
-      paths: {
-        uniscenarios: surface.uniscenariosPath,
-        simcloud: surface.simcloudPath,
-      },
-      counts: counts(files),
-      files,
-    });
-  }
+  const sourceRevision = includeGitRevisions ? revision(uniscenariosRoot) : undefined;
+  const violations = [];
+  const { stack, vendorLock, packages } = await auditPackages({
+    uniscenariosRoot,
+    simcloudRoot,
+    config,
+    sourceRevision,
+    violations,
+  });
+  const ownership = await auditOwnership({ simcloudRoot, config, violations });
+  const forbiddenImports = await auditImports({ simcloudRoot, config, violations });
 
   return {
-    schema: 'uniscenarios.simcloud-divergence/v1',
+    schema: 'uniscenarios.simcloud-anti-drift/v2',
+    status: violations.length === 0 ? 'pass' : 'fail',
     repositories: {
       uniscenarios: {
-        repository: 'https://github.com/SimForgeinc/UniScenarios',
-        ...(includeGitRevisions ? { revision: revision(uniscenariosRoot) } : {}),
+        repository: stack.repository,
+        stackVersion: stack.stackVersion,
+        ...(includeGitRevisions ? { revision: sourceRevision } : {}),
       },
       simcloud: {
         repository: config.platformRepository,
+        stackVersion: vendorLock.stackVersion,
+        sourceRevision: vendorLock.source?.revision,
         ...(includeGitRevisions ? { revision: revision(simcloudRoot) } : {}),
       },
     },
-    surfaces,
-    totals: counts(surfaces.flatMap((surface) => surface.files)),
+    packages,
+    ownership,
+    forbiddenImports,
+    violations,
   };
 }
