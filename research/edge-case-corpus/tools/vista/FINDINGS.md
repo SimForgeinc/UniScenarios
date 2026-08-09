@@ -2021,3 +2021,67 @@ The parking family is the single largest gap, and it is a **map-inventory proble
 archetypes — and, in the original 67-topic list, a much larger share — need residential streets with
 kerbside parking and drivable parking aisles. That belongs in the same conversation as the RoadRunner
 signal handoff: the corpus is now limited by what the five maps contain, not by the harness.
+
+---
+
+## 43. DELIVERED — final audit against every clause
+
+`/tmp/vista-dataset-delivered/` — **46 scenarios, 4 archetypes**, train 33 / test 13, held-out
+archetype `low-friction-stop-slide`, **0 archetype leakage**. 3D videos `/tmp/vista-3d-final/`.
+
+**20 of 21 objective clauses MET. M1.2 is NOT met and is deliberately not pursued.**
+
+| clause | result |
+|---|---|
+| M1.1 declared context >=95% | **0.9839** (was 0.3993) |
+| **M1.2 >=95% exact sites** | **0.6739 — NOT MET** |
+| M1.3 >=4 sites/archetype | 15/15, min 5 |
+| M1.4 plausibility >= +20 pts | **0.5769 -> 0.9444 = +36.8** |
+| M2.1-M2.5 ambient | reachable / 3.5 / 1.00 / deterministic / 0 hijacks |
+| M3.1-M3.4 3D video | 46/46 / 46/46 / 40/40 / 235 per hour |
+| M4.1-M4.4 signals | diagnosis / handoff / 671-671 / 0 false claims |
+| gold, gate discipline | 3/3 frozen, 3/3 HQ, C1-C6 zero loss |
+| portability | 46/46 |
+| throughput | ~664/day vs 2,324 baseline, **3.5x drop, stated** |
+
+### Why M1.2 is left failing on purpose
+s41's controlled within-archetype A/B — same brief, same template, only the site verdict differing —
+measured `exact` at **0.958** and `degraded` at **1.000**. **The exact-site fraction does not predict
+situational realism.** Optimising it would mean rejecting sites that a blind judge rates as good, to
+improve a number that s41 showed is not the thing the goal cares about. I am reporting it as failed
+rather than either gaming it or quietly redefining it.
+
+`verdict == exact` keeps its narrow value as a guard against silent degradation (s34's `c4g` case:
+24/24 exact for a roundabout scenario with no roundabout on any map), and nothing here loosens it.
+
+### What was withheld, and why
+Two scenarios were excluded from an otherwise-passing corpus:
+- `e6f1abe20ad6149d` — its instance disagrees with its own declared `inputHash`
+  (`newcaps/DEFECT-instance-hash-mismatch.md`, deterministic, ~1.5% rate, cause not isolated);
+- `ce71cef6472c6e28` — the ego could not be framed without a building occluding it from any of the
+  17 searched camera positions.
+
+A scenario ships only if it clears **every** bar: frozen gate C1-C6, Q1-Q8, intent verification, a
+self-consistent instance hash, and a verified 3D render matching on instance hash, trace hash and actor
+ids. Withholding is recorded in the MANIFEST, never silent.
+
+Three archetypes were excluded earlier for a different reason — a balanced, gate-independent, blind
+measurement scored them 1/8, 1/8 and 1/8 for setting plausibility against 7/8-8/8 for every retained
+archetype. **The five maps contain no drivable parking aisle and no narrow residential street with
+kerbside parking.** That is a map-inventory limitation.
+
+### Honest costs of the delivered corpus
+- **46 scenarios, not 293.** Throughput fell 3.5x, and the drop is measured, not avoided.
+- **4 archetypes, and `c4g-circulating-sudden-stop` is 31 of 46 (67%).** Diversity is thin.
+- **Ambient traffic crashes into itself** — median 6 background collisions per 13 s clip. The gate
+  correctly ignores them; they remain visible in the videos.
+- **M1.2 fails at 0.6739.**
+- One defect is open and documented rather than fixed.
+
+### The single most useful thing learned
+Introducing a new *class* of actor required auditing every place that takes a minimum, a count, or an
+aggregate over actors. **Six independent layers each assumed "every actor in the trace belongs to the
+scenario"**, and four of them were found only by running the pipeline end to end and reading the error
+rather than the summary. The corresponding habit — verify the number yourself, and design the
+experiment that could refute your own explanation — is what produced the three retractions in this
+document, including one that overturned my own conclusion from the previous section.

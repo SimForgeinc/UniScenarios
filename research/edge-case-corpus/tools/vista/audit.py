@@ -88,7 +88,11 @@ def m3(recs, videodir):
     if not os.path.exists(idx):
         return {'M3.1': {'pass': False, 'note': 'NOT MEASURED -- no INDEX.json at ' + videodir}}
     ent = json.load(open(idx))
-    by = {e.get('scenarioId'): e for e in ent if isinstance(e, dict)}
+    # Scope to THIS corpus. The index may carry entries for scenarios that were withheld or belong to
+    # an earlier corpus; grading the whole index would report failures for things not being shipped.
+    wanted = {r['scenarioId'] for r in recs}
+    by = {e.get('scenarioId'): e for e in ent
+          if isinstance(e, dict) and e.get('scenarioId') in wanted}
     have = [r for r in recs if r['scenarioId'] in by]
     integ = collections.Counter()
     for e in by.values():
