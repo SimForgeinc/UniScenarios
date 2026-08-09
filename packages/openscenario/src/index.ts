@@ -6,3 +6,14 @@
  * can move behind this boundary without changing their code.
  */
 export * from '@uniscenarios/cli/asam';
+export {
+  MAX_XOSC_BYTES,
+  OpenScenarioImportError,
+  analyzeOpenScenarioImport,
+  resolveOpenScenarioMap,
+  translateOpenScenarioImport,
+  type OpenScenarioImportAnalysis,
+  type OpenScenarioImportDiagnostic,
+  type OpenScenarioImportMapCandidate,
+  type OpenScenarioMapResolution,
+} from './import.js';

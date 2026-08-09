@@ -13,17 +13,20 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./import": { "types": "./dist/import.d.ts", "default": "./dist/import.js" }
   },
   "files": ["dist"],
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "build": "tsup src/index.ts src/import.ts --format esm --dts --sourcemap --clean --out-dir dist",
     "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniscenarios/cli": "workspace:*"
+    "@uniscenarios/cli": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
+    "fast-xml-parser": "^5.5.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
