@@ -5,26 +5,27 @@
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
   "bin": {
     "uniscenarios": "./bin/uniscenarios.js",
     "scen": "./bin/scen.js"
   },
   "exports": {
-    ".": "./src/index.ts",
-    "./asam": "./src/asam/index.ts",
-    "./esmini-bundle": "./src/asam/esmini-bundle.ts",
-    "./asam/xml-1.4": "./src/asam/xml-1.4.ts",
-    "./asam/xml-1.4-validation": "./src/asam/xml-1.4-validation.ts",
-    "./asam/types": "./src/asam/types.ts"
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
+    "./asam": { "types": "./dist/asam/index.d.ts", "default": "./dist/asam/index.js" },
+    "./esmini-bundle": { "types": "./dist/asam/esmini-bundle.d.ts", "default": "./dist/asam/esmini-bundle.js" },
+    "./asam/xml-1.4": { "types": "./dist/asam/xml-1.4.d.ts", "default": "./dist/asam/xml-1.4.js" },
+    "./asam/xml-1.4-validation": { "types": "./dist/asam/xml-1.4-validation.d.ts", "default": "./dist/asam/xml-1.4-validation.js" },
+    "./asam/types": { "types": "./dist/asam/types.d.ts", "default": "./dist/asam/types.js" }
   },
   "files": [
-    "src",
+    "dist",
     "bin"
   ],
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsup src/index.ts src/main.ts src/asam/index.ts src/asam/esmini-bundle.ts src/asam/xml-1.4.ts src/asam/xml-1.4-validation.ts src/asam/types.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "audit:xml14-suite": "tsx src/tools/audit-xml14-suite.ts",

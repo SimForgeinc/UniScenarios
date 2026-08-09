@@ -26,11 +26,15 @@ async function fixture(overrides = {}) {
   await writeFile(path.join(root, 'config/uniscenarios-stack.json'), JSON.stringify(config));
   await writeFile(path.join(root, 'packages/model/package.json'), JSON.stringify({
     name: '@uniscenarios/model', version: '1.2.3', license: 'Apache-2.0',
+    main: './dist/index.js', types: './dist/index.d.ts', files: ['dist'],
+    exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
     publishConfig: { access: 'public', provenance: true },
     repository: { directory: 'packages/model' }, ...overrides.model,
   }));
   await writeFile(path.join(root, 'packages/engine/package.json'), JSON.stringify({
     name: '@uniscenarios/engine', version: '1.2.3', license: 'Apache-2.0',
+    main: './dist/index.js', types: './dist/index.d.ts', files: ['dist'],
+    exports: { '.': { types: './dist/index.d.ts', default: './dist/index.js' } },
     publishConfig: { access: 'public', provenance: true },
     repository: { directory: 'packages/engine' },
     dependencies: { '@uniscenarios/model': 'workspace:*' }, ...overrides.engine,
@@ -68,5 +72,18 @@ test('requires a full immutable source revision', async () => {
   await assert.rejects(
     buildStackManifest({ repoRoot, sourceRevision: 'main' }),
     /full lowercase git SHA/u,
+  );
+});
+
+test('rejects packages that publish TypeScript source instead of release artifacts', async () => {
+  const repoRoot = await fixture({ model: {
+    main: './src/index.ts',
+    types: './src/index.ts',
+    files: ['src'],
+    exports: { '.': './src/index.ts' },
+  } });
+  await assert.rejects(
+    buildStackManifest({ repoRoot, sourceRevision: SHA }),
+    /must publish compiled dist entry points/u,
   );
 });

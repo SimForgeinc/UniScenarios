@@ -1,13 +1,20 @@
 {
-  "name": "@uniscenarios/trace-comparator",
+  "name": "@uniscenarios/openscenario",
   "version": "0.0.1",
-  "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/trace-comparator" },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
+    "directory": "packages/openscenario"
+  },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
   "type": "module",
+  "sideEffects": false,
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
   "files": ["dist"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist",
@@ -16,9 +23,10 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniscenarios/sim-engine": "workspace:*"
+    "@uniscenarios/cli": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^22.10.0",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"
   }

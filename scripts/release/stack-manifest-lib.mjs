@@ -20,6 +20,24 @@ function internalDependencies(packageJson) {
   return Object.fromEntries(sections.flatMap((section) => Object.entries(packageJson[section] ?? {})));
 }
 
+function assertCompiledPackage(packageJson) {
+  if (packageJson.main !== './dist/index.js' || packageJson.types !== './dist/index.d.ts') {
+    throw new Error(`${packageJson.name} must publish compiled dist entry points`);
+  }
+  if (!Array.isArray(packageJson.files) || !packageJson.files.includes('dist')) {
+    throw new Error(`${packageJson.name} must include dist in published files`);
+  }
+  const rootExport = packageJson.exports?.['.'];
+  if (rootExport?.default !== './dist/index.js' || rootExport?.types !== './dist/index.d.ts') {
+    throw new Error(`${packageJson.name} must expose compiled root exports`);
+  }
+  for (const [name, target] of Object.entries(packageJson.bin ?? {})) {
+    if (typeof target !== 'string' || target.includes('/src/') || target.endsWith('.ts')) {
+      throw new Error(`${packageJson.name} binary ${name} must not execute TypeScript source`);
+    }
+  }
+}
+
 export async function buildStackManifest({ repoRoot, sourceRevision } = {}) {
   if (!repoRoot) throw new Error('repoRoot is required');
 
@@ -55,6 +73,7 @@ export async function buildStackManifest({ repoRoot, sourceRevision } = {}) {
     if (packageJson.repository?.directory !== entry.path) {
       throw new Error(`${packageJson.name} repository.directory must be ${entry.path}`);
     }
+    assertCompiledPackage(packageJson);
     versions.set(packageJson.name, packageJson.version);
     packages.push({
       name: packageJson.name,

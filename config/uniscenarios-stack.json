@@ -20,6 +20,7 @@
     { "path": "packages/prop-catalog", "role": "actor-catalog" },
     { "path": "packages/trace-comparator", "role": "trace-conformance" },
     { "path": "packages/cli", "role": "cli-and-openscenario" },
+    { "path": "packages/openscenario", "role": "openscenario-public-api" },
     { "path": "packages/esmini-runner", "role": "local-execution-adapter" }
   ]
 }

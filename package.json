@@ -19,6 +19,8 @@
     "maps:derivatives": "node scripts/build-map-derivatives.mjs",
     "maps:derivatives:smoke": "node scripts/smoke-map-derivative-toolchain.mjs",
     "release:manifest": "node scripts/release/generate-stack-manifest.mjs --out artifacts/release/uniscenarios-stack.json",
+    "release:verify-artifacts": "node scripts/release/verify-package-artifacts.mjs",
+    "release:smoke-packages": "node scripts/release/smoke-packed-stack.mjs",
     "test:release": "node --test scripts/release/stack-manifest.test.mjs",
     "integration:audit": "node scripts/integration/audit-simcloud-divergence.mjs",
     "integration:compare-engine": "tsx scripts/integration/compare-engine-behavior.ts",
@@ -27,6 +29,7 @@
   "devDependencies": {
     "playwright-core": "^1.62.1",
     "sharp": "0.34.5",
+    "tsup": "^8.5.0",
     "tsx": "^4.20.0",
     "typescript": "^5.6.0"
   }
