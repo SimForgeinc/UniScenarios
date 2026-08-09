@@ -1,0 +1,45 @@
+name: Publish immutable UniScenarios stack
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: npm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.18.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm --filter @uniscenarios/scenario-model test
+      - run: pnpm --filter @uniscenarios/sim-engine test
+      - run: pnpm --filter @uniscenarios/scenario-materializer test
+      - run: pnpm --filter @uniscenarios/editor-core test
+      - run: pnpm --filter @uniscenarios/city-renderer test
+      - run: pnpm --filter @uniscenarios/prop-catalog test
+      - run: pnpm -r --filter "./packages/**" build
+      - run: pnpm release:manifest
+      - run: pnpm release:verify-artifacts
+      - run: pnpm release:smoke-packages
+      - name: Verify tag and publish with npm provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          node -e "const fs=require('fs');const c=JSON.parse(fs.readFileSync('config/uniscenarios-stack.json'));if(process.env.GITHUB_REF_NAME!=='v'+c.stackVersion)throw new Error('tag must equal v'+c.stackVersion)"
+          pnpm --filter "./packages/**" publish --recursive --access public --provenance --no-git-checks

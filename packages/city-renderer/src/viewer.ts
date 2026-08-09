@@ -149,6 +149,8 @@ export class CityViewer {
   };
   private readonly raycaster = new Raycaster();
   private readonly abort = new AbortController();
+  private mapLoadQueue: Promise<void> = Promise.resolve();
+  private mapLoaded = false;
 
   private manifest: CityManifest | null = null;
   private variantManifest: CityAssetVariantManifest | null = null;
@@ -296,17 +298,24 @@ export class CityViewer {
 
   // ---------------------------------------------------------------- loading
 
-  async loadMap(manifestUrl: string): Promise<void> {
-    this.mapLoadActive = true;
-    try {
-      await this.loadMapInner(manifestUrl);
-    } catch (err) {
-      // dispose() aborts every in-flight request; that is not a failure.
-      if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
-      throw err;
-    } finally {
-      this.mapLoadActive = false;
-    }
+  loadMap(manifestUrl: string): Promise<void> {
+    const load = this.mapLoadQueue.catch(() => undefined).then(async () => {
+      if (this.disposed) return;
+      if (this.mapLoaded) this.releaseMapResources();
+      this.mapLoaded = true;
+      this.mapLoadActive = true;
+      try {
+        await this.loadMapInner(manifestUrl);
+      } catch (err) {
+        // dispose() aborts every in-flight request; that is not a failure.
+        if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
+        throw err;
+      } finally {
+        this.mapLoadActive = false;
+      }
+    });
+    this.mapLoadQueue = load;
+    return load;
   }
 
   private async loadMapInner(manifestUrl: string): Promise<void> {
@@ -1518,5 +1527,32 @@ export class CityViewer {
       this.renderer.dispose();
       this.ultraLowMaterials.dispose();
     });
+  }
+
+  private releaseMapResources(): void {
+    const layers = [this.cityLayer, this.vegLayer, this.roadLayer].filter(
+      (layer): layer is TileStreamLayer => layer !== null,
+    );
+    for (const layer of layers) layer.dispose();
+    this.cityLayer = null;
+    this.vegLayer = null;
+    this.roadLayer = null;
+    this.cityGroup.clear();
+    this.vegetationGroup.clear();
+    this.roadGroup.clear();
+    this.atlas?.dispose();
+    this.atlas = null;
+    this.disposeEnvironment?.();
+    this.disposeEnvironment = null;
+    this.visualResourcesPromise = null;
+    this.visualResourcesStarted = false;
+    if (this.sun) this.scene.remove(this.sun, this.sun.target);
+    this.sun = null;
+    this.vegetationData.clear();
+    this.manifest = null;
+    this.variantManifest = null;
+    this.cameraGroundIndex = null;
+    this.localEnvelopeBounds = null;
+    this.lastStreamUpdate = 0;
   }
 }

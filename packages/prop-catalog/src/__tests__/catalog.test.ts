@@ -53,7 +53,10 @@ describe('catalog', () => {
   });
 
   it('queries by class and by tag', () => {
-    expect(queryCatalog({ class: 'vehicle' })).toHaveLength(13);
+    const vehicles = queryCatalog({ class: 'vehicle' });
+    expect(vehicles.length).toBeGreaterThanOrEqual(13);
+    expect(vehicles.map((entry) => entry.id)).toContain('vehicle.sedan');
+    expect(vehicles.map((entry) => entry.id)).toContain('vehicle.ambulance');
     expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(8);
 
     const vru = queryCatalog({ tags: ['vru'] });

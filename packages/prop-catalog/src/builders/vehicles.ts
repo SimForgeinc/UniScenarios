@@ -9,8 +9,8 @@ import {
   profile,
   sphere,
   type Vec3,
-} from '../geometry.js';
-import { material } from '../materials.js';
+} from '../geometry';
+import { material } from '../materials';
 
 /**
  * Vehicles are built as a painted hull (a rounded side-view profile extruded
@@ -755,5 +755,160 @@ export function buildCyclist(params: VehicleParams = { color: '#2f4f74' }): Grou
     ...mirrored(0.11, (z) => box([0.17, 0.05, 0.09], material('plastic'), { at: [0.06, 0.28, z] })),
   );
   group.add(rider);
+  return group;
+}
+
+export type FleetVehicleId =
+  | 'vehicle.honda_civic'
+  | 'vehicle.toyota_camry'
+  | 'vehicle.tesla_model_3'
+  | 'vehicle.ford_mustang'
+  | 'vehicle.chevrolet_corvette'
+  | 'vehicle.porsche_911'
+  | 'vehicle.jeep_wrangler'
+  | 'vehicle.minivan'
+  | 'vehicle.taxi'
+  | 'vehicle.police_cruiser'
+  | 'vehicle.police_suv'
+  | 'vehicle.fire_command_suv'
+  | 'vehicle.fire_engine'
+  | 'vehicle.dump_truck'
+  | 'vehicle.garbage_truck'
+  | 'vehicle.tow_truck'
+  | 'vehicle.cement_mixer'
+  | 'vehicle.utility_bucket_truck'
+  | 'vehicle.tanker_truck'
+  | 'vehicle.flatbed_truck'
+  | 'vehicle.school_bus'
+  | 'vehicle.shuttle_bus'
+  | 'vehicle.delivery_van';
+
+type FleetStyle =
+  | 'car'
+  | 'suv'
+  | 'van'
+  | 'bus'
+  | 'fire'
+  | 'dump'
+  | 'refuse'
+  | 'tow'
+  | 'mixer'
+  | 'utility'
+  | 'tanker'
+  | 'flatbed';
+
+interface FleetSpec {
+  readonly dims: { l: number; w: number; h: number };
+  readonly style: FleetStyle;
+  readonly emergency?: boolean;
+  readonly roofSign?: boolean;
+}
+
+const FLEET_SPECS: Readonly<Record<FleetVehicleId, FleetSpec>> = {
+  'vehicle.honda_civic': { dims: { l: 4.67, w: 1.8, h: 1.42 }, style: 'car' },
+  'vehicle.toyota_camry': { dims: { l: 4.88, w: 1.84, h: 1.45 }, style: 'car' },
+  'vehicle.tesla_model_3': { dims: { l: 4.72, w: 1.85, h: 1.44 }, style: 'car' },
+  'vehicle.ford_mustang': { dims: { l: 4.81, w: 1.92, h: 1.4 }, style: 'car' },
+  'vehicle.chevrolet_corvette': { dims: { l: 4.63, w: 1.93, h: 1.23 }, style: 'car' },
+  'vehicle.porsche_911': { dims: { l: 4.52, w: 1.85, h: 1.3 }, style: 'car' },
+  'vehicle.jeep_wrangler': { dims: { l: 4.79, w: 1.88, h: 1.87 }, style: 'suv' },
+  'vehicle.minivan': { dims: { l: 5.15, w: 2, h: 1.78 }, style: 'van' },
+  'vehicle.taxi': { dims: { l: 4.9, w: 1.85, h: 1.55 }, style: 'car', roofSign: true },
+  'vehicle.police_cruiser': { dims: { l: 5.1, w: 2, h: 1.55 }, style: 'car', emergency: true },
+  'vehicle.police_suv': { dims: { l: 5.1, w: 2, h: 1.9 }, style: 'suv', emergency: true },
+  'vehicle.fire_command_suv': { dims: { l: 5.2, w: 2, h: 1.95 }, style: 'suv', emergency: true },
+  'vehicle.fire_engine': { dims: { l: 10.2, w: 2.55, h: 3.3 }, style: 'fire', emergency: true },
+  'vehicle.dump_truck': { dims: { l: 8.5, w: 2.55, h: 3.3 }, style: 'dump' },
+  'vehicle.garbage_truck': { dims: { l: 9.2, w: 2.55, h: 3.45 }, style: 'refuse' },
+  'vehicle.tow_truck': { dims: { l: 7.5, w: 2.45, h: 2.8 }, style: 'tow' },
+  'vehicle.cement_mixer': { dims: { l: 8.8, w: 2.5, h: 3.7 }, style: 'mixer' },
+  'vehicle.utility_bucket_truck': { dims: { l: 8.2, w: 2.5, h: 3.6 }, style: 'utility' },
+  'vehicle.tanker_truck': { dims: { l: 10.5, w: 2.55, h: 3.6 }, style: 'tanker' },
+  'vehicle.flatbed_truck': { dims: { l: 8, w: 2.5, h: 2.65 }, style: 'flatbed' },
+  'vehicle.school_bus': { dims: { l: 10.7, w: 2.55, h: 3.2 }, style: 'bus' },
+  'vehicle.shuttle_bus': { dims: { l: 7.4, w: 2.3, h: 2.8 }, style: 'bus' },
+  'vehicle.delivery_van': { dims: { l: 6, w: 2.05, h: 2.65 }, style: 'van' },
+};
+
+/** Detailed procedural stand-ins for the expanded authored-vehicle fleet. */
+export function buildFleetVehicle(
+  id: FleetVehicleId,
+  params: VehicleParams = { color: DEFAULT_COLOR },
+): Group {
+  const { dims, style, emergency, roofSign } = FLEET_SPECS[id];
+  const { l, w, h } = dims;
+  const group = new Group();
+  const paint = material('paint', params.color);
+  const dark = material('plastic');
+  const glass = material('glass');
+  const steel = material('steel');
+  const wheelR = Math.min(.52, h * .19);
+  const wheelW = Math.min(.3, w * .14);
+  const baseH = Math.max(.12, h * .06);
+
+  // The chassis establishes exact catalog length and width. Wheels establish
+  // y=0, while the style-specific body reaches the catalog height.
+  group.add(box([l, baseH, w], dark, { at: [0, wheelR + baseH * .3, 0], name: 'chassis' }));
+  const heavy = !['car', 'suv', 'van'].includes(style);
+  const axles = heavy ? [l * .34, -l * .12, -l * .34] : [l * .3, -l * .3];
+  addWheels(group, { radius: wheelR, width: wheelW, xs: axles, z: w / 2 - .015, dual: heavy ? [1, 2] : undefined });
+
+  const addCab = (height = h * .72, length = l * .3) => {
+    const x = l / 2 - length / 2;
+    group.add(box([length, height - wheelR, w * .94], paint, { at: [x, wheelR + (height - wheelR) / 2, 0], name: 'cab' }));
+    group.add(box([length * .18, height * .28, w * .82], glass, { at: [l / 2 - length * .1, height * .72, 0], name: 'windscreen' }));
+  };
+
+  if (style === 'car' || style === 'suv') {
+    const beltH = h * (style === 'suv' ? .58 : .5);
+    group.add(box([l, beltH - wheelR * .28, w], paint, { at: [0, wheelR * .28 + (beltH - wheelR * .28) / 2, 0], name: 'body' }));
+    group.add(box([l * (style === 'suv' ? .62 : .55), h - beltH, w * .86], glass, { at: [-l * .05, beltH + (h - beltH) / 2, 0], name: 'greenhouse' }));
+    group.add(box([l * .58, h * .045, w * .9], paint, { at: [-l * .05, h - h * .0225, 0], name: 'roof' }));
+  } else if (style === 'van' || style === 'bus') {
+    group.add(box([l * .98, h - wheelR * .35, w], paint, { at: [0, wheelR * .35 + (h - wheelR * .35) / 2, 0], name: 'body' }));
+    group.add(box([l * .82, h * .3, w * 1.002], glass, { at: [l * .03, h * .72, 0], name: 'window-band' }));
+  } else if (style === 'dump') {
+    addCab(h * .76, l * .32);
+    group.add(box([l * .61, h * .5, w], paint, { at: [-l * .16, h * .75, 0], name: 'dump-bed' }));
+    group.add(box([l * .62, h * .07, w], dark, { at: [-l * .16, h - h * .035, 0], name: 'bed-rail' }));
+  } else if (style === 'refuse') {
+    addCab(h * .75, l * .28);
+    group.add(box([l * .68, h * .72, w], paint, { at: [-l * .15, h * .62, 0], name: 'compactor-body' }));
+    group.add(box([l * .12, h * .5, w * 1.002], dark, { at: [-l * .44, h * .52, 0], name: 'hopper' }));
+  } else if (style === 'tow' || style === 'flatbed') {
+    addCab(h, l * .3);
+    group.add(box([l * .68, h * .08, w], steel, { at: [-l * .15, h * .45, 0], name: 'flatbed' }));
+    if (style === 'tow') group.add(box([l * .24, h * .05, w * .08], steel, { at: [-l * .34, h * .7, 0], name: 'recovery-boom' }));
+  } else if (style === 'mixer') {
+    addCab(h * .72, l * .3);
+    const drumR = Math.min(w * .45, h * .32);
+    group.add(cyl(drumR, l * .58, material('safetyWhite'), { axis: 'x', at: [-l * .16, h - drumR, 0], name: 'mixer-drum', segments: 18 }));
+    group.add(box([l * .05, h * .28, w * .12], steel, { at: [-l * .44, h * .62, 0], name: 'discharge-chute' }));
+  } else if (style === 'tanker') {
+    addCab(h * .72, l * .27);
+    const tankR = Math.min(w / 2, h * .34);
+    group.add(cyl(tankR, l * .68, material('chrome'), { axis: 'x', at: [-l * .13, h - tankR, 0], name: 'tank', segments: 20 }));
+  } else if (style === 'utility') {
+    addCab(h * .72, l * .29);
+    group.add(box([l * .62, h * .34, w], paint, { at: [-l * .17, wheelR + h * .22, 0], name: 'utility-body' }));
+    group.add(box([l * .58, h * .07, w * .1], steel, { at: [-l * .1, h - h * .035, 0], name: 'folded-boom' }));
+    group.add(box([l * .09, h * .16, w * .32], material('safetyWhite'), { at: [-l * .38, h * .89, 0], name: 'bucket' }));
+  } else if (style === 'fire') {
+    addCab(h * .82, l * .31);
+    group.add(box([l * .67, h * .68, w], paint, { at: [-l * .16, h * .58, 0], name: 'equipment-body' }));
+    for (const z of [-1, 1] as const) {
+      group.add(box([l * .45, h * .05, w * .04], material('chrome'), { at: [-l * .13, h * .98, z * w * .28], name: 'ladder' }));
+    }
+  }
+
+  if (roofSign) {
+    group.add(box([l * .18, h * .1, w * .24], material('safetyOrange'), { at: [-l * .05, h - h * .05, 0], name: 'taxi-sign' }));
+  }
+  if (emergency) {
+    group.add(box([l * .18, h * .06, w * .5], material('chrome'), { at: [0, h - h * .03, 0], name: 'light-bar' }));
+    group.add(box([l * .08, h * .055, w * .2], material('taillight'), { at: [0, h - h * .0275, -w * .15], name: 'red-beacon' }));
+    group.add(box([l * .08, h * .055, w * .2], material('headlight'), { at: [0, h - h * .0275, w * .15], name: 'blue-beacon' }));
+  }
+
   return group;
 }

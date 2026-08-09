@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/xodr-tools",
-  "version": "0.1.0-rc.4",
+  "version": "0.1.0-rc.5",
   "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/xodr-tools" },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",

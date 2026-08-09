@@ -2,6 +2,7 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CameraRig } from './camera-controls';
 import { DEFAULT_CAMERA_CONTROL_PREFERENCES } from './camera-drag';
+import { CAMERA_ORBIT_EVENT } from './camera-events';
 
 class FakeTarget {
   readonly style: Record<string, string> = {};
@@ -21,6 +22,11 @@ class FakeTarget {
 
   dispatch(type: string, event: Record<string, unknown>): void {
     for (const listener of this.listeners.get(type) ?? []) listener(event);
+  }
+
+  dispatchEvent(event: Event): boolean {
+    this.dispatch(event.type, event as unknown as Record<string, unknown>);
+    return true;
   }
 
   setPointerCapture(id: number): void { this.captures.add(id); }
@@ -77,6 +83,8 @@ describe('CameraRig eye-orbit and inverted drags', () => {
 
   it('left drag rotates only orientation/target about an invariant eye', () => {
     const { dom, camera, rig } = rigFixture();
+    const onOrbit = vi.fn();
+    dom.addEventListener(CAMERA_ORBIT_EVENT, onOrbit);
     const eye = camera.position.toArray();
     const quaternion = camera.quaternion.toArray();
     dom.dispatch('pointerdown', { pointerId: 1, button: 0, clientX: 20, clientY: 20 });
@@ -84,6 +92,7 @@ describe('CameraRig eye-orbit and inverted drags', () => {
     rig.update(1 / 60);
     expect(camera.position.toArray()).toEqual(eye);
     expect(camera.quaternion.toArray()).not.toEqual(quaternion);
+    expect(onOrbit).toHaveBeenCalledOnce();
     dom.dispatch('pointerup', { pointerId: 1, button: 0, clientX: 30, clientY: 24 });
     rig.dispose();
   });

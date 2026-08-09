@@ -23,6 +23,8 @@ ledger intentionally gives no credit to incomplete or rejected evidence.
 - `apps/studio` — interactive UniScenarios authoring and playback surface
 - `packages/cli` — `uniscenarios`, the machine-readable workflow entry point
 - `packages/scenario-model` — versioned scenario documents and JSON Schemas
+- `packages/editor-core` — shared framework-neutral v2 editor document,
+  interaction controller, route overlays, and viewer contract
 - `packages/map-intel` — semantic location and map queries
 - `packages/anchor-matcher` — logical scenario anchors to concrete map sites
 - `packages/sim-engine` — deterministic simulation and trace generation

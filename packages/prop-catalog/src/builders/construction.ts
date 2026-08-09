@@ -9,9 +9,9 @@ import {
   profile,
   rand,
   sphere,
-} from '../geometry.js';
-import { material } from '../materials.js';
-import { buildHumanoid } from './pedestrians.js';
+} from '../geometry';
+import { material } from '../materials';
+import { buildHumanoid } from './pedestrians';
 
 /**
  * Temporary traffic control hardware. Sizes follow the MUTCD / US work-zone

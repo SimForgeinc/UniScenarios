@@ -1,4 +1,4 @@
-import type { CatalogEntry, PropClass, PropTag } from './types.js';
+import type { CatalogEntry, PropClass, PropTag } from './types';
 
 /**
  * The catalog is the contract: other packages address props by `id` and select
@@ -140,66 +140,294 @@ export const CATALOG = [
     tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk'],
     defaultParams: { color: '#287ba8' },
   },
-
-  // -------------------------------------------------------- autonomous actors
   {
-    id: 'sidewalk_robot.delivery_rover',
-    label: 'Delivery rover',
-    class: 'sidewalk_robot',
+    id: 'vehicle.honda_civic',
+    label: 'Honda Civic',
+    class: 'vehicle',
     description:
-      'Compact autonomous sidewalk delivery rover with a cargo body, four wheels and a sensor mast for pedestrian-space conflict scenarios.',
-    dims: { l: 0.75, w: 0.55, h: 0.8 },
-    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk'],
-    defaultParams: { color: '#f1a34f' },
+      'Contemporary Honda Civic compact sedan for recognizable everyday traffic, commuter, parking and intersection scenarios.',
+    dims: { l: 4.67, w: 1.8, h: 1.42 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#4b5563' },
   },
   {
-    id: 'drone.camera_quadcopter',
-    label: 'Camera drone',
-    class: 'drone',
+    id: 'vehicle.toyota_camry',
+    label: 'Toyota Camry',
+    class: 'vehicle',
     description:
-      'Small autonomous camera quadcopter with four rotors, landing skids and a gimbal payload for low-altitude traffic observation scenarios.',
-    dims: { l: 0.65, w: 0.65, h: 0.32 },
-    tags: ['occlusion:low', 'mobile', 'vru', 'roadside'],
-    defaultParams: { color: '#444c57' },
+      'Modern Toyota Camry family sedan for common commuter traffic, rideshare pickup and parked-car occlusion scenes.',
+    dims: { l: 4.88, w: 1.84, h: 1.45 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#c8cbd0' },
+  },
+  {
+    id: 'vehicle.tesla_model_3',
+    label: 'Tesla Model 3',
+    class: 'vehicle',
+    description:
+      'Tesla Model 3 electric fastback with a low grille-free nose for modern mixed-fleet and charging-area scenarios.',
+    dims: { l: 4.72, w: 1.85, h: 1.44 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#f2f3f4' },
+  },
+  {
+    id: 'vehicle.ford_mustang',
+    label: 'Ford Mustang',
+    class: 'vehicle',
+    description:
+      'Ford Mustang two-door performance coupe with a long hood for recognizable enthusiast and high-acceleration traffic scenes.',
+    dims: { l: 4.81, w: 1.92, h: 1.4 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#1f5fa8' },
+  },
+  {
+    id: 'vehicle.chevrolet_corvette',
+    label: 'Chevrolet Corvette',
+    class: 'vehicle',
+    description:
+      'Chevrolet Corvette low sports car with a wide stance for performance-driving and difficult low-profile detection scenarios.',
+    dims: { l: 4.63, w: 1.93, h: 1.23 },
+    tags: ['occlusion:low', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#d62828' },
+  },
+  {
+    id: 'vehicle.porsche_911',
+    label: 'Porsche 911',
+    class: 'vehicle',
+    description:
+      'Porsche 911 sports coupe with its compact rounded roofline for premium urban traffic and performance scenarios.',
+    dims: { l: 4.52, w: 1.85, h: 1.3 },
+    tags: ['occlusion:low', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#d9dde2' },
+  },
+  {
+    id: 'vehicle.jeep_wrangler',
+    label: 'Jeep Wrangler',
+    class: 'vehicle',
+    description:
+      'Four-door Jeep Wrangler with an upright cabin and exposed spare-wheel silhouette for urban and trail-access scenes.',
+    dims: { l: 4.79, w: 1.88, h: 1.87 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#49633d' },
+  },
+  {
+    id: 'vehicle.minivan',
+    label: 'Passenger minivan',
+    class: 'vehicle',
+    description:
+      'Seven-seat passenger minivan for school pickup, family travel, rideshare and sliding-door curbside conflicts.',
+    dims: { l: 5.15, w: 2, h: 1.78 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger'],
+    defaultParams: { color: '#6f7782' },
+  },
+  {
+    id: 'vehicle.taxi',
+    label: 'City taxi',
+    class: 'vehicle',
+    description:
+      'Marked city taxi with a roof sign for curb pickup, sudden stopping, passenger loading and dense downtown traffic.',
+    dims: { l: 4.9, w: 1.85, h: 1.55 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'passenger', 'service'],
+    defaultParams: { color: '#f0c419' },
+  },
+  {
+    id: 'vehicle.police_cruiser',
+    label: 'Police cruiser',
+    class: 'vehicle',
+    description:
+      'Marked police sedan with a roof light bar for traffic stops, pursuits, blocked lanes and emergency-priority scenarios.',
+    dims: { l: 5.1, w: 2, h: 1.55 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'emergency', 'service'],
+    defaultParams: { color: '#1f2937' },
+  },
+  {
+    id: 'vehicle.police_suv',
+    label: 'Police SUV',
+    class: 'vehicle',
+    description:
+      'Marked police utility vehicle with emergency lighting for incident command, pursuits and roadside response scenes.',
+    dims: { l: 5.1, w: 2, h: 1.9 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'emergency', 'service'],
+    defaultParams: { color: '#e9ecef' },
+  },
+  {
+    id: 'vehicle.fire_command_suv',
+    label: 'Fire command SUV',
+    class: 'vehicle',
+    description:
+      'Red fire-department command SUV with warning lights for advance response, road closures and incident staging.',
+    dims: { l: 5.2, w: 2, h: 1.95 },
+    tags: ['occlusion:medium', 'mobile', 'parkable', 'roadway', 'emergency', 'service'],
+    defaultParams: { color: '#b91c1c' },
+  },
+  {
+    id: 'vehicle.fire_engine',
+    label: 'Fire engine',
+    class: 'vehicle',
+    description:
+      'Full-size structural fire engine with equipment body, ladder and emergency light bar for active incident scenes.',
+    dims: { l: 10.2, w: 2.55, h: 3.3 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'emergency', 'service'],
+    defaultParams: { color: '#b91c1c' },
+  },
+  {
+    id: 'vehicle.dump_truck',
+    label: 'Dump truck',
+    class: 'vehicle',
+    description:
+      'Three-axle dump truck with a raised-sided aggregate bed for construction traffic, work zones and blind-spot cases.',
+    dims: { l: 8.5, w: 2.55, h: 3.3 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial', 'workzone'],
+    defaultParams: { color: '#e1a11a' },
+  },
+  {
+    id: 'vehicle.garbage_truck',
+    label: 'Garbage truck',
+    class: 'vehicle',
+    description:
+      'Municipal refuse collection truck with a tall compactor body for frequent curb stops and neighborhood occlusion scenarios.',
+    dims: { l: 9.2, w: 2.55, h: 3.45 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial', 'service'],
+    defaultParams: { color: '#2f855a' },
+  },
+  {
+    id: 'vehicle.tow_truck',
+    label: 'Tow truck',
+    class: 'vehicle',
+    description:
+      'Medium-duty rollback tow truck for disabled-vehicle recovery, shoulder operations and partially blocked traffic lanes.',
+    dims: { l: 7.5, w: 2.45, h: 2.8 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial', 'service'],
+    defaultParams: { color: '#f59e0b' },
+  },
+  {
+    id: 'vehicle.cement_mixer',
+    label: 'Cement mixer',
+    class: 'vehicle',
+    description:
+      'Heavy concrete mixer truck with a rotating-drum silhouette for construction deliveries, turns and large blind spots.',
+    dims: { l: 8.8, w: 2.5, h: 3.7 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial', 'workzone'],
+    defaultParams: { color: '#e5e7eb' },
+  },
+  {
+    id: 'vehicle.utility_bucket_truck',
+    label: 'Utility bucket truck',
+    class: 'vehicle',
+    description:
+      'Utility service truck with a folded aerial bucket boom for roadside maintenance, lane closures and worker-safety scenes.',
+    dims: { l: 8.2, w: 2.5, h: 3.6 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'service', 'workzone'],
+    defaultParams: { color: '#f8fafc' },
+  },
+  {
+    id: 'vehicle.tanker_truck',
+    label: 'Tanker truck',
+    class: 'vehicle',
+    description:
+      'Rigid tanker truck with a cylindrical liquid tank for hazardous-goods routing, turning and high-occlusion scenarios.',
+    dims: { l: 10.5, w: 2.55, h: 3.6 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial'],
+    defaultParams: { color: '#d7dce1' },
+  },
+  {
+    id: 'vehicle.flatbed_truck',
+    label: 'Flatbed truck',
+    class: 'vehicle',
+    description:
+      'Medium-duty flatbed truck for oversized cargo, loading activity and variable roadside obstruction scenarios.',
+    dims: { l: 8, w: 2.5, h: 2.65 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'commercial'],
+    defaultParams: { color: '#475569' },
+  },
+  {
+    id: 'vehicle.school_bus',
+    label: 'School bus',
+    class: 'vehicle',
+    description:
+      'Conventional yellow school bus for pupil loading, flashing-stop conflicts and child pedestrian occlusion scenarios.',
+    dims: { l: 10.7, w: 2.55, h: 3.2 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'service'],
+    defaultParams: { color: '#e8b51b' },
+  },
+  {
+    id: 'vehicle.shuttle_bus',
+    label: 'Shuttle bus',
+    class: 'vehicle',
+    description:
+      'Medium passenger shuttle bus for airport, hotel, campus and paratransit pickup and drop-off interactions.',
+    dims: { l: 7.4, w: 2.3, h: 2.8 },
+    tags: ['occlusion:high', 'mobile', 'roadway', 'large-vehicle', 'service'],
+    defaultParams: { color: '#e2e8f0' },
+  },
+  {
+    id: 'vehicle.delivery_van',
+    label: 'Parcel delivery van',
+    class: 'vehicle',
+    description:
+      'Long-wheelbase parcel delivery van for frequent curb stops, double parking and driver-exit conflict scenarios.',
+    dims: { l: 6, w: 2.05, h: 2.65 },
+    tags: ['occlusion:high', 'mobile', 'parkable', 'roadway', 'delivery', 'commercial'],
+    defaultParams: { color: '#8b5e3c' },
   },
 
   // ------------------------------------------------------------- pedestrians
   {
-    id: 'pedestrian.adult_standing',
-    label: 'Adult standing',
+    id: 'pedestrian.adult',
+    label: 'Adult pedestrian',
     class: 'pedestrian',
     description:
-      'Adult pedestrian at rest, 1.75 m. Use at kerbs, refuge islands and bus stops where the person is waiting rather than crossing.',
+      'Adult pedestrian, 1.75 m. Walking, standing and other motion are authored separately in the timeline.',
+    dims: { l: 0.32, w: 0.5, h: 1.75 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.75, pose: 'standing' },
+  },
+  {
+    id: 'pedestrian.child',
+    label: 'Child pedestrian',
+    class: 'pedestrian',
+    description:
+      'Child pedestrian, 1.20 m — short enough to be hidden by a parked sedan. Motion is authored separately in the timeline.',
+    dims: { l: 0.24, w: 0.35, h: 1.2 },
+    tags: ['vru', 'occlusion:low', 'sidewalk'],
+    defaultParams: { height: 1.2, pose: 'standing' },
+  },
+  {
+    id: 'pedestrian.adult_standing',
+    label: 'Adult standing (legacy id)',
+    class: 'pedestrian',
+    description:
+      'Backward-compatible adult pedestrian preset retained for saved scenarios; new authoring should use pedestrian.adult with a timeline action.',
     dims: { l: 0.32, w: 0.5, h: 1.75 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.75, pose: 'standing' },
   },
   {
     id: 'pedestrian.adult_walking',
-    label: 'Adult walking',
+    label: 'Adult walking (legacy id)',
     class: 'pedestrian',
     description:
-      'Adult pedestrian in a mid-stride pose, 1.75 m. Use for crossings and for anyone the ego must yield to.',
+      'Backward-compatible walking adult preset retained for saved scenarios; new authoring should use pedestrian.adult with timeline motion.',
     dims: { l: 0.85, w: 0.5, h: 1.75 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.75, pose: 'walking' },
   },
   {
     id: 'pedestrian.child_standing',
-    label: 'Child standing',
+    label: 'Child standing (legacy id)',
     class: 'pedestrian',
     description:
-      'Child pedestrian at rest, 1.20 m — short enough to be hidden by a parked sedan. Top-heavy proportions on purpose.',
+      'Backward-compatible child pedestrian preset retained for saved scenarios; new authoring should use pedestrian.child with a timeline action.',
     dims: { l: 0.24, w: 0.35, h: 1.2 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.2, pose: 'standing' },
   },
   {
     id: 'pedestrian.child_walking',
-    label: 'Child walking',
+    label: 'Child walking (legacy id)',
     class: 'pedestrian',
     description:
-      'Child pedestrian mid-stride, 1.20 m. The darting-child case: pair with a parked-vehicle occluder.',
+      'Backward-compatible walking child preset retained for saved scenarios; new authoring should use pedestrian.child with timeline motion.',
     dims: { l: 0.58, w: 0.35, h: 1.2 },
     tags: ['vru', 'occlusion:low', 'sidewalk'],
     defaultParams: { height: 1.2, pose: 'walking' },
@@ -213,6 +441,183 @@ export const CATALOG = [
     dims: { l: 0.72, w: 0.68, h: 1.88 },
     tags: ['vru', 'workzone', 'occlusion:low', 'roadway'],
     defaultParams: { height: 1.82, pose: 'standing' },
+  },
+
+  // --------------------------------------------------------- sidewalk robots
+  {
+    id: 'sidewalk_robot.delivery_rover',
+    label: 'Delivery rover',
+    class: 'sidewalk_robot',
+    description:
+      'Six-sensor autonomous delivery rover sized for pavements and crossings, with an animated wheel-and-lidar locomotion rig.',
+    dims: { l: .75, w: .55, h: .8 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'delivery'],
+    defaultParams: { color: '#f1a34f' },
+    animation: { rig: 'wheeled', clips: ['idle', 'drive', 'open_lid'], idleClip: 'idle', locomotionClip: 'drive' },
+  },
+  {
+    id: 'sidewalk_robot.cooler_bot',
+    label: 'Food delivery cooler bot',
+    class: 'sidewalk_robot',
+    description:
+      'Large insulated food-delivery robot with animated wheels, suspension, lid, lights and sensor mast for busy-sidewalk scenes.',
+    dims: { l: .95, w: .65, h: .95 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'delivery'],
+    defaultParams: { color: '#edf1f4' },
+    animation: { rig: 'wheeled', clips: ['idle', 'drive', 'open_lid'], idleClip: 'idle', locomotionClip: 'drive' },
+  },
+  {
+    id: 'sidewalk_robot.quadruped_courier',
+    label: 'Quadruped courier robot',
+    class: 'sidewalk_robot',
+    description:
+      'Four-legged autonomous courier robot with a cargo pod and articulated walk, idle-balance and sit animations.',
+    dims: { l: 1.05, w: .5, h: .72 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'delivery'],
+    defaultParams: { color: '#e6b84f' },
+    animation: { rig: 'quadruped', clips: ['idle', 'walk', 'sit'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'sidewalk_robot.humanoid_general_purpose',
+    label: 'General-purpose humanoid',
+    class: 'sidewalk_robot',
+    description:
+      'Full-height bipedal service robot with articulated hands, head, torso and walking rig for general public-space scenarios.',
+    dims: { l: .58, w: .62, h: 1.78 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'service'],
+    defaultParams: { color: '#e8edf2' },
+    animation: { rig: 'humanoid', clips: ['idle', 'walk', 'run', 'wave', 'pick_up'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'sidewalk_robot.humanoid_delivery',
+    label: 'Humanoid delivery robot',
+    class: 'sidewalk_robot',
+    description:
+      'Bipedal last-metre delivery robot carrying a parcel pod, animated for walking, handoff and door interaction scenes.',
+    dims: { l: .62, w: .68, h: 1.7 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'delivery'],
+    defaultParams: { color: '#f0a44b' },
+    animation: { rig: 'humanoid', clips: ['idle', 'walk', 'carry', 'handoff', 'open_door'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'sidewalk_robot.humanoid_warehouse',
+    label: 'Warehouse humanoid',
+    class: 'sidewalk_robot',
+    description:
+      'Industrial humanoid worker with protective limbs and grasping hands for loading docks, depots and logistics yards.',
+    dims: { l: .64, w: .7, h: 1.75 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'commercial'],
+    defaultParams: { color: '#d8a31a' },
+    animation: { rig: 'humanoid', clips: ['idle', 'walk', 'lift', 'carry', 'place'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'sidewalk_robot.humanoid_public_safety',
+    label: 'Public-safety humanoid',
+    class: 'sidewalk_robot',
+    description:
+      'High-visibility humanoid response robot for directing pedestrians, inspecting hazards and assisting emergency crews.',
+    dims: { l: .62, w: .68, h: 1.82 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'emergency', 'service'],
+    defaultParams: { color: '#ef4444' },
+    animation: { rig: 'humanoid', clips: ['idle', 'walk', 'signal_stop', 'point', 'inspect'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'sidewalk_robot.humanoid_construction',
+    label: 'Construction humanoid',
+    class: 'sidewalk_robot',
+    description:
+      'Rugged humanoid work robot with a safety helmet and tool mount for roadworks, inspection and repair operations.',
+    dims: { l: .66, w: .72, h: 1.85 },
+    tags: ['occlusion:low', 'mobile', 'sidewalk', 'autonomous', 'workzone', 'service'],
+    defaultParams: { color: '#f59e0b' },
+    animation: { rig: 'humanoid', clips: ['idle', 'walk', 'carry_tool', 'inspect', 'kneel'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+
+  // ------------------------------------------------------------------ drones
+  {
+    id: 'drone.delivery_quadcopter',
+    label: 'Delivery quadcopter',
+    class: 'drone',
+    description:
+      'Parcel-carrying autonomous quadcopter with animated rotors, gimbal, landing gear and a three-metre default hover height.',
+    dims: { l: 1.1, w: 1.1, h: .45 },
+    tags: ['occlusion:low', 'mobile', 'aerial', 'autonomous', 'delivery'],
+    defaultParams: { color: '#444c57' },
+    animation: { rig: 'rotorcraft', clips: ['idle', 'fly', 'land', 'deliver'], idleClip: 'idle', locomotionClip: 'fly', hoverHeightM: 3 },
+  },
+  {
+    id: 'drone.camera_quadcopter',
+    label: 'Camera drone',
+    class: 'drone',
+    description:
+      'Compact camera quadcopter with animated rotors and gimbal for filming, inspection and low-altitude perception scenarios.',
+    dims: { l: .65, w: .65, h: .32 },
+    tags: ['occlusion:low', 'mobile', 'aerial', 'autonomous'],
+    defaultParams: { color: '#343a42' },
+    animation: { rig: 'rotorcraft', clips: ['idle', 'fly', 'orbit', 'land'], idleClip: 'idle', locomotionClip: 'fly', hoverHeightM: 4 },
+  },
+  {
+    id: 'drone.emergency_responder',
+    label: 'Emergency responder drone',
+    class: 'drone',
+    description:
+      'Large first-responder drone with animated rotors, gimbal and warning beacon for incident response and emergency-route scenes.',
+    dims: { l: 1.4, w: 1.4, h: .5 },
+    tags: ['occlusion:low', 'mobile', 'aerial', 'autonomous'],
+    defaultParams: { color: '#e9edf2' },
+    animation: { rig: 'rotorcraft', clips: ['idle', 'fly', 'hover_scan', 'land'], idleClip: 'idle', locomotionClip: 'fly', hoverHeightM: 5 },
+  },
+
+  // ----------------------------------------------------------------- animals
+  {
+    id: 'animal.dog',
+    label: 'Dog',
+    class: 'animal',
+    description: 'Medium dog with idle, walk, run and sit clips for domestic-animal crossings and owner-separation scenarios.',
+    dims: { l: 1.1, w: .42, h: .78 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk', 'domestic'],
+    defaultParams: { coatColor: '#9b6d45' },
+    animation: { rig: 'quadruped', clips: ['idle', 'walk', 'run', 'sit'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'animal.cat',
+    label: 'Cat',
+    class: 'animal',
+    description: 'Domestic cat with idle, walk, run and crouch clips for small, easily occluded sidewalk and roadway conflicts.',
+    dims: { l: .72, w: .28, h: .42 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk', 'domestic'],
+    defaultParams: { coatColor: '#6f747a' },
+    animation: { rig: 'quadruped', clips: ['idle', 'walk', 'run', 'crouch'], idleClip: 'idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'animal.deer',
+    label: 'Deer',
+    class: 'animal',
+    description: 'Adult deer with alert-idle, walk and bound clips for high-severity wildlife incursions on suburban and rural roads.',
+    dims: { l: 1.8, w: .55, h: 1.75 },
+    tags: ['occlusion:medium', 'mobile', 'vru', 'roadside', 'wildlife'],
+    defaultParams: { coatColor: '#9a6842' },
+    animation: { rig: 'quadruped', clips: ['alert_idle', 'walk', 'bound'], idleClip: 'alert_idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'animal.raccoon',
+    label: 'Raccoon',
+    class: 'animal',
+    description: 'Raccoon with sniff-idle, walk and scurry clips for nocturnal curbside, refuse-area and sudden-crossing scenarios.',
+    dims: { l: .85, w: .35, h: .5 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadside', 'wildlife'],
+    defaultParams: { coatColor: '#666b70' },
+    animation: { rig: 'quadruped', clips: ['sniff_idle', 'walk', 'scurry'], idleClip: 'sniff_idle', locomotionClip: 'walk' },
+  },
+  {
+    id: 'animal.goose',
+    label: 'Goose',
+    class: 'animal',
+    description: 'Adult goose with idle, waddle, run and wing-display clips for flock crossings near parks, ponds and campuses.',
+    dims: { l: .86, w: .5, h: .85 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk', 'wildlife'],
+    defaultParams: { coatColor: '#d8d8cf' },
+    animation: { rig: 'avian', clips: ['idle', 'waddle', 'run', 'wing_display'], idleClip: 'idle', locomotionClip: 'waddle' },
   },
 
   // ------------------------------------------------------------ construction

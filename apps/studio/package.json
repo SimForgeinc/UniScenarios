@@ -22,6 +22,7 @@
     "@uniscenarios/anchor-matcher": "workspace:*",
     "@uniscenarios/city-renderer": "workspace:*",
     "@uniscenarios/esmini-runner": "workspace:*",
+    "@uniscenarios/editor-core": "workspace:*",
     "@uniscenarios/map-intel": "workspace:*",
     "@uniscenarios/prop-catalog": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",

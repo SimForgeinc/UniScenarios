@@ -1,7 +1,7 @@
 import { Group, type Mesh } from 'three';
 
-import { box, capsule, type Point2, profile, sphere } from '../geometry.js';
-import { material, type MaterialKey } from '../materials.js';
+import { box, capsule, type Point2, profile, sphere } from '../geometry';
+import { material, type MaterialKey } from '../materials';
 
 /**
  * Humans are capsule-and-slab figures at anthropometrically correct heights.
@@ -170,7 +170,7 @@ export function buildHumanoid(opts: HumanoidOptions): Group {
   return group;
 }
 
-export function buildAdultStanding(
+export function buildAdultPedestrian(
   params: PedestrianParams = { height: 1.75, pose: 'standing' },
 ): Group {
   return buildHumanoid({
@@ -182,13 +182,7 @@ export function buildAdultStanding(
   });
 }
 
-export function buildAdultWalking(
-  params: PedestrianParams = { height: 1.75, pose: 'walking' },
-): Group {
-  return buildAdultStanding({ ...params, pose: 'walking' });
-}
-
-export function buildChildStanding(
+export function buildChildPedestrian(
   params: PedestrianParams = { height: 1.2, pose: 'standing' },
 ): Group {
   return buildHumanoid({
@@ -199,12 +193,6 @@ export function buildChildStanding(
     pants: { key: 'pants', color: params.pantsColor ?? '#39404a' },
     skinColor: params.skinColor,
   });
-}
-
-export function buildChildWalking(
-  params: PedestrianParams = { height: 1.2, pose: 'walking' },
-): Group {
-  return buildChildStanding({ ...params, pose: 'walking' });
 }
 
 export function buildTrafficMarshal(

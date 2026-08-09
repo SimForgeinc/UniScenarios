@@ -1,6 +1,6 @@
 import type { Group } from 'three';
 
-import { type CatalogId, getEntry } from './catalog.js';
+import { type CatalogId, getEntry } from './catalog';
 import type {
   ArrowBoardParams,
   BarrierParams,
@@ -10,7 +10,7 @@ import type {
   PipeParams,
   SignParams,
   SpoilPileParams,
-} from './builders/construction.js';
+} from './builders/construction';
 import {
   buildArrowBoard,
   buildBarricadeTypeIII,
@@ -27,27 +27,21 @@ import {
   buildSpoilPile,
   buildTemporaryStopSign,
   buildTrafficCone,
-} from './builders/construction.js';
-import type { TrashBagParams } from './builders/hazards.js';
+} from './builders/construction';
+import type { TrashBagParams } from './builders/hazards';
 import {
   buildCardboardBox,
   buildDownedBranch,
   buildTireDebris,
   buildTrashBags,
-} from './builders/hazards.js';
-import type { PedestrianParams } from './builders/pedestrians.js';
+} from './builders/hazards';
+import type { PedestrianParams } from './builders/pedestrians';
 import {
-  buildAdultStanding,
-  buildAdultWalking,
-  buildChildStanding,
-  buildChildWalking,
+  buildAdultPedestrian,
+  buildChildPedestrian,
   buildTrafficMarshal,
-} from './builders/pedestrians.js';
-import type { RobotParams } from './builders/robots.js';
-import { buildDeliveryRover } from './builders/robots.js';
-import type { DroneParams } from './builders/drones.js';
-import { buildCameraDrone } from './builders/drones.js';
-import type { RunParams } from './builders/street.js';
+} from './builders/pedestrians';
+import type { RunParams } from './builders/street';
 import {
   buildBusShelter,
   buildCoveredCar,
@@ -57,13 +51,14 @@ import {
   buildHedgeRun,
   buildMailboxCluster,
   buildShoppingCart,
-} from './builders/street.js';
-import type { VehicleParams } from './builders/vehicles.js';
+} from './builders/street';
+import type { VehicleParams } from './builders/vehicles';
 import {
   buildAmbulance,
   buildBoxTruck,
   buildBus,
   buildCyclist,
+  buildFleetVehicle,
   buildHatchback,
   buildMotorcycle,
   buildMobilityScooter,
@@ -73,7 +68,22 @@ import {
   buildSuv,
   buildTram,
   buildVan,
-} from './builders/vehicles.js';
+} from './builders/vehicles';
+import type { RobotParams } from './builders/robots';
+import {
+  buildConstructionHumanoid,
+  buildCoolerRobot,
+  buildDeliveryHumanoid,
+  buildDeliveryRover,
+  buildGeneralPurposeHumanoid,
+  buildPublicSafetyHumanoid,
+  buildQuadrupedCourier,
+  buildWarehouseHumanoid,
+} from './builders/robots';
+import type { DroneParams } from './builders/drones';
+import { buildCameraDrone, buildDeliveryDrone, buildEmergencyDrone } from './builders/drones';
+import type { AnimalParams } from './builders/animals';
+import { buildCat, buildDeer, buildDog, buildGoose, buildRaccoon } from './builders/animals';
 
 /** Build parameters accepted by each catalog id. */
 export interface PropParamMap {
@@ -90,13 +100,52 @@ export interface PropParamMap {
   'vehicle.ambulance': VehicleParams;
   'vehicle.tram': VehicleParams;
   'vehicle.mobility_scooter': VehicleParams;
-  'sidewalk_robot.delivery_rover': RobotParams;
-  'drone.camera_quadcopter': DroneParams;
+  'vehicle.honda_civic': VehicleParams;
+  'vehicle.toyota_camry': VehicleParams;
+  'vehicle.tesla_model_3': VehicleParams;
+  'vehicle.ford_mustang': VehicleParams;
+  'vehicle.chevrolet_corvette': VehicleParams;
+  'vehicle.porsche_911': VehicleParams;
+  'vehicle.jeep_wrangler': VehicleParams;
+  'vehicle.minivan': VehicleParams;
+  'vehicle.taxi': VehicleParams;
+  'vehicle.police_cruiser': VehicleParams;
+  'vehicle.police_suv': VehicleParams;
+  'vehicle.fire_command_suv': VehicleParams;
+  'vehicle.fire_engine': VehicleParams;
+  'vehicle.dump_truck': VehicleParams;
+  'vehicle.garbage_truck': VehicleParams;
+  'vehicle.tow_truck': VehicleParams;
+  'vehicle.cement_mixer': VehicleParams;
+  'vehicle.utility_bucket_truck': VehicleParams;
+  'vehicle.tanker_truck': VehicleParams;
+  'vehicle.flatbed_truck': VehicleParams;
+  'vehicle.school_bus': VehicleParams;
+  'vehicle.shuttle_bus': VehicleParams;
+  'vehicle.delivery_van': VehicleParams;
+  'pedestrian.adult': PedestrianParams;
+  'pedestrian.child': PedestrianParams;
   'pedestrian.adult_standing': PedestrianParams;
   'pedestrian.adult_walking': PedestrianParams;
   'pedestrian.child_standing': PedestrianParams;
   'pedestrian.child_walking': PedestrianParams;
   'pedestrian.traffic_marshal': PedestrianParams;
+  'sidewalk_robot.delivery_rover': RobotParams;
+  'sidewalk_robot.cooler_bot': RobotParams;
+  'sidewalk_robot.quadruped_courier': RobotParams;
+  'sidewalk_robot.humanoid_general_purpose': RobotParams;
+  'sidewalk_robot.humanoid_delivery': RobotParams;
+  'sidewalk_robot.humanoid_warehouse': RobotParams;
+  'sidewalk_robot.humanoid_public_safety': RobotParams;
+  'sidewalk_robot.humanoid_construction': RobotParams;
+  'drone.delivery_quadcopter': DroneParams;
+  'drone.camera_quadcopter': DroneParams;
+  'drone.emergency_responder': DroneParams;
+  'animal.dog': AnimalParams;
+  'animal.cat': AnimalParams;
+  'animal.deer': AnimalParams;
+  'animal.raccoon': AnimalParams;
+  'animal.goose': AnimalParams;
   'construction.traffic_cone': ConeParams;
   'construction.channelizer_drum': Record<string, never>;
   'construction.barricade_type3': Record<string, never>;
@@ -147,13 +196,52 @@ const BUILDERS: Builders = {
   'vehicle.ambulance': buildAmbulance,
   'vehicle.tram': buildTram,
   'vehicle.mobility_scooter': buildMobilityScooter,
-  'sidewalk_robot.delivery_rover': buildDeliveryRover,
-  'drone.camera_quadcopter': buildCameraDrone,
-  'pedestrian.adult_standing': buildAdultStanding,
-  'pedestrian.adult_walking': buildAdultWalking,
-  'pedestrian.child_standing': buildChildStanding,
-  'pedestrian.child_walking': buildChildWalking,
+  'vehicle.honda_civic': (params) => buildFleetVehicle('vehicle.honda_civic', params),
+  'vehicle.toyota_camry': (params) => buildFleetVehicle('vehicle.toyota_camry', params),
+  'vehicle.tesla_model_3': (params) => buildFleetVehicle('vehicle.tesla_model_3', params),
+  'vehicle.ford_mustang': (params) => buildFleetVehicle('vehicle.ford_mustang', params),
+  'vehicle.chevrolet_corvette': (params) => buildFleetVehicle('vehicle.chevrolet_corvette', params),
+  'vehicle.porsche_911': (params) => buildFleetVehicle('vehicle.porsche_911', params),
+  'vehicle.jeep_wrangler': (params) => buildFleetVehicle('vehicle.jeep_wrangler', params),
+  'vehicle.minivan': (params) => buildFleetVehicle('vehicle.minivan', params),
+  'vehicle.taxi': (params) => buildFleetVehicle('vehicle.taxi', params),
+  'vehicle.police_cruiser': (params) => buildFleetVehicle('vehicle.police_cruiser', params),
+  'vehicle.police_suv': (params) => buildFleetVehicle('vehicle.police_suv', params),
+  'vehicle.fire_command_suv': (params) => buildFleetVehicle('vehicle.fire_command_suv', params),
+  'vehicle.fire_engine': (params) => buildFleetVehicle('vehicle.fire_engine', params),
+  'vehicle.dump_truck': (params) => buildFleetVehicle('vehicle.dump_truck', params),
+  'vehicle.garbage_truck': (params) => buildFleetVehicle('vehicle.garbage_truck', params),
+  'vehicle.tow_truck': (params) => buildFleetVehicle('vehicle.tow_truck', params),
+  'vehicle.cement_mixer': (params) => buildFleetVehicle('vehicle.cement_mixer', params),
+  'vehicle.utility_bucket_truck': (params) => buildFleetVehicle('vehicle.utility_bucket_truck', params),
+  'vehicle.tanker_truck': (params) => buildFleetVehicle('vehicle.tanker_truck', params),
+  'vehicle.flatbed_truck': (params) => buildFleetVehicle('vehicle.flatbed_truck', params),
+  'vehicle.school_bus': (params) => buildFleetVehicle('vehicle.school_bus', params),
+  'vehicle.shuttle_bus': (params) => buildFleetVehicle('vehicle.shuttle_bus', params),
+  'vehicle.delivery_van': (params) => buildFleetVehicle('vehicle.delivery_van', params),
+  'pedestrian.adult': buildAdultPedestrian,
+  'pedestrian.child': buildChildPedestrian,
+  'pedestrian.adult_standing': buildAdultPedestrian,
+  'pedestrian.adult_walking': buildAdultPedestrian,
+  'pedestrian.child_standing': buildChildPedestrian,
+  'pedestrian.child_walking': buildChildPedestrian,
   'pedestrian.traffic_marshal': buildTrafficMarshal,
+  'sidewalk_robot.delivery_rover': buildDeliveryRover,
+  'sidewalk_robot.cooler_bot': buildCoolerRobot,
+  'sidewalk_robot.quadruped_courier': buildQuadrupedCourier,
+  'sidewalk_robot.humanoid_general_purpose': buildGeneralPurposeHumanoid,
+  'sidewalk_robot.humanoid_delivery': buildDeliveryHumanoid,
+  'sidewalk_robot.humanoid_warehouse': buildWarehouseHumanoid,
+  'sidewalk_robot.humanoid_public_safety': buildPublicSafetyHumanoid,
+  'sidewalk_robot.humanoid_construction': buildConstructionHumanoid,
+  'drone.delivery_quadcopter': buildDeliveryDrone,
+  'drone.camera_quadcopter': buildCameraDrone,
+  'drone.emergency_responder': buildEmergencyDrone,
+  'animal.dog': buildDog,
+  'animal.cat': buildCat,
+  'animal.deer': buildDeer,
+  'animal.raccoon': buildRaccoon,
+  'animal.goose': buildGoose,
   'construction.traffic_cone': buildTrafficCone,
   'construction.channelizer_drum': buildChannelizerDrum,
   'construction.barricade_type3': buildBarricadeTypeIII,

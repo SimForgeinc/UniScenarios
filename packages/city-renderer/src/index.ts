@@ -1,6 +1,7 @@
 export { CityViewer } from './viewer';
 export type { CityViewerLayers } from './viewer';
 export { CameraRig } from './camera-controls';
+export { CAMERA_ORBIT_EVENT } from './camera-events';
 export type { CameraMode, CameraView, CameraPoseConstraint } from './camera-controls';
 export {
   applyEyeOrbit,
@@ -19,6 +20,8 @@ export type { CameraControlPreferences, CameraDragButton, EyeOrbitDelta } from '
 export { FrameStats } from './frame-stats';
 export { GroundIndex, isGroundSurfaceMesh } from './ground-index';
 export type { GroundIndexOptions, GroundIndexStats } from './ground-index';
+export { indexedWorldHeightSampler } from './indexed-height-sampler';
+export type { GroundHeightSampler } from './indexed-height-sampler';
 export { keepInRoadsOnly, isTrafficSignalMesh, isLowFidelityHiddenHelper, isRoadsOnlyHiddenHelper, LOW_FIDELITY_HIDDEN_ROLE, ROADS_ONLY_HIDDEN_ROLE } from './roads-only';
 export { ShadowAtlas } from './shadow-atlas';
 export { isCityAssetVariantManifest, selectAssetVariant } from './asset-variants';

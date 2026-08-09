@@ -1,22 +1,36 @@
 import { z } from 'zod';
 
-import { PROP_CLASSES, PROP_TAGS } from './types.js';
-import type { CatalogEntry } from './types.js';
+import { PROP_CLASSES, PROP_TAGS } from './types';
+import type { CatalogEntry } from './types';
 
 /**
  * The catalog ships as `catalog.json` for consumers that do not want to pull in
  * three.js. This schema is what makes that file trustworthy: it is enforced
  * both when the JSON is generated and in the test suite.
+ *
+ * The schemas are module-private; `parseCatalog` is the only export, because
+ * nothing outside this file ever needed the pieces.
+ *
+ * The component schemas remain private implementation details; consumers use
+ * `parseCatalog` for a stable validation boundary.
  */
-export const dimsSchema = z.object({
+const dimsSchema = z.object({
   l: z.number().positive(),
   w: z.number().positive(),
   h: z.number().positive(),
 });
 
-export const paramValueSchema = z.union([z.number(), z.string(), z.boolean()]);
+const paramValueSchema = z.union([z.number(), z.string(), z.boolean()]);
 
-export const catalogEntrySchema = z.object({
+const animationProfileSchema = z.strictObject({
+  rig: z.enum(['wheeled', 'rotorcraft', 'quadruped', 'humanoid', 'avian']),
+  clips: z.array(z.string().min(1)).min(2),
+  idleClip: z.string().min(1),
+  locomotionClip: z.string().min(1),
+  hoverHeightM: z.number().nonnegative().optional(),
+});
+
+const catalogEntrySchema = z.object({
   id: z
     .string()
     .regex(/^[a-z_]+\.[a-z0-9_]+$/, 'id must be <class>.<snake_case_name>'),
@@ -26,6 +40,7 @@ export const catalogEntrySchema = z.object({
   dims: dimsSchema,
   tags: z.array(z.enum(PROP_TAGS as unknown as [string, ...string[]])).min(1),
   defaultParams: z.record(z.string(), paramValueSchema),
+  animation: animationProfileSchema.optional(),
 });
 
 export const catalogSchema = z
@@ -53,10 +68,19 @@ export const catalogSchema = z
           message: `${entry.id} must carry exactly one occlusion:* tag`,
         });
       }
+      if (['sidewalk_robot', 'drone', 'animal'].includes(entry.class)) {
+        if (!entry.animation) {
+          ctx.addIssue({ code: 'custom', message: `${entry.id} must declare an animation profile` });
+        } else if (!entry.animation.clips.includes(entry.animation.idleClip)
+          || !entry.animation.clips.includes(entry.animation.locomotionClip)) {
+          ctx.addIssue({ code: 'custom', message: `${entry.id} animation clips must include idle and locomotion clips` });
+        }
+      }
+      if (entry.class === 'drone' && entry.animation?.hoverHeightM === undefined) {
+        ctx.addIssue({ code: 'custom', message: `${entry.id} must declare hoverHeightM` });
+      }
     }
   });
-
-export type CatalogEntryInput = z.infer<typeof catalogEntrySchema>;
 
 /** Validate an arbitrary catalog payload (e.g. a loaded `catalog.json`). */
 export function parseCatalog(data: unknown): CatalogEntry[] {

@@ -1,6 +1,6 @@
 {
   "schema": "uniscenarios.stack-config/v1",
-  "stackVersion": "0.1.0-rc.4",
+  "stackVersion": "0.1.0-rc.5",
   "repository": "https://github.com/SimForgeinc/UniScenarios",
   "contracts": {
     "scenarioTemplate": "2",
@@ -17,6 +17,7 @@
     { "path": "packages/anchor-matcher", "role": "anchor-matching" },
     { "path": "packages/xodr-tools", "role": "opendrive" },
     { "path": "packages/city-renderer", "role": "renderer" },
+    { "path": "packages/editor-core", "role": "editor-core" },
     { "path": "packages/prop-catalog", "role": "actor-catalog" },
     { "path": "packages/trace-comparator", "role": "trace-conformance" },
     { "path": "packages/cli", "role": "cli-and-openscenario" },

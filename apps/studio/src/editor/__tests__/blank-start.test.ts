@@ -127,7 +127,7 @@ describe('fresh page-load authoring document', () => {
     fresh.dispose();
   });
 
-  it('preserves an explicitly authored research warmup on import', async () => {
+  it('normalizes imported warmup into the editor visible timeline', async () => {
     const store = new WebTemplateFileStore({ storage: new MemoryStorage() });
     const source = TemplateDocument.create({ name: 'Research scenario' });
     source.setClip(20, 7);
@@ -135,7 +135,7 @@ describe('fresh page-load authoring document', () => {
 
     fresh.importTemplate(source.data);
 
-    expect(fresh.data.choreography.warmupSeconds).toBe(7);
+    expect(fresh.data.choreography.warmupSeconds).toBe(0);
     fresh.dispose();
   });
 

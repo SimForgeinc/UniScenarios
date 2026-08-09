@@ -22,6 +22,7 @@ export type PropClass =
   | 'pedestrian'
   | 'sidewalk_robot'
   | 'drone'
+  | 'animal'
   | 'construction'
   | 'occluder'
   | 'hazard'
@@ -32,6 +33,7 @@ export const PROP_CLASSES: readonly PropClass[] = [
   'pedestrian',
   'sidewalk_robot',
   'drone',
+  'animal',
   'construction',
   'occluder',
   'hazard',
@@ -68,7 +70,16 @@ export type PropTag =
   | 'parkable'
   | 'run'
   | 'debris'
-  | 'large-vehicle';
+  | 'large-vehicle'
+  | 'autonomous'
+  | 'aerial'
+  | 'delivery'
+  | 'emergency'
+  | 'service'
+  | 'passenger'
+  | 'commercial'
+  | 'wildlife'
+  | 'domestic';
 
 export const PROP_TAGS: readonly PropTag[] = [
   'occlusion:high',
@@ -84,7 +95,28 @@ export const PROP_TAGS: readonly PropTag[] = [
   'run',
   'debris',
   'large-vehicle',
+  'autonomous',
+  'aerial',
+  'delivery',
+  'emergency',
+  'service',
+  'passenger',
+  'commercial',
+  'wildlife',
+  'domestic',
 ] as const;
+
+/** Animation contract shared by procedural previews and authored GLB replacements. */
+export interface CatalogAnimationProfile {
+  /** Skeleton/mechanism family expected from a high-detail replacement model. */
+  readonly rig: 'wheeled' | 'rotorcraft' | 'quadruped' | 'humanoid' | 'avian';
+  /** Required, case-sensitive glTF clip names. */
+  readonly clips: readonly string[];
+  readonly idleClip: string;
+  readonly locomotionClip: string;
+  /** Height above the ground plane while airborne. */
+  readonly hoverHeightM?: number;
+}
 
 /** Extents in metres: `l` along +X (facing), `w` along Z, `h` along Y. */
 export interface Dims {
@@ -112,4 +144,6 @@ export interface CatalogEntry {
   readonly tags: readonly PropTag[];
   /** Parameters the builder is called with when none are supplied. */
   readonly defaultParams: Readonly<Record<string, ParamValue>>;
+  /** Present for every actor whose authored model must ship with animation. */
+  readonly animation?: CatalogAnimationProfile;
 }

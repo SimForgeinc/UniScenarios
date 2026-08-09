@@ -1,7 +1,7 @@
 import { Group } from 'three';
 
-import { box, cyl, type Point2, profile, rand, sphere, torus } from '../geometry.js';
-import { material } from '../materials.js';
+import { box, cyl, type Point2, profile, rand, sphere, torus } from '../geometry';
+import { material } from '../materials';
 
 /**
  * Small objects that end up in the travelled way. These are the classic
