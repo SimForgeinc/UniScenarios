@@ -104,6 +104,8 @@ export type { SceneXZ } from './frames.js';
 export { buildLaneGraph, LaneGraph, ENDPOINT_TOL_M } from './map/lane-graph.js';
 export type { DirectedLane, LaneGeometry } from './map/lane-graph.js';
 export { pointOf } from './map/topology.js';
+export { decodeTopologyIndex } from './map/decode-topology.js';
+export type { TopologyIndexFile } from './map/decode-topology.js';
 export type {
   LaneRsl,
   TopologyGate,
@@ -318,6 +320,38 @@ export {
   promoteAmbientActor,
   resolveAmbientTrafficProfile,
 } from './ambient/traffic.js';
+export {
+  MATERIALIZED_TRAFFIC_SCHEMA,
+  MATERIALIZED_TRAFFIC_TIME_PRECISION,
+  MATERIALIZED_TRAFFIC_MAX_ACTORS,
+  MATERIALIZED_TRAFFIC_MAX_ACTOR_STATES,
+  MaterializedTrafficRecorder,
+  createDisabledMaterializedTrafficArtifact,
+  decodeMaterializedTrafficArtifact,
+  encodeMaterializedTrafficArtifact,
+  materializedTrafficActorSchema,
+  materializedTrafficActorStateSchema,
+  materializedTrafficArtifactEnvelope,
+  materializedTrafficArtifactSchema,
+  materializedTrafficFrameCount,
+  materializedTrafficSignalSchema,
+  materializedTrafficSignalStateSchema,
+  materializedTrafficTime,
+  parseMaterializedTrafficArtifact,
+  validateMaterializedTrafficBinding,
+} from './ambient/materialized-traffic.js';
+export type {
+  MaterializedTrafficActor,
+  MaterializedTrafficActorState,
+  MaterializedTrafficArtifact,
+  MaterializedTrafficArtifactEnvelope,
+  MaterializedTrafficBinding,
+  MaterializedTrafficFrame,
+  MaterializedTrafficFrameActor,
+  MaterializedTrafficProvider,
+  MaterializedTrafficSignal,
+  MaterializedTrafficSignalState,
+} from './ambient/materialized-traffic.js';
 export type {
   AmbientActorProvenance,
   AmbientCandidate,
