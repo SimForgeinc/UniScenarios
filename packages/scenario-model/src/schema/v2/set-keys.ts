@@ -128,6 +128,17 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
   }),
 
   decl({
+    key: 'motion.gear',
+    valueType: 'enum',
+    values: ['forward', 'reverse'],
+    appliesTo: 'vehicle',
+    // Kept under the registry's 400-char limit; the rationale for gear-as-discrete-state rather
+    // than a negative `speed` target lives in the reverse implementation, not here.
+    description:
+      'Direction of travel. `reverse` backs the vehicle rear-first along its path, keeping its heading, at a governed low speed. Select it at a standstill; a shift at speed is held until the vehicle stops.',
+  }),
+
+  decl({
     key: 'lights.indicator',
     valueType: 'enum',
     values: ['off', 'left', 'right', 'hazard'],
@@ -223,9 +234,16 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
     key: 'signal:<handle>.phase',
     pattern: '^signal:[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}\\.phase$',
     valueType: 'enum',
-    values: ['green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off'],
+    // `off` is the blackout — a dark head, which reverts the junction to an
+    // all-way stop rather than to no control. The arrows are the turn-logic
+    // indications; a flashing yellow arrow is what makes a protected left
+    // permissive, which is the whole reason the FYA exists.
+    values: [
+      'green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off',
+      'green_arrow', 'yellow_arrow', 'red_x', 'flashing_yellow_arrow', 'flashing_red_arrow',
+    ],
     appliesTo: 'world',
-    description: 'Force a traffic signal to a phase. The handle comes from the map catalog.',
+    description: 'Force a traffic signal to a phase, including a blackout (`off`). The handle comes from the map catalog.',
   }),
   decl({
     key: 'signal:<handle>.program',
@@ -238,9 +256,12 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
     key: 'signal:feature:<feature>:<approach>.phase',
     pattern: '^signal:feature:[A-Za-z][A-Za-z0-9_-]{0,63}:(ego|opposing|left|right)\\.phase$',
     valueType: 'enum',
-    values: ['green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off'],
+    values: [
+      'green', 'yellow', 'red', 'flashing_yellow', 'flashing_red', 'off',
+      'green_arrow', 'yellow_arrow', 'red_x', 'flashing_yellow_arrow', 'flashing_red_arrow',
+    ],
     appliesTo: 'world',
-    description: 'Force the signal bound to a portable junction feature and relative approach.',
+    description: 'Force the signal bound to a portable junction feature and relative approach, including a blackout (`off`).',
   }),
   decl({
     key: 'signal:feature:<feature>:<approach>.program',

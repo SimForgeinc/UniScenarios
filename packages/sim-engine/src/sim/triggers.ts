@@ -30,6 +30,17 @@ export interface ConditionContext {
   readonly visibilityRangeM: number;
   /** Pair keys colliding on this tick. */
   readonly collisions: ReadonlySet<string>;
+  /**
+   * The tick's perception state, present only when some actor declares a
+   * sensor. `visible` stays pure geometry; `detected` asks this.
+   */
+  readonly perception?: PerceptionQuery;
+}
+
+/** The read-back surface the `detected` condition needs. */
+export interface PerceptionQuery {
+  detects(observer: string, target: string, sensorId?: string): boolean;
+  hasSensor(observer: string, sensorId?: string): boolean;
 }
 
 function actor(ctx: ConditionContext, id: string): ActorRuntime | undefined {
@@ -134,6 +145,22 @@ export function evaluateCondition(ctx: ConditionContext, cond: Condition): boole
       if (!a || !b) return false;
       const los = hasLineOfSight(b.position, a.position, ctx.occluders, ctx.visibilityRangeM);
       return los === cond.value;
+    }
+    case 'detected': {
+      // Fail closed in both directions. Without a perception pass there is no
+      // evidence either way, and turning "no answer" into "not detected" would
+      // silently fire every `detected(..., value: false)` trigger in the clip.
+      if (!ctx.perception) return false;
+      const observer = actor(ctx, cond.by);
+      // The *target* is checked for presence only, not for `retired`. `retired`
+      // means route/interaction motion has finished, not that the body left the
+      // world — a pedestrian stays at her terminal pose. Perception reports
+      // what is physically there, so requiring `!retired` here would make
+      // `detected` disagree with the channel the trace recorded.
+      const target = ctx.world.byId.get(cond.a);
+      if (!observer || !target || !target.present) return false;
+      if (!ctx.perception.hasSensor(cond.by, cond.sensor)) return false;
+      return ctx.perception.detects(cond.by, cond.a, cond.sensor) === cond.value;
     }
   }
 }

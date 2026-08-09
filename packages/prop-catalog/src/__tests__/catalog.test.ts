@@ -63,7 +63,7 @@ describe('catalog', () => {
     expect(vehicles.length).toBeGreaterThanOrEqual(13);
     expect(vehicles.map((entry) => entry.id)).toContain('vehicle.sedan');
     expect(vehicles.map((entry) => entry.id)).toContain('vehicle.ambulance');
-    expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(8);
+    expect(queryCatalog({ class: ['hazard', 'occluder'] }).length).toBe(11);
 
     const vru = queryCatalog({ tags: ['vru'] });
     expect(vru.map((entry) => entry.id)).toContain('pedestrian.child_walking');

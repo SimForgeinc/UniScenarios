@@ -40,6 +40,8 @@ export const PALETTE = {
   shirt: 0x3f6ea8,
   pants: 0x39404a,
   vest: 0xd8e33a,
+  fur: 0x9c7b52,
+  mattress: 0xdcd8cc,
 } as const;
 
 export type MaterialKey = keyof typeof MATERIAL_SPECS;
@@ -82,6 +84,9 @@ const MATERIAL_SPECS = {
   shirt: { color: PALETTE.shirt, roughness: 0.9, metalness: 0.0, smooth: true },
   pants: { color: PALETTE.pants, roughness: 0.9, metalness: 0.0, smooth: true },
   vest: { color: PALETTE.vest, roughness: 0.8, metalness: 0.0, smooth: true },
+  /** Animal coat. Faceted like everything else; colour is per-species. */
+  fur: { color: PALETTE.fur, roughness: 0.95, metalness: 0.0 },
+  mattress: { color: PALETTE.mattress, roughness: 0.98, metalness: 0.0 },
   chainlink: {
     color: 0xa8adb2,
     roughness: 0.6,

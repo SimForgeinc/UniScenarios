@@ -115,12 +115,136 @@ function unsupported(
   };
 }
 
-function factValue(feature: PointFeature, keys: readonly string[]): string | number | boolean | undefined {
+function factValue(
+  feature: PointFeature,
+  keys: readonly string[],
+): string | number | boolean | readonly string[] | undefined {
   for (const key of keys) {
     const value = feature.facts?.[key];
     if (value !== undefined) return value;
   }
   return undefined;
+}
+
+/**
+ * Evaluate a parking-zone feature's authored predicates against map evidence.
+ *
+ * Every clause here was previously deleted by the adapter before matching, so
+ * four parking archetypes bound arterials, a freeway and a 1.14 m stub at score
+ * 1.00. `occupancy` is deliberately left unsupported rather than faked: no
+ * map-intel fact says how full a bay row is.
+ */
+function evaluateParkingPredicates(
+  feature: AnchorFeature,
+  candidate: PointFeature,
+  path: string,
+  anchor: LogicalAnchor,
+): ClauseResult[] {
+  if (feature.kind !== 'parking_zone' || !feature.parking) return [];
+  const out: ClauseResult[] = [];
+  const p = feature.parking;
+
+  if (p.orientation) {
+    const raw = factValue(candidate, ['parking_orientation', 'orientation']);
+    const parallel = factValue(candidate, ['is_parallel_parking']);
+    const actual =
+      typeof raw === 'string' && (raw === 'parallel' || raw === 'angled' || raw === 'perpendicular')
+        ? raw
+        : typeof parallel === 'boolean'
+          ? parallel ? 'parallel' : 'angled'
+          : undefined;
+    if (!actual) {
+      out.push(unsupported(`${path}.orientation`, p.orientation, `${candidate.id} carries no parking-orientation evidence`));
+    } else {
+      const matches = actual === p.orientation.value;
+      out.push({
+        path: `${path}.orientation`, essentiality: p.orientation.essentiality,
+        required: p.orientation.value, actual, score: matches ? 1 : 0, slack: matches ? 0 : 1,
+        weight: clauseWeight(p.orientation), supported: true,
+        reason: `${candidate.id} is ${actual} parking`,
+      });
+    }
+  }
+
+  if (p.capacity) {
+    const raw = factValue(candidate, ['space_count', 'capacity', 'stall_count']);
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      out.push(unsupported(`${path}.capacity`, p.capacity, `${candidate.id} carries no counted parking capacity`));
+    } else {
+      const scored = scoreRange(raw, p.capacity.value, 'countLanes', anchor.toleranceOverrides, p.capacity.tolerance);
+      out.push({
+        path: `${path}.capacity`, essentiality: p.capacity.essentiality,
+        required: p.capacity.value, actual: raw, score: scored.score, slack: scored.slack,
+        weight: clauseWeight(p.capacity), supported: true,
+        reason: `${candidate.id} holds ${raw} space(s)`,
+      });
+    }
+  }
+
+  if (p.lengthM) {
+    const raw = factValue(candidate, ['parking_length_m', 'length_m', 'parking_extent_length_m', 'stall_length_m']);
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
+      out.push(unsupported(`${path}.lengthM`, p.lengthM, `${candidate.id} carries no measured parking-zone length`));
+    } else {
+      const scored = scoreRange(raw, p.lengthM.value, 'distanceM', anchor.toleranceOverrides, p.lengthM.tolerance);
+      out.push({
+        path: `${path}.lengthM`, essentiality: p.lengthM.essentiality,
+        required: p.lengthM.value, actual: round(raw), score: scored.score, slack: scored.slack,
+        weight: clauseWeight(p.lengthM), supported: true,
+        reason: `${candidate.id} spans ${round(raw)} m of kerb`,
+      });
+    }
+  }
+
+  if (p.occupancy) {
+    out.push(unsupported(
+      `${path}.occupancy`,
+      p.occupancy,
+      'no map-intel fact reports parking occupancy; set it as a scenario parameter, not an anchor clause',
+    ));
+  }
+
+  return out;
+}
+
+/**
+ * Honour the location's own `supported_scenario_templates` whitelist.
+ *
+ * map-intel already decided which scenario templates each occlusion zone was
+ * built for. Reading it is the difference between a
+ * `pedestrian_emerging_around_bus` brief binding one of the 5 bus occluders and
+ * it binding one of the 267 parked-car ones.
+ */
+function evaluateSupportsScenario(
+  feature: AnchorFeature,
+  candidate: PointFeature,
+  path: string,
+): ClauseResult[] {
+  const c = feature.supportsScenario;
+  if (!c) return [];
+  const raw = factValue(candidate, ['supported_scenario_templates', 'supportedScenarioTemplates']);
+  const listed = typeof raw === 'string' ? [raw] : Array.isArray(raw) ? [...raw] : null;
+  if (!listed || listed.length === 0) {
+    return [unsupported(
+      `${path}.supportsScenario`,
+      c,
+      `${candidate.id} publishes no supported_scenario_templates whitelist`,
+    )];
+  }
+  const hit = c.value.find((wanted) => listed.includes(wanted));
+  return [{
+    path: `${path}.supportsScenario`,
+    essentiality: c.essentiality,
+    required: c.value,
+    actual: listed,
+    score: hit ? 1 : 0,
+    slack: hit ? 0 : 1,
+    weight: clauseWeight(c),
+    supported: true,
+    reason: hit
+      ? `${candidate.id} was built for "${hit}"`
+      : `${candidate.id} supports ${listed.join('|')}, none of ${c.value.join('|')}`,
+  }];
 }
 
 /** Evaluate authored crossing semantics only from normalized map evidence. */
@@ -1073,7 +1197,14 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
       .filter((e): e is { p: PointFeature; s: number; adjacent: boolean; source: 'point-same-road' | 'point-nearby' | 'lane-adjacent'; distanceM: number; side: 'left' | 'right' | 'both' } => e !== null)
       .map((e) => ({
         ...e,
-        crossingClauses: evaluateCrossingPredicates(feature, e.p, path, anchor),
+        // Every kind-specific predicate the authored feature carries, scored
+        // against *this* candidate, so the ranking below prefers a candidate
+        // that satisfies them over one that merely sits at the right station.
+        pointClauses: [
+          ...evaluateCrossingPredicates(feature, e.p, path, anchor),
+          ...evaluateParkingPredicates(feature, e.p, path, anchor),
+          ...evaluateSupportsScenario(feature, e.p, path),
+        ],
         sideScore: feature.side ? (featureSideMatches(e.side, feature.side.value) ? 1 : 0) : 1,
         sameRoadScore: feature.sameRoad
           ? (feature.sameRoad.value === (e.source === 'point-same-road') ? 1 : 0)
@@ -1095,16 +1226,16 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
           (feature.lateralDistanceM?.essentiality !== 'required' || b.lateral.score === 1) &&
           (feature.sameRoad?.essentiality !== 'required' || b.sameRoadScore === 1) &&
           (feature.side?.essentiality !== 'required' || b.sideScore === 1) &&
-          b.crossingClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
+          b.pointClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
         ) - Number(
           (feature.atM.essentiality !== 'required' || a.score === 1) &&
           (feature.lateralDistanceM?.essentiality !== 'required' || a.lateral.score === 1) &&
           (feature.sameRoad?.essentiality !== 'required' || a.sameRoadScore === 1) &&
           (feature.side?.essentiality !== 'required' || a.sideScore === 1) &&
-          a.crossingClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
+          a.pointClauses.every((clause) => clause.essentiality !== 'required' || (clause.supported && passesRequired(clause.score))),
         ) ||
-        b.crossingClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) -
-          a.crossingClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) ||
+        b.pointClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) -
+          a.pointClauses.reduce((sum, clause) => sum + clause.score * clause.weight, 0) ||
         b.score - a.score ||
         b.lateral.score - a.lateral.score ||
         b.sameRoadScore - a.sameRoadScore ||
@@ -1180,7 +1311,7 @@ export function evaluateAnchor(options: EvaluateOptions): EvaluationResult {
           : `${feature.kind} ${best.p.id} is on the ${best.side} side of travel, wanted ${feature.side.value}`,
       });
     }
-    for (const clause of best.crossingClauses) push(collector, clause);
+    for (const clause of best.pointClauses) push(collector, clause);
   }
 
   collector.results.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

@@ -148,6 +148,98 @@ export const EventOrderInvariantSchema = z
     });
   });
 
+/* ----------------------------------------------------------- perception --
+ *
+ * Invariants over the sensor channel. These exist so an author can REQUIRE a
+ * perception failure rather than hope for one: a fog scenario whose ego happens
+ * to detect the pedestrian on time is not the scenario that was written, and
+ * without these it would pass silently.
+ *
+ * All four are relations, not absolutes, so they retarget like everything else:
+ * "at least 4 s of dropout" survives a move to a different map, "detected at
+ * 41 m" does not.
+ */
+
+const perceptionPairBase = {
+  /** The observer — the actor carrying the sensor. */
+  of: RoleRefSchema,
+  /** The actor that should (or should not) be perceived. */
+  to: RoleRefSchema,
+  /** Sensor id on `of`. Omitted grades the whole suite. */
+  sensor: z.string().min(1).max(128).optional(),
+};
+
+/**
+ * A dropout: a run in which the target was geometrically available to the
+ * sensor — in range, in frame, not occluded away — and still was not reported.
+ *
+ * `reason` narrows the requirement to a physical cause, so "the ego lost her in
+ * the fog for four seconds" cannot be satisfied by "the ego lost her behind a
+ * van for four seconds".
+ */
+export const DetectionGapInvariantSchema = z.strictObject({
+  ...invariantBase,
+  ...perceptionPairBase,
+  kind: z.literal('detection_gap'),
+  /** Seconds. */
+  range: RangeSchema,
+  /** `longest` checks the worst single dropout; `total` checks their sum. */
+  metric: z.enum(['longest', 'total']).default('longest'),
+  /** Require the dominant cause of the dropout to be this. */
+  reason: z
+    .enum([
+      'occluded',
+      'atmospheric_attenuation',
+      'below_angular_resolution',
+      'low_light',
+      'glare',
+    ])
+    .optional(),
+});
+
+/** Clip time at which the sensor first reported the target, seconds. */
+export const TimeToFirstDetectionInvariantSchema = z.strictObject({
+  ...invariantBase,
+  ...perceptionPairBase,
+  kind: z.literal('time_to_first_detection'),
+  range: RangeSchema,
+});
+
+/**
+ * Seconds between the world making the target available and the sensor
+ * admitting it exists.
+ *
+ * This is the one that says *the danger is the perception failure, not the
+ * dynamics*: line of sight opened at t₀, the stack reported it at t₁, and the
+ * scenario is about t₁ − t₀. Requiring it non-zero is requiring that geometry
+ * was never the limiting factor.
+ */
+export const PerceptionLagInvariantSchema = z.strictObject({
+  ...invariantBase,
+  ...perceptionPairBase,
+  kind: z.literal('perception_lag'),
+  /** Seconds. */
+  range: RangeSchema,
+});
+
+/**
+ * Exposure to a declared map/percept divergence, in seconds.
+ *
+ * Recorded exposure only — the simulator does not feed a faded lane line back
+ * into steering, and this invariant does not pretend it does. It requires that
+ * the ego actually drove through the disagreement.
+ */
+export const MapDivergenceInvariantSchema = z.strictObject({
+  ...invariantBase,
+  kind: z.literal('map_divergence'),
+  /** The observer whose exposure is measured. */
+  of: RoleRefSchema,
+  /** Id of a declared `perception.mapDivergences` entry. */
+  divergence: z.string().min(1).max(128),
+  /** Seconds of exposure. */
+  range: RangeSchema,
+});
+
 /**
  * Deceleration budget, m/s².
  *
@@ -175,6 +267,10 @@ export const InvariantSchema = z.discriminatedUnion('kind', [
   SpeedRelLimitInvariantSchema,
   EventOrderInvariantSchema,
   DecelBudgetInvariantSchema,
+  DetectionGapInvariantSchema,
+  TimeToFirstDetectionInvariantSchema,
+  PerceptionLagInvariantSchema,
+  MapDivergenceInvariantSchema,
 ]);
 
 /** An invariant. */

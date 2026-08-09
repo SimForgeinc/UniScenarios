@@ -15,9 +15,46 @@ import {
 } from '@uniscenarios/scenario-materializer';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 
-import { adaptTemplate, type AdaptNote } from './adapt.js';
+import { adaptTemplate, unmatchableNotes, type AdaptNote } from './adapt.js';
 import { CliError } from './errors.js';
 import { loadMap, type MapBundle } from './maps.js';
+
+/**
+ * Refuse to match an anchor whose author stated a requirement the matcher threw
+ * away.
+ *
+ * This is the same rule as `lane_offset_unavailable` one level up: there, a
+ * lane the site does not have is a site that cannot render the scenario; here,
+ * a clause the matcher cannot express is a *requirement nobody will ever
+ * check*. Matching anyway is worse than not matching, because it returns sites
+ * at score 1.00 / `exact` that were scored against a strictly smaller predicate
+ * than the one the author wrote — which is exactly how four parking archetypes
+ * came to bind arterials and a freeway, and how a blind-crest scenario came to
+ * bind five sites 142-272 m from the nearest crest, two of them on a map with
+ * no crest at all.
+ *
+ * The escape hatch is the one the schema already has: mark the clause
+ * `essentiality: "cosmetic"` and the adapter records a note instead.
+ */
+export function assertMatchableAnchor(notes: readonly AdaptNote[]): void {
+  const fatal = unmatchableNotes(notes);
+  if (fatal.length === 0) return;
+  const first = fatal[0];
+  throw new CliError(
+    'clause_unmatchable',
+    fatal.length === 1
+      ? (first?.reason ?? 'an authored clause is unmatchable')
+      : `${fatal.length} authored clauses are unmatchable; the first is at ${first?.path}: ${first?.reason}`,
+    {
+      path: first?.path ?? 'anchor',
+      detail: {
+        clauses: fatal.map((n) => ({ path: n.path, reason: n.reason })),
+        hint: 'express the requirement with a clause the matcher supports, or mark it essentiality: "cosmetic" to state on the record that it is not a requirement',
+      },
+      exitCode: 2,
+    },
+  );
+}
 
 export interface SiteMatch {
   readonly mapId: string;
@@ -120,6 +157,7 @@ export async function matchOnMap(
 
   const bundle = await loadMap(mapId);
   const { anchor, roles, notes } = adaptTemplate(template);
+  assertMatchableAnchor(notes);
   const policy = { ...(anchor.policy ?? {}) };
   if (options.minScore !== undefined) policy.minScore = options.minScore;
   if (options.maxSites !== undefined) policy.maxSitesPerMap = options.maxSites;

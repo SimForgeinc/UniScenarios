@@ -42,6 +42,7 @@ import { InvariantSchema } from './invariants.js';
 import { ParamsBlockSchema } from './params.js';
 import { PropPlacementSchema } from './props.js';
 import { RoleBindingSchema } from './roles.js';
+import { TemplatePerceptionSchema } from './sensors.js';
 import { TrafficControlSchema } from './traffic-controls.js';
 import { MapSignalPlanSchema } from './map-signal-plans.js';
 import { ReasoningTraceSegmentSchema } from './reasoning-trace.js';
@@ -90,6 +91,17 @@ export const ScenarioTemplateV2ObjectSchema = z.strictObject({
   /** Map-bound phase edits for physical signal controllers selected in Studio. */
   mapSignalPlans: z.array(MapSignalPlanSchema).max(64).default([]),
   choreography: ChoreographySchema.prefault({}),
+  /**
+   * Declared map/percept divergence: where the HD map disagrees with the world.
+   *
+   * A typed field rather than a knob under `environment.extensions`, which is
+   * documented as uninterpreted. Hiding a first-class fact in an uninterpreted
+   * bag is exactly how this repo's existing capabilities became unreachable, so
+   * the honest options are a typed field or no capability. The atmosphere is
+   * *not* here: fog, darkness and sun angle already live in `environment`, and
+   * the sensor model derives from those rather than duplicating them.
+   */
+  perception: TemplatePerceptionSchema.prefault({}),
   invariants: z.array(InvariantSchema).max(64).default([]),
   variants: z.array(VariantSchema).max(32).default([]),
   /**

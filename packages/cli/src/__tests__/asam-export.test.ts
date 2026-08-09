@@ -351,7 +351,7 @@ describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
       externalSimulatorValidation: 'not-verified',
     });
     expect(result.capabilityReport.fields.map((entry) => entry.path).sort()).toEqual(
-      Object.keys(fixture()).sort(),
+      [...Object.keys(fixture()), 'perception'].sort(),
     );
     expect(result.content).toContain('name="uniscenarios.export.intent" value="editable-semantic"');
     expect(result.warnings).toContainEqual(expect.objectContaining({
@@ -569,7 +569,7 @@ describe('ASAM OpenSCENARIO DSL 2.2.0 export', () => {
     expect(result.profile).toBe('dsl-2.2-actions');
     expect(result.intent).toBe('editable-semantic');
     expect(result.capabilityReport.fields.map((entry) => entry.path).sort()).toEqual(
-      Object.keys(fixture()).sort(),
+      [...Object.keys(fixture()), 'perception'].sort(),
     );
     expect(result.capabilityReport.roundTrip).toBe('not-supported');
     expect(result.capabilityReport.externalSimulatorValidation).toBe('not-verified');

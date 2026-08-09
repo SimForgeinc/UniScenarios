@@ -74,7 +74,19 @@ export async function templateValidate(options: TemplateValidateOptions): Promis
 
   const { report } = parseAndValidateTemplate(json, context);
   const adapted = adaptTemplate(template);
-  const issues: ClauseResult[] = [...report.issues];
+  // A clause the matcher cannot express is a document error, not a footnote.
+  // Until this existed, `blind-crest-queue` shipped with its `crest` feature
+  // deleted and every one of its five sites scored 0.89 from 142-272 m away
+  // from the nearest actual crest, and the author was told nothing.
+  const unmatchable: ClauseResult[] = adapted.notes
+    .filter((n) => n.severity === 'error')
+    .map((n) => ({
+      path: n.path,
+      severity: 'error' as const,
+      code: 'clause_unmatchable' as const,
+      message: n.reason,
+    }));
+  const issues: ClauseResult[] = [...report.issues, ...unmatchable];
   const counts = {
     error: issues.filter((i) => i.severity === 'error').length,
     warning: issues.filter((i) => i.severity === 'warning').length,
@@ -106,7 +118,10 @@ export async function templateValidate(options: TemplateValidateOptions): Promis
     for (const i of issues) {
       lines.push(`${pad(i.severity, 9)}${pad(i.code, 26)}${pad(i.path, 44)}${i.message}`);
     }
-    for (const n of adapted.notes) lines.push(`${pad('adapter', 9)}${pad('note', 26)}${pad(n.path, 44)}${n.reason}`);
+    for (const n of adapted.notes) {
+      if (n.severity === 'error') continue; // already reported above as an issue
+      lines.push(`${pad('adapter', 9)}${pad('note', 26)}${pad(n.path, 44)}${n.reason}`);
+    }
     emitLines(lines);
   }
   return counts.error > 0 ? EXIT.validationFindings : EXIT.ok;

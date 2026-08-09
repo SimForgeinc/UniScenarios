@@ -79,8 +79,17 @@ export type DoorName = 'left' | 'right' | 'rear';
 export const DOOR_OPEN_DURATION_S = 1;
 export const DOOR_MAX_OPEN_ANGLE_RAD = Math.PI * 0.39;
 
-export function isReverseMotion(a: Pick<ActorRuntime, 'tags'>): boolean {
-  return a.tags.includes('motion:reverse');
+/**
+ * Whether the actor is currently in reverse gear.
+ *
+ * This reads the *runtime* gear, not the spawn tag: `set motion.gear` may shift
+ * an actor mid-clip, which is what makes a three-point turn or a
+ * back-out-then-drive-away expressible on the timeline at all. The
+ * `motion:reverse` tag survives only as the spawn-time initialiser — see
+ * `initialMotionDirection`.
+ */
+export function isReverseMotion(a: Pick<ActorRuntime, 'motionDirection'>): boolean {
+  return a.motionDirection === -1;
 }
 
 export function velocityOf(a: ActorRuntime): Vec2 {

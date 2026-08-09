@@ -7,6 +7,7 @@ import {
   dashCameras,
   defaultDashCamera,
   firstEnabledDashCamera,
+  sensorAperture,
   supportsDashCamera,
 } from '../schema/v2/sensors.js';
 import { ltapTemplateInput } from './v2-fixtures.js';
@@ -65,12 +66,14 @@ describe('actor-attached sensors', () => {
       ...camera,
       camera: { ...camera.camera, horizontalFovDeg: 110 },
     });
-    expect(doc.actorSensor('ego', camera.id)?.camera.horizontalFovDeg).toBe(110);
+    // `sensors` is now a union over modalities, so read the angular envelope
+    // through the shared accessor rather than a camera-only field.
+    expect(sensorAperture(doc.actorSensor('ego', camera.id)!).horizontalFovDeg).toBe(110);
 
     doc.removeActorSensor('ego', camera.id);
     expect(doc.actorSensor('ego', camera.id)).toBeUndefined();
     expect(doc.undo()).toBe(true);
-    expect(doc.actorSensor('ego', camera.id)?.camera.horizontalFovDeg).toBe(110);
+    expect(sensorAperture(doc.actorSensor('ego', camera.id)!).horizontalFovDeg).toBe(110);
     expect(() => doc.removeActorSensor('ego', 'missing')).toThrow(ScenarioOperationError);
   });
 });

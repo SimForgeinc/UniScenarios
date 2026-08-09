@@ -13,18 +13,19 @@ import {
   samplePlaybackDoors,
   samplePlaybackVehicleCues,
 } from '../controller';
+import { DashCameraSensorSchema } from '@uniscenarios/scenario-model';
 
 describe('actor dash-camera transform', () => {
-  const sensor = {
+  const sensor = DashCameraSensorSchema.parse({
     id: 'front-camera',
-    type: 'dash_camera' as const,
+    type: 'dash_camera',
     enabled: true,
     mount: {
       position: { x: 2, y: 1.2, z: 0.25 },
       rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
     },
     camera: { horizontalFovDeg: 90, nearM: 0.05, farM: 500, aspectRatio: 16 / 9 },
-  };
+  });
 
   it('mounts at actor-local position and looks along actor forward', () => {
     const frame = dashCameraFrame({ x: 10, z: 20, headingRad: 0 }, 3, sensor);

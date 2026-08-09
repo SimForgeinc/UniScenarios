@@ -28,6 +28,7 @@ describe('32-actor live startup budget', () => {
     const graph = {
       topologyDigest: 'latency-fixture',
       route: () => { throw new Error('polyline fixture does not route on a lane graph'); },
+      nearestLane: () => null,
     } as never;
     const session = createFixedStepSimulation(input, { graph, guards: 'throw' });
     session.advance(Math.round(input.warmupSeconds / input.dt) + 1);
