@@ -69,7 +69,7 @@ jobs:
           PY
       - name: Test and build public CARLA adapter
         run: |
-          python -m pip install "build==1.3.0" "pytest==9.1.1"
+          python -m pip install "build==1.3.0" "./adapters/carla-bridge[dev]"
           python -m pytest adapters/carla-bridge/tests -q
           python -m build adapters/carla-bridge
           python -m venv /tmp/uniscenarios-carla-smoke
