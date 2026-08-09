@@ -1855,3 +1855,60 @@ is a no-op on traces written before ambient traffic existed.
   occluded from all 17 searched viewpoints. The renderer is correct to refuse all three.
 - **INTEGRITY = 61/62.** One corrupt instance survived into the final corpus, same class as the 4/293
   found earlier — consistent with a write race under `batch --concurrency 2`.
+
+---
+
+## 40. Why M1.2 and M1.4 fail, and why they cannot both be fixed on these maps
+
+### The two failing measures are one failure seen twice
+Every scenario the blind plausibility critic rejected sits at a **`degraded`** site (score 0.667-0.933);
+not one sits at `exact`. M1.2 (exact-site fraction, 0.5323) and M1.4 (plausibility, 0.6538) are not
+independent problems — they are the same defect measured mechanically and visually.
+
+The critic's stated reasons are precise and match the site data: `parked-vans-narrow-road` needs
+*"a narrow ordinary street with kerbside parking, sidewalk, buildings"* and got
+*"a large arterial junction network with broad roads and no buildings"*.
+
+### The clause that degrades, named
+For `parked-vans-narrow-road` the failing clause is
+```
+corridor.requiresAdjacent  required ["sidewalk"]  actual ["opposing"]  score 0
+  reason: missing adjacency at s=0 m (found opposing)
+```
+It is marked `preferred`, so it **degrades rather than rejects** — the same
+required-in-name/optional-in-effect pattern as s34.
+
+### Promoting it does not rescue the archetype; it condemns it
+Making that adjacency `required` drops `parked-vans-narrow-road` from **118 sites to 2**, and both
+remaining sites are still `degraded` on another clause. Two is below the M1.3 floor of four.
+
+**M1.2 (>=95% exact) and M1.3 (>=4 sites per archetype) are mutually exclusive on this map set**, for
+4 of the 7 delivered archetypes — `blind-crest-queue`, `c11g-hidden-child`, `c11g-indicator-mislead`
+and `parked-vans-narrow-road` each have **zero exact sites across all five maps**.
+
+**The honest conclusion: those four briefs are not buildable on these maps.** There is no narrow
+residential street with kerbside parking and a sidewalk, no parking aisle, and no crest of the kind
+those briefs require. The system was silently substituting near-misses, which is exactly the complaint
+that started this work. The fix is not more engineering — it is either different maps or different
+briefs.
+
+### The mechanism, demonstrated but not established
+Filtering the 62-scenario corpus to exact-site scenarios only leaves **33 scenarios**, and the blind
+critic scores them **9/10 = 0.900**, against the 0.5769 baseline — **+32.3 points, comfortably past the
++20 target**, z=1.98, p<0.05.
+
+**I do not claim M1.4 as met on that basis.** The exact-only subset is **93.9%
+`c4g-circulating-sudden-stop` (31 of 33)**, so the result mostly says "c4g is plausible" rather than
+"exact sites are plausible". n=10. It is a suggestive demonstration of the mechanism, not a
+measurement of it, and reporting it as a pass would be exactly the kind of flattering arithmetic this
+whole exercise exists to prevent.
+
+### The real trade, stated for the user to choose
+| | scenarios | archetypes | M1.2 | M1.4 |
+|---|---:|---:|---|---|
+| breadth | **62** | 7 | 0.532 | 0.654 |
+| fidelity (exact sites only) | **33** | 3 (94% one archetype) | 1.000 | 0.900 |
+
+Breadth keeps seven mechanisms and ships 47% of scenarios at places a human would call wrong. Fidelity
+ships only places that genuinely match, and collapses to essentially one archetype. Neither is
+obviously right, and the choice is the user's, not mine to make silently.
