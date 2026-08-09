@@ -77,6 +77,7 @@ async function fixture() {
 
 test('passes when SimCloud consumes the exact immutable stack and only product adapters', async () => {
   const roots = await fixture();
+  await write(roots.simcloudRoot, 'app/.next/generated.js', "import '@private/engine';");
   const report = await auditDivergence({ ...roots, includeGitRevisions: false });
   assert.equal(report.status, 'pass');
   assert.equal(report.packages[0].status, 'pass');

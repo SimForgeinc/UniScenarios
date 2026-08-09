@@ -4,10 +4,18 @@ import { access, readFile, readdir, stat } from 'node:fs/promises';
 import path from 'node:path';
 
 const IGNORED_GENERATED_DIRECTORIES = new Set([
+  '.cache',
+  '.codex-playwright',
+  '.firecrawl',
   '.git',
+  '.next',
+  '.nyc_output',
+  '.playwright-cli',
   '.pytest_cache',
+  '.turbo',
   '.venv',
   '__pycache__',
+  'coverage',
   'dist',
   'node_modules',
 ]);
