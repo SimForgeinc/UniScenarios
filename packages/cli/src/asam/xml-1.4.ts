@@ -125,13 +125,16 @@ function boundingBox(actor: SimActor): string {
   ].join('\n');
 }
 
-function actorEntity(actor: SimActor, name: string): string {
+function actorEntity(actor: SimActor, name: string, trustedAmbientActorIds: ReadonlySet<string>): string {
   const driverProfile = actor.tags.find((tag) => tag.startsWith('driver-profile:'))?.slice('driver-profile:'.length);
   const properties = [
     `<Property name="uniscenarios.actorId" value="${xml(actor.id)}"/>`,
     `<Property name="uniscenarios.actorKind" value="${xml(actor.kind)}"/>`,
     ...(driverProfile
       ? [`<Property name="uniscenarios.driverProfile" value="${xml(driverProfile)}"/>`]
+      : []),
+    ...(trustedAmbientActorIds.has(actor.id)
+      ? ['<Property name="uniscenarios.actorOrigin" value="canonical-ambient"/>']
       : []),
     ...actor.tags.map((tag) => `<Property name="uniscenarios.tag" value="${xml(tag)}"/>`),
   ];
@@ -1227,7 +1230,7 @@ export function exportOpenScenarioXml14(
     ...(controllers.length > 0 ? ['    <TrafficSignals>', ...controllers.map((controller) => lines(controller, 6)), '    </TrafficSignals>'] : []),
     '  </RoadNetwork>',
     '  <Entities>',
-    ...resolved.actors.map(({ actor, name }) => lines(actorEntity(actor, name), 4)),
+    ...resolved.actors.map(({ actor, name }) => lines(actorEntity(actor, name, new Set(options.trustedAmbientActorIds ?? [])), 4)),
     ...input.occluders.map((_, i) => lines(occluderEntity(input, i), 4)),
     '  </Entities>',
     '  <Storyboard>',

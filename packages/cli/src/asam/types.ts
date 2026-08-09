@@ -57,6 +57,8 @@ export class AsamExportError extends Error {
 }
 
 export interface AsamExportOptions {
+  /** Compiler-owned actor identities authorized for materialized-traffic replacement. */
+  readonly trustedAmbientActorIds?: readonly string[] | undefined;
   /** The concrete map graph used to turn every engine route into world coordinates. */
   readonly graph: LaneGraph;
   /** Resolve OpenDRIVE XY to the absolute road-surface elevation for WorldPosition Z. */

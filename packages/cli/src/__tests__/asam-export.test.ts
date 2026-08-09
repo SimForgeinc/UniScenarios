@@ -285,11 +285,12 @@ describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
       ],
       interactions: [],
       occluders: [],
-    }), { graph });
+    }), { graph, trustedAmbientActorIds: ['robot'] });
 
     expect(result.content).toContain('<Pedestrian name="uniscenarios_sidewalk_robot" mass="70" pedestrianCategory="pedestrian">');
     expect(result.content).toContain('<Property name="uniscenarios.actorKind" value="sidewalk_robot"/>');
     expect(result.content).toContain('<Property name="uniscenarios.driverProfile" value="cautious"/>');
+    expect(result.content).toContain('<Property name="uniscenarios.actorOrigin" value="canonical-ambient"/>');
     expect(result.content).toContain('<Pedestrian name="uniscenarios_drone" mass="12" pedestrianCategory="pedestrian">');
     expect(result.content).toContain('<Property name="uniscenarios.actorKind" value="drone"/>');
   });
