@@ -43,7 +43,7 @@ export function selectAssetVariant(
   sourceFile: string,
   preference: CityAssetVariantPreference,
   options: { ultraLow: boolean; roadsOnly?: boolean; ktx2Ready: boolean },
-): { variant: CityAssetVariantId | 'original'; file: string; fallbackFile?: string } {
+): { variant: CityAssetVariantId | 'original'; file: string; fallbackFile?: string; sha256?: string } {
   if (!manifest || preference === 'original') return { variant: 'original', file: sourceFile };
   const requested: CityAssetVariantId | null = preference === 'auto'
     ? (options.roadsOnly ? 'roads-only' : options.ultraLow ? 'geometry-only' : options.ktx2Ready ? 'ktx2' : null)
@@ -55,5 +55,7 @@ export function selectAssetVariant(
   const unsafePath = (file: string): boolean => /^(?:[a-z]+:|\/)/i.test(file) || /(?:^|\/)\.\.(?:\/|$)/.test(file);
   const unsafe = candidate && unsafePath(candidate.file);
   const fallbackFile = candidate?.fallbackFile && !unsafePath(candidate.fallbackFile) ? candidate.fallbackFile : undefined;
-  return candidate && !unsafe ? { variant: requested, file: candidate.file, fallbackFile } : { variant: 'original', file: sourceFile };
+  return candidate && !unsafe
+    ? { variant: requested, file: candidate.file, fallbackFile, sha256: candidate.outputSha256 }
+    : { variant: 'original', file: sourceFile };
 }
