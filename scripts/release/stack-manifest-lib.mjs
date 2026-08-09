@@ -20,6 +20,41 @@ function internalDependencies(packageJson) {
   return Object.fromEntries(sections.flatMap((section) => Object.entries(packageJson[section] ?? {})));
 }
 
+function normalizedPythonVersion(stackVersion) {
+  return stackVersion.replace(/-rc\.(\d+)$/u, 'rc$1');
+}
+
+async function pythonPackages(repoRoot, config) {
+  const result = [];
+  for (const entry of config.pythonPackages ?? []) {
+    if (entry.registry !== 'pypi') {
+      throw new Error(`${entry.path} must publish through PyPI`);
+    }
+    const pyproject = await readFile(path.join(repoRoot, entry.path, 'pyproject.toml'), 'utf8');
+    const project = pyproject.match(/\[project\]([\s\S]*?)(?:\n\[|$)/u)?.[1] ?? '';
+    const field = (name) => project.match(new RegExp(`^${name}\\s*=\\s*"([^"]+)"`, 'mu'))?.[1];
+    const name = field('name');
+    const version = field('version');
+    const license = field('license');
+    if (name !== entry.name || version !== entry.version) {
+      throw new Error(`${entry.path} PyPI identity must equal ${entry.name} ${entry.version}`);
+    }
+    if (version !== normalizedPythonVersion(config.stackVersion)) {
+      throw new Error(`${entry.name} must use the PEP 440 form of stack version ${config.stackVersion}; found ${version}`);
+    }
+    if (license !== 'Apache-2.0') {
+      throw new Error(`${entry.name} must declare the Apache-2.0 license`);
+    }
+    result.push({
+      name,
+      version,
+      role: entry.role,
+      ecosystem: 'pypi',
+    });
+  }
+  return result;
+}
+
 function assertCompiledPackage(packageJson) {
   if (packageJson.main !== './dist/index.js' || packageJson.types !== './dist/index.d.ts') {
     throw new Error(`${packageJson.name} must publish compiled dist entry points`);
@@ -102,6 +137,7 @@ export async function buildStackManifest({ repoRoot, sourceRevision } = {}) {
     },
     contracts: config.contracts,
     packages,
+    pythonPackages: await pythonPackages(repoRoot, config),
   };
 }
 

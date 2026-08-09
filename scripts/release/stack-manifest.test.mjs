@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
@@ -50,7 +50,33 @@ test('builds a deterministic exact stack manifest', async () => {
     { name: '@uniscenarios/model', version: '1.2.3', role: 'scenario-contract' },
     { name: '@uniscenarios/engine', version: '1.2.3', role: 'simulation-kernel' },
   ]);
+  assert.deepEqual(manifest.pythonPackages, []);
   assert.equal(serializeStackManifest(manifest), `${JSON.stringify(manifest, null, 2)}\n`);
+});
+
+test('binds PyPI adapters to the PEP 440 form of the stack version', async () => {
+  const repoRoot = await fixture();
+  const configPath = path.join(repoRoot, 'config/uniscenarios-stack.json');
+  const config = JSON.parse(await readFile(configPath, 'utf8'));
+  config.stackVersion = '1.2.3-rc.4';
+  config.pythonPackages = [{
+    path: 'adapters/carla-bridge', name: 'uniscenarios-carla-bridge',
+    version: '1.2.3rc4', role: 'optional-carla-execution-adapter', registry: 'pypi',
+  }];
+  await writeFile(configPath, JSON.stringify(config));
+  await mkdir(path.join(repoRoot, 'adapters/carla-bridge'), { recursive: true });
+  await writeFile(path.join(repoRoot, 'adapters/carla-bridge/pyproject.toml'), [
+    '[project]',
+    'name = "uniscenarios-carla-bridge"',
+    'version = "1.2.3rc4"',
+    'license = "Apache-2.0"',
+    '',
+  ].join('\n'));
+  const manifest = await buildStackManifest({ repoRoot, sourceRevision: SHA });
+  assert.deepEqual(manifest.pythonPackages, [{
+    name: 'uniscenarios-carla-bridge', version: '1.2.3rc4',
+    role: 'optional-carla-execution-adapter', ecosystem: 'pypi',
+  }]);
 });
 
 test('rejects private packages and version-skewed internal dependencies', async () => {

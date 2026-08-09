@@ -26,5 +26,14 @@
     { "path": "packages/cli", "role": "cli-and-openscenario" },
     { "path": "packages/openscenario", "role": "openscenario-public-api" },
     { "path": "packages/esmini-runner", "role": "local-execution-adapter" }
+  ],
+  "pythonPackages": [
+    {
+      "path": "adapters/carla-bridge",
+      "name": "uniscenarios-carla-bridge",
+      "version": "0.1.0rc9",
+      "role": "optional-carla-execution-adapter",
+      "registry": "pypi"
+    }
   ]
 }
