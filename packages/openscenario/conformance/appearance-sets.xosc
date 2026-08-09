@@ -1,0 +1,1249 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OpenSCENARIO>
+  <FileHeader revMajor="1" revMinor="4" date="1970-01-01T00:00:00.000Z" description="cross-language conformance golden: appearance-sets" author="UniScenario conformance corpus">
+    <Properties>
+      <Property name="uniscenarios.executionMode" value="trajectory-replay"/>
+      <Property name="uniscenarios.export.profile" value="xml-1.4-trajectory-replay"/>
+      <Property name="uniscenarios.export.intent" value="trajectory-replay"/>
+      <Property name="uniscenarios.input.schemaVersion" value="1"/>
+      <Property name="uniscenarios.input.seed" value="12"/>
+      <Property name="uniscenarios.physics.mode" value="dynamic-v1"/>
+      <Property name="uniscenarios.physics.substepS" value="0.005"/>
+      <Property name="uniscenarios.physics.actorBackends" value="ego:dynamic-v1:selected:car,walker:dynamic-v1:selected:pedestrian"/>
+      <Property name="uniscenarios.trajectoryReplay.inputHash" value="e538d202b2a1f4e5755b9d51f987f6798167f501aa2ccec6349a2543aef6bd5e"/>
+      <Property name="uniscenarios.trajectoryReplay.engineVersion" value="0.4.0"/>
+      <Property name="uniscenarios.trajectoryReplay.dt" value="0.02"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.mode" value="dynamic-v1"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.substepS" value="0.005"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.solver" value="uniscenarios-sim-engine"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.solverVersion" value="0.4.0"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.vehicleProfileDigest" value="none"/>
+      <Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="ego:dynamic-v1:selected:car,walker:dynamic-v1:selected:pedestrian"/>
+    </Properties>
+  </FileHeader>
+  <ParameterDeclarations/>
+  <CatalogLocations/>
+  <RoadNetwork>
+    <LogicFile filepath="conformance-map.xodr"/>
+  </RoadNetwork>
+  <Entities>
+    <ScenarioObject name="actor_ego">
+      <Vehicle name="uniscenarios_car" vehicleCategory="car">
+        <BoundingBox>
+          <Center x="0" y="0" z="0.75"/>
+          <Dimensions width="1.9" length="4.6" height="1.5"/>
+        </BoundingBox>
+        <Performance maxSpeed="100" maxAcceleration="12" maxDeceleration="12"/>
+        <Axles>
+          <FrontAxle maxSteering="0.7" wheelDiameter="0.675" trackWidth="1.596" positionX="2.668" positionZ="0.3375"/>
+          <RearAxle maxSteering="0" wheelDiameter="0.675" trackWidth="1.596" positionX="0" positionZ="0.3375"/>
+        </Axles>
+        <Properties>
+          <Property name="uniscenarios.actorId" value="ego"/>
+          <Property name="uniscenarios.actorKind" value="car"/>
+        </Properties>
+      </Vehicle>
+    </ScenarioObject>
+    <ScenarioObject name="actor_walker">
+      <Pedestrian name="uniscenarios_pedestrian" mass="80" pedestrianCategory="pedestrian">
+        <BoundingBox>
+          <Center x="0" y="0" z="0.9"/>
+          <Dimensions width="0.6" length="0.5" height="1.8"/>
+        </BoundingBox>
+        <Properties>
+          <Property name="uniscenarios.actorId" value="walker"/>
+          <Property name="uniscenarios.actorKind" value="pedestrian"/>
+        </Properties>
+      </Pedestrian>
+    </ScenarioObject>
+  </Entities>
+  <Storyboard>
+    <Init><Actions>
+      <Private entityRef="actor_ego">
+        <PrivateAction><TeleportAction><Position>
+            <WorldPosition x="0" y="5" z="0" h="0" p="0" r="0"/>
+        </Position></TeleportAction></PrivateAction>
+        <PrivateAction>
+          <RoutingAction>
+            <FollowTrajectoryAction>
+              <TimeReference><Timing domainAbsoluteRelative="absolute" scale="1" offset="0"/></TimeReference>
+              <TrajectoryFollowingMode followingMode="position"/>
+              <TrajectoryRef>
+                <Trajectory name="trajectory_ego" closed="false">
+                  <Shape><Polyline>
+                    <Vertex time="0">
+                      <Position><WorldPosition x="0" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4"/>
+                    </Vertex>
+                    <Vertex time="0.02">
+                      <Position><WorldPosition x="0.080029856" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.003473535"/>
+                    </Vertex>
+                    <Vertex time="0.04">
+                      <Position><WorldPosition x="0.160161008" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.010117195"/>
+                    </Vertex>
+                    <Vertex time="0.06">
+                      <Position><WorldPosition x="0.240456858" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.019930979"/>
+                    </Vertex>
+                    <Vertex time="0.08">
+                      <Position><WorldPosition x="0.32098081" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.032914889"/>
+                    </Vertex>
+                    <Vertex time="0.1">
+                      <Position><WorldPosition x="0.401796266" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.049068923"/>
+                    </Vertex>
+                    <Vertex time="0.12">
+                      <Position><WorldPosition x="0.482966627" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.068393082"/>
+                    </Vertex>
+                    <Vertex time="0.14">
+                      <Position><WorldPosition x="0.564555298" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.090887366"/>
+                    </Vertex>
+                    <Vertex time="0.16">
+                      <Position><WorldPosition x="0.646625679" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.116551775"/>
+                    </Vertex>
+                    <Vertex time="0.18">
+                      <Position><WorldPosition x="0.729241174" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.145386308"/>
+                    </Vertex>
+                    <Vertex time="0.2">
+                      <Position><WorldPosition x="0.812465185" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.177390966"/>
+                    </Vertex>
+                    <Vertex time="0.22">
+                      <Position><WorldPosition x="0.896361115" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.212565749"/>
+                    </Vertex>
+                    <Vertex time="0.24">
+                      <Position><WorldPosition x="0.980992366" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.250910657"/>
+                    </Vertex>
+                    <Vertex time="0.26">
+                      <Position><WorldPosition x="1.066422341" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.29242569"/>
+                    </Vertex>
+                    <Vertex time="0.28">
+                      <Position><WorldPosition x="1.152714441" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.337110847"/>
+                    </Vertex>
+                    <Vertex time="0.3">
+                      <Position><WorldPosition x="1.239932071" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.38496613"/>
+                    </Vertex>
+                    <Vertex time="0.32">
+                      <Position><WorldPosition x="1.328138631" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.435991537"/>
+                    </Vertex>
+                    <Vertex time="0.34">
+                      <Position><WorldPosition x="1.417397525" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.490187069"/>
+                    </Vertex>
+                    <Vertex time="0.36">
+                      <Position><WorldPosition x="1.507772155" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.547552725"/>
+                    </Vertex>
+                    <Vertex time="0.38">
+                      <Position><WorldPosition x="1.599325424" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.607888507"/>
+                    </Vertex>
+                    <Vertex time="0.4">
+                      <Position><WorldPosition x="1.69209484" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.668814343"/>
+                    </Vertex>
+                    <Vertex time="0.42">
+                      <Position><WorldPosition x="1.786082773" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.729740179"/>
+                    </Vertex>
+                    <Vertex time="0.44">
+                      <Position><WorldPosition x="1.881289222" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.790666015"/>
+                    </Vertex>
+                    <Vertex time="0.46">
+                      <Position><WorldPosition x="1.977714188" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.851591851"/>
+                    </Vertex>
+                    <Vertex time="0.48">
+                      <Position><WorldPosition x="2.075357671" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.912517687"/>
+                    </Vertex>
+                    <Vertex time="0.5">
+                      <Position><WorldPosition x="2.17421967" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="4.973443523"/>
+                    </Vertex>
+                    <Vertex time="0.52">
+                      <Position><WorldPosition x="2.274300186" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.03436936"/>
+                    </Vertex>
+                    <Vertex time="0.54">
+                      <Position><WorldPosition x="2.375599219" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.095295196"/>
+                    </Vertex>
+                    <Vertex time="0.56">
+                      <Position><WorldPosition x="2.478116769" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.156221032"/>
+                    </Vertex>
+                    <Vertex time="0.58">
+                      <Position><WorldPosition x="2.581852835" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.217146868"/>
+                    </Vertex>
+                    <Vertex time="0.6">
+                      <Position><WorldPosition x="2.686807418" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.278072704"/>
+                    </Vertex>
+                    <Vertex time="0.62">
+                      <Position><WorldPosition x="2.792980518" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.33899854"/>
+                    </Vertex>
+                    <Vertex time="0.64">
+                      <Position><WorldPosition x="2.900372135" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.399924376"/>
+                    </Vertex>
+                    <Vertex time="0.66">
+                      <Position><WorldPosition x="3.008982268" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.460850212"/>
+                    </Vertex>
+                    <Vertex time="0.68">
+                      <Position><WorldPosition x="3.118810918" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.521776048"/>
+                    </Vertex>
+                    <Vertex time="0.7">
+                      <Position><WorldPosition x="3.229858085" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.582701884"/>
+                    </Vertex>
+                    <Vertex time="0.72">
+                      <Position><WorldPosition x="3.342123768" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.64362772"/>
+                    </Vertex>
+                    <Vertex time="0.74">
+                      <Position><WorldPosition x="3.455607968" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.704553557"/>
+                    </Vertex>
+                    <Vertex time="0.76">
+                      <Position><WorldPosition x="3.570310685" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.765479393"/>
+                    </Vertex>
+                    <Vertex time="0.78">
+                      <Position><WorldPosition x="3.686231918" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.826405229"/>
+                    </Vertex>
+                    <Vertex time="0.8">
+                      <Position><WorldPosition x="3.803371669" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.887331065"/>
+                    </Vertex>
+                    <Vertex time="0.82">
+                      <Position><WorldPosition x="3.921729936" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="5.948256901"/>
+                    </Vertex>
+                    <Vertex time="0.84">
+                      <Position><WorldPosition x="4.04130672" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.009182737"/>
+                    </Vertex>
+                    <Vertex time="0.86">
+                      <Position><WorldPosition x="4.16210202" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.070108573"/>
+                    </Vertex>
+                    <Vertex time="0.88">
+                      <Position><WorldPosition x="4.284115837" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.131034409"/>
+                    </Vertex>
+                    <Vertex time="0.9">
+                      <Position><WorldPosition x="4.407348171" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.191960245"/>
+                    </Vertex>
+                    <Vertex time="0.92">
+                      <Position><WorldPosition x="4.531799022" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.252886081"/>
+                    </Vertex>
+                    <Vertex time="0.94">
+                      <Position><WorldPosition x="4.657468389" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.313811917"/>
+                    </Vertex>
+                    <Vertex time="0.96">
+                      <Position><WorldPosition x="4.784356273" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.374737754"/>
+                    </Vertex>
+                    <Vertex time="0.98">
+                      <Position><WorldPosition x="4.912462674" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.43566359"/>
+                    </Vertex>
+                    <Vertex time="1">
+                      <Position><WorldPosition x="5.041787591" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.496589426"/>
+                    </Vertex>
+                    <Vertex time="1.02">
+                      <Position><WorldPosition x="5.172331026" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.557515262"/>
+                    </Vertex>
+                    <Vertex time="1.04">
+                      <Position><WorldPosition x="5.304092977" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.618441098"/>
+                    </Vertex>
+                    <Vertex time="1.06">
+                      <Position><WorldPosition x="5.437073444" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.679366934"/>
+                    </Vertex>
+                    <Vertex time="1.08">
+                      <Position><WorldPosition x="5.571272429" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.74029277"/>
+                    </Vertex>
+                    <Vertex time="1.1">
+                      <Position><WorldPosition x="5.70668993" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.801218606"/>
+                    </Vertex>
+                    <Vertex time="1.12">
+                      <Position><WorldPosition x="5.843325948" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.862144442"/>
+                    </Vertex>
+                    <Vertex time="1.14">
+                      <Position><WorldPosition x="5.981180482" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.923070278"/>
+                    </Vertex>
+                    <Vertex time="1.16">
+                      <Position><WorldPosition x="6.120253533" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="6.983996114"/>
+                    </Vertex>
+                    <Vertex time="1.18">
+                      <Position><WorldPosition x="6.260545101" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.044921951"/>
+                    </Vertex>
+                    <Vertex time="1.2">
+                      <Position><WorldPosition x="6.402055186" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.105847787"/>
+                    </Vertex>
+                    <Vertex time="1.22">
+                      <Position><WorldPosition x="6.544783788" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.166773623"/>
+                    </Vertex>
+                    <Vertex time="1.24">
+                      <Position><WorldPosition x="6.688730906" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.227699459"/>
+                    </Vertex>
+                    <Vertex time="1.26">
+                      <Position><WorldPosition x="6.833896541" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.288625295"/>
+                    </Vertex>
+                    <Vertex time="1.28">
+                      <Position><WorldPosition x="6.980280692" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.349551131"/>
+                    </Vertex>
+                    <Vertex time="1.3">
+                      <Position><WorldPosition x="7.127883361" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.410476967"/>
+                    </Vertex>
+                    <Vertex time="1.32">
+                      <Position><WorldPosition x="7.276704546" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.471402803"/>
+                    </Vertex>
+                    <Vertex time="1.34">
+                      <Position><WorldPosition x="7.426744248" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.532328639"/>
+                    </Vertex>
+                    <Vertex time="1.36">
+                      <Position><WorldPosition x="7.578002466" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.593254475"/>
+                    </Vertex>
+                    <Vertex time="1.38">
+                      <Position><WorldPosition x="7.730479201" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.654180311"/>
+                    </Vertex>
+                    <Vertex time="1.4">
+                      <Position><WorldPosition x="7.884174453" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.715106147"/>
+                    </Vertex>
+                    <Vertex time="1.42">
+                      <Position><WorldPosition x="8.039088222" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.776031984"/>
+                    </Vertex>
+                    <Vertex time="1.44">
+                      <Position><WorldPosition x="8.195220507" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.83695782"/>
+                    </Vertex>
+                    <Vertex time="1.46">
+                      <Position><WorldPosition x="8.352571309" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.897883656"/>
+                    </Vertex>
+                    <Vertex time="1.48">
+                      <Position><WorldPosition x="8.511140628" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="7.958809492"/>
+                    </Vertex>
+                    <Vertex time="1.5">
+                      <Position><WorldPosition x="8.670928464" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.019735328"/>
+                    </Vertex>
+                    <Vertex time="1.52">
+                      <Position><WorldPosition x="8.831934816" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.080661164"/>
+                    </Vertex>
+                    <Vertex time="1.54">
+                      <Position><WorldPosition x="8.994159685" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.141587"/>
+                    </Vertex>
+                    <Vertex time="1.56">
+                      <Position><WorldPosition x="9.157603071" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.202512836"/>
+                    </Vertex>
+                    <Vertex time="1.58">
+                      <Position><WorldPosition x="9.322264973" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.263438672"/>
+                    </Vertex>
+                    <Vertex time="1.6">
+                      <Position><WorldPosition x="9.488145392" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.324364508"/>
+                    </Vertex>
+                    <Vertex time="1.62">
+                      <Position><WorldPosition x="9.655244328" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.385290344"/>
+                    </Vertex>
+                    <Vertex time="1.64">
+                      <Position><WorldPosition x="9.823561781" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.446216181"/>
+                    </Vertex>
+                    <Vertex time="1.66">
+                      <Position><WorldPosition x="9.99309775" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.507142017"/>
+                    </Vertex>
+                    <Vertex time="1.68">
+                      <Position><WorldPosition x="10.163852236" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.568067853"/>
+                    </Vertex>
+                    <Vertex time="1.7">
+                      <Position><WorldPosition x="10.335825239" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.628993689"/>
+                    </Vertex>
+                    <Vertex time="1.72">
+                      <Position><WorldPosition x="10.509016758" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.689919525"/>
+                    </Vertex>
+                    <Vertex time="1.74">
+                      <Position><WorldPosition x="10.683426795" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.750845361"/>
+                    </Vertex>
+                    <Vertex time="1.76">
+                      <Position><WorldPosition x="10.859055348" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.811771197"/>
+                    </Vertex>
+                    <Vertex time="1.78">
+                      <Position><WorldPosition x="11.035902417" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.872697033"/>
+                    </Vertex>
+                    <Vertex time="1.8">
+                      <Position><WorldPosition x="11.213968004" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.933622869"/>
+                    </Vertex>
+                    <Vertex time="1.82">
+                      <Position><WorldPosition x="11.393252107" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="8.994548705"/>
+                    </Vertex>
+                    <Vertex time="1.84">
+                      <Position><WorldPosition x="11.573754727" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.055474541"/>
+                    </Vertex>
+                    <Vertex time="1.86">
+                      <Position><WorldPosition x="11.755475863" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.116400378"/>
+                    </Vertex>
+                    <Vertex time="1.88">
+                      <Position><WorldPosition x="11.938415516" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.177326214"/>
+                    </Vertex>
+                    <Vertex time="1.9">
+                      <Position><WorldPosition x="12.122573686" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.23825205"/>
+                    </Vertex>
+                    <Vertex time="1.92">
+                      <Position><WorldPosition x="12.307950373" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.299177886"/>
+                    </Vertex>
+                    <Vertex time="1.94">
+                      <Position><WorldPosition x="12.494545577" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.360103722"/>
+                    </Vertex>
+                    <Vertex time="1.96">
+                      <Position><WorldPosition x="12.682359297" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.421029558"/>
+                    </Vertex>
+                    <Vertex time="1.98">
+                      <Position><WorldPosition x="12.871391534" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.481955394"/>
+                    </Vertex>
+                    <Vertex time="2">
+                      <Position><WorldPosition x="13.061642287" y="5" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="9.54288123"/>
+                    </Vertex>
+                    <Interpolation/>
+                  </Polyline></Shape>
+                </Trajectory>
+              </TrajectoryRef>
+            </FollowTrajectoryAction>
+          </RoutingAction>
+        </PrivateAction>
+      </Private>
+      <Private entityRef="actor_walker">
+        <PrivateAction><TeleportAction><Position>
+            <WorldPosition x="0" y="12" z="0" h="0" p="0" r="0"/>
+        </Position></TeleportAction></PrivateAction>
+        <PrivateAction>
+          <RoutingAction>
+            <FollowTrajectoryAction>
+              <TimeReference><Timing domainAbsoluteRelative="absolute" scale="1" offset="0"/></TimeReference>
+              <TrajectoryFollowingMode followingMode="position"/>
+              <TrajectoryRef>
+                <Trajectory name="trajectory_walker" closed="false">
+                  <Shape><Polyline>
+                    <Vertex time="0">
+                      <Position><WorldPosition x="0" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.2"/>
+                    </Vertex>
+                    <Vertex time="0.02">
+                      <Position><WorldPosition x="0.024009847" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.201229842"/>
+                    </Vertex>
+                    <Vertex time="0.04">
+                      <Position><WorldPosition x="0.048060171" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.204040314"/>
+                    </Vertex>
+                    <Vertex time="0.06">
+                      <Position><WorldPosition x="0.072182567" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.208429541"/>
+                    </Vertex>
+                    <Vertex time="0.08">
+                      <Position><WorldPosition x="0.09640859" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.21439565"/>
+                    </Vertex>
+                    <Vertex time="0.1">
+                      <Position><WorldPosition x="0.120769071" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.221749186"/>
+                    </Vertex>
+                    <Vertex time="0.12">
+                      <Position><WorldPosition x="0.145277014" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.229010912"/>
+                    </Vertex>
+                    <Vertex time="0.14">
+                      <Position><WorldPosition x="0.169927219" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.235976805"/>
+                    </Vertex>
+                    <Vertex time="0.16">
+                      <Position><WorldPosition x="0.19471389" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.242658915"/>
+                    </Vertex>
+                    <Vertex time="0.18">
+                      <Position><WorldPosition x="0.219631469" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.249068804"/>
+                    </Vertex>
+                    <Vertex time="0.2">
+                      <Position><WorldPosition x="0.244674622" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.255217562"/>
+                    </Vertex>
+                    <Vertex time="0.22">
+                      <Position><WorldPosition x="0.269838233" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.261115827"/>
+                    </Vertex>
+                    <Vertex time="0.24">
+                      <Position><WorldPosition x="0.295117396" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.266773803"/>
+                    </Vertex>
+                    <Vertex time="0.26">
+                      <Position><WorldPosition x="0.320507402" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.27220128"/>
+                    </Vertex>
+                    <Vertex time="0.28">
+                      <Position><WorldPosition x="0.346003736" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.277407648"/>
+                    </Vertex>
+                    <Vertex time="0.3">
+                      <Position><WorldPosition x="0.371602067" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.282401915"/>
+                    </Vertex>
+                    <Vertex time="0.32">
+                      <Position><WorldPosition x="0.397298239" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.287192722"/>
+                    </Vertex>
+                    <Vertex time="0.34">
+                      <Position><WorldPosition x="0.423088266" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.291788356"/>
+                    </Vertex>
+                    <Vertex time="0.36">
+                      <Position><WorldPosition x="0.448968324" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.29619677"/>
+                    </Vertex>
+                    <Vertex time="0.38">
+                      <Position><WorldPosition x="0.474934747" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.300425591"/>
+                    </Vertex>
+                    <Vertex time="0.4">
+                      <Position><WorldPosition x="0.500984015" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.304482134"/>
+                    </Vertex>
+                    <Vertex time="0.42">
+                      <Position><WorldPosition x="0.527112754" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.308373418"/>
+                    </Vertex>
+                    <Vertex time="0.44">
+                      <Position><WorldPosition x="0.553317725" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.312106177"/>
+                    </Vertex>
+                    <Vertex time="0.46">
+                      <Position><WorldPosition x="0.579595824" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.315686867"/>
+                    </Vertex>
+                    <Vertex time="0.48">
+                      <Position><WorldPosition x="0.605944071" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.319121684"/>
+                    </Vertex>
+                    <Vertex time="0.5">
+                      <Position><WorldPosition x="0.632359609" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.32241657"/>
+                    </Vertex>
+                    <Vertex time="0.52">
+                      <Position><WorldPosition x="0.658839696" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.325577227"/>
+                    </Vertex>
+                    <Vertex time="0.54">
+                      <Position><WorldPosition x="0.685381702" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.328609123"/>
+                    </Vertex>
+                    <Vertex time="0.56">
+                      <Position><WorldPosition x="0.711983105" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.331517502"/>
+                    </Vertex>
+                    <Vertex time="0.58">
+                      <Position><WorldPosition x="0.738641485" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.334307398"/>
+                    </Vertex>
+                    <Vertex time="0.6">
+                      <Position><WorldPosition x="0.765354521" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.336983636"/>
+                    </Vertex>
+                    <Vertex time="0.62">
+                      <Position><WorldPosition x="0.792119987" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.339550848"/>
+                    </Vertex>
+                    <Vertex time="0.64">
+                      <Position><WorldPosition x="0.818935746" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.342013475"/>
+                    </Vertex>
+                    <Vertex time="0.66">
+                      <Position><WorldPosition x="0.84579975" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.344375777"/>
+                    </Vertex>
+                    <Vertex time="0.68">
+                      <Position><WorldPosition x="0.872710033" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.346641842"/>
+                    </Vertex>
+                    <Vertex time="0.7">
+                      <Position><WorldPosition x="0.899664709" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.34881559"/>
+                    </Vertex>
+                    <Vertex time="0.72">
+                      <Position><WorldPosition x="0.926661971" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.350900782"/>
+                    </Vertex>
+                    <Vertex time="0.74">
+                      <Position><WorldPosition x="0.953700083" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.352901026"/>
+                    </Vertex>
+                    <Vertex time="0.76">
+                      <Position><WorldPosition x="0.980777382" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.354819782"/>
+                    </Vertex>
+                    <Vertex time="0.78">
+                      <Position><WorldPosition x="1.00789227" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.356660371"/>
+                    </Vertex>
+                    <Vertex time="0.8">
+                      <Position><WorldPosition x="1.035043216" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.358425976"/>
+                    </Vertex>
+                    <Vertex time="0.82">
+                      <Position><WorldPosition x="1.062228752" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.360119652"/>
+                    </Vertex>
+                    <Vertex time="0.84">
+                      <Position><WorldPosition x="1.089447469" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.36174433"/>
+                    </Vertex>
+                    <Vertex time="0.86">
+                      <Position><WorldPosition x="1.116698013" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.363302821"/>
+                    </Vertex>
+                    <Vertex time="0.88">
+                      <Position><WorldPosition x="1.14397909" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.36479782"/>
+                    </Vertex>
+                    <Vertex time="0.9">
+                      <Position><WorldPosition x="1.171289455" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.366231915"/>
+                    </Vertex>
+                    <Vertex time="0.92">
+                      <Position><WorldPosition x="1.198627915" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.367607587"/>
+                    </Vertex>
+                    <Vertex time="0.94">
+                      <Position><WorldPosition x="1.225993325" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.368927216"/>
+                    </Vertex>
+                    <Vertex time="0.96">
+                      <Position><WorldPosition x="1.253384587" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.370193084"/>
+                    </Vertex>
+                    <Vertex time="0.98">
+                      <Position><WorldPosition x="1.280800649" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.371407382"/>
+                    </Vertex>
+                    <Vertex time="1">
+                      <Position><WorldPosition x="1.3082405" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.372572212"/>
+                    </Vertex>
+                    <Vertex time="1.02">
+                      <Position><WorldPosition x="1.33570317" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.373689587"/>
+                    </Vertex>
+                    <Vertex time="1.04">
+                      <Position><WorldPosition x="1.363187731" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.374761442"/>
+                    </Vertex>
+                    <Vertex time="1.06">
+                      <Position><WorldPosition x="1.39069329" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.375789631"/>
+                    </Vertex>
+                    <Vertex time="1.08">
+                      <Position><WorldPosition x="1.418218992" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.376775933"/>
+                    </Vertex>
+                    <Vertex time="1.1">
+                      <Position><WorldPosition x="1.445764017" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.377722054"/>
+                    </Vertex>
+                    <Vertex time="1.12">
+                      <Position><WorldPosition x="1.473327576" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.378629631"/>
+                    </Vertex>
+                    <Vertex time="1.14">
+                      <Position><WorldPosition x="1.500908916" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.379500234"/>
+                    </Vertex>
+                    <Vertex time="1.16">
+                      <Position><WorldPosition x="1.528507311" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.38033537"/>
+                    </Vertex>
+                    <Vertex time="1.18">
+                      <Position><WorldPosition x="1.556122067" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.381136484"/>
+                    </Vertex>
+                    <Vertex time="1.2">
+                      <Position><WorldPosition x="1.583752518" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.381904961"/>
+                    </Vertex>
+                    <Vertex time="1.22">
+                      <Position><WorldPosition x="1.611398024" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.382642132"/>
+                    </Vertex>
+                    <Vertex time="1.24">
+                      <Position><WorldPosition x="1.639057971" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.383349271"/>
+                    </Vertex>
+                    <Vertex time="1.26">
+                      <Position><WorldPosition x="1.666731772" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.384027602"/>
+                    </Vertex>
+                    <Vertex time="1.28">
+                      <Position><WorldPosition x="1.694418861" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.384678298"/>
+                    </Vertex>
+                    <Vertex time="1.3">
+                      <Position><WorldPosition x="1.722118698" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.385302486"/>
+                    </Vertex>
+                    <Vertex time="1.32">
+                      <Position><WorldPosition x="1.749830764" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.385901245"/>
+                    </Vertex>
+                    <Vertex time="1.34">
+                      <Position><WorldPosition x="1.77755456" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.386475612"/>
+                    </Vertex>
+                    <Vertex time="1.36">
+                      <Position><WorldPosition x="1.805289607" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.387026579"/>
+                    </Vertex>
+                    <Vertex time="1.38">
+                      <Position><WorldPosition x="1.833035449" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.387555101"/>
+                    </Vertex>
+                    <Vertex time="1.4">
+                      <Position><WorldPosition x="1.860791645" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.388062092"/>
+                    </Vertex>
+                    <Vertex time="1.42">
+                      <Position><WorldPosition x="1.888557773" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.388548428"/>
+                    </Vertex>
+                    <Vertex time="1.44">
+                      <Position><WorldPosition x="1.916333429" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.389014951"/>
+                    </Vertex>
+                    <Vertex time="1.46">
+                      <Position><WorldPosition x="1.944118224" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.389462469"/>
+                    </Vertex>
+                    <Vertex time="1.48">
+                      <Position><WorldPosition x="1.971911786" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.389891756"/>
+                    </Vertex>
+                    <Vertex time="1.5">
+                      <Position><WorldPosition x="1.999713759" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.390303554"/>
+                    </Vertex>
+                    <Vertex time="1.52">
+                      <Position><WorldPosition x="2.027523799" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.390698575"/>
+                    </Vertex>
+                    <Vertex time="1.54">
+                      <Position><WorldPosition x="2.055341577" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.391077504"/>
+                    </Vertex>
+                    <Vertex time="1.56">
+                      <Position><WorldPosition x="2.083166779" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.391440996"/>
+                    </Vertex>
+                    <Vertex time="1.58">
+                      <Position><WorldPosition x="2.110999103" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.39178968"/>
+                    </Vertex>
+                    <Vertex time="1.6">
+                      <Position><WorldPosition x="2.138838257" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.392124158"/>
+                    </Vertex>
+                    <Vertex time="1.62">
+                      <Position><WorldPosition x="2.166683964" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.392445011"/>
+                    </Vertex>
+                    <Vertex time="1.64">
+                      <Position><WorldPosition x="2.194535956" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.392752792"/>
+                    </Vertex>
+                    <Vertex time="1.66">
+                      <Position><WorldPosition x="2.222393978" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.393048035"/>
+                    </Vertex>
+                    <Vertex time="1.68">
+                      <Position><WorldPosition x="2.250257784" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.39333125"/>
+                    </Vertex>
+                    <Vertex time="1.7">
+                      <Position><WorldPosition x="2.278127139" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.393602927"/>
+                    </Vertex>
+                    <Vertex time="1.72">
+                      <Position><WorldPosition x="2.306001816" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.393863536"/>
+                    </Vertex>
+                    <Vertex time="1.74">
+                      <Position><WorldPosition x="2.333881598" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.394113528"/>
+                    </Vertex>
+                    <Vertex time="1.76">
+                      <Position><WorldPosition x="2.361766278" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.394353336"/>
+                    </Vertex>
+                    <Vertex time="1.78">
+                      <Position><WorldPosition x="2.389655656" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.394583374"/>
+                    </Vertex>
+                    <Vertex time="1.8">
+                      <Position><WorldPosition x="2.417549541" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.394804041"/>
+                    </Vertex>
+                    <Vertex time="1.82">
+                      <Position><WorldPosition x="2.445447748" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.395015718"/>
+                    </Vertex>
+                    <Vertex time="1.84">
+                      <Position><WorldPosition x="2.473350103" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.395218772"/>
+                    </Vertex>
+                    <Vertex time="1.86">
+                      <Position><WorldPosition x="2.501256435" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.395413554"/>
+                    </Vertex>
+                    <Vertex time="1.88">
+                      <Position><WorldPosition x="2.529166583" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.3956004"/>
+                    </Vertex>
+                    <Vertex time="1.9">
+                      <Position><WorldPosition x="2.557080392" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.395779635"/>
+                    </Vertex>
+                    <Vertex time="1.92">
+                      <Position><WorldPosition x="2.584997712" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.395951567"/>
+                    </Vertex>
+                    <Vertex time="1.94">
+                      <Position><WorldPosition x="2.612918401" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.396116496"/>
+                    </Vertex>
+                    <Vertex time="1.96">
+                      <Position><WorldPosition x="2.64084232" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.396274705"/>
+                    </Vertex>
+                    <Vertex time="1.98">
+                      <Position><WorldPosition x="2.668769339" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.396426469"/>
+                    </Vertex>
+                    <Vertex time="2">
+                      <Position><WorldPosition x="2.696699331" y="12" z="0" h="0" p="0" r="0"/></Position>
+                      <Motion speed_longitudinal="1.39657205"/>
+                    </Vertex>
+                    <Interpolation/>
+                  </Polyline></Shape>
+                </Trajectory>
+              </TrajectoryRef>
+            </FollowTrajectoryAction>
+          </RoutingAction>
+        </PrivateAction>
+      </Private>
+    </Actions></Init>
+    <Story name="uniscenarios_story">
+      <Act name="uniscenarios_act">
+        <ManeuverGroup name="group_ego" maximumExecutionCount="1">
+          <Actors selectTriggeringEntities="false"><EntityRef entityRef="actor_ego"/></Actors>
+          <Maneuver name="maneuver_ego">
+            <Event name="event_set_0" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_0_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorLeft"/></LightType>
+                    <LightState mode="flashing" flashingOnDuration="0.5" flashingOffDuration="0.5"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_0_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorRight"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_0_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="warningLights"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_0_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.1" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_1" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_1_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorLeft"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_1_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorRight"/></LightType>
+                    <LightState mode="flashing" flashingOnDuration="0.5" flashingOffDuration="0.5"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_1_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="warningLights"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_1_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.2" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_2" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_2_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorLeft"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_2_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorRight"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_2_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="warningLights"/></LightType>
+                    <LightState mode="flashing" flashingOnDuration="0.5" flashingOffDuration="0.5"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_2_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.3" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_3" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_3_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorLeft"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_3_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="indicatorRight"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_3_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="warningLights"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_3_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.4" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_4" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_4_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="brakeLights"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_4_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.5" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_5" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_5_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="reversingLights"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_5_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.6" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_6" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_6_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="specialPurposeLights"/></LightType>
+                    <LightState mode="flashing" flashingOnDuration="0.5" flashingOffDuration="0.5"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_6_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.7" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_7" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_7_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="daytimeRunningLights"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_7_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="lowBeam"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_7_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="highBeam"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_7_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.8" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_8" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_8_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="daytimeRunningLights"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_8_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="lowBeam"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_8_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="highBeam"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_8_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0.9" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_9" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_9_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="daytimeRunningLights"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_9_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="lowBeam"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_9_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="highBeam"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_9_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_10" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_10_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="daytimeRunningLights"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_10_action_1"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="lowBeam"/></LightType>
+                    <LightState mode="on"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <Action name="event_set_10_action_2"><PrivateAction>
+                <AppearanceAction>
+                  <LightStateAction transitionTime="0">
+                    <LightType><VehicleLight vehicleLightType="highBeam"/></LightType>
+                    <LightState mode="off"/>
+                  </LightStateAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_10_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.1" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_11" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_11_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="1">
+                    <AnimationType><ComponentAnimation><VehicleComponent vehicleComponentType="doorFrontLeft"/></ComponentAnimation></AnimationType>
+                    <AnimationState state="1"/>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_11_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.2" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_12" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_12_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><ComponentAnimation><VehicleComponent vehicleComponentType="doorFrontRight"/></ComponentAnimation></AnimationType>
+                    <AnimationState state="1"/>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_12_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.3" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_13" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_13_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><UserDefinedAnimation userDefinedAnimationType="uniscenarios:audio.horn:true"/></AnimationType>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_13_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.4" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_14" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_14_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><UserDefinedAnimation userDefinedAnimationType="uniscenarios:pose.stopArm:extended"/></AnimationType>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_14_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.5" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+          </Maneuver>
+        </ManeuverGroup>
+        <ManeuverGroup name="group_walker" maximumExecutionCount="1">
+          <Actors selectTriggeringEntities="false"><EntityRef entityRef="actor_walker"/></Actors>
+          <Maneuver name="maneuver_walker">
+            <Event name="event_set_15" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_15_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><UserDefinedAnimation userDefinedAnimationType="uniscenarios:pose.paddle:stop"/></AnimationType>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_15_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.6" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_16" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_16_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><UserDefinedAnimation userDefinedAnimationType="uniscenarios:pose.gesture:halt"/></AnimationType>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_16_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.7" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+            <Event name="event_set_17" priority="overwrite" maximumExecutionCount="1">
+              <Action name="event_set_17_action_0"><PrivateAction>
+                <AppearanceAction>
+                  <AnimationAction loop="false" animationDuration="0">
+                    <AnimationType><UserDefinedAnimation userDefinedAnimationType="uniscenarios:pose.headingLookDeg:-30"/></AnimationType>
+                  </AnimationAction>
+                </AppearanceAction>
+              </PrivateAction></Action>
+              <StartTrigger><ConditionGroup><Condition name="set_17_replay" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="1.8" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+            </Event>
+          </Maneuver>
+        </ManeuverGroup>
+        <StartTrigger><ConditionGroup><Condition name="act_start" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="0" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StartTrigger>
+      </Act>
+    </Story>
+    <StopTrigger><ConditionGroup><Condition name="scenario_end" delay="0" conditionEdge="none"><ByValueCondition><SimulationTimeCondition value="2" rule="greaterOrEqual"/></ByValueCondition></Condition></ConditionGroup></StopTrigger>
+  </Storyboard>
+</OpenSCENARIO>

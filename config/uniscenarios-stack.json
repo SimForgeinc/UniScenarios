@@ -1,6 +1,6 @@
 {
   "schema": "uniscenarios.stack-config/v1",
-  "stackVersion": "0.1.0-rc.2",
+  "stackVersion": "0.1.0-rc.3",
   "repository": "https://github.com/SimForgeinc/UniScenarios",
   "contracts": {
     "scenarioTemplate": "2",
