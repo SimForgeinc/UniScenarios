@@ -37,6 +37,8 @@ const KIND_DEFAULTS: Record<SimActor['kind'], CatalogId> = {
   bicycle: 'vehicle.bicycle',
   pedestrian: 'pedestrian.adult_walking',
   scooter: 'vehicle.bicycle',
+  sidewalk_robot: 'sidewalk_robot.delivery_rover',
+  drone: 'drone.camera_quadcopter',
   animal: 'pedestrian.child_walking',
   static_object: 'hazard.cardboard_box',
 };

@@ -11,6 +11,7 @@ export * from './traffic-controls.js';
 export * from './map-signal-plans.js';
 export * from './set-keys.js';
 export * from './interactions.js';
+export * from './reasoning-trace.js';
 export * from './invariants.js';
 export * from './variants.js';
 export * from './template.js';

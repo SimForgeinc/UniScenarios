@@ -32,6 +32,7 @@
 
 import { z } from 'zod';
 
+import { DriverProfileSchema } from '../../driver-profiles.js';
 import { ExprSchema, NumberOrExprSchema } from '../../expr/index.js';
 import { LaneRefSchema as V1LaneRefSchema, PoseSchema as V1PoseSchema } from '../v1.js';
 import { ApproachRelationSchema, TurnDirectionSchema } from './anchor.js';
@@ -52,6 +53,8 @@ export const ACTOR_CLASSES = [
   'bicycle',
   'pedestrian',
   'scooter',
+  'sidewalk_robot',
+  'drone',
   'animal',
   'static_object',
 ] as const;
@@ -73,12 +76,14 @@ export const DEFAULT_ACTOR_DIMS: Record<
   bicycle: { length: 1.8, width: 0.6, height: 1.7 },
   pedestrian: { length: 0.6, width: 0.6, height: 1.75 },
   scooter: { length: 1.2, width: 0.6, height: 1.7 },
+  sidewalk_robot: { length: 0.85, width: 0.6, height: 0.85 },
+  drone: { length: 1.0, width: 1.0, height: 0.45 },
   animal: { length: 1.2, width: 0.5, height: 1.0 },
   static_object: { length: 1.0, width: 1.0, height: 1.0 },
 };
 
 /** Which actor classes are legal on a pedestrian-only surface. */
-export const VRU_CLASSES = new Set(['pedestrian', 'bicycle', 'scooter', 'animal']);
+export const VRU_CLASSES = new Set(['pedestrian', 'bicycle', 'scooter', 'sidewalk_robot', 'drone', 'animal']);
 
 /** Explicit bounding box, overriding the catalog model's own. */
 export const V2DimensionsSchema = z.strictObject({
@@ -169,6 +174,8 @@ const roleBase = {
    * `clamp(0.9 * lane.speedLimitKph, 25, 65)`.
    */
   initialSpeedKph: NumberOrExprSchema.optional(),
+  /** Driver policy for moving road actors. Appearance and physical dimensions remain independent. */
+  driverProfile: DriverProfileSchema.optional(),
   /** Physical movement-control requirement resolved against the concrete gate.
    * `uncontrolled` means this movement has priority at a minor-stop junction;
    * it must not silently inherit a stop sign from another arm. */

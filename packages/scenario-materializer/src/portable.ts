@@ -111,7 +111,9 @@ function scenePoint(role: Extract<RoleBinding, { kind: 'scene_absolute' }>): Poi
 function routeTurn(template: ScenarioTemplateV2, roleId: string): 'left' | 'right' | 'straight' | 'uturn' | undefined {
   for (const interaction of template.choreography.interactions) {
     if (interaction.actor !== roleId || interaction.verb !== 'route') continue;
-    if (interaction.target.mode === 'turn') return interaction.target.turn;
+    if (interaction.target.mode === 'turn' || interaction.target.mode === 'nextJunction') {
+      return interaction.target.turn;
+    }
   }
   return undefined;
 }

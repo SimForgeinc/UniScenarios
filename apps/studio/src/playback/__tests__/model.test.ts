@@ -259,6 +259,8 @@ describe('UniScenarios concrete playback import', () => {
       bicycle: defaultCatalogIdForActorKind('bicycle'),
       pedestrian: defaultCatalogIdForActorKind('pedestrian'),
       scooter: defaultCatalogIdForActorKind('scooter'),
+      sidewalk_robot: defaultCatalogIdForActorKind('sidewalk_robot'),
+      drone: defaultCatalogIdForActorKind('drone'),
       animal: defaultCatalogIdForActorKind('animal'),
       static_object: defaultCatalogIdForActorKind('static_object'),
     }).toEqual({
@@ -271,6 +273,8 @@ describe('UniScenarios concrete playback import', () => {
       bicycle: 'vehicle.bicycle',
       pedestrian: 'pedestrian.adult_walking',
       scooter: 'vehicle.bicycle',
+      sidewalk_robot: 'sidewalk_robot.delivery_rover',
+      drone: 'drone.camera_quadcopter',
       animal: 'pedestrian.child_walking',
       static_object: 'hazard.cardboard_box',
     });

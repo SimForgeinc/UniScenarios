@@ -23,7 +23,7 @@
 import { angleDelta, clamp, obbCorners, obbOverlap, normalizeAngle, type Obb, type Vec2 } from '../core/math.js';
 import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
-import { localFromScene } from '../frames.js';
+import { localFromScene, toSceneXZ } from '../frames.js';
 import { issue, SimEngineError, type SimIssue } from '../errors.js';
 import type { LaneGraph } from '../map/lane-graph.js';
 import {
@@ -77,7 +77,7 @@ import {
   sweptObbTimeOfImpact,
   type DoorName,
 } from './pairs.js';
-import { SignalBook } from './signals.js';
+import { resolveOverlappingControlLanes, SignalBook } from './signals.js';
 import { spatialCandidatePairs, type SpatialBounds } from './spatial.js';
 import {
   axisOf,
@@ -320,13 +320,34 @@ class Simulation {
     this.graph = opts.graph;
 
     const normalized = normalizeSimScenarioInput(rawInput);
+    const controlResolution = resolveOverlappingControlLanes(normalized, this.graph);
     const arrivalResult =
       opts.resolveArrival === false
-        ? { input: normalized, solutions: [] as ArrivalSolution[], issues: [] as SimIssue[] }
-        : resolveArrivalTriggers(normalized, this.graph);
+        ? { input: controlResolution.input, solutions: [] as ArrivalSolution[], issues: [] as SimIssue[] }
+        : resolveArrivalTriggers(controlResolution.input, this.graph);
     this.resolvedInput = arrivalResult.input;
     this.arrivalSolutions = arrivalResult.solutions;
     this.issues.push(...arrivalResult.issues);
+    for (const repair of controlResolution.repairs) {
+      this.issues.push(issue(
+        'traffic_control_binding_repaired',
+        `${repair.source}.${repair.controlId}`,
+        `A coincident OpenDRIVE lane was bound to ${repair.routeRsl} so this route can obey the physical control. Choose an unambiguous lane when portability matters.`,
+        { ...repair },
+        'warning',
+      ));
+    }
+    for (const actor of controlResolution.input.actors) {
+      if (!actor.static && actor.behavior.rules.obeySignals && actor.behavior.route.kind === 'polyline') {
+        this.issues.push(issue(
+          'traffic_control_route_unbound',
+          `actors.${actor.id}.behavior.route`,
+          'This vehicle has a freeform route, so map stop signs and traffic signals cannot be applied. Move it onto a lane or choose an explicit violator profile.',
+          { actorId: actor.id },
+          'warning',
+        ));
+      }
+    }
 
     const input = this.resolvedInput;
     this.physicsConfig = resolvePhysicsConfig(input);
@@ -536,6 +557,7 @@ class Simulation {
         : spec.behavior.cruiseSpeedMps * this.resolvedInput.operationalConditions.effects.trafficSpeedFactor,
       route,
       routeS,
+      bestEffortWorldPath: false,
       remainingTurns:
         spec.behavior.route.kind === 'follow' ? [...spec.behavior.route.turns] : ([] as TurnRelation[]),
       speedMps: spec.static ? 0 : spec.initial.speedMps,
@@ -1242,17 +1264,23 @@ class Simulation {
         break;
       }
       case 'route': {
-        const built = buildRoute(this.graph, it.target);
+        const polylineTarget = it.target.kind === 'polyline' ? it.target : null;
+        const joinsLivePose = it.joinFromCurrentPose === true && polylineTarget !== null;
+        const target = joinsLivePose
+          ? { ...polylineTarget, points: [toSceneXZ(a.position), ...polylineTarget.points] }
+          : it.target;
+        const built = buildRoute(this.graph, target);
         if (!built.ok) {
           this.issues.push(
             issue('route_disconnected', `interactions.${it.id}.target`, built.error.reason, built.error.detail, 'warning'),
           );
           break;
         }
-        const proj = built.route.projectPoint(a.position);
+        const proj = joinsLivePose ? { s: 0 } : built.route.projectPoint(a.position);
         a.route = built.route;
         a.routeS = proj.s;
-        a.lateralOffsetM = built.route.lateralOffsetAt(proj.s, a.position);
+        a.bestEffortWorldPath = it.bestEffortWorldPath === true;
+        a.lateralOffsetM = joinsLivePose ? 0 : built.route.lateralOffsetAt(proj.s, a.position);
         a.lateralReferenceOffsetM = a.lateralOffsetM;
         a.lateralReferenceRateMps = 0;
         a.lateralReferenceAccelMps2 = 0;
@@ -1783,9 +1811,9 @@ class Simulation {
 
     const commandedLeader =
       a.longCmd?.kind === 'gap' && a.longCmd.gap ? this.leaderFromId(a, a.longCmd.gap.actorId) : null;
-    const sourceLeader = findLeader(a, this.actors);
+    const sourceLeader = a.bestEffortWorldPath ? null : findLeader(a, this.actors);
     let targetLeader: ReturnType<typeof findLeader> = null;
-    if (a.latCmd?.kind === 'changeLane' && a.latCmd.pending) {
+    if (!a.bestEffortWorldPath && a.latCmd?.kind === 'changeLane' && a.latCmd.pending) {
       const targetRoute = a.latCmd.pending.route;
       const targetS = targetRoute.projectPoint(a.position).s;
       const targetObserver: ActorRuntime = {
@@ -1815,11 +1843,13 @@ class Simulation {
       leader: commandedLeader ?? nearestLeader,
     });
 
-    const stopLineDist = distanceToStopLine(
-      a, this.signals, t, LOOKAHEAD_M, nearestLeader,
-      (controlId, coordinationId, actorId, at) => this.canReleaseStop(controlId, coordinationId, actorId, at),
-    );
-    const conflict = this.findConflict(a);
+    const stopLineDist = a.bestEffortWorldPath
+      ? null
+      : distanceToStopLine(
+          a, this.signals, t, LOOKAHEAD_M, nearestLeader,
+          (controlId, coordinationId, actorId, at) => this.canReleaseStop(controlId, coordinationId, actorId, at),
+        );
+    const conflict = a.bestEffortWorldPath ? null : this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
     const frictionScale = this.resolvedInput.operationalConditions.effects.frictionScale;

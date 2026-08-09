@@ -130,6 +130,22 @@ export const MOTION_LIMITS_BY_KIND: Readonly<Record<ActorKind, MotionLimits>> = 
     lateralAccelMax: 2.5,
     lateralJerkMax: 5,
   },
+  sidewalk_robot: {
+    accelMax: 1.2,
+    brakeComfort: 1.8,
+    brakeHard: 3.5,
+    lateralRateMax: 1.2,
+    lateralAccelMax: 2,
+    lateralJerkMax: 4,
+  },
+  drone: {
+    accelMax: 3,
+    brakeComfort: 3,
+    brakeHard: 6,
+    lateralRateMax: 3,
+    lateralAccelMax: 4,
+    lateralJerkMax: 8,
+  },
   animal: {
     accelMax: 2,
     brakeComfort: 2,

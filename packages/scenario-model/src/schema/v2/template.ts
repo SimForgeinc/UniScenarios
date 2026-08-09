@@ -44,6 +44,7 @@ import { PropPlacementSchema } from './props.js';
 import { RoleBindingSchema } from './roles.js';
 import { TrafficControlSchema } from './traffic-controls.js';
 import { MapSignalPlanSchema } from './map-signal-plans.js';
+import { ReasoningTraceSegmentSchema } from './reasoning-trace.js';
 import { VariantSchema } from './variants.js';
 
 /** The schema version this module describes. */
@@ -97,6 +98,8 @@ export const ScenarioTemplateV2ObjectSchema = z.strictObject({
    * only a declared measurement subject (architecture doc §9.2).
    */
   metricSubject: RoleRefSchema.optional(),
+  /** Time-bounded observation/action annotations authored for the metric subject. */
+  reasoningTrace: z.array(ReasoningTraceSegmentSchema).max(128).default([]),
   extensions: V2ExtensionsSchema.optional(),
 });
 
@@ -154,6 +157,15 @@ export const ScenarioTemplateV2Schema = ScenarioTemplateV2ObjectSchema.check((ct
   });
   dupes(doc.invariants, 'invariants');
   dupes(doc.variants, 'variants');
+  dupes(doc.reasoningTrace, 'reasoningTrace');
+  doc.reasoningTrace.forEach((segment, index) => {
+    if (segment.endS > doc.choreography.clipSeconds) {
+      ctx.issues.push({
+        code: 'custom', path: ['reasoningTrace', index, 'endS'], input: segment.endS,
+        message: `reasoning trace ends after choreography.clipSeconds (${doc.choreography.clipSeconds})`,
+      });
+    }
+  });
   dupes(doc.params.declarations, 'params');
   dupes(doc.anchor.features, 'features');
   const seenInteractions = new Set<string>();

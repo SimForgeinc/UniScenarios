@@ -19,7 +19,7 @@ export const paramValueSchema = z.union([z.number(), z.string(), z.boolean()]);
 export const catalogEntrySchema = z.object({
   id: z
     .string()
-    .regex(/^[a-z]+\.[a-z0-9_]+$/, 'id must be <class>.<snake_case_name>'),
+    .regex(/^[a-z_]+\.[a-z0-9_]+$/, 'id must be <class>.<snake_case_name>'),
   label: z.string().min(1),
   class: z.enum(PROP_CLASSES as unknown as [string, ...string[]]),
   description: z.string().min(20),

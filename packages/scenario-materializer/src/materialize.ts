@@ -41,6 +41,7 @@
 
 import {
   DEFAULT_ACTOR_DIMS,
+  driverProfileDefinition,
   evaluateExpr,
   isExpr,
   rolePose,
@@ -88,6 +89,7 @@ import {
   type Interaction as SimInteraction,
   type LaneGraph,
   type NearMissCriterion,
+  type TurnRelation,
   type Occluder,
   type OcclusionPair,
   type RoadControl,
@@ -594,6 +596,10 @@ function assertMaterializableRuleControls(template: ScenarioTemplateV2): void {
  * of collapsing it to the old two motion families. */
 export function actorKindForClass(actorClass: ActorClass): SimActor['kind'] {
   return actorClass;
+}
+
+function supportsDriverProfile(actorClass: ActorClass): boolean {
+  return !['pedestrian', 'sidewalk_robot', 'drone', 'animal', 'static_object'].includes(actorClass);
 }
 
 /* ------------------------------------------------------------------ scopes */
@@ -1539,7 +1545,7 @@ class Materializer {
         },
         presentAtStart: true,
         static: role.actor.static || role.actor.class === 'static_object',
-        tags: [`role:${role.id}`, `class:${role.actor.class}`, 'binding:scene_absolute', ...(role.actor.catalogId ? [`catalog:${role.actor.catalogId}`] : [])],
+        tags: [`role:${role.id}`, `class:${role.actor.class}`, ...(supportsDriverProfile(role.actor.class) ? [`driver-profile:${role.driverProfile ?? 'lawful'}`] : []), 'binding:scene_absolute', ...(role.actor.catalogId ? [`catalog:${role.actor.catalogId}`] : [])],
       });
     }
 
@@ -1816,6 +1822,7 @@ class Materializer {
       tags: [
         `role:${role.id}`,
         `class:${role.actor.class}`,
+        ...(supportsDriverProfile(role.actor.class) ? [`driver-profile:${role.driverProfile ?? 'lawful'}`] : []),
         `binding:${role.kind}`,
         ...(role.extensions?.['motionSemantics'] === 'reverse' ? ['motion:reverse'] : []),
         ...(role.actor.catalogId ? [`catalog:${role.actor.catalogId}`] : []),
@@ -2071,7 +2078,10 @@ class Materializer {
 
   /** Initial `rules`, after folding `set rules.*` interactions at `t ≤ 0`. */
   private rulesFor(roleId: string): Record<string, boolean | number> {
-    return this.initialRules.get(roleId) ?? {};
+    const role = this.roleById.get(roleId);
+    if (!role || !supportsDriverProfile(role.actor.class)) return this.initialRules.get(roleId) ?? {};
+    const profile = driverProfileDefinition(role.driverProfile);
+    return { ...profile.rules, ...(this.initialRules.get(roleId) ?? {}) };
   }
 
   private foldInitialRules(): void {
@@ -2530,6 +2540,58 @@ class Materializer {
         });
       case 'route': {
         const t = it.target;
+        if (t.mode === 'nextJunction') {
+          const actor = this.actors.find((candidate) => candidate.id === it.actor);
+          const startRsl = actor?.initial.laneRef?.rsl;
+          if (!actor || !startRsl) {
+            throw new CliError(
+              'route_turn_unbindable',
+              `next-junction route for "${it.actor}" needs a lane-bound actor`,
+              { path: `${path}.target` },
+            );
+          }
+          const ordered = this.template.choreography.interactions
+            .map((candidate, index) => ({ candidate, index }))
+            .filter(({ candidate }) =>
+              candidate.actor === it.actor &&
+              candidate.verb === 'route' &&
+              candidate.target.mode === 'nextJunction')
+            .sort((a, b) => {
+              const time = (candidate: V2Interaction): number =>
+                candidate.trigger.kind === 'at'
+                  ? evalNum(candidate.trigger.t, scope, `choreography.${candidate.id}.trigger.t`)
+                  : Number.POSITIVE_INFINITY;
+              return time(a.candidate) - time(b.candidate) || a.index - b.index;
+            });
+          const through = ordered.findIndex(({ candidate }) => candidate.id === it.id);
+          const turns: TurnRelation[] = ordered.slice(0, through + 1).map(({ candidate }) => {
+            if (candidate.verb !== 'route' || candidate.target.mode !== 'nextJunction') {
+              throw new Error('filtered next-junction interaction lost its type');
+            }
+            return candidate.target.turn === 'straight'
+              ? 'Straight'
+              : candidate.target.turn === 'left'
+                ? 'Left'
+                : 'Right';
+          });
+          const distance = Math.max(
+            100,
+            actor.initial.speedMps *
+              (this.template.choreography.clipSeconds + this.template.choreography.warmupSeconds) *
+              1.6,
+          );
+          const built = buildFollowRoute(this.bundle.graph, startRsl, turns, distance);
+          if (!built.ok) {
+            throw new CliError(built.error.code, built.error.reason, {
+              path: `${path}.target`, detail: built.error.detail,
+            });
+          }
+          return parseInteraction({
+            ...base,
+            verb: 'route',
+            target: { kind: 'lanePath', lanes: built.route.legs.map((leg) => leg.rsl) },
+          });
+        }
         if (t.mode === 'lanePath') {
           return parseInteraction({ ...base, verb: 'route', target: { kind: 'lanePath', lanes: t.lanes } });
         }
@@ -2540,6 +2602,15 @@ class Materializer {
             return { x: scene.x, z: scene.z };
           });
           return parseInteraction({ ...base, verb: 'route', target: { kind: 'polyline', points } });
+        }
+        if (t.mode === 'customRoute') {
+          return parseInteraction({
+            ...base,
+            verb: 'route',
+            target: { kind: 'polyline', points: t.points },
+            joinFromCurrentPose: true,
+            bestEffortWorldPath: true,
+          });
         }
         if (t.mode === 'turn') {
           const match = this.site.featureMatches[t.feature];

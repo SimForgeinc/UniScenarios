@@ -17,6 +17,11 @@ export { ENGINE_VERSION } from './version.js';
 
 /* ------------------------------------------------------------- the contract */
 export {
+  resolveOverlappingControlLanes,
+  type ControlBindingRepair,
+} from './sim/signals.js';
+
+export {
   simScenarioInputSchema,
   parseSimScenarioInput,
   safeParseSimScenarioInput,

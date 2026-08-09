@@ -12,8 +12,81 @@
  * unnaturally fresh cycle at `t = 0`.
  */
 
+import { angleDelta } from '../core/math.js';
+import type { LaneGraph } from '../map/lane-graph.js';
+import { buildLanePathRoute } from '../map/route.js';
 import type { LaneRsl } from '../map/topology.js';
-import type { ControlIndication, RoadControl, SignalProgram } from '../schema/input.js';
+import type { ControlIndication, RoadControl, SignalProgram, SimScenarioInput } from '../schema/input.js';
+
+const OVERLAPPING_CONTROL_LANE_TOLERANCE_M = 1.5;
+const OVERLAPPING_CONTROL_HEADING_TOLERANCE_RAD = Math.PI / 8;
+
+export interface ControlBindingRepair {
+  readonly source: 'signalPrograms' | 'roadControls';
+  readonly controlId: string;
+  readonly sourceRsl: string;
+  readonly routeRsl: string;
+  readonly distanceM: number;
+}
+
+/** Bind physical controls across coincident, same-direction OpenDRIVE lane identities. */
+export function resolveOverlappingControlLanes(
+  input: SimScenarioInput,
+  graph: LaneGraph,
+): { input: SimScenarioInput; repairs: readonly ControlBindingRepair[] } {
+  const actorLanePaths = input.actors.flatMap((actor) =>
+    actor.behavior.route.kind === 'lanePath' ? [actor.behavior.route.lanes] : []);
+  const routeRsls = [...new Set(actorLanePaths.flat())].sort();
+  const routeByRsl = new Map(routeRsls.flatMap((rsl) => {
+    const built = buildLanePathRoute(graph, [rsl]);
+    return built.ok ? [[rsl, built.route] as const] : [];
+  }));
+  const repairs: ControlBindingRepair[] = [];
+
+  const repairLines = <T extends { rsl: string; s: number; connectingLaneRsls: readonly string[] }>(
+    sourceKind: ControlBindingRepair['source'],
+    controlId: string,
+    lines: readonly T[],
+  ): T[] => {
+    const repaired = [...lines];
+    const keys = new Set(lines.map((line) => `${line.rsl}\0${line.connectingLaneRsls.join('\0')}`));
+    for (const line of lines) {
+      const sourceGeometry = graph.geometry(line.rsl);
+      if (!sourceGeometry) continue;
+      const source = graph.sampleStorage(sourceGeometry, line.s);
+      const sourceHeading = graph.nominalReversed(line.rsl) ? source.headingRad + Math.PI : source.headingRad;
+      for (const routeRsl of routeRsls) {
+        if (routeRsl === line.rsl) continue;
+        const key = `${routeRsl}\0${line.connectingLaneRsls.join('\0')}`;
+        if (keys.has(key)) continue;
+        if (line.connectingLaneRsls.length > 0 && !actorLanePaths.some((lanes) =>
+          lanes.includes(routeRsl) && line.connectingLaneRsls.some((connector) => lanes.includes(connector)))) continue;
+        const route = routeByRsl.get(routeRsl);
+        if (!route) continue;
+        const projection = route.projectPoint(source.point, 0.5);
+        if (projection.d > OVERLAPPING_CONTROL_LANE_TOLERANCE_M) continue;
+        const pose = route.poseAt(projection.s);
+        if (Math.abs(angleDelta(sourceHeading, pose.headingRad)) > OVERLAPPING_CONTROL_HEADING_TOLERANCE_RAD) continue;
+        repaired.push({ ...line, rsl: routeRsl, s: pose.storageS });
+        keys.add(key);
+        repairs.push({ source: sourceKind, controlId, sourceRsl: line.rsl, routeRsl, distanceM: projection.d });
+      }
+    }
+    return repaired.sort((a, b) => a.rsl.localeCompare(b.rsl) || a.s - b.s) as T[];
+  };
+
+  const signalPrograms = input.signalPrograms.map((program) => ({
+    ...program,
+    stopLines: repairLines('signalPrograms', program.id, program.stopLines),
+  }));
+  const roadControls = input.roadControls.map((control) => ({
+    ...control,
+    stopLines: repairLines('roadControls', control.id, control.stopLines),
+  }));
+  return repairs.length === 0
+    ? { input, repairs }
+    : { input: { ...input, signalPrograms, roadControls }, repairs };
+}
 
 export type SignalPhase = ControlIndication;
 

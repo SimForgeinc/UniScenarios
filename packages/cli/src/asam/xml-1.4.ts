@@ -121,15 +121,21 @@ function boundingBox(actor: SimActor): string {
 }
 
 function actorEntity(actor: SimActor, name: string): string {
+  const driverProfile = actor.tags.find((tag) => tag.startsWith('driver-profile:'))?.slice('driver-profile:'.length);
   const properties = [
     `<Property name="uniscenarios.actorId" value="${xml(actor.id)}"/>`,
     `<Property name="uniscenarios.actorKind" value="${xml(actor.kind)}"/>`,
+    ...(driverProfile
+      ? [`<Property name="uniscenarios.driverProfile" value="${xml(driverProfile)}"/>`]
+      : []),
     ...actor.tags.map((tag) => `<Property name="uniscenarios.tag" value="${xml(tag)}"/>`),
   ];
-  if (actor.kind === 'pedestrian' || actor.kind === 'animal') {
+  if (actor.kind === 'pedestrian' || actor.kind === 'sidewalk_robot' || actor.kind === 'drone' || actor.kind === 'animal') {
+    const pedestrianCategory = actor.kind === 'animal' ? 'animal' : 'pedestrian';
+    const mass = actor.kind === 'animal' ? 40 : actor.kind === 'sidewalk_robot' ? 70 : actor.kind === 'drone' ? 12 : 80;
     return [
       `<ScenarioObject name="${xml(name)}">`,
-      `  <Pedestrian name="uniscenarios_${actor.kind}" mass="${actor.kind === 'animal' ? '40' : '80'}" pedestrianCategory="${actor.kind}">`,
+      `  <Pedestrian name="uniscenarios_${actor.kind}" mass="${mass}" pedestrianCategory="${pedestrianCategory}">`,
       lines(boundingBox(actor), 4),
       '    <Properties>',
       ...properties.map((property) => `      ${property}`),

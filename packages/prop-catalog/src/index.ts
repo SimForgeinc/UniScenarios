@@ -68,6 +68,8 @@ export {
 // without going through the catalog defaults.
 export type { VehicleParams } from './builders/vehicles.js';
 export type { PedestrianParams } from './builders/pedestrians.js';
+export type { RobotParams } from './builders/robots.js';
+export type { DroneParams } from './builders/drones.js';
 export type {
   ArrowBoardParams,
   BarrierParams,

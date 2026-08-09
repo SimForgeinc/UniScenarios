@@ -63,6 +63,15 @@
  */
 
 export {
+  DRIVER_PROFILE_IDS,
+  DRIVER_PROFILES,
+  DriverProfileSchema,
+  driverProfileDefinition,
+  type DriverProfile,
+  type DriverProfileDefinition,
+} from './driver-profiles.js';
+
+export {
   SCENARIO_VERSION,
   ScenarioV1Schema,
   ScenarioV1ObjectSchema,

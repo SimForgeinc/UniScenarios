@@ -6,12 +6,17 @@ import { AuthoredActorLimitError, ScenarioMigrationError, ScenarioOperationError
 import { MAX_AUTHORED_ACTORS, authoredActorCount } from './actor-limits.js';
 import { parseTemplate, serializeTemplate, deepFreeze } from './serialize.js';
 import type { Interaction } from './schema/v2/interactions.js';
+import type { Environment } from './schema/v2/environment.js';
 import type { Invariant } from './schema/v2/invariants.js';
 import type { MapSignalPlan } from './schema/v2/map-signal-plans.js';
+import type { ParamDecl } from './schema/v2/params.js';
+import type { PropPlacement } from './schema/v2/props.js';
 import type { RoleBinding } from './schema/v2/roles.js';
+import type { ReasoningTraceSegment } from './schema/v2/reasoning-trace.js';
 import type { ActorSensor } from './schema/v2/sensors.js';
 import type { LogicalAnchorInput } from './schema/v2/anchor.js';
 import type { ScenarioTemplateV2 } from './schema/v2/template.js';
+import type { Variant } from './schema/v2/variants.js';
 import type { MapRef } from './schema/v1.js';
 import {
   applyTemplateOp,
@@ -59,6 +64,7 @@ function isOverLimitRecoveryOp(op: TemplateOp): boolean {
   switch (op.type) {
     case 'removeRole':
     case 'removeInteraction':
+    case 'removeReasoningTraceSegment':
     case 'removeMapSignalPlan':
     case 'removeProp':
     case 'removeInvariant':
@@ -127,6 +133,7 @@ export class TemplateDocument {
       roles: [],
       props: [],
       choreography: { interactions: [] },
+      reasoningTrace: [],
       invariants: [],
       variants: [],
     });
@@ -154,6 +161,7 @@ export class TemplateDocument {
   get data(): ScenarioTemplateV2 { return this.#state; }
   get roles(): readonly RoleBinding[] { return this.#state.roles; }
   get interactions(): readonly Interaction[] { return this.#state.choreography.interactions; }
+  get reasoningTrace(): readonly ReasoningTraceSegment[] { return this.#state.reasoningTrace; }
   get isDirty(): boolean { return this.#cleanIndex !== this.#index; }
   get canUndo(): boolean { return this.#index > 0; }
   get canRedo(): boolean { return this.#index < this.#history.length; }
@@ -211,6 +219,13 @@ export class TemplateDocument {
 
   setMeta(patch: TemplateMetaPatch): boolean { return this.apply({ type: 'setTemplateMeta', patch }); }
   setSourceMap(sourceMap: MapRef | null): boolean { return this.apply({ type: 'setSourceMap', sourceMap }); }
+  setEnvironment(environment: Environment): boolean { return this.apply({ type: 'setEnvironment', environment }); }
+  addParam(param: ParamDecl, index?: number): string {
+    this.apply(index === undefined ? { type: 'addParam', param } : { type: 'addParam', param, index });
+    return param.id;
+  }
+  replaceParam(id: string, param: ParamDecl): boolean { return this.apply({ type: 'replaceParam', id, param }); }
+  removeParam(id: string): boolean { return this.apply({ type: 'removeParam', id }); }
   addRole(role: RoleBinding, index?: number): string {
     this.apply(index === undefined ? { type: 'addRole', role } : { type: 'addRole', role, index });
     return role.id;
@@ -262,6 +277,14 @@ export class TemplateDocument {
     return this.apply({ type: 'replaceInteraction', id, interaction });
   }
   removeInteraction(id: string): boolean { return this.apply({ type: 'removeInteraction', id }); }
+  addReasoningTraceSegment(segment: ReasoningTraceSegment, index?: number): string {
+    this.apply(index === undefined ? { type: 'addReasoningTraceSegment', segment } : { type: 'addReasoningTraceSegment', segment, index });
+    return segment.id;
+  }
+  replaceReasoningTraceSegment(id: string, segment: ReasoningTraceSegment): boolean {
+    return this.apply({ type: 'replaceReasoningTraceSegment', id, segment });
+  }
+  removeReasoningTraceSegment(id: string): boolean { return this.apply({ type: 'removeReasoningTraceSegment', id }); }
   addMapSignalPlan(plan: MapSignalPlan, index?: number): string {
     this.apply(index === undefined ? { type: 'addMapSignalPlan', plan } : { type: 'addMapSignalPlan', plan, index });
     return plan.id;
@@ -270,6 +293,11 @@ export class TemplateDocument {
     return this.apply({ type: 'replaceMapSignalPlan', id, plan });
   }
   removeMapSignalPlan(id: string): boolean { return this.apply({ type: 'removeMapSignalPlan', id }); }
+  addProp(prop: PropPlacement, index?: number): string {
+    this.apply(index === undefined ? { type: 'addProp', prop } : { type: 'addProp', prop, index });
+    return prop.id;
+  }
+  replaceProp(id: string, prop: PropPlacement): boolean { return this.apply({ type: 'replaceProp', id, prop }); }
   removeProp(id: string): boolean { return this.apply({ type: 'removeProp', id }); }
   addInvariant(invariant: Invariant, index?: number): string {
     this.apply(index === undefined ? { type: 'addInvariant', invariant } : { type: 'addInvariant', invariant, index });
@@ -277,6 +305,11 @@ export class TemplateDocument {
   }
   replaceInvariant(id: string, invariant: Invariant): boolean { return this.apply({ type: 'replaceInvariant', id, invariant }); }
   removeInvariant(id: string): boolean { return this.apply({ type: 'removeInvariant', id }); }
+  addVariant(variant: Variant, index?: number): string {
+    this.apply(index === undefined ? { type: 'addVariant', variant } : { type: 'addVariant', variant, index });
+    return variant.id;
+  }
+  replaceVariant(id: string, variant: Variant): boolean { return this.apply({ type: 'replaceVariant', id, variant }); }
   removeVariant(id: string): boolean { return this.apply({ type: 'removeVariant', id }); }
   setMetricSubject(roleId: string | null): boolean { return this.apply({ type: 'setMetricSubject', roleId }); }
   setClip(clipSeconds?: number, warmupSeconds?: number): boolean {

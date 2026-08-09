@@ -141,6 +141,28 @@ export const CATALOG = [
     defaultParams: { color: '#287ba8' },
   },
 
+  // -------------------------------------------------------- autonomous actors
+  {
+    id: 'sidewalk_robot.delivery_rover',
+    label: 'Delivery rover',
+    class: 'sidewalk_robot',
+    description:
+      'Compact autonomous sidewalk delivery rover with a cargo body, four wheels and a sensor mast for pedestrian-space conflict scenarios.',
+    dims: { l: 0.75, w: 0.55, h: 0.8 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'sidewalk'],
+    defaultParams: { color: '#f1a34f' },
+  },
+  {
+    id: 'drone.camera_quadcopter',
+    label: 'Camera drone',
+    class: 'drone',
+    description:
+      'Small autonomous camera quadcopter with four rotors, landing skids and a gimbal payload for low-altitude traffic observation scenarios.',
+    dims: { l: 0.65, w: 0.65, h: 0.32 },
+    tags: ['occlusion:low', 'mobile', 'vru', 'roadside'],
+    defaultParams: { color: '#444c57' },
+  },
+
   // ------------------------------------------------------------- pedestrians
   {
     id: 'pedestrian.adult_standing',

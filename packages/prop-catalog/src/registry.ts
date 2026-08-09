@@ -43,6 +43,10 @@ import {
   buildChildWalking,
   buildTrafficMarshal,
 } from './builders/pedestrians.js';
+import type { RobotParams } from './builders/robots.js';
+import { buildDeliveryRover } from './builders/robots.js';
+import type { DroneParams } from './builders/drones.js';
+import { buildCameraDrone } from './builders/drones.js';
 import type { RunParams } from './builders/street.js';
 import {
   buildBusShelter,
@@ -86,6 +90,8 @@ export interface PropParamMap {
   'vehicle.ambulance': VehicleParams;
   'vehicle.tram': VehicleParams;
   'vehicle.mobility_scooter': VehicleParams;
+  'sidewalk_robot.delivery_rover': RobotParams;
+  'drone.camera_quadcopter': DroneParams;
   'pedestrian.adult_standing': PedestrianParams;
   'pedestrian.adult_walking': PedestrianParams;
   'pedestrian.child_standing': PedestrianParams;
@@ -141,6 +147,8 @@ const BUILDERS: Builders = {
   'vehicle.ambulance': buildAmbulance,
   'vehicle.tram': buildTram,
   'vehicle.mobility_scooter': buildMobilityScooter,
+  'sidewalk_robot.delivery_rover': buildDeliveryRover,
+  'drone.camera_quadcopter': buildCameraDrone,
   'pedestrian.adult_standing': buildAdultStanding,
   'pedestrian.adult_walking': buildAdultWalking,
   'pedestrian.child_standing': buildChildStanding,

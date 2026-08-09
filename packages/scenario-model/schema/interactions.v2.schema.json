@@ -424,6 +424,28 @@
                   "properties": {
                     "mode": {
                       "type": "string",
+                      "const": "nextJunction"
+                    },
+                    "turn": {
+                      "type": "string",
+                      "enum": [
+                        "straight",
+                        "left",
+                        "right"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "turn"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
                       "const": "toFeature"
                     },
                     "feature": {
@@ -492,6 +514,28 @@
                   "properties": {
                     "mode": {
                       "type": "string",
+                      "const": "customRoute"
+                    },
+                    "points": {
+                      "minItems": 2,
+                      "maxItems": 128,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema19"
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
                       "const": "lanePath"
                     },
                     "lanes": {
@@ -499,7 +543,7 @@
                       "maxItems": 128,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema19"
+                        "$ref": "#/$defs/__schema20"
                       }
                     }
                   },
@@ -1511,6 +1555,22 @@
       ]
     },
     "__schema19": {
+      "type": "object",
+      "properties": {
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "x",
+        "z"
+      ],
+      "additionalProperties": false
+    },
+    "__schema20": {
       "type": "string",
       "minLength": 1
     }

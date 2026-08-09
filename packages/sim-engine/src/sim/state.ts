@@ -117,6 +117,8 @@ export interface ActorRuntime {
 
   route: Route;
   routeS: number;
+  /** Literal editor-authored polyline: bypass traffic governors, but not physical contact. */
+  bestEffortWorldPath: boolean;
   /** Remaining turn preferences, consumed when a route is rebuilt. */
   remainingTurns: TurnRelation[];
 

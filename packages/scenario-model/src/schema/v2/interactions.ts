@@ -339,6 +339,8 @@ export const LaneOffsetTargetSchema = z.strictObject({
 /** Where a `route` interaction sends the actor. */
 export const RouteTargetSchema = z.discriminatedUnion('mode', [
   z.strictObject({ mode: z.literal('turn'), feature: FeatureRefSchema, turn: TurnDirectionSchema }),
+  /** Map-bound editor intent: choose this direction at the next junction at runtime. */
+  z.strictObject({ mode: z.literal('nextJunction'), turn: z.enum(['straight', 'left', 'right']) }),
   z.strictObject({ mode: z.literal('toFeature'), feature: FeatureRefSchema }),
   z.strictObject({
     mode: z.literal('crossing'),
@@ -348,6 +350,14 @@ export const RouteTargetSchema = z.discriminatedUnion('mode', [
   }),
   /** Frame-relative polyline: jaywalking, work-zone weaves, parking manoeuvres. */
   z.strictObject({ mode: z.literal('polyline'), points: z.array(FramePoseSchema).min(2).max(32) }),
+  /** Exact scene-space points authored against a pinned map revision. */
+  z.strictObject({
+    mode: z.literal('customRoute'),
+    points: z.array(z.strictObject({
+      x: z.number().finite(),
+      z: z.number().finite(),
+    })).min(2).max(128),
+  }),
   /**
    * Exact map-bound lane chain authored by Studio placement. This target is
    * only portable together with scene_absolute roles and deliberately retains
