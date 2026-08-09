@@ -9,8 +9,11 @@ export type InstantiateWasm = (
  * synchronously inside Emscripten's promise executor, so failures reject
  * instead of leaving initialization pending forever.
  */
-export async function compileSumoRuntime(binary: ArrayBuffer | undefined): Promise<InstantiateWasm | undefined> {
-  if (!binary) return undefined;
-  const compiled = await WebAssembly.compile(binary);
+export async function compileSumoRuntime(
+  binary: ArrayBuffer | undefined,
+  precompiled?: WebAssembly.Module,
+): Promise<InstantiateWasm | undefined> {
+  const compiled = precompiled ?? (binary ? await WebAssembly.compile(binary) : undefined);
+  if (!compiled) return undefined;
   return (imports, successCallback) => successCallback(new WebAssembly.Instance(compiled, imports));
 }

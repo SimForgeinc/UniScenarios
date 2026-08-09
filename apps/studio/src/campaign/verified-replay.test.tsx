@@ -1,6 +1,6 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it, vi } from 'vitest';
-import type { PlaybackState } from '../playback/controller';
+import type { PlaybackState } from '@uniscenarios/playback';
 import { VerifiedReplayBar, verifiedReplayKeyboardAction, verifiedReplayPresentation } from './VerifiedReplayBar';
 
 function state(time: number, playing: boolean): PlaybackState {

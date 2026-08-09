@@ -25,13 +25,16 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
 
   constructor(
     private readonly moduleUrl = '/vendor/sumo/sumo.mjs',
-    private readonly workerFactory: () => Worker = () => new Worker(new URL('./sumoWasmWorker.ts', import.meta.url), { type: 'module' }),
+    private readonly workerFactory?: () => Worker,
   ) {}
 
   async initialize(payload: TrafficNetworkPayload): Promise<TrafficProviderInitialization> {
     const network = payload.network.slice(0);
     const routes = payload.routes.slice(0);
-    const wasmBinary = payload.wasmBinary?.slice(0);
+    // A structured-cloned WebAssembly.Module needs neither a second binary
+    // copy nor a second worker-side compile. Retain the byte path as the
+    // compatibility fallback for callers that did not preload a module.
+    const wasmBinary = payload.wasmModule ? undefined : payload.wasmBinary?.slice(0);
     const response = await this.send(
       { kind: 'init', id: this.nextId++, moduleUrl: this.moduleUrl, payload: { ...payload, network, routes, wasmBinary } },
       wasmBinary ? [network, routes, wasmBinary] : [network, routes],
@@ -56,7 +59,7 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
     const network = payload.network.slice(0);
     const routes = payload.routes.slice(0);
     const response = await this.send(
-      { kind: 'reconfigure', id: this.nextId++, payload: { ...payload, network, routes, wasmBinary: undefined }, request },
+      { kind: 'reconfigure', id: this.nextId++, payload: { ...payload, network, routes, wasmBinary: undefined, wasmModule: undefined }, request },
       [network, routes],
     );
     if (response.kind !== 'state') throw new Error(`Unexpected SUMO response: ${response.kind}`);
@@ -104,7 +107,11 @@ export class SumoWasmTrafficProvider implements TrafficProvider {
 
   private ensureWorker(): Worker {
     if (this.worker) return this.worker;
-    const worker = this.workerFactory();
+    // Keep the URL directly at the creation site. Turbopack's worker transform
+    // cannot discover it when it is hidden in a constructor default value.
+    const worker = this.workerFactory
+      ? this.workerFactory()
+      : new Worker(new URL('./traffic-provider/sumoWasmWorker.js', import.meta.url), { type: 'module' });
     worker.onmessage = (event: MessageEvent<SumoWorkerResponse>) => {
       const pending = this.pending.get(event.data.id);
       if (!pending) return;

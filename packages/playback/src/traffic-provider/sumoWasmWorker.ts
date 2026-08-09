@@ -1,4 +1,7 @@
 /// <reference lib="webworker" />
+
+/* eslint-disable @next/next/no-assign-module-variable */
+
 import { boundedTrafficActorCount, type ExternalTrafficActor, type NetworkWorldTransform, type SumoWorkerRequest, type SumoWorkerResponse, type TrafficNetworkPayload } from './protocol';
 import { externalActorToNetwork, transformPackedStatesToWorld } from './coordinateTransform';
 import { compileSumoRuntime, type InstantiateWasm } from './sumoRuntimeInstantiation';
@@ -45,7 +48,7 @@ let module: SumoModule | undefined;
 let restartPayload: TrafficNetworkPayload | undefined;
 let worldFromNetwork: NetworkWorldTransform | undefined;
 let maxActorStates = Number.POSITIVE_INFINITY;
-const mirroredIds = new Set<string>();
+const mirroredActors = new Map<string, ExternalTrafficActor>();
 const scope = self as DedicatedWorkerGlobalScope;
 let commandChain = Promise.resolve();
 
@@ -62,8 +65,11 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   if (message.kind === 'init') {
     const started = performance.now();
     const moduleUrl = new URL(message.moduleUrl, scope.location.href).href;
-    const imported = await import(/* @vite-ignore */ moduleUrl) as { default: SumoFactory };
-    const instantiateWasm = await compileSumoRuntime(message.payload.wasmBinary);
+    const imported = await import(/* turbopackIgnore: true */ moduleUrl) as { default: SumoFactory };
+    const instantiateWasm = await compileSumoRuntime(
+      message.payload.wasmBinary,
+      message.payload.wasmModule,
+    );
     module = await imported.default({
       noInitialRun: true,
       // Emscripten otherwise downloads and streaming-compiles the binary from
@@ -84,7 +90,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     });
     // Retain only the immutable simulation inputs. The much larger WASM binary
     // is already compiled into `module` and need not be kept a second time.
-    restartPayload = { ...message.payload, wasmBinary: undefined };
+    restartPayload = { ...message.payload, wasmBinary: undefined, wasmModule: undefined };
     startSimulation(module, restartPayload);
     post({ kind: 'ready', id: message.id, initMilliseconds: performance.now() - started, heapBytes: module.HEAPU8.buffer.byteLength });
     return;
@@ -96,7 +102,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
     restartPayload = undefined;
     worldFromNetwork = undefined;
     maxActorStates = Number.POSITIVE_INFINITY;
-    mirroredIds.clear();
+    mirroredActors.clear();
     post({ kind: 'closed', id: message.id });
     return;
   }
@@ -104,7 +110,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
   const sumo = requireModule();
   const started = performance.now();
   if (message.kind === 'reconfigure') {
-    restartPayload = { ...message.payload, wasmBinary: undefined };
+    restartPayload = { ...message.payload, wasmBinary: undefined, wasmModule: undefined };
     startSimulation(sumo, restartPayload);
   } else if (message.kind === 'reset') startSimulation(sumo, requireRestartPayload());
   mirrorExternalActors(sumo, message.request.externalActors);
@@ -136,7 +142,7 @@ async function handle(message: SumoWorkerRequest): Promise<void> {
 function startSimulation(sumo: SumoModule, payload: TrafficNetworkPayload): void {
   worldFromNetwork = payload.worldFromNetwork;
   maxActorStates = payload.maxActorStates;
-  mirroredIds.clear();
+  mirroredActors.clear();
   const net = copyBytes(sumo, new Uint8Array(payload.network));
   const routes = copyBytes(sumo, new Uint8Array(payload.routes));
   try {
@@ -152,11 +158,17 @@ function startSimulation(sumo: SumoModule, payload: TrafficNetworkPayload): void
 function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTrafficActor[]): void {
   const transform = requireTransform();
   const current = new Set(actors.map((actor) => actor.id));
-  for (const id of mirroredIds) {
-    if (!current.has(id)) withString(sumo, id, (idPointer) => assertOk(sumo._us_sumo_remove(idPointer)));
+  for (const id of mirroredActors.keys()) {
+    if (!current.has(id)) {
+      withString(sumo, id, (idPointer) => assertOk(sumo._us_sumo_remove(idPointer)));
+      mirroredActors.delete(id);
+    }
   }
-  mirroredIds.clear();
   for (const actor of actors) {
+    // Fixed props and stopped authored vehicles dominate the external list.
+    // Avoid repeatedly allocating their UTF-8 identifiers and asking libsumo
+    // to apply an identical moveToXY on every 50 ms provider step.
+    if (sameExternalActor(mirroredActors.get(actor.id), actor)) continue;
     const network = externalActorToNetwork({ x: actor.x, z: actor.z, headingDegrees: actor.headingDegrees }, transform);
     withString(sumo, actor.id, (idPointer) => withString(sumo, actor.routeId, (routePointer) => {
       assertOk(sumo._us_sumo_upsert_external(
@@ -171,8 +183,23 @@ function mirrorExternalActors(sumo: SumoModule, actors: readonly ExternalTraffic
         actor.widthMeters,
       ));
     }));
-    mirroredIds.add(actor.id);
+    mirroredActors.set(actor.id, actor);
   }
+}
+
+function sameExternalActor(
+  previous: ExternalTrafficActor | undefined,
+  next: ExternalTrafficActor,
+): boolean {
+  return previous !== undefined
+    && previous.kind === next.kind
+    && previous.routeId === next.routeId
+    && previous.x === next.x
+    && previous.z === next.z
+    && previous.headingDegrees === next.headingDegrees
+    && previous.speedMetersPerSecond === next.speedMetersPerSecond
+    && previous.lengthMeters === next.lengthMeters
+    && previous.widthMeters === next.widthMeters;
 }
 
 function withString<T>(sumo: SumoModule, value: string, callback: (pointer: number) => T): T {

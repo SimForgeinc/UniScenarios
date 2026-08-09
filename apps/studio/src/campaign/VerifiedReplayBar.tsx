@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { PlaybackState } from '../playback/controller';
+import type { PlaybackState } from '@uniscenarios/playback';
 import type { PlaybackCameraOption } from '../playback/PlaybackPanel';
 
 export interface VerifiedReplayPresentation {

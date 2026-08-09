@@ -3,7 +3,7 @@ import type { EditorController } from '../editor/controller';
 import { initialSession, reduceSession, canMutate, shouldPreparePlayback, type StudioSessionState } from './model';
 import { handleTransportKey } from './keyboard';
 import { PreparationGate } from './preparationGate';
-import { StudioTransport, type StudioTransportCounters } from './StudioTransport';
+import { StudioTransport, type StudioTransportCounters } from '@uniscenarios/playback';
 
 export interface StudioSessionApi {
   readonly state: StudioSessionState;

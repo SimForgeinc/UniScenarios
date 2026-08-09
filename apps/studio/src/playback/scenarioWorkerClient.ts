@@ -2,11 +2,11 @@ import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { MapSignalCatalog, SignalControlIndex } from '@uniscenarios/scenario-materializer';
 import { contentHash, type AmbientCandidatePool, type AmbientTrafficProfile, type EvaluateFilters, type IntentRubricInput } from '@uniscenarios/sim-engine';
 import type { MapEntry } from '../maps';
-import { parsePlaybackPair, type PlaybackBundle } from './model';
+import { parsePlaybackPair, type PlaybackBundle } from '@uniscenarios/playback';
 import type { AmbientRobustnessSummary, ScenarioWorkerRequest, ScenarioWorkerResponse } from './scenario-worker';
 import type { ScenarioWorkerStartRequest } from './scenario-worker';
 import type { ScenarioWorkerInspectSignalsRequest } from './scenario-worker';
-import { mapAssetDigest, RevisionGate } from './mapRuntime';
+import { mapAssetDigest, RevisionGate } from '@uniscenarios/playback';
 
 export interface LivePlaybackCounters {
   readonly startupMs: number | null;

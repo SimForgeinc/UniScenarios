@@ -9,6 +9,8 @@ export interface TrafficNetworkPayload {
    * worker-side instantiateStreaming(fetch(...)) path.
    */
   readonly wasmBinary?: ArrayBuffer;
+  /** Precompiled during scenario preparation when structured cloning is available. */
+  readonly wasmModule?: WebAssembly.Module;
   readonly seed: number;
   readonly stepSeconds: number;
   /** world = rotate(network * scale) + translation */

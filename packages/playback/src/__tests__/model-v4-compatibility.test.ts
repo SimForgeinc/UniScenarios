@@ -271,11 +271,11 @@ describe('UniScenarios concrete playback import', () => {
       van: 'vehicle.van',
       motorcycle: 'vehicle.motorcycle',
       bicycle: 'vehicle.bicycle',
-      pedestrian: 'pedestrian.adult_walking',
+      pedestrian: 'pedestrian.adult',
       scooter: 'vehicle.bicycle',
       sidewalk_robot: 'sidewalk_robot.delivery_rover',
       drone: 'drone.camera_quadcopter',
-      animal: 'pedestrian.child_walking',
+      animal: 'animal.dog',
       static_object: 'hazard.cardboard_box',
     });
   });
@@ -291,7 +291,7 @@ describe('UniScenarios concrete playback import', () => {
     );
     const gzipped = await readPlaybackFiles(
       new BytesFile('golden.instance.json', instanceBytes),
-      new BytesFile('golden.trace.json.gz', gzipSync(traceBytes)),
+      new BytesFile('golden.trace.json.gz', new Uint8Array(gzipSync(traceBytes))),
     );
 
     expect(plain.actors.map((actor) => [actor.id, actor.catalogId, actor.modelBasis])).toEqual([
@@ -609,8 +609,8 @@ const GOLDEN_TRACE = new URL('trace.json.gz', GOLDEN_ROOT);
 describe.skipIf(!existsSync(GOLDEN_INSTANCE) || !existsSync(GOLDEN_TRACE))('current-engine golden Yale pair', () => {
   it('loads three concrete actors and samples real static/dynamic motion', async () => {
     const bundle = await readPlaybackFiles(
-      new BytesFile('instance.json', readFileSync(GOLDEN_INSTANCE)),
-      new BytesFile('trace.json.gz', readFileSync(GOLDEN_TRACE)),
+      new BytesFile('instance.json', new Uint8Array(readFileSync(GOLDEN_INSTANCE))),
+      new BytesFile('trace.json.gz', new Uint8Array(readFileSync(GOLDEN_TRACE))),
     );
     expect(bundle.instance.manifest.instanceId).toBe('fa9fa19457cf576f#8');
     expect(bundle.instance.manifest.inputHash).toBe(

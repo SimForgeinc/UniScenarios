@@ -8,10 +8,10 @@ import {
 import type { ActorView } from '../editor/actorRenderer';
 import type { ActorRenderer } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
-import { evaluateSumoPerformance } from '../playback/traffic-provider/adaptiveFallback';
-import type { ExternalTrafficActor, TrafficNetworkPayload, TrafficStepRequest, TrafficStepResult } from '../playback/traffic-provider/protocol';
-import { SumoWasmTrafficProvider } from '../playback/traffic-provider/sumoWasmProvider';
-import { decodeSumoSignalSnapshot, type SumoSignalTopology } from '../playback/traffic-provider/signalState';
+import { evaluateSumoPerformance } from '@uniscenarios/playback';
+import type { ExternalTrafficActor, TrafficNetworkPayload, TrafficStepRequest, TrafficStepResult } from '@uniscenarios/playback';
+import { SumoWasmTrafficProvider } from '@uniscenarios/playback';
+import { decodeSumoSignalSnapshot, type SumoSignalTopology } from '@uniscenarios/playback';
 import type { StudioSessionMode } from '../session/model';
 import { DISABLED_SUMO_STATUS, type SumoTrafficStatus } from './provider';
 import { decodeSumoActorViews, loadSumoAssets, signalNetworkForScenario, SUMO_RUNTIME_MODULE_URL } from './sumoAssets';

@@ -1,6 +1,7 @@
 import { contentHash } from '@uniscenarios/sim-engine';
 
 export interface MapRuntimeIdentity {
+  /** Canonical source map id used by MapBundle, replay and simulation input. */
   readonly mapId: string;
   readonly assetDigest: string;
   readonly graphDigest: string;
@@ -20,7 +21,11 @@ export interface CompileIdentity {
  * can supply an explicit revision by changing any URL.
  */
 export function mapAssetDigest(map: {
-  readonly id: string;
+  readonly id?: string;
+  readonly runtimeAssetId?: string;
+  readonly mapVersionId?: string;
+  readonly sourceMapId?: string;
+  readonly browserClosureSha256?: string;
   readonly manifest: string;
   readonly topology: string;
   readonly derivedTopology: string;
@@ -28,6 +33,9 @@ export function mapAssetDigest(map: {
   readonly xodr: string;
   readonly signals: string;
 }): string {
+  if (!map.id && !map.runtimeAssetId) {
+    throw new Error('mapAssetDigest requires a local id or immutable runtimeAssetId');
+  }
   return contentHash(map);
 }
 

@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { ValidationReport } from '@uniscenarios/scenario-model';
-import { physicsReasonLabel, type PhysicsDisplaySummary } from '../playback/physics';
+import { physicsReasonLabel, type PhysicsDisplaySummary } from '@uniscenarios/playback';
 
 export interface ScenarioReadinessSummaryProps {
   validation: ValidationReport;

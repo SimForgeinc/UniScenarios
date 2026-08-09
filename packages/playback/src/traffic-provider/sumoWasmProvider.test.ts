@@ -72,6 +72,20 @@ describe('SUMO provider lifecycle', () => {
     expect(worker.messages.map((message) => message.kind)).toEqual(['init', 'reset']);
   });
 
+  it('sends a precompiled module without copying or transferring the WASM binary', async () => {
+    const worker = new FakeWorker();
+    const provider = new SumoWasmTrafficProvider('/sumo.mjs', () => worker as unknown as Worker);
+    const wasmModule = await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+    const initializing = provider.initialize({ ...payload, wasmModule });
+    const init = worker.messages[0]!;
+    expect(init.kind).toBe('init');
+    expect(init.kind === 'init' ? init.payload.wasmBinary : 'unexpected').toBeUndefined();
+    expect(init.kind === 'init' ? init.payload.wasmModule : null).toBe(wasmModule);
+    expect(worker.transfers[0]).toHaveLength(2);
+    worker.emit({ kind: 'ready', id: init.id, initMilliseconds: 1, heapBytes: 64 });
+    await initializing;
+  });
+
   it('reconfigures signal programs through the existing worker without retransferring or recompiling WASM', async () => {
     const worker = new FakeWorker();
     const factory = vi.fn(() => worker as unknown as Worker);

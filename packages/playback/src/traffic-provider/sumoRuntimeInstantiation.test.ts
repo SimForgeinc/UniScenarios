@@ -14,4 +14,12 @@ describe('SUMO browser runtime instantiation', () => {
   it('rejects corrupt runtime bytes instead of hanging', async () => {
     await expect(compileSumoRuntime(new Uint8Array([1, 2, 3]).buffer)).rejects.toBeInstanceOf(WebAssembly.CompileError);
   });
+
+  it('instantiates a precompiled module without compiling transferred bytes again', async () => {
+    const compiled = await WebAssembly.compile(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0]));
+    const instantiate = await compileSumoRuntime(undefined, compiled);
+    const success = vi.fn();
+    instantiate?.({}, success);
+    expect(success.mock.calls[0]?.[0]).toBeInstanceOf(WebAssembly.Instance);
+  });
 });

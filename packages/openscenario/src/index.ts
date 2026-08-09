@@ -17,3 +17,9 @@ export {
   type OpenScenarioImportMapCandidate,
   type OpenScenarioMapResolution,
 } from './import.js';
+export type {
+  OpenScenarioSnapshot,
+  OpenScenarioSourceMapping,
+  OpenScenarioValidationStage,
+  OpenScenarioValidationStatus,
+} from './snapshot.js';

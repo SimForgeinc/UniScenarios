@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { StudioTransport } from './StudioTransport';
+import { StudioTransport } from '@uniscenarios/playback';
 
 afterEach(() => vi.unstubAllGlobals());
 

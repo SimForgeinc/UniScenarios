@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { mapById } from '../maps';
-import type { PlaybackBundle } from '../playback/model';
+import type { PlaybackBundle } from '@uniscenarios/playback';
 import { CAMERA_EXTENSION_KEY, parseCameraPresentation, type CameraPresentation } from '../cameras/model';
 import { GENERATED_CAMPAIGN_DIAGNOSTICS, GENERATED_CAMPAIGN_ENTRIES } from './generated';
 import { filterGalleryEntries, galleryDetails, hasVerifiedVariation, type GalleryFilter } from './gallery';

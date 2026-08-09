@@ -44,6 +44,12 @@ importers:
       '@uniscenarios/map-intel':
         specifier: workspace:*
         version: link:../../packages/map-intel
+      '@uniscenarios/openscenario':
+        specifier: workspace:*
+        version: link:../../packages/openscenario
+      '@uniscenarios/playback':
+        specifier: workspace:*
+        version: link:../../packages/playback
       '@uniscenarios/prop-catalog':
         specifier: workspace:*
         version: link:../../packages/prop-catalog
@@ -246,6 +252,9 @@ importers:
       '@uniscenarios/scenario-model':
         specifier: workspace:*
         version: link:../scenario-model
+      '@uniscenarios/sim-engine':
+        specifier: workspace:*
+        version: link:../sim-engine
       fast-xml-parser:
         specifier: ^5.5.6
         version: 5.10.1
@@ -253,6 +262,40 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.0
+        version: 3.2.7(@types/node@22.20.1)(supports-color@7.2.0)(tsx@4.23.1)
+
+  packages/playback:
+    dependencies:
+      '@uniscenarios/city-renderer':
+        specifier: workspace:*
+        version: link:../city-renderer
+      '@uniscenarios/editor-core':
+        specifier: workspace:*
+        version: link:../editor-core
+      '@uniscenarios/openscenario':
+        specifier: workspace:*
+        version: link:../openscenario
+      '@uniscenarios/prop-catalog':
+        specifier: workspace:*
+        version: link:../prop-catalog
+      '@uniscenarios/scenario-model':
+        specifier: workspace:*
+        version: link:../scenario-model
+      '@uniscenarios/sim-engine':
+        specifier: workspace:*
+        version: link:../sim-engine
+      three:
+        specifier: ^0.182.0
+        version: 0.182.0
+    devDependencies:
+      '@types/three':
+        specifier: ^0.182.0
+        version: 0.182.0
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

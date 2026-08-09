@@ -8,7 +8,7 @@ import {
   type DoorName,
   type DoorState,
   type DoorStates,
-} from '../editor/actorRenderer';
+} from '@uniscenarios/editor-core';
 import {
   samplePlaybackActors,
   samplePlaybackSignals,
@@ -16,9 +16,14 @@ import {
   type SampledActor,
   type SampledSignal,
 } from './model';
-import type { CameraPolicy } from '../cameras/model';
-import { StudioTransport } from '../session/StudioTransport';
-import { isInternalTrafficActor } from '../ambient/useAmbientTrafficPreview';
+import { StudioTransport } from './transport';
+
+/** Presentation policy shared by local Studio and cloud product adapters. */
+export type CameraPolicy = 'editor' | 'all-actors' | 'ego-chase' | 'dash-camera' | 'authored' | 'auto-incident' | 'free';
+
+function isInternalTrafficActor(actor: { readonly id: string }): boolean {
+  return actor.id === 'ambient-world-seed';
+}
 
 export interface PlaybackState {
   readonly time: number;
@@ -58,6 +63,10 @@ export interface PlaybackControllerOptions {
   renderer?: ActorRenderer;
   /** StudioTransport owns animation; this controller only samples/render frames. */
   externalClock?: boolean;
+  /** Wrap at the trace boundary. Preview playback loops by default. */
+  loop?: boolean;
+  /** Restrict the one-time overview fit to these actors. */
+  cameraActorIds?: readonly string[];
 }
 
 export interface DashCameraFrame {
@@ -161,9 +170,14 @@ export function galleryCameraChoice(bundle: PlaybackBundle): GalleryCameraChoice
 }
 
 /** Full-timeline authored bounds. Ego identity is deliberately irrelevant. */
-export function buildAllActorsCameraPlan(bundle: PlaybackBundle): AllActorsCameraPlan | null {
+export function buildAllActorsCameraPlan(
+  bundle: PlaybackBundle,
+  actorIds?: readonly string[],
+): AllActorsCameraPlan | null {
+  const selected = actorIds ? new Set(actorIds) : null;
   const authored = bundle.actors.filter((actor) => (
     !actor.id.startsWith('ambient-') && !actor.tags.some((tag) => tag.startsWith('ambient:'))
+    && (!selected || selected.has(actor.id))
   ));
   const points: Array<{ x: number; z: number; pad: number }> = [];
   for (const actor of authored) {
@@ -174,8 +188,10 @@ export function buildAllActorsCameraPlan(bundle: PlaybackBundle): AllActorsCamer
       points.push({ x: track.x[index]!, z: track.z[index]!, pad: Math.max(actor.dims.l, actor.dims.w) / 2 });
     }
   }
-  for (const prop of bundle.props) {
-    points.push({ x: prop.pose.x, z: prop.pose.z, pad: Math.max(prop.dims.l, prop.dims.w) * prop.scale / 2 });
+  if (!selected) {
+    for (const prop of bundle.props) {
+      points.push({ x: prop.pose.x, z: prop.pose.z, pad: Math.max(prop.dims.l, prop.dims.w) * prop.scale / 2 });
+    }
   }
   if (points.length === 0) return null;
   const minX = Math.min(...points.map((point) => point.x - point.pad));
@@ -349,6 +365,7 @@ export class PlaybackController {
   private time: number;
   private playing = false;
   private readonly transport = new StudioTransport();
+  private readonly metadataByActor: ReadonlyMap<string, PlaybackBundle['actors'][number]>;
   private sampled: readonly SampledActor[] = [];
   private sampledSignals: readonly SampledSignal[] = [];
   private renderedSignalHeadCount = 0;
@@ -362,18 +379,21 @@ export class PlaybackController {
   private readonly previousCameraUp: Vector3 | null;
   private readonly previousCameraProjection: { near: number; far: number; aspect: number } | null;
   private snapshot: PlaybackState;
+  private presentationActive = false;
+  private signalPresentationKey = '';
 
   constructor(private readonly options: PlaybackControllerOptions) {
     this.viewer = options.viewer;
     this.bundle = options.bundle;
     this.sampleHeight = options.sampleHeight;
     this.renderer = options.renderer ?? new ActorRenderer();
+    this.metadataByActor = new Map(this.bundle.actors.map((actor) => [actor.id, actor]));
     this.cameraPolicy = options.cameraPolicy ?? 'free';
     this.galleryCameraChoice = galleryCameraChoice(this.bundle);
     this.cameraSelectionId = this.cameraPolicy === 'ego-chase'
       ? this.galleryCameraChoice.selectionId
       : this.cameraPolicy;
-    this.allActorsCameraPlan = buildAllActorsCameraPlan(this.bundle);
+    this.allActorsCameraPlan = buildAllActorsCameraPlan(this.bundle, options.cameraActorIds);
     this.incidentCameraPlan = buildIncidentCameraPlan(this.bundle);
     this.previousCameraView = options.restoreCameraOnDispose
       ? this.viewer.controls.getView()
@@ -390,7 +410,7 @@ export class PlaybackController {
       (time) => this.renderAt(time),
       (time) => {
         this.time = time;
-        if (time >= this.bundle.endTime) this.playing = false;
+        if (time >= this.bundle.endTime && options.loop === false) this.playing = false;
         this.publish();
       },
     );
@@ -398,8 +418,7 @@ export class PlaybackController {
       this.renderer.group.name = 'playback-actors';
       this.viewer.scene.add(this.renderer.group);
     } else {
-      this.renderer.setLayerVisible('editor', false);
-      this.renderer.setLayerVisible('ambient-preview', false);
+      this.renderer.setLayerVisible('playback', false);
     }
     if (this.cameraPolicy === 'dash-camera') this.viewer.setCameraPoseConstraintsEnabled(false);
     this.syncScene();
@@ -431,6 +450,12 @@ export class PlaybackController {
     return this.sampledSignals;
   }
 
+  /** Re-assert trace-owned head colours after another provider releases them. */
+  refreshSignalPresentation(): void {
+    this.signalPresentationKey = '';
+    this.syncScene();
+  }
+
   subscribe = (listener: () => void): (() => void) => {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -438,13 +463,30 @@ export class PlaybackController {
 
   getSnapshot = (): PlaybackState => this.snapshot;
 
+  /**
+   * Swap only renderer presentation. The controller, trace, transport and
+   * playhead remain alive while editor chrome is shown.
+   */
+  setPresentationActive(active: boolean): void {
+    if (!this.options.renderer || this.presentationActive === active) return;
+    this.presentationActive = active;
+    this.renderer.setLayerVisible('playback', active);
+    this.renderer.setLayerVisible('sumo-traffic', active);
+    this.renderer.setLayerVisible('editor', !active);
+    this.renderer.setLayerVisible('ambient-preview', !active);
+    if (active) this.renderer.setSelection([]);
+  }
+
   play(): void {
     if (this.playing) return;
     if (this.time >= this.bundle.endTime) this.time = this.bundle.startTime;
     this.playing = true;
     this.publish();
     if (this.options.externalClock) return;
-    this.transport.play(this.time, this.bundle.endTime);
+    this.transport.play(this.time, this.bundle.endTime, {
+      loop: this.options.loop ?? true,
+      startTime: this.bundle.startTime,
+    });
   }
 
   pause(): void {
@@ -482,11 +524,10 @@ export class PlaybackController {
     this.time = Math.max(this.bundle.startTime, Math.min(this.bundle.endTime, time));
     if (this.playing && !this.options.externalClock) this.transport.seek(this.time);
     this.syncScene();
-    // A scrub is an explicit request to inspect this moment. Reframe the real
-    // present actors rather than leaving them as sub-pixel dots in the map-wide
-    // import view (the exact failure mode of the rejected map-only evidence).
-    if (this.cameraPolicy === 'all-actors') this.frameAllActors();
-    else if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
+    // The all-actors camera is an initial composition, not a playhead-owned
+    // camera. Scrubbing must preserve any view the author established after
+    // entering playback. Explicit following cameras still track their subject.
+    if (this.cameraPolicy === 'ego-chase') this.frameEgoChase();
     else if (this.cameraPolicy === 'auto-incident') this.frameActors();
     else if (this.cameraPolicy === 'dash-camera') this.frameDashCamera();
     this.publish();
@@ -506,6 +547,7 @@ export class PlaybackController {
     this.transport.dispose();
     if (this.options.renderer) {
       this.renderer.clearLayer('playback');
+      this.renderer.setLayerVisible('sumo-traffic', true);
       this.renderer.setLayerVisible('editor', true);
       this.renderer.setLayerVisible('ambient-preview', true);
     } else {
@@ -534,21 +576,28 @@ export class PlaybackController {
     this.sampledSignals = samplePlaybackSignals(this.bundle, this.time);
     const doorsByActor = samplePlaybackDoors(this.bundle.trace, this.time);
     const cuesByActor = samplePlaybackVehicleCues(this.bundle.trace, this.time);
-    const metadataByActor = new Map(this.bundle.actors.map((actor) => [actor.id, actor]));
     const headStates: Record<string, ControlIndication> = {};
     for (const signal of this.sampledSignals) {
       for (const headId of signal.headIds) headStates[headId] = signal.phase;
     }
-    if (Object.keys(headStates).length > 0) {
-      this.renderedSignalHeadCount = this.options.setSignalStates?.(headStates, this.time) ?? 0;
-    } else {
-      this.options.clearSignalStates?.();
-      this.renderedSignalHeadCount = 0;
+    const headIds = Object.keys(headStates).sort();
+    // Traffic-light geometry only changes when a phase changes or the 2 Hz
+    // flashing cadence crosses a boundary. Avoid rewriting instance colors on
+    // every 120 Hz actor sample between those moments.
+    const signalPresentationKey = `${Math.floor(Math.max(0, this.time) * 2)}:${headIds.map((id) => `${id}=${headStates[id]}`).join('|')}`;
+    if (signalPresentationKey !== this.signalPresentationKey) {
+      this.signalPresentationKey = signalPresentationKey;
+      if (headIds.length > 0) {
+        this.renderedSignalHeadCount = this.options.setSignalStates?.(headStates, this.time) ?? 0;
+      } else {
+        this.options.clearSignalStates?.();
+        this.renderedSignalHeadCount = 0;
+      }
     }
     const views: ActorView[] = this.sampled
       .filter((actor) => actor.present)
       .map((actor) => {
-        const metadata = metadataByActor.get(actor.id);
+        const metadata = this.metadataByActor.get(actor.id);
         const cues = cuesByActor.get(actor.id);
         return {
           id: actor.id,
@@ -558,9 +607,12 @@ export class PlaybackController {
           y: this.sampleHeight(actor.x, actor.z) ?? 0,
           z: actor.z,
           headingRad: actor.headingRad,
+          animationTimeS: this.time,
+          speedMps: actor.speedMps,
           reversing: actor.motionDirection === -1,
           ...(metadata ? { kind: metadata.kind } : {}),
           ...(metadata?.modelBasis === 'input-tag' ? { catalogIdAuthored: true } : {}),
+          ...(metadata?.bodyColor ? { bodyColor: metadata.bodyColor } : {}),
           ...(doorsByActor.has(actor.id) ? { doors: doorsByActor.get(actor.id) } : {}),
           ...(cues ? { emergency: cues.emergency, hornActive: cues.hornActive, indicator: cues.indicator } : {}),
         } satisfies ActorView;
@@ -597,7 +649,6 @@ export class PlaybackController {
       }];
     });
     this.renderer.syncLayer(this.options.renderer ? 'playback' : 'editor', [...views, ...propViews]);
-    this.renderer.setSelection([]);
   }
 
   private frameActors(): void {

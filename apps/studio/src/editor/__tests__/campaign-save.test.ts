@@ -4,7 +4,7 @@ import path from 'node:path';
 import { MemoryStorage, TemplateDocument, WebTemplateFileStore } from '@uniscenarios/scenario-model';
 import { editableCampaignTemplate, loadSavedCampaign } from '../../campaign';
 import { GENERATED_CAMPAIGN_ENTRIES } from '../../campaign/generated';
-import { readPlaybackFiles } from '../../playback/model';
+import { readPlaybackFiles } from '@uniscenarios/playback';
 import { MAPS } from '../../maps';
 import { EditorDocument, autosaveName } from '../document';
 

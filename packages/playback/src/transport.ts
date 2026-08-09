@@ -1,3 +1,5 @@
+"use client";
+
 export interface StudioTransportCounters {
   readonly frames: number;
   readonly uiPublishes: number;
@@ -18,6 +20,8 @@ export class StudioTransport {
   private wallStart = 0;
   private traceStart = 0;
   private duration = 0;
+  private loopStart = 0;
+  private loop = false;
   private lastPublish = -Infinity;
   private renderFrame: (time: number) => void = () => undefined;
   private publishTime: (time: number) => void = () => undefined;
@@ -41,11 +45,13 @@ export class StudioTransport {
     this.playableUntil = playableUntil;
   }
 
-  play(time: number, duration: number): void {
+  play(time: number, duration: number, options: { loop?: boolean; startTime?: number } = {}): void {
     if (this.running) return;
     this.running = true;
-    this.traceStart = time >= duration ? 0 : time;
+    this.loopStart = options.startTime ?? 0;
+    this.traceStart = time >= duration ? this.loopStart : time;
     this.duration = duration;
+    this.loop = options.loop ?? false;
     this.wallStart = performance.now();
     this.lastPublish = -Infinity;
     this.starts++;
@@ -80,7 +86,12 @@ export class StudioTransport {
 
   private tick = (now: number): void => {
     if (!this.running) return;
-    const desired = Math.min(this.duration, this.traceStart + Math.max(0, now - this.wallStart) / 1000);
+    const elapsed = Math.max(0, now - this.wallStart) / 1000;
+    const unbounded = this.traceStart + elapsed;
+    const span = this.duration - this.loopStart;
+    const desired = this.loop && span > 0 && unbounded >= this.duration
+      ? this.loopStart + ((unbounded - this.loopStart) % span)
+      : Math.min(this.duration, unbounded);
     const time = Math.min(desired, this.playableUntil());
     if (time + 1e-9 < desired) {
       this.underrunFrames++;
@@ -101,7 +112,7 @@ export class StudioTransport {
       this.publishTime(time);
       this.uiPublishes++;
     }
-    if (time >= this.duration) {
+    if (!this.loop && time >= this.duration) {
       this.running = false;
       this.raf = 0;
       return;

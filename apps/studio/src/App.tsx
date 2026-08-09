@@ -13,15 +13,15 @@ import { WorkspaceHeader } from './editor/EditorChrome';
 import { EditorToolRail, shouldShowEditorToolRail, type CatalogPlacementAdapter, type ViewportTool } from './editor/EditorToolRail';
 import { PlaybackPanel } from './playback/PlaybackPanel';
 import type { PlaybackCameraOption } from './playback/PlaybackPanel';
-import { PlaybackLoadError, canonicalPreviewIdentity, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from './playback/model';
-import { galleryCameraChoice } from './playback/controller';
+import { PlaybackLoadError, canonicalPreviewIdentity, evaluatePlaybackSignalHeadStates, samplePlaybackActors, type PlaybackBundle, type SampledActor } from '@uniscenarios/playback';
+import { galleryCameraChoice } from '@uniscenarios/playback';
 import {
   physicsForActor,
   physicsReasonLabel,
   physicsSummaryForAuthoredActors,
   physicsSummaryForTrace,
   type ActorPhysicsDisplay,
-} from './playback/physics';
+} from '@uniscenarios/playback';
 import { usePlayback } from './playback/usePlayback';
 import { useStudioSession } from './session/useStudioSession';
 import { throwIfPreparationAborted } from './session/preparationGate';

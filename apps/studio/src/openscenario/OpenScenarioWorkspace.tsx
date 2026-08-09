@@ -9,7 +9,7 @@ import {
   type OpenScenarioWorkspaceState,
 } from './model';
 import { buildLocalEsminiBundle, cancelLocalEsminiRun, submitLocalEsminiRun, waitForLocalEsminiRun } from './localClient';
-import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '../playback/physics';
+import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '@uniscenarios/playback';
 import type { ValidationReport } from '@uniscenarios/scenario-model';
 import { PlannedAuthoringFormats, ScenarioReadinessSummary } from '../editor/ScenarioActionsPanel';
 

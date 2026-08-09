@@ -11,13 +11,13 @@ import {
 } from '@uniscenarios/sim-engine';
 import type { ActorView } from '../editor/actorRenderer';
 import type { MapEntry } from '../maps';
-import type { NetworkWorldTransform, TrafficNetworkPayload, TrafficStepResult } from '../playback/traffic-provider/protocol';
-import { toNetwork } from '../playback/traffic-provider/coordinateTransform';
+import type { NetworkWorldTransform, TrafficNetworkPayload, TrafficStepResult } from '@uniscenarios/playback';
+import { toNetwork } from '@uniscenarios/playback';
 import {
   fitSumoSignalProgramsToScenario,
   parseSumoSignalTopology,
   type SumoSignalTopology,
-} from '../playback/traffic-provider/signalState';
+} from '@uniscenarios/playback';
 
 export const SUMO_RUNTIME_MODULE_URL = '/dev-assets/sumo-runtime/sumo.mjs';
 export const SUMO_RUNTIME_WASM_URL = '/dev-assets/sumo-runtime/sumo.wasm';

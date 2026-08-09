@@ -23,7 +23,7 @@ import {
   type CatalogId,
   type Dims,
 } from '@uniscenarios/prop-catalog';
-import type { OpenScenarioSnapshot } from '../openscenario/model';
+import type { OpenScenarioSnapshot } from '@uniscenarios/openscenario';
 
 const TRACE_CHANNELS = ['x', 'y', 'headingRad', 'speedMps', 'laneRsl', 's', 'present'] as const;
 const STATIC_CHANNELS = ['x', 'y', 'headingRad', 'speedMps', 'present'] as const;
@@ -35,11 +35,11 @@ const KIND_DEFAULTS: Record<SimActor['kind'], CatalogId> = {
   van: 'vehicle.van',
   motorcycle: 'vehicle.motorcycle',
   bicycle: 'vehicle.bicycle',
-  pedestrian: 'pedestrian.adult_walking',
+  pedestrian: 'pedestrian.adult',
   scooter: 'vehicle.bicycle',
   sidewalk_robot: 'sidewalk_robot.delivery_rover',
   drone: 'drone.camera_quadcopter',
-  animal: 'pedestrian.child_walking',
+  animal: 'animal.dog',
   static_object: 'hazard.cardboard_box',
 };
 
@@ -74,6 +74,7 @@ export interface PlaybackActor {
   readonly tags: readonly string[];
   readonly catalogId: CatalogId;
   readonly modelBasis: 'input-tag' | 'kind-default';
+  readonly bodyColor?: string;
   readonly dims: Dims;
   readonly initial: { readonly x: number; readonly z: number; readonly headingRad: number };
 }
@@ -105,6 +106,7 @@ export interface PlaybackBundle {
     readonly classes: Readonly<Record<string, number>>;
   };
   /** Immutable export evidence produced from the same input, graph and trace. */
+  /** Product/local export evidence is carried through without coupling playback to an adapter UI. */
   readonly openScenario?: OpenScenarioSnapshot;
 }
 
@@ -145,7 +147,12 @@ export function canonicalPreviewParity(
 ): { readonly ok: boolean; readonly preview: CanonicalPreviewIdentity; readonly playback: CanonicalPreviewIdentity } {
   const a = canonicalPreviewIdentity(preview);
   const b = canonicalPreviewIdentity(playback);
-  return { ok: a.complete && b.complete && a.hashBound && b.hashBound && a.inputHash === b.inputHash && a.traceHash === b.traceHash, preview: a, playback: b };
+  return {
+    ok: a.complete && b.complete && a.hashBound && b.hashBound
+      && a.inputHash === b.inputHash && a.traceHash === b.traceHash,
+    preview: a,
+    playback: b,
+  };
 }
 
 export interface PlaybackSignal {
@@ -166,6 +173,7 @@ export interface SampledActor {
   readonly x: number;
   readonly z: number;
   readonly headingRad: number;
+  readonly speedMps: number;
   readonly present: boolean;
   readonly static: boolean;
   /** Body motion direction; reverse motion must not be presented by flipping heading. */
@@ -664,6 +672,16 @@ function mapPlaybackActors(
       continue;
     }
     const explicit = catalogTags[0]?.slice('catalog:'.length);
+    const bodyColorTags = actor.tags.filter((tag) => tag.startsWith('studio:body-color:'));
+    if (bodyColorTags.length > 1) {
+      issues.push(`${name}: actor ${actor.id} has multiple studio:body-color:* tags`);
+      continue;
+    }
+    const bodyColor = bodyColorTags[0]?.slice('studio:body-color:'.length);
+    if (bodyColor && !/^#[0-9a-f]{6}$/i.test(bodyColor)) {
+      issues.push(`${name}: actor ${actor.id} has invalid Studio body color ${display(bodyColor)}`);
+      continue;
+    }
     const catalogId = explicit ?? defaultCatalogIdForActorKind(actor.kind);
     if (!isCatalogId(catalogId)) {
       issues.push(`${name}: actor ${actor.id} requests unknown Studio catalog model ${display(catalogId)}`);
@@ -679,6 +697,7 @@ function mapPlaybackActors(
       tags: [...actor.tags],
       catalogId,
       modelBasis: explicit ? 'input-tag' : 'kind-default',
+      ...(bodyColor ? { bodyColor: bodyColor.toLowerCase() } : {}),
       dims: { l: actor.dims.l, w: actor.dims.w, h: actor.dims.h },
       initial: {
         x: actor.initial.pose.x,
@@ -734,9 +753,41 @@ export function sampleBracket(times: readonly number[], time: number): SampleBra
   return { lower, upper, alpha: (clamped - (times[lower] as number)) / span, time: clamped };
 }
 
+const collisionTimesByTrace = new WeakMap<SceneTrace, ReadonlyMap<string, readonly number[]>>();
+
+function collisionTimes(trace: SceneTrace): ReadonlyMap<string, readonly number[]> {
+  const cached = collisionTimesByTrace.get(trace);
+  if (cached) return cached;
+  const byActor = new Map<string, number[]>();
+  for (const event of trace.events) {
+    if (event.kind !== 'collision') continue;
+    for (const actorId of [event.a, event.b]) {
+      const times = byActor.get(actorId);
+      if (times) times.push(event.t);
+      else byActor.set(actorId, [event.t]);
+    }
+  }
+  for (const times of byActor.values()) times.sort((a, b) => a - b);
+  collisionTimesByTrace.set(trace, byActor);
+  return byActor;
+}
+
+function hasCollisionBetween(times: readonly number[] | undefined, after: number, through: number): boolean {
+  if (!times?.length) return false;
+  let low = 0;
+  let high = times.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (times[middle]! <= after) low = middle + 1;
+    else high = middle;
+  }
+  return low < times.length && times[low]! <= through;
+}
+
 /** Interpolate dynamic poses; static actors always retain their authored instance pose. */
 export function samplePlaybackActors(bundle: PlaybackBundle, time: number): SampledActor[] {
   const bracket = sampleBracket(bundle.trace.ticks.t, time);
+  const collisions = collisionTimes(bundle.trace);
   return bundle.actors.map((actor) => {
     const track = bundle.trace.ticks.actors[actor.id];
     if (!track) throw new Error(`validated trace lost actor track ${actor.id}`);
@@ -750,6 +801,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
         x: actor.initial.x,
         z: actor.initial.z,
         headingRad: actor.initial.headingRad,
+        speedMps: 0,
         present,
         static: true,
         motionDirection,
@@ -759,10 +811,11 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
     // preceding physical sample until the exact event boundary prevents a
     // visual pose that the deterministic simulation never occupied.
     const discontinuous = track.present[bracket.lower] !== track.present[bracket.upper]
-      || bundle.trace.events.some((event) => event.kind === 'collision'
-        && event.t > (bundle.trace.ticks.t[bracket.lower] as number)
-        && event.t <= (bundle.trace.ticks.t[bracket.upper] as number)
-        && (event.a === actor.id || event.b === actor.id));
+      || hasCollisionBetween(
+        collisions.get(actor.id),
+        bundle.trace.ticks.t[bracket.lower] as number,
+        bundle.trace.ticks.t[bracket.upper] as number,
+      );
     const alpha = discontinuous && bracket.alpha < 1 ? 0 : bracket.alpha;
     return {
       id: actor.id,
@@ -773,6 +826,11 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
       headingRad: lerpHeading(
         track.headingRad[bracket.lower] as number,
         track.headingRad[bracket.upper] as number,
+        alpha,
+      ),
+      speedMps: lerp(
+        track.speedMps[bracket.lower] as number,
+        track.speedMps[bracket.upper] as number,
         alpha,
       ),
       present,
@@ -792,13 +850,7 @@ export function samplePlaybackSignals(bundle: PlaybackBundle, time: number): Sam
   });
 }
 
-/**
- * Evaluate physical-head states directly from the immutable program input.
- * Authoring previews intentionally record only through t=0, so trace sampling
- * cannot represent a later timeline scrub until Play has built the full trace.
- * SignalBook is the same evaluator used by simulation and preserves authored
- * half-open clips plus the compiled map baseline in every gap.
- */
+/** Evaluate physical signal-head states from the immutable program input. */
 export function evaluatePlaybackSignalHeadStates(
   bundle: PlaybackBundle,
   time: number,

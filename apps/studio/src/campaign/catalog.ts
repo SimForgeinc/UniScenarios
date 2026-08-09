@@ -4,7 +4,7 @@ import {
   type ScenarioTemplateV2,
   type TemplateFileStore,
 } from '@uniscenarios/scenario-model';
-import { readPlaybackFiles, type PlaybackBundle } from '../playback/model';
+import { readPlaybackFiles, type PlaybackBundle } from '@uniscenarios/playback';
 import { GENERATED_CAMPAIGN_ENTRIES } from './generated';
 import type { CampaignImportRecord, GeneratedCampaignEntry } from './types';
 

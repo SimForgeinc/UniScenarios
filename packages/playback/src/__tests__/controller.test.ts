@@ -44,6 +44,44 @@ describe('actor dash-camera transform', () => {
 });
 
 describe('real-time playback pacing', () => {
+  it('switches shared renderer layers without replacing playback state', () => {
+    const setLayerVisible = vi.fn();
+    const renderer = {
+      syncLayer: vi.fn(),
+      setSelection: vi.fn(),
+      setLayerVisible,
+      clearLayer: vi.fn(),
+    };
+    const bundle = cameraBundle({ subject: 'ego', pair: ['ego', 'other'], tracks: { ego: [[0, 0]], other: [[2, 0]] } });
+    (bundle.actors.find((actor) => actor.id === 'ego') as { bodyColor?: string }).bodyColor = '#8c2f2f';
+    const controller = new PlaybackController({
+      viewer: {
+        camera: new PerspectiveCamera(55, 16 / 9, 0.1, 2000),
+        scene: new Scene(),
+        controls: { getView: vi.fn(), applyView: vi.fn(), setView: vi.fn() },
+      } as never,
+      bundle,
+      sampleHeight: () => 0,
+      renderer: renderer as never,
+    });
+    const bundleIdentity = controller.bundle;
+    controller.setPresentationActive(true);
+    controller.seek(0);
+    const playbackViews = renderer.syncLayer.mock.calls
+      .filter(([layer]) => layer === 'playback')
+      .at(-1)?.[1];
+    expect(playbackViews).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'ego', bodyColor: '#8c2f2f' }),
+    ]));
+    controller.setPresentationActive(false);
+    expect(controller.bundle).toBe(bundleIdentity);
+    expect(setLayerVisible).toHaveBeenCalledWith('playback', true);
+    expect(setLayerVisible).toHaveBeenCalledWith('editor', false);
+    expect(setLayerVisible).toHaveBeenCalledWith('playback', false);
+    expect(setLayerVisible).toHaveBeenCalledWith('editor', true);
+    controller.dispose();
+  });
+
   it('drops render frames instead of stretching a verified 20-second trace', () => {
     // Representative software/headless cadence: only seven rendered frames
     // arrive during the entire clip. The playhead must still track wall time.
@@ -86,9 +124,12 @@ describe('real-time playback pacing', () => {
       } as never,
       bundle: cameraBundle({ subject: 'ego', pair: ['ego', 'other'], tracks: { ego: [[0, 0], [10, 0], [20, 0]], other: [[4, 2], [8, 2], [12, 2]] } }),
       sampleHeight: () => 0,
+      loop: false,
     });
     try {
+      expect(controller.state).toMatchObject({ time: 0, playing: false });
       controller.play();
+      expect(controller.state).toMatchObject({ time: 0, playing: true });
       for (const wallMs of [3_500, 7_000, 10_500, 14_000, 17_500, 20_250]) {
         const callback = nextFrame as FrameRequestCallback | null;
         expect(callback).not.toBeNull();
@@ -96,6 +137,46 @@ describe('real-time playback pacing', () => {
       }
       expect(controller.state.time).toBe(20);
       expect(controller.state.playing).toBe(false);
+    } finally {
+      controller.dispose();
+      now.mockRestore();
+      vi.unstubAllGlobals();
+      Object.defineProperty(globalThis, 'document', { configurable: true, value: originalDocument });
+    }
+  });
+
+  it('loops by default instead of freezing on the final frame', () => {
+    const originalDocument = globalThis.document;
+    Object.defineProperty(globalThis, 'document', {
+      configurable: true,
+      value: { createElement: () => ({ width: 0, height: 0, getContext: () => null }) },
+    });
+    let nextFrame: FrameRequestCallback | null = null;
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+      nextFrame = callback;
+      return 1;
+    });
+    vi.stubGlobal('cancelAnimationFrame', () => undefined);
+    const now = vi.spyOn(performance, 'now').mockReturnValue(0);
+    const controller = new PlaybackController({
+      viewer: {
+        camera: new PerspectiveCamera(55, 16 / 9, 0.1, 2000),
+        scene: new Scene(),
+        controls: {
+          getView: () => ({ position: [0, 10, 20], target: [0, 0, 0], fov: 55 }),
+          applyView: () => undefined,
+          setView: () => undefined,
+        },
+      } as never,
+      bundle: cameraBundle({ subject: 'ego', pair: ['ego', 'other'], tracks: { ego: [[0, 0], [10, 0], [20, 0]], other: [[4, 2], [8, 2], [12, 2]] } }),
+      sampleHeight: () => 0,
+    });
+    try {
+      controller.play();
+      (nextFrame as FrameRequestCallback | null)!(20_250);
+      expect(controller.state.time).toBeCloseTo(0.25);
+      expect(controller.state.playing).toBe(true);
+      expect(nextFrame).not.toBeNull();
     } finally {
       controller.dispose();
       now.mockRestore();
@@ -223,6 +304,43 @@ describe('Gallery incident camera planning', () => {
 });
 
 describe('all-actors playback camera', () => {
+  it('keeps an author-adjusted viewport unchanged when the playhead seeks', () => {
+    const applyView = vi.fn();
+    const controller = new PlaybackController({
+      viewer: {
+        camera: new PerspectiveCamera(55, 16 / 9, 0.1, 2000),
+        scene: new Scene(),
+        controls: {
+          getView: () => ({ position: [0, 10, 20], target: [0, 0, 0], fov: 55 }),
+          applyView,
+          setView: vi.fn(),
+        },
+      } as never,
+      bundle: cameraBundle({
+        subject: 'driver',
+        pair: ['driver', 'pedestrian'],
+        tracks: { driver: [[0, 0], [20, 0]], pedestrian: [[4, 2], [8, 2]] },
+      }),
+      sampleHeight: () => 0,
+      cameraPolicy: 'all-actors',
+      renderer: {
+        syncLayer: vi.fn(),
+        setSelection: vi.fn(),
+        setLayerVisible: vi.fn(),
+        clearLayer: vi.fn(),
+      } as never,
+    });
+    try {
+      expect(applyView).toHaveBeenCalledTimes(1);
+      controller.seek(10);
+      controller.seek(20);
+      expect(applyView).toHaveBeenCalledTimes(1);
+      expect(controller.state.time).toBe(20);
+    } finally {
+      controller.dispose();
+    }
+  });
+
   it('selects a trailing camera only for exactly one explicitly designated ego', () => {
     const base = cameraBundle({ subject: 'driver', pair: ['driver', 'pedestrian'], tracks: { driver: [[0, 0], [20, 0]], pedestrian: [[4, 2], [8, 2]] } });
     const zero = { ...base, actors: base.actors.map((actor) => ({ ...actor, tags: [] })) };
@@ -260,7 +378,7 @@ describe('all-actors playback camera', () => {
           setView: (position: Vector3, target: Vector3) => views.push({ position: position.clone(), target: target.clone() }),
         },
       } as never,
-      bundle, sampleHeight: () => 0, cameraPolicy: 'ego-chase',
+      bundle, sampleHeight: () => 0, cameraPolicy: 'ego-chase', loop: false,
     });
     try {
       expect(controller.state).toMatchObject({ cameraPolicy: 'ego-chase', cameraSelectionId: 'ego-chase:driver' });
@@ -311,6 +429,7 @@ describe('all-actors playback camera', () => {
       }),
       sampleHeight: () => 0,
       cameraPolicy: 'all-actors',
+      loop: false,
     });
     try {
       expect(controller.state).toMatchObject({ cameraPolicy: 'all-actors', cameraSelectionId: 'all-actors' });
@@ -382,6 +501,7 @@ describe('editor free-camera playback', () => {
         sampleHeight: () => 0,
         cameraPolicy: 'free',
         restoreCameraOnDispose: false,
+        loop: false,
       });
       try {
         expect(controller.state).toMatchObject({ cameraPolicy: 'free', cameraSelectionId: 'free' });
