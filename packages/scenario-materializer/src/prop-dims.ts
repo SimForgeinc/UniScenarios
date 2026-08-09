@@ -85,6 +85,26 @@ export function propBehavior(catalogId: string): PropBehavior {
   return PROP_BEHAVIOR[catalogId] ?? { collidable: false, occluder: true };
 }
 
+/**
+ * Is this a catalog id this package can resolve to real dimensions?
+ *
+ * `propDims` deliberately falls back for unknown ids so non-Studio consumers stay parseable, and the
+ * original note said "renderers reject them loudly". Headless authoring never reaches a renderer, so
+ * for an agent the fallback is silent: a template carrying `vehicle.boxTruck` (which does not exist —
+ * the real id is `vehicle.box_truck`) validates with exit 0 and materialises at 4.70 x 1.82 x 1.45,
+ * i.e. a sedan. An occluder that silently becomes a sedan deletes the point of the scenario, which is
+ * pitfall 4 in docs/research/retargeting.md: resolve assets against the catalog at author time and
+ * fail loud. Author-time surfaces must call this and refuse unknown ids.
+ */
+export function isKnownPropCatalogId(catalogId: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PROP_DIMS, catalogId);
+}
+
+/** Every id this package can resolve, sorted — suitable for a "did you mean" repair hint. */
+export function knownPropCatalogIds(): string[] {
+  return Object.keys(PROP_DIMS).sort();
+}
+
 /** Unknown ids remain parseable for non-Studio consumers; renderers reject them loudly. */
 export function propDims(catalogId: string, override?: Partial<PropDims>): PropDims {
   const base = PROP_DIMS[catalogId] ?? (catalogId.startsWith('vehicle.')

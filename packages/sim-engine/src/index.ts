@@ -187,6 +187,10 @@ export type { PedestrianNearMissRequest, PedestrianNearMissResult, PedestrianNea
 export { resolvePedestrianProjection } from './solve/pedestrian-projection.js';
 export type { PedestrianProjection, PedestrianProjectionMovement, PedestrianProjectionSegment, PedestrianProjectionSegmentKind } from './solve/pedestrian-projection.js';
 export { verifyNearMissOutcome } from './trace/near-miss.js';
+export { computeRealizedPet } from './trace/realized-pet.js';
+export { computeMinClearance } from './trace/min-clearance.js';
+export type { MinClearanceResult } from './trace/min-clearance.js';
+export type { RealizedPetResult, RealizedPetStatus } from './trace/realized-pet.js';
 export type { NearMissVerification } from './trace/near-miss.js';
 export { checkFeasibility, COMFORT_DECEL_MPS2, HARD_DECEL_MPS2 } from './solve/guards.js';
 export { actionAwareRunwayNeedM, nominalRun, nominalRunwayNeedM } from './solve/nominal.js';
