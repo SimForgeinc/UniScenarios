@@ -253,14 +253,22 @@ describe('corridor mechanism templates', () => {
     expect(egoPresentationMarkers).toEqual([]);
   });
 
-  it('merge-gap-collapse is anchored to a merge and accelerates both participants before entry', async () => {
+  it('merge-gap-collapse is anchored to a merge approach and accelerates both participants before entry', async () => {
     const doc = await template('merge-gap-collapse.template.json');
-    expect(doc.anchor.features).toContainEqual(expect.objectContaining({ id: 'merge-point', kind: 'merge' }));
+    expect(doc.anchor.features).toContainEqual(expect.objectContaining({
+      id: 'merge-point',
+      kind: 'junction',
+      conflictingApproach: expect.objectContaining({
+        value: expect.objectContaining({ from: 'merge' }),
+      }),
+    }));
+    expect(doc.roles.find((role) => role.id === 'merging')).toMatchObject({
+      kind: 'conflicting_gate',
+      feature: 'merge-point',
+      from: 'merge',
+    });
     expect(doc.choreography.interactions.find((item) => item.id === 'ego-accelerates')?.verb).toBe('speed');
     expect(doc.choreography.interactions.find((item) => item.id === 'merger-accelerates')?.verb).toBe('speed');
-    expect(doc.choreography.interactions.find((item) => item.id === 'merging-convergence-path')).toMatchObject({
-      verb: 'route', trigger: { kind: 'at', t: 0 }, target: { mode: 'polyline' },
-    });
     expect(doc.choreography.interactions.find((item) => item.id === 'merging-enters')).toMatchObject({
       verb: 'set', trigger: { kind: 'at', t: 2 }, target: { key: 'lights.indicator', value: 'left' },
     });
