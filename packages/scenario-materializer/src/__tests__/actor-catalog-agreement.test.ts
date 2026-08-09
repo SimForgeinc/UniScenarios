@@ -19,7 +19,7 @@
  * runs once a role has actually bound to concrete lane structure.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -43,6 +43,7 @@ import type { MapBundle } from '../types.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEV_ASSETS = path.resolve(HERE, '..', '..', '..', '..', 'dev-assets');
 const MAP_ID = 'richmond-field-station';
+const HAVE_MAP = existsSync(path.join(DEV_ASSETS, MAP_ID, 'topology-index.json.gz'));
 
 function readJsonGz<T>(file: string): T {
   const bytes = readFileSync(file);
@@ -147,7 +148,7 @@ function actor(result: ReturnType<typeof materialize>, id: string) {
   return found!;
 }
 
-describe('actor class / catalog id agreement', () => {
+describe.skipIf(!HAVE_MAP)('actor class / catalog id agreement', () => {
   it('refuses an animal wearing a pedestrian model', () => {
     expect(() => run(templateWith({ class: 'animal', catalogId: 'pedestrian.adult_walking' })))
       .toThrow(/actor class "animal" cannot be filled by catalog model "pedestrian.adult_walking"/);
@@ -172,7 +173,7 @@ describe('actor class / catalog id agreement', () => {
   });
 });
 
-describe('the catalog model carries the footprint', () => {
+describe.skipIf(!HAVE_MAP)('the catalog model carries the footprint', () => {
   it('gives a deer the deer footprint instead of the generic animal box', () => {
     const deer = actor(run(templateWith({ class: 'animal', catalogId: 'animal.deer' })), 'subject');
     expect(deer.kind).toBe('animal');

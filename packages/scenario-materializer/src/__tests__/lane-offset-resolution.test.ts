@@ -15,7 +15,7 @@
  * template assumes, which is most of these maps.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
@@ -39,6 +39,7 @@ import type { MapBundle } from '../types.js';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEV_ASSETS = path.resolve(HERE, '..', '..', '..', '..', 'dev-assets');
 const MAP_ID = 'richmond-field-station';
+const HAVE_MAP = existsSync(path.join(DEV_ASSETS, MAP_ID, 'topology-index.json.gz'));
 
 function readJsonGz<T>(file: string): T {
   const bytes = readFileSync(file);
@@ -134,7 +135,7 @@ function firstSite(template: ScenarioTemplateV2): { bundle: MapBundle; site: Mat
   return { bundle: loaded, site: site! };
 }
 
-describe('framePosePoint — a laneOffset the site cannot satisfy', () => {
+describe.skipIf(!HAVE_MAP)('framePosePoint — a laneOffset the site cannot satisfy', () => {
   it('materialises normally when the offset is the reference lane', () => {
     const template = templateWithPropAt(0);
     const { bundle: loaded, site } = firstSite(template);
