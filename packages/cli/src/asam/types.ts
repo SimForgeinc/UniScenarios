@@ -59,6 +59,12 @@ export class AsamExportError extends Error {
 export interface AsamExportOptions {
   /** The concrete map graph used to turn every engine route into world coordinates. */
   readonly graph: LaneGraph;
+  /** Resolve OpenDRIVE XY to the absolute road-surface elevation for WorldPosition Z. */
+  readonly worldElevation?: ((position: {
+    readonly x: number;
+    readonly y: number;
+    readonly actorId?: string;
+  }) => number) | undefined;
   /** Logical road file referenced by XML 1.4. Defaults to `<mapId>.xodr`. */
   readonly roadFile?: string | undefined;
   /** Deterministic header timestamp. Defaults to the Unix epoch. */

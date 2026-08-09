@@ -307,10 +307,14 @@ export type {
 
 /* --------------------------------------------------------- ambient traffic */
 export {
+  AMBIENT_TRAFFIC_EXTENSION_KEY,
+  ambientTrafficProfileFromExtensions,
   ambientTrafficProfileSchema,
   applyAmbientTraffic,
   createAmbientCandidatePool,
+  defaultAmbientTrafficProfile,
   materializeAmbientCandidatePool,
+  materializeAmbientTrafficProfile,
   promoteAmbientActor,
   resolveAmbientTrafficProfile,
 } from './ambient/traffic.js';
