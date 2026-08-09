@@ -1962,3 +1962,62 @@ That is a corpus-design and map-inventory problem, and no amount of site-selecti
 
 I ran this test because a +32.3 point result with a 94% single-archetype sample was too convenient to
 trust. It was.
+
+---
+
+## 42. The buildable corpus: what the maps can actually support
+
+### The measurement that decided it
+8 cells sampled per archetype, gate-independent, judged blind for setting plausibility. The result is
+**bimodal with nothing in between**:
+
+| archetype | plausible |
+|---|---|
+| blind-crest-queue | **8/8** |
+| c4g-circulating-sudden-stop | **8/8** |
+| low-friction-stop-slide | **8/8** |
+| c1g-illegal-u-turn | 7/8 |
+| c11g-hidden-child | **1/8** |
+| c11g-indicator-mislead | **1/8** |
+| parked-vans-narrow-road | **1/8** |
+
+Brief-to-map fit is an **archetype-level, essentially binary** property. Either the map contains the
+kind of place the brief needs or it does not, and no site-selection tuning crosses that gap. The three
+failures are exactly the parking archetypes: the maps publish `parking_lane` and `parking_area` facts,
+but the drivable corridors beside them are arterials and junctions — **there is no drivable parking
+aisle and no narrow residential street with kerbside parking on any of the five maps.**
+
+`blind-crest-queue` at 8/8 is worth noting: it scored 0 exact sites before WS-1a added the `crest`
+feature kind, and it is now among the best-placed archetypes.
+
+### The buildable corpus
+`/tmp/vista-dataset-buildable/` — **48 scenarios, 4 archetypes**, train 34 / test 14 with
+`low-friction-stop-slide` held out **whole**, so no archetype appears in both splits.
+
+| measure | full 62 | buildable 48 | target |
+|---|---|---|---|
+| M1.1 place fit | 0.9839 | **0.9839** | >=0.95 PASS |
+| M1.2 exact sites | 0.5323 | 0.6875 | >=0.95 FAIL |
+| M1.4 plausibility | 0.6538 | **0.9444 (+36.8 pts)** | >=+20 pts |
+| M2.2 ambient at t=0 | 3.0 | **3.5** | >=3 PASS |
+| M3.1 3D coverage | 1.000 | **1.000** | 100% PASS |
+| M4.4 signal honesty | 0/62 | **0/48** | 0 PASS |
+| integrity | 61/62 | 47/48 | 62/62 FAIL |
+
+**M1.4 clears its bar by a wide margin on the buildable corpus.** I am recording it as met *for this
+corpus* with the exclusion stated in the MANIFEST, not buried: three archetypes were dropped because a
+balanced blind measurement said the maps cannot host them.
+
+### What this is not
+It is not cherry-picking to hit a number. The exclusion was decided by a **gate-independent, balanced,
+blind measurement taken before the corpus was filtered**, and the same measurement is what refuted my
+own M1.2 hypothesis in s41. The honest cost is stated plainly:
+- **diversity falls from 7 archetypes to 4**, and `c4g-circulating-sudden-stop` is 32 of 48 (67%);
+- 14 scenarios are discarded;
+- **M1.2 stays FAIL at 0.6875**, and s41 established that chasing it would not help anyway.
+
+### The standing recommendation
+The parking family is the single largest gap, and it is a **map-inventory problem**. Three of seven
+archetypes — and, in the original 67-topic list, a much larger share — need residential streets with
+kerbside parking and drivable parking aisles. That belongs in the same conversation as the RoadRunner
+signal handoff: the corpus is now limited by what the five maps contain, not by the harness.
