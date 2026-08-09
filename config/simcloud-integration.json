@@ -19,7 +19,15 @@
     "apps/web/app/lib/uniscenario/editor/catalog",
     "apps/web/app/lib/uniscenario/editor/renderer",
     "apps/web/app/lib/uniscenario/openscenario/model.ts",
-    "apps/web/app/lib/uniscenario/session/StudioTransport.ts"
+    "apps/web/app/lib/uniscenario/session/StudioTransport.ts",
+    "apps/web/app/lib/uniscenario/ambient/candidatePool.ts",
+    "apps/web/app/lib/uniscenario/ambient/model.ts",
+    "apps/web/app/lib/uniscenario/ambient/provider.ts",
+    "apps/web/app/lib/uniscenario/ambient/robustnessGate.ts",
+    "apps/web/app/lib/uniscenario/cameras/companion.ts",
+    "apps/web/app/lib/uniscenario/cameras/controller.ts",
+    "apps/web/app/lib/uniscenario/cameras/helpers.ts",
+    "apps/web/app/lib/uniscenario/cameras/model.ts"
   ],
   "adapterSurfaces": [
     {
@@ -42,6 +50,29 @@
         "simulationPreview.ts",
         "usePlayback.ts"
       ]
+    },
+    {
+      "id": "ambient-traffic-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/ambient",
+      "allowedFiles": [
+        "AmbientTrafficPanel.test.tsx",
+        "AmbientTrafficPanel.tsx",
+        "sumoAssets.test.ts",
+        "sumoAssets.ts",
+        "useAmbientTrafficPreview.test.ts",
+        "useAmbientTrafficPreview.ts",
+        "useSumoTraffic.test.ts",
+        "useSumoTraffic.ts"
+      ]
+    },
+    {
+      "id": "camera-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/cameras",
+      "allowedFiles": [
+        "CameraPanel.tsx",
+        "index.ts",
+        "useCameras.ts"
+      ]
     }
   ],
   "sourceScanRoots": [
@@ -59,6 +90,8 @@
     "@simforge/uniscenario-(model|sim-engine|materializer|map-intel|anchor-matcher|xodr-tools|openscenario)",
     "@/app/lib/uniscenario/editor/(core|catalog|renderer)(/|[\"'])",
     "@/app/lib/uniscenario/playback/(controller|model|physics|liveSimulationPlan|mapRuntime|site-selection|staticMapColliders|canonicalPreview|traffic-provider)",
+    "@/app/lib/uniscenario/ambient/(candidatePool|model|provider|robustnessGate)",
+    "@/app/lib/uniscenario/cameras/(companion|controller|helpers|model)",
     "dashboard/scenarios/editor-native|NativeScenarioEditor"
   ]
 }
