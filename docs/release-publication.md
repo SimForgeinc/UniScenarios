@@ -31,9 +31,9 @@ Run the local gates before creating the tag:
 
 ```bash
 pnpm install --frozen-lockfile
+# Builds packages in dependency order before checking every workspace.
 pnpm typecheck
 pnpm test:release
-pnpm -r --filter "./packages/**" build
 pnpm release:manifest
 pnpm release:verify-artifacts
 pnpm release:smoke-packages

@@ -30,7 +30,6 @@ jobs:
       - run: pnpm test:release
       - run: pnpm test:integration
       - run: pnpm test:portable
-      - run: pnpm -r --filter "./packages/**" build
       - run: pnpm release:manifest
       - run: pnpm release:verify-artifacts
       - run: pnpm release:smoke-packages
@@ -53,6 +52,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      - name: Install OpenSCENARIO schema validator
+        run: sudo apt-get update && sudo apt-get install --yes libxml2-utils
       - name: Verify release identity
         run: |
           python - <<'PY'
