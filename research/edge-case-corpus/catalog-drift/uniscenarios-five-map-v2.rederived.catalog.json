@@ -1931,7 +1931,7 @@
       "id": "parking.delivery-double-park",
       "runtimeTemplateId": "delivery-double-park",
       "source": "examples/mechanisms/parking-transit/delivery-double-park.template.json",
-      "digest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+      "digest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
     },
     {
       "id": "parking.driveway-emergence",
@@ -18209,7 +18209,7 @@
         "engineGraphDigest": "35cf2b16a1d308c6436089a0edf66f20c87a79da12e79472a03a2f568ba28f63",
         "locationCatalogDigest": "d39562c629a27e4c81387201904d0c15e34f0bfc9e3f55ff56f124c4cda33d97",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -18359,7 +18359,7 @@
         "video": "evidence/belmont-research-center/belmont-research-center-003-delivery-double-park-20f309742db4/render/video.mp4",
         "visualInspection": "evidence/belmont-research-center/belmont-research-center-003-delivery-double-park-20f309742db4/render/visual-inspection.json"
       },
-      "designDigest": "564430699fbff3d4feba9a4f5cb56a1b0c0ee374b4d2324df22ae90fef67ce97"
+      "designDigest": "7bbdf9e3d0af8728b59721be46abd62db584355f12b26ee024274d7e8d5b6c48"
     },
     {
       "identity": "belmont-research-center-004-bus-pullout-d14411f87503",
@@ -20597,7 +20597,7 @@
         "engineGraphDigest": "35cf2b16a1d308c6436089a0edf66f20c87a79da12e79472a03a2f568ba28f63",
         "locationCatalogDigest": "d39562c629a27e4c81387201904d0c15e34f0bfc9e3f55ff56f124c4cda33d97",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -20747,7 +20747,7 @@
         "video": "evidence/belmont-research-center/belmont-research-center-018-delivery-double-park-43c8bfe5a14f/render/video.mp4",
         "visualInspection": "evidence/belmont-research-center/belmont-research-center-018-delivery-double-park-43c8bfe5a14f/render/visual-inspection.json"
       },
-      "designDigest": "415136a9bf355404bbd6ed1a17486cefeb2902734b092a7c4fc3d018f13f2aee"
+      "designDigest": "ea17a9e5927a71493b7e86f518839bf07aab2ff2602857251748e1eea1992366"
     },
     {
       "identity": "belmont-research-center-019-driveway-emergence-a8a2294fa91a",
@@ -24412,7 +24412,7 @@
         "engineGraphDigest": "35cf2b16a1d308c6436089a0edf66f20c87a79da12e79472a03a2f568ba28f63",
         "locationCatalogDigest": "d39562c629a27e4c81387201904d0c15e34f0bfc9e3f55ff56f124c4cda33d97",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -24562,7 +24562,7 @@
         "video": "evidence/belmont-research-center/belmont-research-center-042-delivery-double-park-aa71e5b7da73/render/video.mp4",
         "visualInspection": "evidence/belmont-research-center/belmont-research-center-042-delivery-double-park-aa71e5b7da73/render/visual-inspection.json"
       },
-      "designDigest": "a57ac08c33d489ea201a949998e56a0866c4404f0f51cb030bddd172a5c63b6f"
+      "designDigest": "e0cfc6ca99155ec33e02efda49f33d580638c40840b676b2cde9633dc6ec29a7"
     },
     {
       "identity": "belmont-research-center-043-driveway-emergence-64bd8cd4de6b",
@@ -37138,7 +37138,7 @@
         "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
         "locationCatalogDigest": "a9ceb9b33cb777795040e4ff642d4f2531f88e97594f4998ad5a628ad0dfd86b",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -37288,7 +37288,7 @@
         "video": "evidence/el-camino-road/el-camino-road-022-delivery-double-park-6db7764648bd/render/video.mp4",
         "visualInspection": "evidence/el-camino-road/el-camino-road-022-delivery-double-park-6db7764648bd/render/visual-inspection.json"
       },
-      "designDigest": "708d5114df7d71340b778afcf8844c7d0189ea991a01cf33eb9bb8831d781279"
+      "designDigest": "fb46e147c4a568f2c357888650c9e0c3d9e0008d36c1249644963ee586a4d340"
     },
     {
       "identity": "el-camino-road-023-driveway-emergence-6850657bcca2",
@@ -41768,7 +41768,7 @@
         "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
         "locationCatalogDigest": "a9ceb9b33cb777795040e4ff642d4f2531f88e97594f4998ad5a628ad0dfd86b",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -41919,7 +41919,7 @@
         "video": "evidence/el-camino-road/el-camino-road-051-delivery-double-park-5712112d4e9d/render/video.mp4",
         "visualInspection": "evidence/el-camino-road/el-camino-road-051-delivery-double-park-5712112d4e9d/render/visual-inspection.json"
       },
-      "designDigest": "e355623ffaf9b662e29e060b4e56bd96a765f463f82b11c2b300ec3f6412d71d"
+      "designDigest": "3c31ae283c6e3e8ac190414ee600543a702b71a06f5a660f8965000ab16c9b63"
     },
     {
       "identity": "el-camino-road-052-driveway-emergence-bbae3fdf5b4c",
@@ -46399,7 +46399,7 @@
         "engineGraphDigest": "00293fb5a40e6665257770f20eddbd0cbd711b301cce17496544c0e1fa15900a",
         "locationCatalogDigest": "a9ceb9b33cb777795040e4ff642d4f2531f88e97594f4998ad5a628ad0dfd86b",
         "taxonomyDigest": "e7eae946e314074710c092632ca02141e95d41ff684bece2e849799443011e1c",
-        "templateDigest": "88cc236a77f0ae6e86fc91c7e4fa28fd819c44a894249a08a9dfc23d93ec4b91"
+        "templateDigest": "041a4dd9a951782065865a2e17d8de567cbda33234a3096ac4b5bb7e2326a8da"
       },
       "scenario": {
         "incidentId": "parking.delivery-double-park",
@@ -46549,7 +46549,7 @@
         "video": "evidence/el-camino-road/el-camino-road-080-delivery-double-park-10fa89e995ec/render/video.mp4",
         "visualInspection": "evidence/el-camino-road/el-camino-road-080-delivery-double-park-10fa89e995ec/render/visual-inspection.json"
       },
-      "designDigest": "b2fb0f560141db542eb67bfed34b18a2eef2cf5769905c654b6715d5d03fa426"
+      "designDigest": "f3370cbf5b4addc350453188769f8736d664cb605fc6347ab80c59207e8b85e2"
     },
     {
       "identity": "el-camino-road-081-driveway-emergence-a9fed6dba081",
@@ -81457,5 +81457,5 @@
     "visuallyAccepted": 0,
     "rejected": 0
   },
-  "catalogDigest": "359ae348f7324d4655e0d665b45631a415bfad46affd5d669fb1cf2a87bafb78"
+  "catalogDigest": "ae4a28462693cd4c52885286c7315982a23af13888bc6ec9e62aed390e42705e"
 }

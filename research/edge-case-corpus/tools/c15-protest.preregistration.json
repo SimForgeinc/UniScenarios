@@ -1,0 +1,54 @@
+{
+ "rubric": "c15-protest.rubric.json",
+ "sha256": "cd00891351ae4b52192b9523c3c718950b3619e245b6decc9a52be96934d891b",
+ "registeredAt": "2026-08-06T18:51:47.923829+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "narrow_lane",
+   "right",
+   "barricade",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
+   "occluder.hedge_run",
+   "advance_warning",
+   1
+  ],
+  [
+   "place_actor",
+   "pedestrian",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "pedestrian",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "pedestrian"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

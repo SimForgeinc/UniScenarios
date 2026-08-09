@@ -1,0 +1,53 @@
+{
+ "rubric": "c3-occluded-uncontrolled.rubric.json",
+ "sha256": "89cc3a5a058c23966560325509a1c6a8e70f9a7bad442b47746ad4154d58b667",
+ "registeredAt": "2026-08-06T18:30:17.654757+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_prop",
+   "occluder.dumpster",
+   "junction",
+   1
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "conflicting"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "ignore_right_of_way",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "hold_course",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0,
+    3
+   ]
+  ]
+ ]
+}

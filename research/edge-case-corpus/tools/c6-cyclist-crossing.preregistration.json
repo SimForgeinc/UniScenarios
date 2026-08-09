@@ -1,0 +1,41 @@
+{
+ "rubric": "c6-cyclist-crossing.rubric.json",
+ "sha256": "ad4992927e88bbc073eea470de815f39cdd5eaf386acd7ea85238da54aa3f315",
+ "registeredAt": "2026-08-06T21:01:19.323612+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::1239713a0473a495"
+  ],
+  [
+   "place_actor",
+   "cyclist",
+   "vehicle.bicycle",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "cyclist",
+   "cross_road",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "cyclist"
+   ],
+   [
+    0.1,
+    2
+   ]
+  ]
+ ]
+}

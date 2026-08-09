@@ -1,0 +1,53 @@
+{
+ "rubric": "c5-reversing-ped.rubric.json",
+ "sha256": "d0bd4989ec13fdb4e804b463c48a258b86902f02b4b44b53e706499c6fa63976",
+ "registeredAt": "2026-08-06T18:49:08.165677+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "reversing_vehicle",
+   "vehicle.suv",
+   "ahead_same_lane"
+  ],
+  [
+   "place_actor",
+   "pedestrian",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "reversing_vehicle",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "add_interaction",
+   "pedestrian",
+   "cross_road",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "pedestrian"
+   ],
+   [
+    0.1,
+    1.5
+   ]
+  ]
+ ]
+}

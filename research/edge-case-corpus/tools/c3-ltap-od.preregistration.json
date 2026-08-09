@@ -1,0 +1,41 @@
+{
+ "rubric": "c3-ltap-od.rubric.json",
+ "sha256": "c992ccd37d62ae0e149cc3dc01467d869e65bf78cf738334f139b15b850d89e2",
+ "registeredAt": "2026-08-06T19:36:49.385046+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "conflicting"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "hold_course",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

@@ -1,0 +1,47 @@
+{
+ "rubric": "c3-left-hook-ptw.rubric.json",
+ "sha256": "b7b1f018498fa0b2fd9b9f59335106594d61acbfa4b0a4e980c9c1d087d348ad",
+ "registeredAt": "2026-08-06T18:48:04.567983+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::007b7001d1afa0c5"
+  ],
+  [
+   "place_actor",
+   "motorcycle",
+   "vehicle.motorcycle",
+   "oncoming"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "motorcycle",
+   "ignore_right_of_way",
+   "at_conflict"
+  ],
+  [
+   "add_interaction",
+   "motorcycle",
+   "hold_course",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "motorcycle"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

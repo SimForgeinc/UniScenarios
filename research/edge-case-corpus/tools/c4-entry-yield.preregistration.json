@@ -1,0 +1,47 @@
+{
+ "rubric": "c4-entry-yield.rubric.json",
+ "sha256": "522e91d37fb194bcd6a0e29baf07347db52d46c06a670eedb11eecb8d79eb10c",
+ "registeredAt": "2026-08-06T21:15:02.655915+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::007b7001d1afa0c5"
+  ],
+  [
+   "place_actor",
+   "circulating_vehicle",
+   "vehicle.sedan",
+   "conflicting"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "circulating_vehicle",
+   "ignore_right_of_way",
+   "at_conflict"
+  ],
+  [
+   "add_interaction",
+   "circulating_vehicle",
+   "hold_course",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "circulating_vehicle"
+   ],
+   [
+    0.5,
+    3.0
+   ]
+  ]
+ ]
+}

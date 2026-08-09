@@ -1,0 +1,47 @@
+{
+ "rubric": "c13-rail-crossing.rubric.json",
+ "sha256": "e7406189480e19a03817df37f14f57feaa7d204d0c73bf5083f3f7ece2d53041",
+ "registeredAt": "2026-08-06T18:52:08.834247+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_prop",
+   "construction.portable_signal",
+   "approach",
+   1
+  ],
+  [
+   "place_actor",
+   "lead_vehicle",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "add_interaction",
+   "lead_vehicle",
+   "brake_to_stop",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "lead_vehicle"
+   ],
+   [
+    0,
+    2
+   ]
+  ]
+ ]
+}

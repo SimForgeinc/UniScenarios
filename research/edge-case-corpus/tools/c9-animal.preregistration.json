@@ -1,0 +1,41 @@
+{
+ "rubric": "c9-animal.rubric.json",
+ "sha256": "063bf38f3d0c9323ecafa97dc10c451b1c4a3054c41127432bb723b51ef58455",
+ "registeredAt": "2026-08-06T18:35:13.008530+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "animal",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "animal",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "animal"
+   ],
+   [
+    0,
+    2
+   ]
+  ]
+ ]
+}

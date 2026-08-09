@@ -1,0 +1,41 @@
+{
+ "rubric": "c15-phantom-brake.rubric.json",
+ "sha256": "77fa3b45ff0ff927ec7b33728f00a83ad8ca2afee52b21ffd9aa00ed74a13c22",
+ "registeredAt": "2026-08-06T21:14:46.888149+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "lead",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "brake_to_stop",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "lead"
+   ],
+   [
+    0,
+    1
+   ]
+  ]
+ ]
+}

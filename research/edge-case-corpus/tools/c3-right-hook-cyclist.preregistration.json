@@ -1,0 +1,41 @@
+{
+ "rubric": "c3-right-hook-cyclist.rubric.json",
+ "sha256": "65ea33df40f24048cc336e0a1be81608fbdcb404b53aef617e845fd8e781d1c0",
+ "registeredAt": "2026-08-06T21:02:25.059463+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::007b7001d1afa0c5"
+  ],
+  [
+   "place_actor",
+   "cyclist",
+   "vehicle.bicycle",
+   "conflicting"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "cyclist",
+   "hold_course",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "cyclist"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

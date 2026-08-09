@@ -1,0 +1,53 @@
+{
+ "rubric": "c5-cpnco-dartout.rubric.json",
+ "sha256": "014f62f0837d21e6098ef7d29c15194b550c7e2c3e18efcf0552e5e387799a42",
+ "registeredAt": "2026-08-06T21:02:15.740299+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_prop",
+   "vehicle.sedan",
+   "approach",
+   1
+  ],
+  [
+   "place_prop",
+   "vehicle.suv",
+   "departure",
+   1
+  ],
+  [
+   "place_actor",
+   "child",
+   "pedestrian.child_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "child",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "child"
+   ],
+   [
+    0,
+    3
+   ]
+  ]
+ ]
+}

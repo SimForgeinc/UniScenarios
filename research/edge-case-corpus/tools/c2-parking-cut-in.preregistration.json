@@ -1,0 +1,41 @@
+{
+ "rubric": "c2-parking-cut-in.rubric.json",
+ "sha256": "5f4f44b65cc99dbf6988994e4ef5456faef9bd2f80341e86a3e5ffbd1eeb1815",
+ "registeredAt": "2026-08-06T19:36:50.612448+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "pulling_vehicle",
+   "vehicle.sedan",
+   "adjacent_lane"
+  ],
+  [
+   "add_interaction",
+   "pulling_vehicle",
+   "change_lane",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "pulling_vehicle"
+   ],
+   [
+    0.1,
+    1.0
+   ]
+  ]
+ ]
+}

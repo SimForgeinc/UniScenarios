@@ -1,0 +1,41 @@
+{
+ "rubric": "c11-backing-out.rubric.json",
+ "sha256": "915935338c8e17a9d84e95b7fafaf8e59505718b6edec2304a545a8b5bfe9f91",
+ "registeredAt": "2026-08-06T18:35:20.226597+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "backing_vehicle",
+   "vehicle.sedan",
+   "adjacent_lane"
+  ],
+  [
+   "add_interaction",
+   "backing_vehicle",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "backing_vehicle"
+   ],
+   [
+    0.1,
+    1.5
+   ]
+  ]
+ ]
+}

@@ -1,0 +1,54 @@
+{
+ "rubric": "c9-debris.rubric.json",
+ "sha256": "6b7feb1b792f68b391a56bdb88faaa126194af3ebd5cdf68aeab7cae795c0d8e",
+ "registeredAt": "2026-08-06T21:17:54.136124+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::086d587d6a7a45e8"
+  ],
+  [
+   "narrow_lane",
+   "right",
+   "cone",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
+   "hazard.tire_debris",
+   "activity",
+   1
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0,
+    1
+   ]
+  ]
+ ]
+}

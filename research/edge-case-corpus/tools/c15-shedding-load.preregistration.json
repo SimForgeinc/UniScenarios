@@ -1,0 +1,54 @@
+{
+ "rubric": "c15-shedding-load.rubric.json",
+ "sha256": "2157c541c12a12d1fac6b37afa187a313da037e6d76b257778fc412c66f7e5f0",
+ "registeredAt": "2026-08-06T18:11:09.761822+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "narrow_lane",
+   "right",
+   "cone",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
+   "hazard.cardboard_box",
+   "activity",
+   3
+  ],
+  [
+   "place_actor",
+   "lead",
+   "vehicle.box_truck",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "lead"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

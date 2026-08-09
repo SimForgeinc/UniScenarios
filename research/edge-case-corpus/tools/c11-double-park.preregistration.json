@@ -1,0 +1,54 @@
+{
+ "rubric": "c11-double-park.rubric.json",
+ "sha256": "8c8bddb1010af7a257a8ad5b61a9dd3179a65c9d64a3a041e33db2c425418ada",
+ "registeredAt": "2026-08-06T17:58:18.869037+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::1239713a0473a495"
+  ],
+  [
+   "narrow_lane",
+   "right",
+   "cone",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
+   "vehicle.box_truck",
+   "activity",
+   1
+  ],
+  [
+   "place_actor",
+   "passing_vehicle",
+   "vehicle.sedan",
+   "adjacent_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "change_lane",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "passing_vehicle",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "passing_vehicle"
+   ],
+   [
+    0,
+    2
+   ]
+  ]
+ ]
+}

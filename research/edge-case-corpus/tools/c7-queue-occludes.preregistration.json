@@ -1,0 +1,53 @@
+{
+ "rubric": "c7-queue-occludes.rubric.json",
+ "sha256": "88d5c0c8e9accec7b2bc79cd942faddaea0c0b4c070ca24d3520b1c1a0c20094",
+ "registeredAt": "2026-08-06T21:14:48.825828+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "queue_bus",
+   "vehicle.bus",
+   "adjacent_lane"
+  ],
+  [
+   "place_actor",
+   "queue_van",
+   "vehicle.van",
+   "adjacent_lane"
+  ],
+  [
+   "place_actor",
+   "crossing_pedestrian",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "crossing_pedestrian",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "crossing_pedestrian"
+   ],
+   [
+    0.1,
+    1.0
+   ]
+  ]
+ ]
+}

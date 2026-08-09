@@ -1,0 +1,48 @@
+{
+ "rubric": "c2-merge-gap-collapse.rubric.json",
+ "sha256": "31cfb812db253367a6b3e279165519d39d3ab1c79562c6ac69407b38c246859f",
+ "registeredAt": "2026-08-06T19:36:48.358642+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "close_lane",
+   "adjacent_right",
+   "cone",
+   33.0,
+   5
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "adjacent_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "change_lane",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

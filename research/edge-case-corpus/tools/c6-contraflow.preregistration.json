@@ -1,0 +1,47 @@
+{
+ "rubric": "c6-contraflow.rubric.json",
+ "sha256": "073e2c70472dfee9efa226638bba40e8456d10a3625633742fc7f4ecd8aad9ad",
+ "registeredAt": "2026-08-06T17:49:08.412841+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "cyclist",
+   "vehicle.bicycle",
+   "oncoming"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "cyclist",
+   "ignore_right_of_way",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "cyclist",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "cyclist"
+   ],
+   [
+    0.5,
+    2.0
+   ]
+  ]
+ ]
+}

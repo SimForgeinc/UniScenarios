@@ -1,0 +1,29 @@
+{
+ "version": 1,
+ "intentId": "c2-cut-in-brake",
+ "title": "c2-cut-in-brake",
+ "originalIntent": "Assembled from the agent require() calls; frozen before any parameter solving.",
+ "criteria": [
+  {
+   "id": "R-clearance",
+   "kind": "clearance",
+   "required": true,
+   "pair": [
+    "ego",
+    "cutter"
+   ],
+   "measure": "centre_distance",
+   "minM": 0.5
+  },
+  {
+   "id": "R-nocoll",
+   "kind": "collision",
+   "required": true,
+   "pair": [
+    "ego",
+    "cutter"
+   ],
+   "maxCount": 0
+  }
+ ]
+}

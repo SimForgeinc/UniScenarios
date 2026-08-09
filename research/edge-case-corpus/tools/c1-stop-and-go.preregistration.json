@@ -1,0 +1,53 @@
+{
+ "rubric": "c1-stop-and-go.rubric.json",
+ "sha256": "6a4bc66039df0f0e5544c2fc97436aea5fb61b03bd0313adf8cf7875c2f1f88f",
+ "registeredAt": "2026-08-06T19:40:45.527723+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "lead",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "brake_to_stop",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "brake_to_stop",
+   "after"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "brake_to_stop",
+   "after"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "lead"
+   ],
+   [
+    0.1,
+    2
+   ]
+  ]
+ ]
+}

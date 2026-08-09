@@ -1,0 +1,47 @@
+{
+ "rubric": "c6-dooring.rubric.json",
+ "sha256": "3fd245bf6f611555a63e6b8e666f5b78acd2cc05810a6806614299e6c5daf95e",
+ "registeredAt": "2026-08-06T21:02:20.554676+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_prop",
+   "vehicle.sedan",
+   "approach",
+   1
+  ],
+  [
+   "place_actor",
+   "cyclist",
+   "vehicle.bicycle",
+   "adjacent_lane"
+  ],
+  [
+   "add_interaction",
+   "cyclist",
+   "change_lane",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "scenario_start"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "cyclist"
+   ],
+   [
+    0.1,
+    2.0
+   ]
+  ]
+ ]
+}

@@ -1,0 +1,41 @@
+{
+ "rubric": "c5-adult-midblock.rubric.json",
+ "sha256": "e365cc67306ec9c901d6f89d926445aea5a66d762498956183538cb68d97e407",
+ "registeredAt": "2026-08-06T21:01:38.492065+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0.1,
+    1.0
+   ]
+  ]
+ ]
+}

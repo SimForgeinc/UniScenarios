@@ -1,0 +1,47 @@
+{
+ "rubric": "c7-hedge-corner.rubric.json",
+ "sha256": "eedcf1b09e8a654889391d79088d423b1f1168ffe17b98f8e8b052c07544f854",
+ "registeredAt": "2026-08-06T21:14:47.441777+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_prop",
+   "occluder.hedge_run",
+   "junction",
+   1
+  ],
+  [
+   "place_actor",
+   "crossing_pedestrian",
+   "pedestrian.adult_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "crossing_pedestrian",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "crossing_pedestrian"
+   ],
+   [
+    0.1,
+    1.0
+   ]
+  ]
+ ]
+}

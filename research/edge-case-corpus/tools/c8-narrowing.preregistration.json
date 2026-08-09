@@ -1,0 +1,54 @@
+{
+ "rubric": "c8-narrowing.rubric.json",
+ "sha256": "6bc94b735854db4404eff89aff939b12638135c61d74c439d5e291ea376e9ee0",
+ "registeredAt": "2026-08-06T18:51:29.421316+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "narrow_lane",
+   "right",
+   "barricade",
+   8.2,
+   4
+  ],
+  [
+   "place_prop",
+   "construction.jersey_barrier",
+   "activity",
+   3
+  ],
+  [
+   "place_actor",
+   "challenger",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "challenger",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "challenger"
+   ],
+   [
+    0.1,
+    2
+   ]
+  ]
+ ]
+}

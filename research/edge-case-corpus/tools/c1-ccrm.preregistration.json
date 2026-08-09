@@ -1,0 +1,41 @@
+{
+ "rubric": "c1-ccrm.rubric.json",
+ "sha256": "4d3b48f64d8c8fb4e6f0dcfd83b8e10b5cce2825eb42518d15ee37816d3de560",
+ "registeredAt": "2026-08-06T18:41:28.243815+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "lead",
+   "vehicle.sedan",
+   "ahead_same_lane"
+  ],
+  [
+   "add_interaction",
+   "lead",
+   "brake_to_stop",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "lead"
+   ],
+   [
+    0,
+    2
+   ]
+  ]
+ ]
+}

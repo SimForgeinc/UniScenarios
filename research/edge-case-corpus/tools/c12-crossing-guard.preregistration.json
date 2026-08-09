@@ -1,0 +1,65 @@
+{
+ "rubric": "c12-crossing-guard.rubric.json",
+ "sha256": "d98fb235659cfe684f271414bddab71d30794d688c45592e993d58c67cc6e181",
+ "registeredAt": "2026-08-06T18:37:51.940627+00:00",
+ "authorLog": [
+  [
+   "use_site",
+   "yale-street::016011e14fda56b1"
+  ],
+  [
+   "place_actor",
+   "crossing_guard",
+   "pedestrian.traffic_marshal",
+   "ego_lane"
+  ],
+  [
+   "place_actor",
+   "child1",
+   "pedestrian.child_walking",
+   "ego_lane"
+  ],
+  [
+   "place_actor",
+   "child2",
+   "pedestrian.child_walking",
+   "ego_lane"
+  ],
+  [
+   "add_interaction",
+   "ego",
+   "hold_course",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "crossing_guard",
+   "wave_traffic",
+   "on_approach"
+  ],
+  [
+   "add_interaction",
+   "child1",
+   "cross_road",
+   "at_conflict"
+  ],
+  [
+   "add_interaction",
+   "child2",
+   "cross_road",
+   "after"
+  ],
+  [
+   "require",
+   "near_miss",
+   [
+    "ego",
+    "child1"
+   ],
+   [
+    0.2,
+    1.5
+   ]
+  ]
+ ]
+}
