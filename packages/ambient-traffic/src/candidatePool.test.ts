@@ -70,3 +70,4 @@ describe('ambient candidate pool preview cache', () => {
     expect(previewForRevision(null, 'map:yellow', 2)).toBeNull();
   });
 });
+

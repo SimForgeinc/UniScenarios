@@ -12,3 +12,4 @@ describe('ambient robustness intent gate', () => {
     expect(ambientRobustnessGate(false, { baseline: 'accept', cases: { off: 'accept' } })).toEqual({ accepted: false, overall: 'rejected' });
   });
 });
+

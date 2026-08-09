@@ -61,4 +61,3 @@ export class AuthoredCameraHelpers {
     this.resources.length = 0;
   }
 }
-

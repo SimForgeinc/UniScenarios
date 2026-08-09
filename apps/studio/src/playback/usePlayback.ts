@@ -3,7 +3,7 @@ import type { CameraView, CityViewer } from '@uniscenarios/city-renderer';
 import { PlaybackController, type PlaybackState } from '@uniscenarios/playback';
 import type { PlaybackBundle } from '@uniscenarios/playback';
 import type { MapOverlayHandle } from '../mapOverlays';
-import type { CameraPolicy } from '../cameras/model';
+import type { CameraPolicy } from '@uniscenarios/camera-rig';
 import type { DashCameraSensor } from '@uniscenarios/scenario-model';
 import type { ActorRenderer } from '../editor/actorRenderer';
 

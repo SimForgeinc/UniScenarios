@@ -1,11 +1,11 @@
 {
-  "name": "@uniscenarios/editor-core",
+  "name": "@uniscenarios/camera-rig",
   "version": "0.1.0-rc.9",
-  "description": "Framework-neutral UniScenarios v2 authoring document, interaction controller, route overlays, and editor contracts.",
+  "description": "Portable authored-camera presentation, attachment, companion metadata, and Three.js editor helpers for UniScenarios.",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
-    "directory": "packages/editor-core"
+    "directory": "packages/camera-rig"
   },
   "publishConfig": {
     "access": "public",
@@ -21,9 +21,7 @@
       "default": "./dist/index.js"
     }
   },
-  "files": [
-    "dist"
-  ],
+  "files": ["dist"],
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist",
     "prepack": "pnpm run build",
@@ -31,9 +29,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniscenarios/prop-catalog": "workspace:*",
+    "@uniscenarios/city-renderer": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
-    "@uniscenarios/sim-engine": "workspace:*",
     "three": "^0.182.0"
   },
   "devDependencies": {

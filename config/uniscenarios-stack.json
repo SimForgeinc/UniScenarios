@@ -1,6 +1,6 @@
 {
   "schema": "uniscenarios.stack-config/v1",
-  "stackVersion": "0.1.0-rc.8",
+  "stackVersion": "0.1.0-rc.9",
   "repository": "https://github.com/SimForgeinc/UniScenarios",
   "contracts": {
     "scenarioTemplate": "2",
@@ -12,12 +12,14 @@
   "packages": [
     { "path": "packages/scenario-model", "role": "scenario-contract" },
     { "path": "packages/sim-engine", "role": "simulation-kernel" },
+    { "path": "packages/ambient-traffic", "role": "ambient-traffic-contracts" },
     { "path": "packages/scenario-materializer", "role": "materializer" },
     { "path": "packages/map-intel", "role": "map-intelligence" },
     { "path": "packages/anchor-matcher", "role": "anchor-matching" },
     { "path": "packages/xodr-tools", "role": "opendrive" },
     { "path": "packages/city-renderer", "role": "renderer" },
     { "path": "packages/editor-core", "role": "editor-core" },
+    { "path": "packages/camera-rig", "role": "camera-presentation" },
     { "path": "packages/playback", "role": "playback-runtime" },
     { "path": "packages/prop-catalog", "role": "actor-catalog" },
     { "path": "packages/trace-comparator", "role": "trace-conformance" },

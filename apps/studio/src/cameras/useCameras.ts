@@ -1,7 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { CityViewer } from '@uniscenarios/city-renderer';
-import { CameraRegistry, type CameraAttachmentResolver, type CameraPresentationStore } from './controller';
-import { EMPTY_CAMERA_PRESENTATION, type CameraPresentation } from './model';
+import {
+  CameraRegistry,
+  EMPTY_CAMERA_PRESENTATION,
+  type CameraAttachmentResolver,
+  type CameraPresentation,
+  type CameraPresentationStore,
+} from '@uniscenarios/camera-rig';
 
 export interface UseCamerasOptions {
   viewer: CityViewer | null;
@@ -34,4 +39,3 @@ export function useCameras(options: UseCamerasOptions): {
 
 function noopSubscribe(): () => void { return () => {}; }
 function emptySnapshot(): CameraPresentation { return EMPTY_CAMERA_PRESENTATION; }
-

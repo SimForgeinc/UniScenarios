@@ -34,7 +34,7 @@ export const EMPTY_CAMERA_PRESENTATION: CameraPresentation = {
 
 const POLICIES = new Set<CameraPolicy>(['editor', 'all-actors', 'ego-chase', 'dash-camera', 'authored', 'auto-incident', 'free']);
 
-/** Tolerant at the extension boundary: malformed presentation data cannot break a scenario. */
+/** Tolerant at the presentation-extension boundary: malformed data cannot break a scenario. */
 export function parseCameraPresentation(value: unknown): CameraPresentation {
   if (!value || typeof value !== 'object') return EMPTY_CAMERA_PRESENTATION;
   const raw = value as Record<string, unknown>;
@@ -51,7 +51,7 @@ export function parseCameraPresentation(value: unknown): CameraPresentation {
   return { version: 1, cameras, policy, ...(active ? { activeCameraId: active } : {}) };
 }
 
-/** Select the stable authored view used by read-only Gallery playback. */
+/** Select the stable authored view used by read-only playback. */
 export function preferredAuthoredCamera(template: Pick<ScenarioTemplateV2, 'extensions'>): CameraView | null {
   const presentation = parseCameraPresentation(template.extensions?.[CAMERA_EXTENSION_KEY]);
   const camera = presentation.cameras.find((item) => item.id === presentation.activeCameraId)

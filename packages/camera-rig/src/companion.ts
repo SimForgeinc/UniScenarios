@@ -7,10 +7,7 @@ export interface CameraCompanionMetadata {
   notice: string;
 }
 
-/**
- * Sidecar seam for downstream renderers. This does not imply portable camera
- * support in OpenSCENARIO XML/DSL and must not be folded into simulation input.
- */
+/** Presentation sidecar for renderers; never a claim of native ASAM camera support. */
 export function createCameraCompanion(
   presentation: CameraPresentation,
   scenarioInputHash?: string,
@@ -22,4 +19,3 @@ export function createCameraCompanion(
     notice: 'Presentation metadata only; not a native ASAM OpenSCENARIO camera declaration.',
   };
 }
-

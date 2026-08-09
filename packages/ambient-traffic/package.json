@@ -1,7 +1,12 @@
 {
-  "name": "@uniscenarios/trace-comparator",
+  "name": "@uniscenarios/ambient-traffic",
   "version": "0.1.0-rc.9",
-  "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/trace-comparator" },
+  "description": "Canonical ambient traffic authoring, provider choice, preview identity, and materialized evidence contracts for UniScenarios.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
+    "directory": "packages/ambient-traffic"
+  },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
   "type": "module",
@@ -16,10 +21,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@uniscenarios/playback": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*"
   },
-  "devDependencies": {
-    "typescript": "^5.6.0",
-    "vitest": "^3.0.0"
-  }
+  "devDependencies": { "typescript": "^5.6.0", "vitest": "^3.0.0" }
 }

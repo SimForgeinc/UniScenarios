@@ -20,7 +20,9 @@
   "dependencies": {
     "@uniscenarios/cli": "workspace:*",
     "@uniscenarios/anchor-matcher": "workspace:*",
+    "@uniscenarios/ambient-traffic": "workspace:*",
     "@uniscenarios/city-renderer": "workspace:*",
+    "@uniscenarios/camera-rig": "workspace:*",
     "@uniscenarios/esmini-runner": "workspace:*",
     "@uniscenarios/editor-core": "workspace:*",
     "@uniscenarios/map-intel": "workspace:*",

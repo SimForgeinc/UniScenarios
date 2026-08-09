@@ -67,7 +67,6 @@ export class CameraRegistry {
     return id;
   }
 
-  /** Traffic-light preset: low roadside viewpoint looking along the approach. */
   addTrafficLightCamera(signalId: string, approach?: string): string {
     const attachment: CameraAttachment = { kind: 'traffic-signal', id: signalId, ...(approach ? { approach } : {}) };
     const resolved = this.options.resolveAttachment?.(attachment);
@@ -105,15 +104,12 @@ export class CameraRegistry {
   activate(id: string): boolean {
     const stored = this.snapshot.cameras.find((camera) => camera.id === id);
     if (!stored) return false;
-    const camera = this.resolveView(stored);
-    this.options.viewer.controls.applyView(camera);
+    this.options.viewer.controls.applyView(this.resolveView(stored));
     this.write({ ...this.snapshot, activeCameraId: id, policy: 'authored' });
     return true;
   }
 
-  setPolicy(policy: CameraPolicy): void {
-    this.write({ ...this.snapshot, policy });
-  }
+  setPolicy(policy: CameraPolicy): void { this.write({ ...this.snapshot, policy }); }
 
   dispose(): void {
     this.unsubscribe();
@@ -125,12 +121,10 @@ export class CameraRegistry {
     if (!camera.attachment) return camera;
     const resolved = this.options.resolveAttachment?.(camera.attachment);
     if (!resolved) return camera;
-    const oldTarget = camera.target;
-    const oldPosition = camera.position;
     const offset: readonly [number, number, number] = [
-      oldPosition[0] - oldTarget[0],
-      oldPosition[1] - oldTarget[1],
-      oldPosition[2] - oldTarget[2],
+      camera.position[0] - camera.target[0],
+      camera.position[1] - camera.target[1],
+      camera.position[2] - camera.target[2],
     ];
     const target = resolved.target ?? resolved.position;
     return {
@@ -146,14 +140,10 @@ export class CameraRegistry {
       cameras: this.snapshot.cameras.map((camera) => camera.id === id ? { ...camera, ...update, id } : camera),
     });
   }
-
   private nextName(): string { return `Camera ${this.snapshot.cameras.length + 1}`; }
   private read(): CameraPresentation {
     return parseCameraPresentation(this.options.store.data.extensions?.[CAMERA_EXTENSION_KEY] ?? EMPTY_CAMERA_PRESENTATION);
   }
-  private write(next: CameraPresentation): void {
-    this.options.store.setPresentationExtension(CAMERA_EXTENSION_KEY, next);
-  }
+  private write(next: CameraPresentation): void { this.options.store.setPresentationExtension(CAMERA_EXTENSION_KEY, next); }
   private emit(): void { for (const listener of [...this.listeners]) listener(); }
 }
-
