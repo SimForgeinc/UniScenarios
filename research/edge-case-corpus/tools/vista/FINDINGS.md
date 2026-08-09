@@ -1912,3 +1912,53 @@ whole exercise exists to prevent.
 Breadth keeps seven mechanisms and ships 47% of scenarios at places a human would call wrong. Fidelity
 ships only places that genuinely match, and collapses to essentially one archetype. Neither is
 obviously right, and the choice is the user's, not mine to make silently.
+
+---
+
+## 41. RETRACTION: "M1.2 and M1.4 are one failure seen twice"
+
+Last section I wrote that the exact/degraded site verdict and the plausibility judgement were the same
+defect measured two ways, on the evidence that every critic-rejected scenario sat at a `degraded` site.
+**That was a between-archetype correlation read as a within-site cause, and a controlled test refutes
+it.**
+
+### The experiment
+`low-friction-stop-slide` has 120 cells at `exact` sites and 200 at `degraded` sites — **same brief,
+same archetype, same template; only the site verdict differs**. `c4g-circulating-sudden-stop` has 760
+and 40. The plausibility critic judges the PLACE from a rendered context view, so it does not need
+gate-passing cells, which made a properly balanced sample free.
+
+12 exact + 12 degraded were drawn from each archetype, shuffled together, and judged blind — the critic
+never saw the archetype id, the verdict, or which arm a scene came from.
+
+| archetype | verdict | plausible |
+|---|---|---|
+| c4g-circulating-sudden-stop | degraded | 12/12 = 1.000 |
+| c4g-circulating-sudden-stop | exact | 12/12 = 1.000 |
+| low-friction-stop-slide | degraded | 12/12 = 1.000 |
+| low-friction-stop-slide | exact | 11/12 = 0.917 |
+| **pooled** | **exact** | **23/24 = 0.958** |
+| **pooled** | **degraded** | **24/24 = 1.000** |
+
+**Delta -4.2 points.** Within an archetype, an `exact` site is not more plausible than a `degraded` one.
+If anything it is marginally worse, and certainly there is no benefit to find.
+
+### What this changes
+- The earlier correlation was **entirely between archetypes**. The archetypes scoring 0 on plausibility
+  (`parked-vans-narrow-road`, `c11g-hidden-child`, `c11g-indicator-mislead`) are also the ones with
+  zero exact sites — but the driver is **whether the map contains the kind of place the brief needs at
+  all**, not the verdict attached to the site that was chosen.
+- **Chasing M1.2 would not improve plausibility.** The "fidelity subset" I offered last section scores
+  0.900 because it is 94% `c4g`, not because its sites are exact. I flagged that confound at the time;
+  this experiment settles it.
+- `verdict == exact` remains a useful guard against silent degradation — s34's `c4g` case (24/24 exact
+  for a roundabout scenario with no roundabout on any map) shows it is not worthless — but it is **not
+  a proxy for situational realism**, and M1.2 should not be optimised as though it were.
+
+### The measure that actually tracks the goal
+Brief-to-map fit at the ARCHETYPE level. Four of seven archetypes have zero exact sites because the
+five maps contain no narrow residential street with kerbside parking, no parking aisle, and no crest.
+That is a corpus-design and map-inventory problem, and no amount of site-selection tuning reaches it.
+
+I ran this test because a +32.3 point result with a 94% single-archetype sample was too convenient to
+trust. It was.
