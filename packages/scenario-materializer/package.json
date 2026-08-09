@@ -1,14 +1,17 @@
 {
   "name": "@uniscenarios/scenario-materializer",
-  "version": "0.0.1",
+  "version": "0.1.0-rc.9",
+  "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/scenario-materializer" },
+  "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
   "type": "module",
-  "main": "src/index.ts",
-  "types": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "files": ["src"],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" } },
+  "files": ["dist"],
   "scripts": {
-    "build": "tsc --noEmit",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

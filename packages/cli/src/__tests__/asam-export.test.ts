@@ -76,6 +76,7 @@ function fixture() {
     warmupSeconds: 0,
     physics: { mode: 'kinematic-v1' },
     metricSubject: 'ego',
+    nearMissCriteria: [],
     actors: [
       {
         id: 'ego',
@@ -264,6 +265,36 @@ function standardActionsXmlFixture() {
 }
 
 describe('ASAM OpenSCENARIO XML 1.4.0 export', () => {
+  it('exports robots and drones using valid pedestrian categories while preserving their exact kinds', () => {
+    const base = fixture();
+    const result = exportOpenScenarioXml14(parseSimScenarioInput({
+      ...base,
+      metricSubject: 'robot',
+      actors: [
+        {
+          id: 'robot', kind: 'sidewalk_robot', dims: { l: 0.9, w: 0.7, h: 1.2 },
+          tags: ['driver-profile:cautious'],
+          initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+          behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 2, z: 0 }] } },
+        },
+        {
+          id: 'drone', kind: 'drone', dims: { l: 0.8, w: 0.8, h: 0.3 },
+          initial: { pose: { x: 0, z: 2, headingRad: 0 }, speedMps: 0 },
+          behavior: { route: { kind: 'polyline', points: [{ x: 0, z: 2 }, { x: 2, z: 2 }] } },
+        },
+      ],
+      interactions: [],
+      occluders: [],
+    }), { graph, trustedAmbientActorIds: ['robot'] });
+
+    expect(result.content).toContain('<Pedestrian name="uniscenarios_sidewalk_robot" mass="70" pedestrianCategory="pedestrian">');
+    expect(result.content).toContain('<Property name="uniscenarios.actorKind" value="sidewalk_robot"/>');
+    expect(result.content).toContain('<Property name="uniscenarios.driverProfile" value="cautious"/>');
+    expect(result.content).toContain('<Property name="uniscenarios.actorOrigin" value="canonical-ambient"/>');
+    expect(result.content).toContain('<Pedestrian name="uniscenarios_drone" mass="12" pedestrianCategory="pedestrian">');
+    expect(result.content).toContain('<Property name="uniscenarios.actorKind" value="drone"/>');
+  });
+
   it('preserves near-miss criterion metadata and states the OSC limitation', () => {
     const result = exportOpenScenarioXml14(fixture(), {
       graph,

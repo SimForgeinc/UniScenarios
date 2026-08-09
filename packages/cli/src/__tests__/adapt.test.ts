@@ -134,6 +134,7 @@ describe('adaptTemplate — features', () => {
     expect(feature.junction?.conflictingApproach?.value).toEqual({
       from: 'opposing',
       turn: 'straight',
+      crossingAngleDeg: [110, 170],
     });
   });
 

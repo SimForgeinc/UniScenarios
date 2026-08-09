@@ -35,6 +35,7 @@ describe('city asset variants', () => {
       variant: 'roads-only',
       file: 'variants/roads-only-v2/road.glb',
       fallbackFile: 'variants/roads-only-v1/road.glb',
+      sha256: 'r',
     });
     expect(selectAssetVariant(manifest, 'tiles/missing.glb', 'auto', { ultraLow: true, roadsOnly: true, ktx2Ready: false }).variant).toBe('original');
     expect(allowsSourceAssetFallback('roads-only', true)).toBe(false);
@@ -61,6 +62,7 @@ describe('city asset variants', () => {
       variant: 'roads-only',
       file: 'variants/roads-only-v2/road.glb',
       fallbackFile: undefined,
+      sha256: 'r',
     });
   });
 

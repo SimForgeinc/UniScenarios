@@ -39,29 +39,34 @@ function lines(text: string, spaces: number): string {
   return text.split('\n').map((line) => `${prefix}${line}`).join('\n');
 }
 
-function worldPosition(pose: Pose): string {
-  return `<WorldPosition x="${finite(pose.x)}" y="${finite(-pose.z)}" z="0" h="${finite(pose.headingRad)}" p="0" r="0"/>`;
+type WorldElevation = NonNullable<AsamExportOptions['worldElevation']>;
+
+function worldPosition(pose: Pose, elevation?: WorldElevation, actorId?: string): string {
+  const y = -pose.z;
+  const z = elevation?.({ x: pose.x, y, actorId }) ?? 0;
+  return `<WorldPosition x="${finite(pose.x)}" y="${finite(y)}" z="${finite(z)}" h="${finite(pose.headingRad)}" p="0" r="0"/>`;
 }
 
-function routeXml(name: string, points: readonly Pose[]): string {
+function routeXml(name: string, points: readonly Pose[], elevation?: WorldElevation, actorId?: string): string {
   return [
     `<Route name="${xml(name)}" closed="false">`,
-    ...points.map((pose) => lines(`<Waypoint routeStrategy="shortest"><Position>${worldPosition(pose)}</Position></Waypoint>`, 2)),
+    ...points.map((pose) => lines(`<Waypoint routeStrategy="shortest"><Position>${worldPosition(pose, elevation, actorId)}</Position></Waypoint>`, 2)),
     '</Route>',
   ].join('\n');
 }
 
-function traceWorldPosition(x: number, y: number, headingRad: number): string {
-  return `<WorldPosition x="${finite(x)}" y="${finite(y)}" z="0" h="${finite(headingRad)}" p="0" r="0"/>`;
+function traceWorldPosition(x: number, y: number, headingRad: number, elevation?: WorldElevation, actorId?: string): string {
+  const z = elevation?.({ x, y, actorId }) ?? 0;
+  return `<WorldPosition x="${finite(x)}" y="${finite(y)}" z="${finite(z)}" h="${finite(headingRad)}" p="0" r="0"/>`;
 }
 
-function trajectoryXml(actorId: string, trace: SimTrace, warmupSeconds: number): string {
+function trajectoryXml(actorId: string, trace: SimTrace, warmupSeconds: number, elevation?: WorldElevation): string {
   const track = trace.ticks.actors[actorId]!;
   const vertices = trace.ticks.t.map((t, index) => {
     const direction = track.motionDirection?.[index] ?? 1;
     return [
       `<Vertex time="${finite(t + warmupSeconds)}">`,
-      `  <Position>${traceWorldPosition(track.x[index]!, track.y[index]!, track.headingRad[index]!)}</Position>`,
+      `  <Position>${traceWorldPosition(track.x[index]!, track.y[index]!, track.headingRad[index]!, elevation, actorId)}</Position>`,
       `  <Motion speed_longitudinal="${finite(track.speedMps[index]! * direction)}"/>`,
       '</Vertex>',
     ].join('\n');
@@ -76,7 +81,7 @@ function trajectoryXml(actorId: string, trace: SimTrace, warmupSeconds: number):
   ].join('\n');
 }
 
-function followTrajectoryAction(actorId: string, trace: SimTrace, warmupSeconds: number): string {
+function followTrajectoryAction(actorId: string, trace: SimTrace, warmupSeconds: number, elevation?: WorldElevation): string {
   return [
     '<PrivateAction>',
     '  <RoutingAction>',
@@ -84,7 +89,7 @@ function followTrajectoryAction(actorId: string, trace: SimTrace, warmupSeconds:
     '      <TimeReference><Timing domainAbsoluteRelative="absolute" scale="1" offset="0"/></TimeReference>',
     '      <TrajectoryFollowingMode followingMode="position"/>',
     '      <TrajectoryRef>',
-    lines(trajectoryXml(actorId, trace, warmupSeconds), 8),
+    lines(trajectoryXml(actorId, trace, warmupSeconds, elevation), 8),
     '      </TrajectoryRef>',
     '    </FollowTrajectoryAction>',
     '  </RoutingAction>',
@@ -120,16 +125,25 @@ function boundingBox(actor: SimActor): string {
   ].join('\n');
 }
 
-function actorEntity(actor: SimActor, name: string): string {
+function actorEntity(actor: SimActor, name: string, trustedAmbientActorIds: ReadonlySet<string>): string {
+  const driverProfile = actor.tags.find((tag) => tag.startsWith('driver-profile:'))?.slice('driver-profile:'.length);
   const properties = [
     `<Property name="uniscenarios.actorId" value="${xml(actor.id)}"/>`,
     `<Property name="uniscenarios.actorKind" value="${xml(actor.kind)}"/>`,
+    ...(driverProfile
+      ? [`<Property name="uniscenarios.driverProfile" value="${xml(driverProfile)}"/>`]
+      : []),
+    ...(trustedAmbientActorIds.has(actor.id)
+      ? ['<Property name="uniscenarios.actorOrigin" value="canonical-ambient"/>']
+      : []),
     ...actor.tags.map((tag) => `<Property name="uniscenarios.tag" value="${xml(tag)}"/>`),
   ];
-  if (actor.kind === 'pedestrian' || actor.kind === 'animal') {
+  if (actor.kind === 'pedestrian' || actor.kind === 'sidewalk_robot' || actor.kind === 'drone' || actor.kind === 'animal') {
+    const pedestrianCategory = actor.kind === 'animal' ? 'animal' : 'pedestrian';
+    const mass = actor.kind === 'animal' ? 40 : actor.kind === 'sidewalk_robot' ? 70 : actor.kind === 'drone' ? 12 : 80;
     return [
       `<ScenarioObject name="${xml(name)}">`,
-      `  <Pedestrian name="uniscenarios_${actor.kind}" mass="${actor.kind === 'animal' ? '40' : '80'}" pedestrianCategory="${actor.kind}">`,
+      `  <Pedestrian name="uniscenarios_${actor.kind}" mass="${mass}" pedestrianCategory="${pedestrianCategory}">`,
       lines(boundingBox(actor), 4),
       '    <Properties>',
       ...properties.map((property) => `      ${property}`),
@@ -414,7 +428,7 @@ function interactionActions(
         '<PrivateAction>',
         '  <RoutingAction>',
         '    <AssignRouteAction>',
-        lines(routeXml(identifier('route_event', interaction.id), routePoints(built.route, sampleM)), 6),
+        lines(routeXml(identifier('route_event', interaction.id), routePoints(built.route, sampleM), options.worldElevation, interaction.actorId), 6),
         '    </AssignRouteAction>',
         '  </RoutingAction>',
         '</PrivateAction>',
@@ -423,7 +437,7 @@ function interactionActions(
     case 'exist': {
       const body = interaction.target.state === 'absent'
         ? '<DeleteEntityAction/>'
-        : `<AddEntityAction><Position>${worldPosition(resolved.actors.find((a) => a.actor.id === interaction.actorId)!.actor.initial.pose)}</Position></AddEntityAction>`;
+        : `<AddEntityAction><Position>${worldPosition(resolved.actors.find((a) => a.actor.id === interaction.actorId)!.actor.initial.pose, options.worldElevation, interaction.actorId)}</Position></AddEntityAction>`;
       return [`<GlobalAction><EntityAction entityRef="${xml(actorName)}">${body}</EntityAction></GlobalAction>`];
     }
     case 'set': {
@@ -1090,10 +1104,10 @@ export function exportOpenScenarioXml14(
       if (track.present[0] !== 1) return [];
       const actions = [
         '<PrivateAction><TeleportAction><Position>',
-        lines(traceWorldPosition(track.x[0]!, track.y[0]!, track.headingRad[0]!), 4),
+        lines(traceWorldPosition(track.x[0]!, track.y[0]!, track.headingRad[0]!, options.worldElevation, actor.id), 4),
         '</Position></TeleportAction></PrivateAction>',
       ];
-      if (!actor.static) actions.push(followTrajectoryAction(actor.id, trace, input.warmupSeconds));
+      if (!actor.static) actions.push(followTrajectoryAction(actor.id, trace, input.warmupSeconds, options.worldElevation));
       return [[
         `<Private entityRef="${xml(name)}">`,
         ...actions.map((action) => lines(action, 2)),
@@ -1105,7 +1119,7 @@ export function exportOpenScenarioXml14(
       return [[
         `<Private entityRef="${xml(name)}">`,
         '  <PrivateAction><TeleportAction><Position>',
-        lines(worldPosition(actor.initial.pose), 6),
+        lines(worldPosition(actor.initial.pose, options.worldElevation, actor.id), 6),
         '  </Position></TeleportAction></PrivateAction>',
         '</Private>',
       ].join('\n')];
@@ -1113,10 +1127,10 @@ export function exportOpenScenarioXml14(
     return [[
       `<Private entityRef="${xml(name)}">`,
       '  <PrivateAction><TeleportAction><Position>',
-      lines(worldPosition(actor.initial.pose), 6),
+      lines(worldPosition(actor.initial.pose, options.worldElevation, actor.id), 6),
       '  </Position></TeleportAction></PrivateAction>',
       '  <PrivateAction><RoutingAction><AssignRouteAction>',
-      lines(routeXml(routeName, points), 6),
+      lines(routeXml(routeName, points, options.worldElevation, actor.id), 6),
       '  </AssignRouteAction></RoutingAction></PrivateAction>',
       '  <PrivateAction><LongitudinalAction><SpeedAction>',
       '    <SpeedActionDynamics dynamicsShape="step" dynamicsDimension="time" value="0"/>',
@@ -1127,7 +1141,7 @@ export function exportOpenScenarioXml14(
   });
   const initOccluders = input.occluders.map((o) => {
     const name = identifier('occluder', o.id);
-    return `<Private entityRef="${xml(name)}"><PrivateAction><TeleportAction><Position>${worldPosition({ x: o.obb.center.x, z: o.obb.center.z, headingRad: o.obb.headingRad })}</Position></TeleportAction></PrivateAction></Private>`;
+    return `<Private entityRef="${xml(name)}"><PrivateAction><TeleportAction><Position>${worldPosition({ x: o.obb.center.x, z: o.obb.center.z, headingRad: o.obb.headingRad }, options.worldElevation, o.id)}</Position></TeleportAction></PrivateAction></Private>`;
   });
   const controllers = executionMode === 'trajectory-replay' ? [] : input.signalPrograms.flatMap((program) =>
     program.mapBinding!.controllerHeadGroups!.map((group) => [
@@ -1216,7 +1230,7 @@ export function exportOpenScenarioXml14(
     ...(controllers.length > 0 ? ['    <TrafficSignals>', ...controllers.map((controller) => lines(controller, 6)), '    </TrafficSignals>'] : []),
     '  </RoadNetwork>',
     '  <Entities>',
-    ...resolved.actors.map(({ actor, name }) => lines(actorEntity(actor, name), 4)),
+    ...resolved.actors.map(({ actor, name }) => lines(actorEntity(actor, name, new Set(options.trustedAmbientActorIds ?? [])), 4)),
     ...input.occluders.map((_, i) => lines(occluderEntity(input, i), 4)),
     '  </Entities>',
     '  <Storyboard>',

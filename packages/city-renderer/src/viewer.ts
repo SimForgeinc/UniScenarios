@@ -120,6 +120,37 @@ const _rayOrigin = new Vector3();
 const _down = new Vector3(0, -1, 0);
 const _cameraPos = new Vector3();
 
+function smoothStep(value: number): number {
+  const clamped = Math.max(0, Math.min(1, value));
+  return clamped * clamped * (3 - 2 * clamped);
+}
+
+/** A reversible, multi-angle orbit path expressed in map-span units. */
+function benchmarkOrbitPose(progress: number): { angle: number; radius: number; height: number } {
+  if (progress < 0.4) {
+    const t = smoothStep(progress / 0.4);
+    return {
+      angle: (-120 + 240 * t) * Math.PI / 180,
+      radius: 0.62 - 0.06 * Math.sin(Math.PI * t),
+      height: 0.32,
+    };
+  }
+  if (progress < 0.75) {
+    const t = smoothStep((progress - 0.4) / 0.35);
+    return {
+      angle: (120 - 200 * t) * Math.PI / 180,
+      radius: 0.5,
+      height: 0.22 + 0.2 * Math.sin(Math.PI * t),
+    };
+  }
+  const t = smoothStep((progress - 0.75) / 0.25);
+  return {
+    angle: (-80 + 115 * t) * Math.PI / 180,
+    radius: 0.38 + 0.17 * t,
+    height: 0.2 + 0.08 * t,
+  };
+}
+
 /**
  * Streaming 3D city viewer.
  *
@@ -149,6 +180,8 @@ export class CityViewer {
   };
   private readonly raycaster = new Raycaster();
   private readonly abort = new AbortController();
+  private mapLoadQueue: Promise<void> = Promise.resolve();
+  private mapLoaded = false;
 
   private manifest: CityManifest | null = null;
   private variantManifest: CityAssetVariantManifest | null = null;
@@ -296,17 +329,24 @@ export class CityViewer {
 
   // ---------------------------------------------------------------- loading
 
-  async loadMap(manifestUrl: string): Promise<void> {
-    this.mapLoadActive = true;
-    try {
-      await this.loadMapInner(manifestUrl);
-    } catch (err) {
-      // dispose() aborts every in-flight request; that is not a failure.
-      if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
-      throw err;
-    } finally {
-      this.mapLoadActive = false;
-    }
+  loadMap(manifestUrl: string): Promise<void> {
+    const load = this.mapLoadQueue.catch(() => undefined).then(async () => {
+      if (this.disposed) return;
+      if (this.mapLoaded) this.releaseMapResources();
+      this.mapLoaded = true;
+      this.mapLoadActive = true;
+      try {
+        await this.loadMapInner(manifestUrl);
+      } catch (err) {
+        // dispose() aborts every in-flight request; that is not a failure.
+        if (this.disposed || (err as { name?: string } | null)?.name === 'AbortError') return;
+        throw err;
+      } finally {
+        this.mapLoadActive = false;
+      }
+    });
+    this.mapLoadQueue = load;
+    return load;
   }
 
   private async loadMapInner(manifestUrl: string): Promise<void> {
@@ -1397,9 +1437,18 @@ export class CityViewer {
   }
 
   /**
-   * Flies a fixed path (orbit sweep, then a street-level pass) and reports what
-   * the frame pacing looked like. Camera state is restored afterwards.
+   * Return the reusable road/ground height index, building it once on demand.
+   * Editor overlays and actor placement use this instead of repeating expensive
+   * whole-scene raycasts for every sampled point.
    */
+  getGroundIndex(): GroundIndex | null {
+    if (this.cameraGroundIndex) return this.cameraGroundIndex;
+    this.cameraGroundIndex = this.buildGroundIndex();
+    if (this.cameraGroundIndex) this.localEnvelopeBounds = null;
+    return this.cameraGroundIndex;
+  }
+
+  /** Exercise reversible multi-angle editor orbits and report frame pacing. */
   async runBenchmark(durationMs = 15000): Promise<BenchResult> {
     const center = this.sceneBox.getCenter(new Vector3());
     const size = this.sceneBox.getSize(new Vector3());
@@ -1407,10 +1456,7 @@ export class CityViewer {
     const savedPosition = this.camera.position.clone();
     const savedTarget = this.controls.target.clone();
     const savedMode = this.controls.mode;
-
-    const groundY = this.sampleGroundHeight(center.x, center.z) ?? this.sceneBox.min.y;
-    const streetA = new Vector3(center.x - span * 0.3, groundY + 2.5, center.z);
-    const streetB = new Vector3(center.x + span * 0.3, groundY + 2.5, center.z);
+    const benchmarkPosition = new Vector3();
 
     this.benchmarkActive = true;
     this.controls.setEnabled(false);
@@ -1436,22 +1482,13 @@ export class CityViewer {
         frames++;
 
         const t = Math.min(1, elapsed / durationMs);
-        if (t < 0.65) {
-          // Orbit sweep at altitude.
-          const angle = (t / 0.65) * Math.PI * 2;
-          const radius = span * 0.62;
-          this.camera.position.set(
-            center.x + Math.cos(angle) * radius,
-            center.y + span * 0.4,
-            center.z + Math.sin(angle) * radius,
-          );
-          this.camera.lookAt(center);
-        } else {
-          // Street-level pass.
-          const k = (t - 0.65) / 0.35;
-          this.camera.position.lerpVectors(streetA, streetB, k);
-          this.camera.lookAt(streetB.x + 40, streetB.y, streetB.z);
-        }
+        const pose = benchmarkOrbitPose(t);
+        benchmarkPosition.set(
+          center.x + Math.cos(pose.angle) * span * pose.radius,
+          center.y + span * pose.height,
+          center.z + Math.sin(pose.angle) * span * pose.radius,
+        );
+        this.controls.setView(benchmarkPosition, center);
         if (elapsed >= durationMs) resolve();
       };
     });
@@ -1477,6 +1514,16 @@ export class CityViewer {
       frames,
       durationMs: durationSeconds * 1000,
       frameTimeCounts: this.frameTimeCounts(stats),
+      orbit: {
+        frames: stats.count,
+        durationMs: durationSeconds * 1000,
+        p50FrameMs: stats.percentile(0.5),
+        p95FrameMs: stats.percentile(0.95),
+        p99FrameMs: stats.percentile(0.99),
+        maxFrameMs: stats.max(),
+        over33_3: stats.countAbove(33.3),
+        over50: stats.countAbove(50),
+      },
       phases,
       capturedAt: new Date().toISOString(),
       renderingSuspended: this.renderingSuspended,
@@ -1518,5 +1565,32 @@ export class CityViewer {
       this.renderer.dispose();
       this.ultraLowMaterials.dispose();
     });
+  }
+
+  private releaseMapResources(): void {
+    const layers = [this.cityLayer, this.vegLayer, this.roadLayer].filter(
+      (layer): layer is TileStreamLayer => layer !== null,
+    );
+    for (const layer of layers) layer.dispose();
+    this.cityLayer = null;
+    this.vegLayer = null;
+    this.roadLayer = null;
+    this.cityGroup.clear();
+    this.vegetationGroup.clear();
+    this.roadGroup.clear();
+    this.atlas?.dispose();
+    this.atlas = null;
+    this.disposeEnvironment?.();
+    this.disposeEnvironment = null;
+    this.visualResourcesPromise = null;
+    this.visualResourcesStarted = false;
+    if (this.sun) this.scene.remove(this.sun, this.sun.target);
+    this.sun = null;
+    this.vegetationData.clear();
+    this.manifest = null;
+    this.variantManifest = null;
+    this.cameraGroundIndex = null;
+    this.localEnvelopeBounds = null;
+    this.lastStreamUpdate = 0;
   }
 }

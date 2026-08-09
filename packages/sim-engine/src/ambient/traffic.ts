@@ -161,6 +161,25 @@ const CITY_PRESET_DEFAULTS = {
   exclusionRadiusM: 16,
 } as const;
 
+export const AMBIENT_TRAFFIC_EXTENSION_KEY = 'studio.ambientTraffic.profile.v1';
+
+export function defaultAmbientTrafficProfile(): ResolvedAmbientTrafficProfile {
+  return resolveAmbientTrafficProfile({ version: 1, preset: 'city', seed: 'ambient-1' });
+}
+
+/** Read the canonical authored ambient profile used by browser and compiler. */
+export function ambientTrafficProfileFromExtensions(
+  extensions: Readonly<Record<string, unknown>> | undefined,
+): ResolvedAmbientTrafficProfile {
+  const value = extensions?.[AMBIENT_TRAFFIC_EXTENSION_KEY];
+  if (value === undefined) return defaultAmbientTrafficProfile();
+  try {
+    return resolveAmbientTrafficProfile(value as AmbientTrafficProfile);
+  } catch {
+    return defaultAmbientTrafficProfile();
+  }
+}
+
 /** Resolve defaults once so hashes and worker messages have one canonical shape. */
 export function resolveAmbientTrafficProfile(profile: AmbientTrafficProfile): ResolvedAmbientTrafficProfile {
   const withPresetDefaults = profile.preset === 'city'
@@ -233,7 +252,13 @@ export function createAmbientCandidatePool(
       },
       presentAtStart: true,
       static: false,
-      tags: ['ambient', 'ambient:v1', `ambient-profile:${profileHash.slice(0, 16)}`, `ambient-seed:${seedKey}`],
+      tags: [
+        'ambient',
+        'ambient:v1',
+        `catalog:${ambientCatalogId(requestedKind)}`,
+        `ambient-profile:${profileHash.slice(0, 16)}`,
+        `ambient-seed:${seedKey}`,
+      ],
     });
     candidates.push({
       id,
@@ -353,6 +378,27 @@ export function applyAmbientTraffic(
   return materializeAmbientCandidatePool(base, graph, createAmbientCandidatePool(graph, rawProfile), options);
 }
 
+/** One ambient expansion path shared by browser preparation and export. */
+export function materializeAmbientTrafficProfile(
+  base: SimScenarioInput,
+  graph: LaneGraph,
+  rawProfile: AmbientTrafficProfile,
+  reusablePool?: AmbientCandidatePool,
+  options: AmbientTrafficOptions = {},
+): AmbientTrafficResult & { readonly candidatePool: AmbientCandidatePool } {
+  const profile = resolveAmbientTrafficProfile(rawProfile);
+  const profileHash = contentHash(profile);
+  const candidatePool = reusablePool
+    && reusablePool.mapGraphDigest === graph.topologyDigest
+    && reusablePool.profileHash === profileHash
+    ? reusablePool
+    : createAmbientCandidatePool(graph, profile);
+  return {
+    ...materializeAmbientCandidatePool(base, graph, candidatePool, options),
+    candidatePool,
+  };
+}
+
 /** Remove ambient provenance so an editor can adopt the actor as authored. */
 export function promoteAmbientActor(actor: SimActor, authoredId: string): SimActor {
   if (!actor.tags.includes('ambient')) throw new Error(`${actor.id} is not an ambient actor`);
@@ -365,6 +411,24 @@ export function promoteAmbientActor(actor: SimActor, authoredId: string): SimAct
 
 function normalizeActor(actor: z.input<typeof actorSchema>): SimActor {
   return actorSchema.parse(actor);
+}
+
+function ambientCatalogId(kind: ActorKind): string {
+  return {
+    vehicle: 'vehicle.sedan',
+    car: 'vehicle.sedan',
+    truck: 'vehicle.box_truck',
+    bus: 'vehicle.bus',
+    van: 'vehicle.van',
+    motorcycle: 'vehicle.motorcycle',
+    bicycle: 'vehicle.bicycle',
+    scooter: 'vehicle.bicycle',
+    sidewalk_robot: 'sidewalk_robot.delivery_rover',
+    drone: 'drone.camera_quadcopter',
+    pedestrian: 'pedestrian.adult_walking',
+    animal: 'pedestrian.child_walking',
+    static_object: 'hazard.cardboard_box',
+  }[kind];
 }
 
 function eligibleDirectedLanes(

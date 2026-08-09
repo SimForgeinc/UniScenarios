@@ -58,7 +58,6 @@
     "clipSeconds": 13.5,
     "warmupSeconds": 2,
     "interactions": [
-      { "id": "delivery-van-remains-stopped", "actor": "delivery-vehicle", "verb": "speed", "trigger": { "kind": "at", "t": -2 }, "target": { "mode": "stop" }, "dynamics": { "shape": "step", "constraint": "time", "value": 0.1 } },
       { "id": "worker-waits-hidden", "actor": "delivery-worker", "verb": "speed", "trigger": { "kind": "at", "t": 1.75 }, "target": { "mode": "stop" }, "dynamics": { "shape": "linear", "constraint": "time", "value": 1 } },
       { "id": "worker-path", "actor": "delivery-worker", "verb": "route", "trigger": { "kind": "at", "t": 0 }, "target": { "mode": "polyline", "points": [
         { "laneOffset": 0, "s": 76, "tFrac": -1, "headingOffsetRad": 0 },

@@ -243,6 +243,17 @@ export interface BenchResult {
   frames: number;
   durationMs: number;
   frameTimeCounts: FrameTimeCounts;
+  /** Frame pacing while the camera reverses direction and changes pitch/radius. */
+  orbit: {
+    frames: number;
+    durationMs: number;
+    p50FrameMs: number;
+    p95FrameMs: number;
+    p99FrameMs: number;
+    maxFrameMs: number;
+    over33_3: number;
+    over50: number;
+  };
   phases: FramePhaseStats;
   /** ISO timestamp makes downloaded benchmark snapshots self-identifying. */
   capturedAt: string;

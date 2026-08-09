@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { CityViewer } from '@uniscenarios/city-renderer';
 import { ActorRenderer, type ActorView } from '../editor/actorRenderer';
-import { samplePlaybackActors, type PlaybackBundle } from '../playback/model';
+import { samplePlaybackActors, type PlaybackBundle } from '@uniscenarios/playback';
 
 export function isAmbientPlaybackActor(actor: { readonly id: string; readonly tags: readonly string[] }): boolean {
   return actor.id.startsWith('ambient:')

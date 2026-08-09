@@ -1,8 +1,8 @@
 import { Group, Object3D } from 'three';
 
-import { type CatalogId, getEntry } from './catalog.js';
-import { vehicleColor } from './materials.js';
-import { buildProp } from './registry.js';
+import { type CatalogId, getEntry } from './catalog';
+import { vehicleColor } from './materials';
+import { buildProp } from './registry';
 
 /**
  * Composites are the edge cases people actually place: nobody wants to position

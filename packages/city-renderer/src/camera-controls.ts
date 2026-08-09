@@ -12,6 +12,7 @@ import {
   dampedEyeOrbitStep,
   type CameraControlPreferences,
 } from './camera-drag';
+import { CAMERA_ORBIT_EVENT } from './camera-events';
 
 export type CameraMode = 'orbit' | 'fly';
 
@@ -353,6 +354,9 @@ export class CameraRig {
       const press = this.dragPress;
       if (!press || !crossedCameraDragThreshold(press.x, press.y, event.clientX, event.clientY)) return;
       this.cameraDragging = true;
+      if (this.dragButton === 0) {
+        this.dom.dispatchEvent(new Event(CAMERA_ORBIT_EVENT, { bubbles: true }));
+      }
       this.stableYawRemaining = 0;
       this.stablePitchRemaining = 0;
       this.panOffset.set(0, 0, 0);

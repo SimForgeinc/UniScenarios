@@ -13,7 +13,8 @@ describe('top-level Generations authoring gallery', () => {
   it('opens the exact stored template without invoking any provider', () => {
     const entry = new CopilotHistoryStore().list().entries[0]!;
     const parsed = parseSavedGenerationDraft(entry);
-    expect(parsed).toEqual(entry.candidate!.scenarioDoc);
+    expect(parsed).toMatchObject(entry.candidate!.scenarioDoc);
+    expect(parsed.reasoningTrace).toEqual(entry.candidate!.scenarioDoc.reasoningTrace ?? []);
     expect(parsed.roles.map((role) => role.id)).toEqual(entry.candidate!.scenarioDoc.roles.map((role) => role.id));
   });
 

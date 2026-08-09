@@ -1,67 +1,12 @@
-import type { AsamCapabilityReport, AsamExportIssue, AsamExportWarning } from '@uniscenarios/cli/asam/types';
-import type { SimScenarioInput, SimTrace } from '@uniscenarios/sim-engine';
-import type { ExternalRunResult } from '@uniscenarios/esmini-runner/contracts';
+import type { OpenScenarioSnapshot } from '@uniscenarios/openscenario';
 import type { TraceComparisonReport } from '@uniscenarios/trace-comparator';
 
-export type OpenScenarioValidationStatus = 'passed' | 'failed' | 'pending' | 'not-run' | 'unavailable';
-
-export interface OpenScenarioValidationStage {
-  readonly id: 'internal-model' | 'xml-profile' | 'official-xsd' | 'dependencies' | 'external-execution' | 'behavior-parity';
-  readonly label: string;
-  readonly status: OpenScenarioValidationStatus;
-  readonly detail: string;
-}
-
-export interface OpenScenarioSourceMapping {
-  readonly sourcePath: string;
-  readonly sourceId: string;
-  readonly exportKind: 'entity' | 'event' | 'trajectory' | 'signal' | 'property';
-  readonly exportName: string;
-  readonly selector: string;
-}
-
-export interface OpenScenarioSnapshot {
-  readonly version: 1;
-  readonly source: {
-    readonly name: string;
-    readonly templateHash: string;
-    readonly mapping: readonly OpenScenarioSourceMapping[];
-  };
-  readonly concrete: {
-    /** The exact materialized input used for canonical playback and export. */
-    readonly input: SimScenarioInput;
-    readonly inputHash: string;
-    readonly instanceId: string;
-    readonly traceHash: string;
-    readonly traceHeader: SimTrace['header'];
-    /** Exact canonical evidence retained for local external comparison. */
-    readonly trace: SimTrace;
-  };
-  readonly map: {
-    readonly id: string;
-    readonly roadFile: string;
-    readonly xodrDigest: string;
-    readonly laneGraphDigest: string;
-  };
-  readonly artifact: {
-    readonly state: 'ready' | 'rejected';
-    readonly standard: 'ASAM OpenSCENARIO XML 1.4.0';
-    readonly profile: 'xml-1.4-trajectory-replay';
-    readonly intent: 'trajectory-replay';
-    readonly filename: string;
-    readonly mediaType: 'application/xml';
-    readonly content: string | null;
-    readonly capabilityReport: AsamCapabilityReport | null;
-    readonly warnings: readonly AsamExportWarning[];
-    readonly issues: readonly AsamExportIssue[];
-  };
-  readonly validation: readonly OpenScenarioValidationStage[];
-  /** Populated only by the external runner API; never synthesized in Studio. */
-  readonly external?: {
-    readonly run: ExternalRunResult;
-    readonly comparison?: TraceComparisonReport;
-  };
-}
+export type {
+  OpenScenarioSnapshot,
+  OpenScenarioSourceMapping,
+  OpenScenarioValidationStage,
+  OpenScenarioValidationStatus,
+} from '@uniscenarios/openscenario';
 
 export type OpenScenarioExportProfile = 'native-1.4' | 'esmini-1.3-trajectory' | 'esmini-1.3-actions';
 

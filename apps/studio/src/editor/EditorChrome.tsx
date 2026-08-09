@@ -3,7 +3,7 @@ import type { CSSProperties, MouseEvent } from 'react';
 import type { EditorController, EditorState } from './controller';
 import type { ActorRecord } from './document';
 import type { MapEntry } from '../maps';
-import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '../playback/physics';
+import { physicsReasonLabel, physicsSummaryForTrace, type PhysicsDisplaySummary } from '@uniscenarios/playback';
 
 const ACCENT = '#5b8cff';
 const PANEL = '#202226';

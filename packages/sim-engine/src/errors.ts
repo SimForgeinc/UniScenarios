@@ -20,6 +20,8 @@ export type SimIssueCode =
   | 'spawn_off_lane'
   | 'spawn_lane_not_on_route'
   | 'spawn_lane_pose_mismatch'
+  | 'traffic_control_route_unbound'
+  | 'traffic_control_binding_repaired'
   // binding
   | 'actor_unknown'
   | 'interaction_unknown'

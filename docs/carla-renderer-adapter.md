@@ -1,8 +1,10 @@
 # CARLA renderer adapter and conformance plan
 
-Status: design plus dependency-free bridge contract scaffold, verified
-2026-08-03. This document uses upstream project documentation and repositories
-as primary sources. It does not claim a CARLA execution that was not run.
+Status: public concrete backend and deterministic worker runtime implemented,
+with dependency-free fake-CARLA conformance coverage, verified 2026-08-08.
+This document uses upstream project documentation and repositories as primary
+sources. Fake-backend conformance is not presented as a real GPU/CARLA
+qualification run; the latter remains an explicit acceptance gate.
 
 ## Verified compatibility facts
 
@@ -33,7 +35,8 @@ cannot be exposed through that API.
 
 ## Architecture
 
-The authoritative pipeline is:
+The authoritative pipeline, implemented in
+`adapters/carla-bridge/uniscenarios_carla_bridge/runtime`, is:
 
 1. Validate the authored scenario and exact OpenDRIVE/controller/head bindings.
 2. Compile once with the UniScenarios evaluator into an immutable 50 Hz trace
@@ -41,8 +44,9 @@ The authoritative pipeline is:
    expectation, and provenance streams.
 3. Hash the trace, complete XODR, catalogs/assets, bridge protocol, CARLA build,
    sensor configuration, and comparison thresholds.
-4. Send those immutable inputs to the optional CARLA bridge service. The
-   browser never imports or controls CARLA.
+4. Give those immutable inputs to the optional local CARLA CLI, or to a cloud
+   adapter that imports the exact same public wheel. The browser never imports
+   or controls CARLA.
 5. The service loads the identical OpenDRIVE/custom-map package, configures one
    synchronous tick owner and a fixed 0.02 s delta, freezes native traffic-light
    cycling, resolves every actor/head exactly, and applies one authoritative
@@ -211,19 +215,26 @@ median/p95 tick and sensor latency, GPU memory high-water mark, dropped frames,
 and achieved simulation-to-wall-time ratio. Use CARLA no-rendering mode only for
 control/conformance tests; camera acceptance necessarily enables rendering.
 
-## Implementation phases
+## Implementation and qualification status
 
-1. Implement the concrete Python API backend for CARLA 0.9.16 and fake-backend
-   CI already described by the scaffold.
-2. Add exact actor and signal inventory commands; certify one shared XODR map.
-3. Record CARLA observations in the existing external-trace contract and run
-   comparator tests for trajectory, lifecycle, collisions, signal edges, and
-   stop lines.
-4. Add camera/sensor manifests and bounded artifact collection.
-5. Qualify a packaged custom map and asset catalog on 0.9.16.
-6. Qualify 0.10/UE5 independently after upstream ScenarioRunner compatibility
-   lands or through the bridge alone. Do not infer parity from the open PR.
-7. Implement the narrow OSC 1.0 down-converter and expand its exact allowlist
-   one tested construct at a time.
-8. Consider a CARLA/UE plugin only if public API inventory proves exact map
-   signal or required custom-asset binding impossible.
+Implemented in the public wheel:
+
+1. The concrete CARLA Python backend and synchronous fixed-step executor.
+2. Exact actor, blueprint, signal, OpenDRIVE, and asset-catalog binding gates.
+3. OpenSCENARIO 1.4 compilation and official-schema validation.
+4. Lifecycle, pose/control, collision, signal, stop-line, appearance, camera,
+   sensor-manifest, ambient-traffic, cancellation, and parity evidence.
+5. Bounded downloads/uploads, redirect and SSRF controls, deadlines, retries,
+   cleanup, and output-volume limits.
+6. A local CLI and a versioned wheel that SimCloud consumes unchanged.
+
+Still hardware- and asset-specific acceptance work, not shared source work:
+
+1. Qualify the pinned UE5 CARLA build on representative GPU hardware and
+   retain three immutable rerun receipts per required fixture.
+2. Certify each packaged custom map and asset catalog against exact actor and
+   OpenDRIVE signal inventories.
+3. Expand an optional ScenarioRunner 1.0 down-converter only when every mapping
+   is exact and independently evidenced. It never replaces the 1.4 compiler.
+4. Consider a CARLA/UE plugin only if public API inventory proves an exact
+   required map, signal, or custom-asset binding impossible.

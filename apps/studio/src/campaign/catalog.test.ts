@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { MemoryStorage, WebTemplateFileStore, type TemplateFileStore } from '@uniscenarios/scenario-model';
 import { GENERATED_CAMPAIGN_DIAGNOSTICS, GENERATED_CAMPAIGN_ENTRIES } from './generated';
-import { readPlaybackFiles } from '../playback/model';
+import { readPlaybackFiles } from '@uniscenarios/playback';
 import {
   CAMPAIGN_IMPORTS_KEY,
   campaignImports,

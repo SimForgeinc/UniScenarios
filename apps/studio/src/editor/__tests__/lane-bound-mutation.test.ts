@@ -44,23 +44,24 @@ describe('lane-bound pose mutation', () => {
     expect(document.actor('ego')).toMatchObject({
       x: 50, z: -20,
       laneRef: { roadId: '2', section: 0, laneId: -1, s: 50, t: 0 },
-      routeLaneRsls: ['2:0:-1'],
     });
     expect(document.data.roles[0]).toMatchObject({
       pose: { position: { x: 50, z: -20 } },
       laneRef: { roadId: '2', s: 50 },
-      initialRoute: { lanes: ['2:0:-1'] },
     });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
     expect(document.undo()).toBe(true);
-    expect(document.actor('ego')).toMatchObject({ x: 10, z: 0, laneRef: { roadId: '1' }, routeLaneRsls: ['1:0:-1'] });
+    expect(document.actor('ego')).toMatchObject({ x: 10, z: 0, laneRef: { roadId: '1' } });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
     expect(document.redo()).toBe(true);
-    expect(document.actor('ego')).toMatchObject({ x: 50, z: -20, laneRef: { roadId: '2' }, routeLaneRsls: ['2:0:-1'] });
+    expect(document.actor('ego')).toMatchObject({ x: 50, z: -20, laneRef: { roadId: '2' } });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
 
     controller.dispose();
     document.dispose();
   });
 
-  it('moves an actor onto a short terminal lane and uses the available route', async () => {
+  it('moves an actor onto a short terminal lane without persisting topology', async () => {
     const document = await EditorDocument.openBlank(MAPS[0]!, {
       store: new WebTemplateFileStore({ storage: new MemoryStorage() }), autosaveMs: 60_000,
     });
@@ -77,9 +78,11 @@ describe('lane-bound pose mutation', () => {
 
     controller.setWorldPose('ego', { x: 10, z: -20 });
 
-    expect(document.actor('ego')).toMatchObject({ x: 10, z: -20, laneRef: { roadId: '2' }, routeLaneRsls: ['2:0:-1'] });
+    expect(document.actor('ego')).toMatchObject({ x: 10, z: -20, laneRef: { roadId: '2' } });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
     expect(document.undo()).toBe(true);
-    expect(document.actor('ego')).toMatchObject({ x: 10, z: 0, laneRef: { roadId: '1' }, routeLaneRsls: ['1:0:-1'] });
+    expect(document.actor('ego')).toMatchObject({ x: 10, z: 0, laneRef: { roadId: '1' } });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
     controller.dispose();
     document.dispose();
   });

@@ -124,6 +124,26 @@ function finite(value: unknown, fallback = 0): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
+interface XodrSignalElement {
+  readonly kind: 'signal' | 'signalReference';
+  readonly attributes: string;
+  readonly body: string;
+}
+
+/** Match self-closing elements before paired elements without double-capturing. */
+function xodrSignalElements(roadBody: string): XodrSignalElement[] {
+  const elements: XodrSignalElement[] = [];
+  const pattern = /<(signal|signalReference)\b([^>]*?)\/\s*>|<(signal|signalReference)\b([^>]*)>([\s\S]*?)<\/\3\s*>/g;
+  for (const match of roadBody.matchAll(pattern)) {
+    elements.push({
+      kind: (match[1] ?? match[3]) as XodrSignalElement['kind'],
+      attributes: match[2] ?? match[4] ?? '',
+      body: match[5] ?? '',
+    });
+  }
+  return elements;
+}
+
 /** Parse only the small controller seam needed by the CLI; no XML mutation. */
 export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): MapSignalCatalog {
   const heads = (geojson.features ?? [])
@@ -164,13 +184,14 @@ export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): Map
     .sort((a, b) => a.roadId.localeCompare(b.roadId) || a.s - b.s || a.id.localeCompare(b.id));
 
   const applicability: MapSignalApplicability[] = [];
+  const dynamicHeadIds = new Set(heads.map((head) => head.id));
   for (const road of xodr.matchAll(/<road\b([^>]*)>([\s\S]*?)<\/road>/g)) {
     const roadId = attrs(road[1]!)['id'];
     if (!roadId) continue;
-    for (const signal of road[2]!.matchAll(/<(signal|signalReference)\b([^>]*)>([\s\S]*?)<\/\1>/g)) {
-      const headId = attrs(signal[2]!)['id'];
-      if (!headId) continue;
-      const validities = [...signal[3]!.matchAll(/<validity\b([^>]*)\/?\s*>/g)]
+    for (const signal of xodrSignalElements(road[2]!)) {
+      const headId = attrs(signal.attributes)['id'];
+      if (!headId || !dynamicHeadIds.has(headId)) continue;
+      const validities = [...signal.body.matchAll(/<validity\b([^>]*)\/?\s*>/g)]
         .map((entry) => attrs(entry[1]!))
         .map((entry) => ({
           fromLane: Number(entry['fromLane']),
@@ -183,7 +204,7 @@ export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): Map
           roadId,
           fromLane: null,
           toLane: null,
-          source: signal[1] === 'signalReference' ? 'signal-reference' : 'signal',
+          source: signal.kind === 'signalReference' ? 'signal-reference' : 'signal',
         });
       } else {
         for (const validity of validities) {
@@ -192,7 +213,7 @@ export function parseMapSignalCatalog(xodr: string, geojson: SignalGeoJson): Map
             roadId,
             fromLane: validity.fromLane,
             toLane: validity.toLane,
-            source: signal[1] === 'signalReference' ? 'signal-reference' : 'signal',
+            source: signal.kind === 'signalReference' ? 'signal-reference' : 'signal',
           });
         }
       }

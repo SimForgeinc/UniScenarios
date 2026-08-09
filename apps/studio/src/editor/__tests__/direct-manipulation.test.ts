@@ -214,10 +214,11 @@ describe('direct authored-actor manipulation', () => {
     expect(document.revision).toBe(revision);
     expect(document.actor('ego')).toMatchObject({ x: 10, laneRef: { s: 10 } });
     expect(controller.authoringPreviewData.roles[0]).toMatchObject({
-      pose: { position: { x: 100 } }, laneRef: { s: 100 }, initialRoute: { lanes: ['1:0:-1'] },
+      pose: { position: { x: 100 } }, laneRef: { s: 100 },
     });
     internals.onPointerUp(pointer(canvas, 100));
-    expect(document.actor('ego')).toMatchObject({ x: 100, laneRef: { s: 100 }, routeLaneRsls: ['1:0:-1'] });
+    expect(document.actor('ego')).toMatchObject({ x: 100, laneRef: { s: 100 } });
+    expect(document.actor('ego')?.routeLaneRsls).toBeUndefined();
     controller.dispose(); document.dispose();
   });
 

@@ -21,24 +21,26 @@
 
 export type {
   CatalogEntry,
+  CatalogAnimationProfile,
   Dims,
   ParamValue,
   PropClass,
   PropTag,
-} from './types.js';
-export { PROP_CLASSES, PROP_TAGS } from './types.js';
+} from './types';
+export { PROP_CLASSES, PROP_TAGS } from './types';
 
 export {
   CATALOG,
   CATALOG_IDS,
+  AUTHORING_CATALOG,
   type CatalogId,
   type CatalogQuery,
   getEntry,
   isCatalogId,
   queryCatalog,
-} from './catalog.js';
+} from './catalog';
 
-export { BUILDER_IDS, buildProp, type PropParamMap } from './registry.js';
+export { BUILDER_IDS, buildProp, type PropParamMap } from './registry';
 
 export {
   buildParkedRow,
@@ -46,14 +48,9 @@ export {
   type ParkedRowParams,
   type WorkZoneCounts,
   type WorkZoneParams,
-} from './composites.js';
+} from './composites';
 
-export {
-  catalogEntrySchema,
-  catalogSchema,
-  dimsSchema,
-  parseCatalog,
-} from './schema.js';
+export { parseCatalog } from './schema';
 
 export {
   disposeMaterials,
@@ -62,12 +59,15 @@ export {
   PALETTE,
   VEHICLE_COLORS,
   vehicleColor,
-} from './materials.js';
+} from './materials';
 
 // Direct builder access, for callers that want a specific parametric variant
 // without going through the catalog defaults.
-export type { VehicleParams } from './builders/vehicles.js';
-export type { PedestrianParams } from './builders/pedestrians.js';
+export type { VehicleParams } from './builders/vehicles';
+export type { PedestrianParams } from './builders/pedestrians';
+export type { RobotParams } from './builders/robots';
+export type { DroneParams } from './builders/drones';
+export type { AnimalParams } from './builders/animals';
 export type {
   ArrowBoardParams,
   BarrierParams,
@@ -76,6 +76,6 @@ export type {
   FlaggerParams,
   SignParams,
   SpoilPileParams,
-} from './builders/construction.js';
-export type { RunParams } from './builders/street.js';
-export type { TrashBagParams } from './builders/hazards.js';
+} from './builders/construction';
+export type { RunParams } from './builders/street';
+export type { TrashBagParams } from './builders/hazards';

@@ -6,6 +6,7 @@ import {
   createAmbientCandidatePool,
   evaluateAmbientRobustness,
   materializeAmbientCandidatePool,
+  materializeAmbientTrafficProfile,
   promoteAmbientActor,
   runSimulation,
 } from '../index.js';
@@ -81,7 +82,19 @@ describe('native ambient traffic', () => {
     expect(a.provenance.baseInputHash).toBe(before);
     expect(a.provenance.generatedInputHash).toBe(contentHash(a.input));
     expect(a.input.actors.filter((actor) => actor.tags.includes('ambient')).length).toBe(a.provenance.actors.length);
+    for (const actor of a.input.actors.filter((candidate) => candidate.tags.includes('ambient'))) {
+      expect(actor.tags.filter((tag) => tag.startsWith('catalog:'))).toHaveLength(1);
+    }
     expect(() => runSimulation(a.input, { graph, guards: 'throw' })).not.toThrow();
+  });
+
+  it('reuses one candidate pool through the canonical browser/compiler entrypoint', () => {
+    const profile = { version: 1 as const, preset: 'custom' as const, densityVehiclesPerKm: 10, seed: 'shared', maxActors: 8 };
+    const first = materializeAmbientTrafficProfile(base, graph, profile);
+    const second = materializeAmbientTrafficProfile(base, graph, profile, first.candidatePool);
+    expect(second.candidatePool).toBe(first.candidatePool);
+    expect(second.input.actors.map((actor) => actor.id)).toEqual(first.input.actors.map((actor) => actor.id));
+    expect(second.provenance.generatedInputHash).toBe(first.provenance.generatedInputHash);
   });
 
   it('reserves runway for warm-up as well as the recorded clip', () => {

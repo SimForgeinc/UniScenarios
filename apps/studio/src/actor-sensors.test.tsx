@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { defaultDashCamera, type ActorSensor, type RoleBinding } from '@uniscenarios/scenario-model';
-import type { SampledActor } from './playback/model';
+import type { SampledActor } from '@uniscenarios/playback';
 import type { EditorController } from './editor/controller';
 import type { ActorRecord } from './editor/document';
 import { ActorDetailsCallout, ActorSensorsPanel, actorRecordForRole } from './App';
@@ -89,6 +89,7 @@ describe('ActorSensorsPanel', () => {
       x: 42,
       z: -17,
       headingRad: 0.5,
+      speedMps: 0,
       present: true,
       static: false,
       motionDirection: 1,

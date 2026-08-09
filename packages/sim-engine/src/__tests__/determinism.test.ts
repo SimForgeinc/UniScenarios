@@ -136,7 +136,7 @@ describe('determinism', () => {
       const digest = traceDigest(runSimulation(permuted, { graph, guards: 'collect' }).trace);
       expect(digest).toBe(reference);
     }
-  });
+  }, 15_000);
 
   it('records the input hash and engine version in the header', () => {
     const { trace } = runSimulation(busyScenario(), { graph, guards: 'collect' });

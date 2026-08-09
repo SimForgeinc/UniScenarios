@@ -32,13 +32,13 @@ import {
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import { ambientRobustnessGate } from '../ambient/robustnessGate';
 import type { OpenScenarioSnapshot, OpenScenarioSourceMapping } from '../openscenario/model';
-import { selectPlayableSite } from './site-selection';
-import { withEditablePhysicsDefault } from './physics';
-import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from './staticMapColliders';
-import type { StaticColliderDiagnostics } from './staticMapColliders';
-import { initialLiveTickBudget, planLiveRefill } from './liveSimulationPlan';
-import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from './mapRuntime';
-import { runCanonicalPreview } from './canonicalPreview';
+import { selectPlayableSite } from '@uniscenarios/playback';
+import { withEditablePhysicsDefault } from '@uniscenarios/playback';
+import { emptyStaticColliderBundle, loadStaticMapCollidersBounded } from '@uniscenarios/playback';
+import type { StaticColliderDiagnostics } from '@uniscenarios/playback';
+import { initialLiveTickBudget, planLiveRefill } from '@uniscenarios/playback';
+import { mapAssetDigest, runtimeDigest, type MapRuntimeIdentity } from '@uniscenarios/playback';
+import { runCanonicalPreview } from '@uniscenarios/playback';
 
 export interface ScenarioWorkerMap {
   id: string;

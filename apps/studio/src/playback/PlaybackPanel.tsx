@@ -1,8 +1,8 @@
 import { useState, type CSSProperties, type ChangeEvent } from 'react';
-import type { PlaybackController, PlaybackState } from './controller';
-import { PlaybackLoadError, readPlaybackFiles, type PlaybackBundle } from './model';
+import type { PlaybackController, PlaybackState } from '@uniscenarios/playback';
+import { PlaybackLoadError, readPlaybackFiles, type PlaybackBundle } from '@uniscenarios/playback';
 import type { CameraView } from '@uniscenarios/city-renderer';
-import type { CameraPolicy } from '../cameras/model';
+import type { CameraPolicy } from '@uniscenarios/camera-rig';
 
 export interface PlaybackCameraOption {
   id: string;

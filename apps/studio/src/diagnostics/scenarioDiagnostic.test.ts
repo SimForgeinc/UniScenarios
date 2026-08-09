@@ -24,7 +24,7 @@ const scenario = {
   invariants: [], variants: [],
   extensions: {
     'studio.ambientTraffic.provider.v1': 'native',
-    'studio.presentation.ambientTraffic.v1': { version: 1, preset: 'heavy', densityVehiclesPerKm: 42, seed: 'diagnostic' },
+    'studio.ambientTraffic.profile.v1': { version: 1, preset: 'heavy', densityVehiclesPerKm: 42, seed: 'diagnostic' },
     'studio.ambientTraffic.acceleratedSignalCycles.v1': true,
     apiKey: 'must-not-leak',
     localAsset: '/Users/person/private/model.fbx',

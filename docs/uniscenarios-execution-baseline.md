@@ -1,5 +1,11 @@
 # UniScenarios execution baseline
 
+> **Historical audit, superseded.** This file records the repository state on
+> 2026-08-01 and is retained as evidence; its missing-capability statements are
+> not the current architecture or release status. See
+> [`simcloud-convergence.md`](./simcloud-convergence.md) for the current
+> UniScenarios/SimCloud ownership and acceptance contract.
+
 Date: 2026-08-01
 Scope: current dirty local checkout; no commit was made.
 

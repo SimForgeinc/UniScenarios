@@ -2,8 +2,8 @@ import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { TemplateDocument } from '@uniscenarios/scenario-model';
-import { readPlaybackFiles } from '../playback/model';
-import { galleryCameraChoice } from '../playback/controller';
+import { readPlaybackFiles } from '@uniscenarios/playback';
+import { galleryCameraChoice } from '@uniscenarios/playback';
 import { GENERATED_CAMPAIGN_ENTRIES } from './generated';
 import { assertCampaignEntryIdentity, editableCampaignTemplate } from './catalog';
 

@@ -1,6 +1,5 @@
 import { useState, type CSSProperties } from 'react';
-import type { CameraRegistry } from './controller';
-import type { CameraPolicy, CameraPresentation } from './model';
+import type { CameraPolicy, CameraPresentation, CameraRegistry } from '@uniscenarios/camera-rig';
 
 export interface CameraPanelProps {
   registry: CameraRegistry;

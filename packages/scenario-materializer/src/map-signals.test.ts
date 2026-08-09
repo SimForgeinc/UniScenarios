@@ -3,6 +3,26 @@ import { describe, expect, it } from 'vitest';
 import { buildMapControlPlan, parseMapSignalCatalog, topologyWithMapSpeedLimits } from './map-signals.js';
 
 describe('map-wide ambient physical controls', () => {
+  it('parses self-closing and paired signal elements exactly once while retaining validity', () => {
+    const catalog = parseMapSignalCatalog(`
+      <road id="17"><signals>
+        <signal id="self-signal" s="1"/>
+        <signalReference id="self-reference" s="2" />
+        <signal id="paired-signal" s="3"><validity fromLane="-2" toLane="-1"/></signal>
+        <signalReference id="paired-reference" s="4"><validity fromLane="1" toLane="2"/></signalReference>
+      </signals></road>
+    `, { features: ['self-signal', 'self-reference', 'paired-signal', 'paired-reference'].map((id) => ({ properties: {
+      id, road_id: '17', signal_category: 'traffic_light', dynamic: 'yes',
+    } })) });
+
+    expect(catalog.applicability).toEqual([
+      { headId: 'paired-reference', roadId: '17', fromLane: 1, toLane: 2, source: 'signal-reference' },
+      { headId: 'paired-signal', roadId: '17', fromLane: -2, toLane: -1, source: 'signal' },
+      { headId: 'self-reference', roadId: '17', fromLane: null, toLane: null, source: 'signal-reference' },
+      { headId: 'self-signal', roadId: '17', fromLane: null, toLane: null, source: 'signal' },
+    ]);
+  });
+
   it('makes a physical speed-limit sign authoritative before graph compilation', () => {
     const catalog = parseMapSignalCatalog('', {
       features: [{ properties: {

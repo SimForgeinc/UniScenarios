@@ -1,0 +1,108 @@
+{
+  "schema": "uniscenarios.simcloud-integration/v2",
+  "platformRepository": "https://github.com/SimForgeinc/simcloud-platform",
+  "sourceStackConfig": "config/uniscenarios-stack.json",
+  "vendorLock": "vendor/uniscenarios/stack-lock.json",
+  "consumerManifest": "package.json",
+  "consumerLock": "package-lock.json",
+  "pythonConsumerManifest": "services/uniscenario-render-worker/pyproject.toml",
+  "pythonConsumerLock": "services/uniscenario-render-worker/uv.lock",
+  "requireExactSourceRevision": true,
+  "forbiddenPaths": [
+    "packages/uniscenario-model",
+    "packages/uniscenario-sim-engine",
+    "packages/uniscenario-materializer",
+    "packages/uniscenario-map-intel",
+    "packages/uniscenario-anchor-matcher",
+    "packages/uniscenario-xodr-tools",
+    "packages/uniscenario-openscenario",
+    "apps/web/app/dashboard/scenarios/editor-native",
+    "apps/web/app/lib/uniscenario/editor/core",
+    "apps/web/app/lib/uniscenario/editor/catalog",
+    "apps/web/app/lib/uniscenario/editor/renderer",
+    "apps/web/app/lib/uniscenario/openscenario/model.ts",
+    "apps/web/app/lib/uniscenario/session/StudioTransport.ts",
+    "apps/web/app/lib/uniscenario/ambient/candidatePool.ts",
+    "apps/web/app/lib/uniscenario/ambient/model.ts",
+    "apps/web/app/lib/uniscenario/ambient/provider.ts",
+    "apps/web/app/lib/uniscenario/ambient/robustnessGate.ts",
+    "apps/web/app/lib/uniscenario/cameras/companion.ts",
+    "apps/web/app/lib/uniscenario/cameras/controller.ts",
+    "apps/web/app/lib/uniscenario/cameras/helpers.ts",
+    "apps/web/app/lib/uniscenario/cameras/model.ts"
+  ],
+  "adapterSurfaces": [
+    {
+      "id": "editor-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/editor",
+      "allowedFiles": [
+        "anchored-popover.ts",
+        "api.ts",
+        "profile-map-cache.ts",
+        "use-editor-runtime.ts"
+      ]
+    },
+    {
+      "id": "playback-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/playback",
+      "allowedFiles": [
+        "PlaybackPanel.tsx",
+        "scenario-worker.ts",
+        "scenarioWorkerClient.ts",
+        "simulationPreview.ts",
+        "usePlayback.ts"
+      ]
+    },
+    {
+      "id": "ambient-traffic-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/ambient",
+      "allowedFiles": [
+        "AmbientTrafficPanel.test.tsx",
+        "AmbientTrafficPanel.tsx",
+        "sumoAssets.test.ts",
+        "sumoAssets.ts",
+        "useAmbientTrafficPreview.test.ts",
+        "useAmbientTrafficPreview.ts",
+        "useSumoTraffic.test.ts",
+        "useSumoTraffic.ts"
+      ]
+    },
+    {
+      "id": "camera-product-adapters",
+      "path": "apps/web/app/lib/uniscenario/cameras",
+      "allowedFiles": [
+        "CameraPanel.tsx",
+        "index.ts",
+        "useCameras.ts"
+      ]
+    },
+    {
+      "id": "carla-cloud-control-plane-adapters",
+      "path": "services/uniscenario-render-worker/uniscenario_render_worker",
+      "allowedFiles": [
+        "__init__.py",
+        "api.py",
+        "main.py"
+      ]
+    }
+  ],
+  "sourceScanRoots": [
+    "apps",
+    "docker",
+    "infra",
+    "packages",
+    "scripts",
+    "services"
+  ],
+  "importScanIgnoreFiles": [
+    "scripts/verify-uniscenarios-vendor.mjs"
+  ],
+  "forbiddenImportPatterns": [
+    "@simforge/uniscenario-(model|sim-engine|materializer|map-intel|anchor-matcher|xodr-tools|openscenario)",
+    "@/app/lib/uniscenario/editor/(core|catalog|renderer)(/|[\"'])",
+    "@/app/lib/uniscenario/playback/(controller|model|physics|liveSimulationPlan|mapRuntime|site-selection|staticMapColliders|canonicalPreview|traffic-provider)",
+    "@/app/lib/uniscenario/ambient/(candidatePool|model|provider|robustnessGate)",
+    "@/app/lib/uniscenario/cameras/(companion|controller|helpers|model)",
+    "dashboard/scenarios/editor-native|NativeScenarioEditor"
+  ]
+}

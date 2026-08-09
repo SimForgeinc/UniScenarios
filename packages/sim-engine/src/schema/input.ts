@@ -157,6 +157,8 @@ export const ACTOR_KINDS = [
   'bicycle',
   'pedestrian',
   'scooter',
+  'sidewalk_robot',
+  'drone',
   'animal',
   'static_object',
 ] as const;
@@ -175,6 +177,8 @@ export const DEFAULT_ACTOR_DIMS: Readonly<Record<ActorKind, Dims>> = {
   bicycle: { l: 1.8, w: 0.6, h: 1.7 },
   pedestrian: { l: 0.6, w: 0.6, h: 1.75 },
   scooter: { l: 1.2, w: 0.6, h: 1.7 },
+  sidewalk_robot: { l: 0.85, w: 0.6, h: 0.85 },
+  drone: { l: 1, w: 1, h: 0.45 },
   animal: { l: 1.2, w: 0.5, h: 1 },
   static_object: { l: 1, w: 1, h: 1 },
 };
@@ -182,7 +186,7 @@ export const DEFAULT_ACTOR_DIMS: Readonly<Record<ActorKind, Dims>> = {
 /** Motion-family helpers preserve the legacy vehicle/pedestrian behaviour
  * while keeping the concrete semantic identity available end to end. */
 export function isPedestrianLikeKind(kind: ActorKind): boolean {
-  return kind === 'pedestrian' || kind === 'animal';
+  return kind === 'pedestrian' || kind === 'sidewalk_robot' || kind === 'drone' || kind === 'animal';
 }
 
 export function isRoadActorKind(kind: ActorKind): boolean {
@@ -291,7 +295,14 @@ export const verbSchema = z.discriminatedUnion('verb', [
     target: z.object({ mode: z.enum(['meters', 'fraction']), value: finite }),
     dynamics: dynamicsSchema,
   }),
-  z.object({ verb: z.literal('route'), target: routeSpecSchema }),
+  z.object({
+    verb: z.literal('route'),
+    target: routeSpecSchema,
+    /** Connect the actor's live pose to the first authored waypoint when the interaction fires. */
+    joinFromCurrentPose: z.boolean().optional(),
+    /** Follow literal world-space points without road, signal, or avoidance governors. */
+    bestEffortWorldPath: z.boolean().optional(),
+  }),
   z.object({ verb: z.literal('exist'), target: z.object({ state: z.enum(['present', 'absent']) }) }),
   z.object({
     verb: z.literal('set'),

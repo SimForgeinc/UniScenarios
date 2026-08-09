@@ -1,7 +1,7 @@
 import { Group } from 'three';
 
-import { box, cyl, mirrored, type Point2, profile, rand, sphere } from '../geometry.js';
-import { material } from '../materials.js';
+import { box, cyl, mirrored, type Point2, profile, rand, sphere } from '../geometry';
+import { material } from '../materials';
 
 /**
  * Roadside furniture and sightline blockers. These exist so a scenario author

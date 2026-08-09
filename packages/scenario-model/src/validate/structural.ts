@@ -227,6 +227,28 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
   const relDeps = new Map<string, string[]>();
   template.roles.forEach((role, index) => {
     const base = joinPath('roles', index);
+    if (role.actor.static) {
+      const speed = role.initialSpeedKph === undefined
+        ? { status: 'value' as const, value: 0 }
+        : tryEvaluateExpr(role.initialSpeedKph, scope);
+      if (speed.status === 'value' && speed.value > 0) {
+        out.push(issue(
+          'error',
+          'static_actor_motion',
+          joinPath(base, 'initialSpeedKph'),
+          `static role "${role.id}" must have zero initial speed`,
+          { required: 0, actual: speed.value },
+        ));
+      }
+      if (role.kind === 'scene_absolute' && role.initialRoute) {
+        out.push(issue(
+          'error',
+          'static_actor_motion',
+          joinPath(base, 'initialRoute'),
+          `static role "${role.id}" cannot follow an initial route`,
+        ));
+      }
+    }
     switch (role.kind) {
       case 'conflicting_gate':
         needFeature(role.feature, joinPath(base, 'feature'), 'junction');
@@ -381,6 +403,18 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
     const worldKey =
       setKey !== undefined && ['env', 'signal', 'control'].includes(setKeyNamespace(setKey));
     needRole(interaction.actor, joinPath(base, 'actor'), worldKey);
+    const interactionRole = roles.get(interaction.actor);
+    if (
+      interactionRole?.actor.static &&
+      ['speed', 'gap', 'changeLane', 'laneOffset', 'route'].includes(interaction.verb)
+    ) {
+      out.push(issue(
+        'error',
+        'static_actor_motion',
+        base,
+        `static role "${interaction.actor}" cannot perform ${interaction.verb} motion`,
+      ));
+    }
     const controlSet = setKey === undefined ? null : /^control:(.+)\.indication$/.exec(setKey);
     if (controlSet && !trafficControls.has(controlSet[1]!)) {
       out.push(issue('error', 'control_ref_unknown', joinPath(base, 'target', 'key'), `no traffic control with id "${controlSet[1]}"`));
@@ -464,6 +498,16 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
               'route_disconnected',
               joinPath(base, 'target'),
               'an exact lanePath is map-bound and may only drive a pinned scene_absolute actor',
+            ));
+          }
+        } else if (interaction.target.mode === 'customRoute') {
+          const actor = roles.get(interaction.actor);
+          if (!actor || actor.kind !== 'scene_absolute' || !template.anchor.pin) {
+            out.push(issue(
+              'error',
+              'route_disconnected',
+              joinPath(base, 'target'),
+              'a custom route is map-bound and may only drive a pinned scene_absolute actor',
             ));
           }
         } else if (interaction.target.mode === 'nearMiss') {
