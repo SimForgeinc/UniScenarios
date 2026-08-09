@@ -12,12 +12,17 @@ const IGNORED_GENERATED_DIRECTORIES = new Set([
   '.nyc_output',
   '.playwright-cli',
   '.pytest_cache',
+  '.terraform',
   '.turbo',
   '.venv',
   '__pycache__',
   'coverage',
   'dist',
   'node_modules',
+]);
+
+const IMPORT_SCAN_EXTENSIONS = new Set([
+  '.cjs', '.js', '.jsx', '.json', '.mjs', '.py', '.sh', '.tf', '.toml', '.ts', '.tsx', '.yaml', '.yml',
 ]);
 
 async function readJson(file) {
@@ -54,7 +59,7 @@ async function collectFiles(root, relative = '', result = []) {
 
   entries.sort((left, right) => left.name.localeCompare(right.name));
   for (const entry of entries) {
-    if (entry.isDirectory() && IGNORED_GENERATED_DIRECTORIES.has(entry.name)) continue;
+    if (entry.isDirectory() && (entry.name.startsWith('.') || IGNORED_GENERATED_DIRECTORIES.has(entry.name))) continue;
     const child = relative ? path.posix.join(relative, entry.name) : entry.name;
     if (entry.isDirectory()) await collectFiles(root, child, result);
     if (entry.isFile() || entry.isSymbolicLink()) result.push(child);
@@ -234,6 +239,7 @@ async function auditImports({ simcloudRoot, config, violations }) {
     for (const relativeFile of await collectFiles(path.join(simcloudRoot, root))) {
       const file = path.posix.join(root, relativeFile);
       if (ignoredFiles.has(file)) continue;
+      if (!IMPORT_SCAN_EXTENSIONS.has(path.extname(file))) continue;
       let source;
       try {
         source = await readFile(path.join(simcloudRoot, file), 'utf8');

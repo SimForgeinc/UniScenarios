@@ -78,6 +78,9 @@ async function fixture() {
 test('passes when SimCloud consumes the exact immutable stack and only product adapters', async () => {
   const roots = await fixture();
   await write(roots.simcloudRoot, 'app/.next/generated.js', "import '@private/engine';");
+  await write(roots.simcloudRoot, 'app/.omc/project-memory.json', '"@private/engine"');
+  await write(roots.simcloudRoot, 'app/public/model.glb', "import '@private/engine';");
+  await write(roots.simcloudRoot, 'app/.terraform/provider.js', "import '@private/engine';");
   const report = await auditDivergence({ ...roots, includeGitRevisions: false });
   assert.equal(report.status, 'pass');
   assert.equal(report.packages[0].status, 'pass');
