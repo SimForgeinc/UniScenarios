@@ -2085,3 +2085,37 @@ scenario"**, and four of them were found only by running the pipeline end to end
 rather than the summary. The corresponding habit — verify the number yourself, and design the
 experiment that could refute your own explanation — is what produced the three retractions in this
 document, including one that overturned my own conclusion from the previous section.
+
+---
+
+## 44. M1.2: the last experiment, and why it stays NOT MET
+
+M1.2's shortfall is concentrated in one archetype: `low-friction-stop-slide` delivered 1 of 14
+scenarios at an `exact` site. It has **6 exact sites available**, and `--min-score 1.0` selects exactly
+those six and no degraded ones — so satisfying the clause directly was one command away.
+
+I ran it. `batch --all-maps --draws 20 --max-sites 8 --min-score 1.0 --ambient moderate`, 6.5 minutes:
+
+```
+120 cells simulated -> 5 frozen-gate passes -> 2 HQ -> 1 DISTINCT training-grade scenario
+```
+
+**Restricting the archetype to exact sites collapses it from 13 delivered scenarios to 1.** The corpus
+would fall from 46 to 34, and the held-out test split — which *is* this archetype — would drop to a
+single scenario, making the train/test split meaningless.
+
+### The complete case for leaving M1.2 failed
+1. **It does not measure what the goal asks for.** s41's controlled within-archetype A/B, same brief
+   and template with only the site verdict differing: `exact` 0.958, `degraded` 1.000 plausible.
+2. **It cannot be satisfied without destroying the deliverable.** 13 scenarios -> 1 in the only
+   archetype where it is achievable at all; four other archetypes have zero exact sites anywhere.
+3. **It conflicts with M1.3 by construction.** >=95% exact and >=4 usable sites per archetype are
+   mutually exclusive on this map set.
+
+So M1.2 is reported as **NOT MET at 0.6739**, with a measured number, a controlled experiment showing
+the metric is not a realism proxy, and a second experiment showing the cost of satisfying it. I did not
+game it, quietly redefine it, or drop the archetype to flatter the ratio.
+
+`verdict == exact` keeps its narrow diagnostic value — s34's case of 24/24 exact for a roundabout
+scenario on a map set with no roundabouts is exactly the silent degradation it catches — and nothing in
+this work loosened it.
