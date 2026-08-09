@@ -27,12 +27,23 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
+      - run: pnpm test:release
+      - run: pnpm test:integration
       - run: pnpm --filter @uniscenarios/scenario-model test
       - run: pnpm --filter @uniscenarios/sim-engine test
       - run: pnpm --filter @uniscenarios/scenario-materializer test
       - run: pnpm --filter @uniscenarios/editor-core test
       - run: pnpm --filter @uniscenarios/city-renderer test
       - run: pnpm --filter @uniscenarios/prop-catalog test
+      - run: pnpm --filter @uniscenarios/ambient-traffic test
+      - run: pnpm --filter @uniscenarios/camera-rig test
+      - run: pnpm --filter @uniscenarios/playback test
+      - run: pnpm --filter @uniscenarios/openscenario test
+      - run: pnpm --filter @uniscenarios/trace-comparator test
+      - run: pnpm --filter @uniscenarios/xodr-tools test
+      - run: pnpm --filter @uniscenarios/map-intel test
+      - run: pnpm --filter @uniscenarios/anchor-matcher test
+      - run: pnpm --filter @uniscenarios/esmini-runner test
       - run: pnpm -r --filter "./packages/**" build
       - run: pnpm release:manifest
       - run: pnpm release:verify-artifacts
