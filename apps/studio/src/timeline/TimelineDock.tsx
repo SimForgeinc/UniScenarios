@@ -54,6 +54,10 @@ export type TimelineSignalSubmitResult =
   | { readonly ok: true; readonly plan: MapSignalPlan; readonly clip: MapSignalPlanClip }
   | { readonly ok: false; readonly message: string };
 
+function isTargetSpeedAction(definition: ActionDefinition): boolean {
+  return definition.verb === 'speed' && definition.target.mode === 'absolute';
+}
+
 export function submitTimelineSignalClip(
   document: EditorDocument,
   draft: TimelineSignalDraft,
@@ -130,10 +134,10 @@ export function submitTimelineAction(
     if (timingEditable && draft.time + draft.duration > template.choreography.clipSeconds + 1e-9) {
       return { ok: false, message: `This action ends after the ${template.choreography.clipSeconds}-second scenario. Shorten it or move it earlier.` };
     }
-    if (definition.id.includes('target_speed') && (!Number.isFinite(draft.targetSpeed) || draft.targetSpeed < 0 || draft.targetSpeed > 200)) {
+    if (isTargetSpeedAction(definition) && (!Number.isFinite(draft.targetSpeed) || draft.targetSpeed < 0 || draft.targetSpeed > 200)) {
       return { ok: false, message: 'Speed must be between 0 and 200 km/h.' };
     }
-    let customized: ActionDefinition = definition.id.includes('target_speed')
+    let customized: ActionDefinition = isTargetSpeedAction(definition)
       ? { ...definition, target: { mode: 'absolute', valueKph: draft.targetSpeed } }
       : definition;
     const requestedTurn = definition.id.endsWith('turn_left') ? 'Left' : definition.id.endsWith('turn_right') ? 'Right' : definition.id.endsWith('keep_lane') ? 'Straight' : null;
@@ -243,7 +247,7 @@ function updateConditionalInteractionFields(
   definition: ActionDefinition,
   draft: TimelineActionDraft,
 ): Interaction {
-  if (definition.id.includes('target_speed')) {
+  if (isTargetSpeedAction(definition)) {
     return { ...existing, target: generated.target } as Interaction;
   }
   if (existing.verb === 'changeLane' || existing.verb === 'laneOffset') {
@@ -266,7 +270,7 @@ export function actionEditorStateForItem(item: TimelineItem, group: TimelineActo
   const choices = actionsForActor(group.actorClass, group.catalogId);
   const definition = definitionForInteraction(item.interaction, group.actorClass, group.catalogId)
     ?? (item.interaction.verb === 'speed' && item.interaction.target.mode === 'absolute'
-      ? choices.find((choice) => choice.id.includes('target_speed'))
+      ? choices.find(isTargetSpeedAction)
       : undefined)
     ?? choices.find((choice) => choice.verb === item.interaction.verb && choice.resource === item.resource)
     ?? choices[0];
@@ -453,7 +457,7 @@ export function ActionEditor({ state, group, actorChoices = [], nearMissPreview 
     <form onSubmit={(event) => { event.preventDefault(); onSave(); }}>
       <label style={styles.field}><span>Action</span><select value={selected.id} onChange={(event) => { const next = choices.find((item) => item.id === event.target.value)!; onChange({ ...state, definitionId: next.id, duration: next.durationS, maneuverDuration: next.durationS, targetSpeed: Number(next.target.valueKph ?? state.targetSpeed) }); }} disabled={readOnly} data-testid="action-preset">{grouped.map((name) => <optgroup key={name} label={name}>{choices.filter((item) => item.group === name).map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>)}</select></label>
       {group.actorClass === 'pedestrian' ? <fieldset><legend>Desired outcome</legend><label style={styles.field}><span>Movement</span><select value={state.desiredOutcome} onChange={(event) => onChange({ ...state, desiredOutcome: event.target.value as ActionEditorState['desiredOutcome'] })} data-testid="pedestrian-desired-outcome"><option value="ordinary">Ordinary walk</option><option value="nearMiss">Cross for near miss</option></select></label>{state.desiredOutcome === 'nearMiss' ? <><label style={styles.field}><span>Target</span><select value={state.triggerActorId} onChange={(event) => onChange({ ...state, triggerActorId: event.target.value })}>{actorChoices.map((actor) => <option key={actor.id} value={actor.id}>{actor.label}</option>)}</select></label><label style={styles.field}><span>Clearance</span><span><input type="number" min={.1} step={.1} value={state.nearMissClearanceM} onChange={(event) => onChange({ ...state, nearMissClearanceM: Number(event.target.value) })} /> m</span></label><label style={styles.field}><span>Pass</span><select value={state.nearMissPass} onChange={(event) => onChange({ ...state, nearMissPass: event.target.value as NearMissPass })}><option value="auto">Automatic</option><option value="front">In front</option><option value="behind">Behind</option></select></label><label style={styles.field}><span>Walk speed</span><span><input aria-label="Minimum pedestrian speed" type="number" min={.2} max={4} step={.1} value={state.nearMissMinSpeedMps} onChange={(event) => onChange({ ...state, nearMissMinSpeedMps: Number(event.target.value) })} />–<input aria-label="Maximum pedestrian speed" type="number" min={.2} max={4} step={.1} value={state.nearMissMaxSpeedMps} onChange={(event) => onChange({ ...state, nearMissMaxSpeedMps: Number(event.target.value) })} /> m/s</span></label>{nearMissPreview?.ok ? <div role="status" data-testid="near-miss-feasibility">Predicted clearance {nearMissPreview.solution.predictedClearanceM.toFixed(2)} m · time gap {nearMissPreview.solution.predictedTimeGapS.toFixed(2)} s · {nearMissPreview.solution.speedMps.toFixed(2)} m/s</div> : nearMissPreview ? <div role="alert" data-testid="near-miss-diagnostic">{nearMissPreview.diagnostic.message}</div> : null}</> : null}</fieldset> : null}
-      {selected.id.includes('target_speed') ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}
+      {isTargetSpeedAction(selected) ? <label style={styles.field}><span>Speed</span><span><input type="number" min={0} max={200} value={state.targetSpeed} onChange={(event) => onChange({ ...state, targetSpeed: Number(event.target.value) })} data-testid="speed-value" /> km/h</span></label> : null}
       <fieldset style={styles.triggerGroup}><legend>Trigger</legend><label style={styles.field}><span>Start when</span><select value={state.triggerMode} onChange={(event) => onChange({ ...state, triggerMode: event.target.value as ActorRelativeTriggerMode, triggerThreshold: event.target.value === 'ttc' ? 2 : 12 })} disabled={readOnly} data-testid="actor-relative-trigger-mode"><option value="time">Timeline reaches time</option><option value="distance">Actor is within distance</option><option value="ttc">Time to collision is below</option></select></label>
       {state.triggerMode !== 'time' ? <><label style={styles.field}><span>Authored actor</span><select value={state.triggerActorId} onChange={(event) => onChange({ ...state, triggerActorId: event.target.value })} disabled={readOnly || actorChoices.length === 0} data-testid="actor-relative-trigger-actor">{actorChoices.length ? actorChoices.map((actor) => <option key={actor.id} value={actor.id}>{actor.label}</option>) : <option value="">No other authored actors</option>}</select></label><label style={styles.field}><span>{state.triggerMode === 'distance' ? 'Distance' : 'TTC'}</span><span><input type="number" min={.1} step={.1} value={state.triggerThreshold} onChange={(event) => onChange({ ...state, triggerThreshold: Number(event.target.value) })} data-testid="actor-relative-trigger-threshold" /> {state.triggerMode === 'distance' ? 'm' : 's'}</span></label><label style={styles.field}><span>Deadline</span><span><input type="number" min={0} max={20} step={.1} value={state.triggerDeadline} onChange={(event) => onChange({ ...state, triggerDeadline: Number(event.target.value) })} data-testid="actor-relative-trigger-deadline" /> s</span></label><label style={styles.field}><span>If never</span><select value={state.triggerIfNever} onChange={(event) => onChange({ ...state, triggerIfNever: event.target.value as 'skip' | 'fire' })}><option value="skip">Skip safely</option><option value="fire">Start at deadline</option></select></label></> : null}</fieldset>
       <label style={styles.field}><span>Start</span><input type="number" min={0} step={TIMELINE_TIME_STEP_SECONDS} value={state.time} onChange={(event) => onChange({ ...state, time: Number(event.target.value) })} disabled={readOnly || !state.timingEditable} title={!state.timingEditable ? 'Conditional timing is preserved and cannot be retimed here.' : undefined} data-testid="interaction-time" /></label>

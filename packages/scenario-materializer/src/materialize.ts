@@ -1684,6 +1684,7 @@ class Materializer {
         },
         behavior: {
           rules: this.rulesFor(role.id),
+          drivingProfile: this.drivingProfileFor(role.id),
           route: routeSpec,
           cruiseSpeedMps: speedMps,
         },
@@ -1950,6 +1951,7 @@ class Materializer {
       },
       behavior: {
         rules: this.rulesFor(role.id),
+        drivingProfile: this.drivingProfileFor(role.id),
         route: route.isFreeform
           ? { kind: 'polyline', points: polylinePointsOf(route) }
           : { kind: 'lanePath', lanes: route.legs.map((leg) => leg.rsl) },
@@ -2226,6 +2228,16 @@ class Materializer {
     if (!role || !supportsDriverProfile(role.actor.class)) return this.initialRules.get(roleId) ?? {};
     const profile = driverProfileDefinition(role.driverProfile);
     return { ...profile.rules, ...(this.initialRules.get(roleId) ?? {}) };
+  }
+
+  /** Actor-local human comfort targets; traffic rules remain independently authored. */
+  private drivingProfileFor(roleId: string): {
+    comfortableLateralAccelerationMps2: number;
+    comfortableDecelerationMps2: number;
+  } | undefined {
+    const role = this.roleById.get(roleId);
+    if (!role || !supportsDriverProfile(role.actor.class)) return undefined;
+    return { ...driverProfileDefinition(role.driverProfile).dynamics };
   }
 
   private foldInitialRules(): void {

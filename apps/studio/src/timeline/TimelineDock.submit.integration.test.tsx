@@ -67,7 +67,7 @@ describe('timeline action dialog submission', () => {
     expect(document.data.invariants).toHaveLength(0);
     document.dispose();
   });
-  it('adds Accelerate as one undoable action and publishes the document revision synchronously', async () => {
+  it('adds a persistent target-speed acceleration as one undoable action', async () => {
     const { store } = memoryStore();
     const { document, actorId } = await boxTruck(store);
     const before = document.revision;
@@ -80,7 +80,7 @@ describe('timeline action dialog submission', () => {
     expect(document.revision).toBe(before + 1);
     expect(notified).toEqual([before + 1]);
     expect(document.data.choreography.interactions).toMatchObject([
-      { actor: actorId, label: 'Accelerate', verb: 'speed', target: { mode: 'delta', deltaKph: 10 } },
+      { actor: actorId, label: 'Accelerate to target speed', verb: 'speed', target: { mode: 'absolute', valueKph: 30 } },
     ]);
     expect(buildTimelineGroups(document.data)[0]!.lanes[0]!.items).toHaveLength(1);
     expect(document.undo()).toBe(true);
@@ -108,7 +108,7 @@ describe('timeline action dialog submission', () => {
       target: { mode: 'lanePath', lanes: ['5:0:-3', '7:0:-3'] },
     });
     expect(group.lanes).toHaveLength(2);
-    expect(group.lanes.map((lane) => lane.items[0]!.interaction.label).sort()).toEqual(['Accelerate', 'Turn left']);
+    expect(group.lanes.map((lane) => lane.items[0]!.interaction.label).sort()).toEqual(['Accelerate to target speed', 'Turn left']);
     document.dispose();
   });
 
@@ -120,7 +120,7 @@ describe('timeline action dialog submission', () => {
 
     const result = submitTimelineAction(document, draft(actorId, 'decelerate'));
 
-    expect(result).toMatchObject({ ok: true, warning: expect.stringContaining('overlaps “Accelerate”') });
+    expect(result).toMatchObject({ ok: true, warning: expect.stringContaining('overlaps “Accelerate to target speed”') });
     expect(document.revision).toBe(before + 1);
     expect(document.data.choreography.interactions).toHaveLength(2);
     expect(buildTimelineGroups(document.data)[0]!.lanes).toHaveLength(2);
@@ -248,7 +248,7 @@ describe('timeline action dialog submission', () => {
     document.addInteraction(original);
     const item = buildTimelineGroups(document.data)[0]!.lanes[0]!.items[0]!;
     const editor = actionEditorStateForItem(item, buildTimelineGroups(document.data)[0]!);
-    expect(editor).toMatchObject({ editingId: original.id, definitionId: 'target_speed', targetSpeed: 42, timingEditable: false });
+    expect(editor).toMatchObject({ editingId: original.id, definitionId: 'accelerate', targetSpeed: 42, timingEditable: false });
     const before = document.revision;
 
     const result = submitTimelineAction(document, { ...editor!, time: Number.NaN, duration: Number.NaN, targetSpeed: 55 });

@@ -4,7 +4,11 @@ import { actionsForActor, defaultSpeedKph, interactionForAction } from './action
 describe('actor-specific action catalog', () => {
   it('offers vehicle controls without pedestrian commands', () => {
     const ids = actionsForActor('car').map((action) => action.id);
-    expect(ids).toEqual(expect.arrayContaining(['accelerate', 'brake_stop', 'lane_left', 'keep_lane', 'turn_right', 'pull_over', 'indicator_left', 'horn_on', 'lights_on']));
+    expect(ids).toEqual(expect.arrayContaining(['accelerate', 'increase_speed', 'brake_stop', 'lane_left', 'keep_lane', 'turn_right', 'pull_over', 'indicator_left', 'horn_on', 'lights_on']));
+    expect(actionsForActor('car').find((action) => action.id === 'accelerate')).toMatchObject({
+      label: 'Accelerate to target speed',
+      target: { mode: 'absolute', valueKph: 48 },
+    });
     expect(ids).not.toContain('walk');
   });
 
