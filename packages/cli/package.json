@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/cli",
-  "version": "0.1.0-rc.12",
+  "version": "0.1.0-rc.13",
   "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/cli" },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
