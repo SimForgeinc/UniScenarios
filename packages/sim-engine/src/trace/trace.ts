@@ -104,6 +104,7 @@ export type SimEvent =
   | { t: number; kind: 'lateral_maneuver_planned'; actorId: string; interactionId: string; requestedDurationS: number; effectiveDurationS: number; displacementM: number }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
+  | { t: number; kind: 'route_change_rejected'; actorId: string; interactionId: string; reason: string; requestedTurn?: string }
   | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }
   | {
       t: number;

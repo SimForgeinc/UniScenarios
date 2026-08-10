@@ -419,6 +419,13 @@ function interactionActions(
       return typeof action === 'string' ? [action] : action;
     }
     case 'route': {
+      if (interaction.target.kind === 'nextJunction') {
+        return {
+          code: 'dynamic_next_junction_requires_trajectory_replay',
+          path: `interactions.${interaction.id}.target`,
+          reason: 'a live-position next-junction turn cannot be represented faithfully as a precomputed OSC action; use trajectory-replay export',
+        };
+      }
       const built = buildRoute(options.graph, interaction.target);
       if (!built.ok) {
         return { code: built.error.code, path: `interactions.${interaction.id}.target`, reason: built.error.reason };

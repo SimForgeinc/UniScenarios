@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/map-intel",
-  "version": "0.1.0-rc.13",
+  "version": "0.1.0-rc.14",
   "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/map-intel" },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",

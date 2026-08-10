@@ -17,6 +17,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
 import { createFixedStepSimulation, runSimulation } from '../sim/engine.js';
 import { serializeTrace, traceDigest } from '../trace/gzip.js';
@@ -139,11 +140,31 @@ describe('determinism', () => {
   }, 15_000);
 
   it('records the input hash and engine version in the header', () => {
-    const { trace } = runSimulation(busyScenario(), { graph, guards: 'collect' });
+    const { input, trace } = runSimulation(busyScenario(), { graph, guards: 'collect' });
     expect(trace.header.inputHash).toMatch(/^[0-9a-f]{64}$/);
+    expect(contentHash(input)).toBe(trace.header.inputHash);
     expect(trace.header.engineVersion).toMatch(/^\d+\.\d+\.\d+$/);
     expect(trace.header.frame).toBe('xodr-local');
     expect(trace.header.actorIds).toEqual(['challenger', 'ego', 'lead', 'tail']);
+  });
+
+  it('returns the normalized input whose identity is recorded by the trace', () => {
+    const authored = busyScenario();
+    const unsorted: SimScenarioInput = {
+      ...authored,
+      actors: [...authored.actors].reverse(),
+      interactions: [...authored.interactions].reverse(),
+    };
+    const result = runSimulation(unsorted, { graph, guards: 'collect' });
+    expect(result.input.actors.map((actor) => actor.id)).toEqual(['challenger', 'ego', 'lead', 'tail']);
+    expect(result.input.interactions.map((interaction) => interaction.id)).toEqual([
+      'brake',
+      'commit',
+      'cut-in',
+      'follow-lead',
+    ]);
+    expect(contentHash(result.input)).toBe(result.trace.header.inputHash);
+    expect(contentHash(unsorted)).not.toBe(result.trace.header.inputHash);
   });
 
   it('a different seed leaves the deterministic core unchanged', () => {
