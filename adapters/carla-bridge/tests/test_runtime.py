@@ -202,6 +202,27 @@ def seal_lease(value, manifest: bytes = MANIFEST):
         "executionMode": job["renderSpec"].get("executionMode", "native-physics"),
         "cameraKinds": sorted({camera["kind"] for camera in job["renderSpec"]["cameras"]}),
         "outputs": sorted(set(job["renderSpec"]["outputs"])),
+        "resources": {
+            "schema": "uniscenario.render-resource-request/v1",
+            "durationS": 0.04,
+            "sensors": len(job["renderSpec"]["cameras"]),
+            "captureFrames": len(job["renderSpec"]["cameras"]),
+            "actors": 256,
+            "actorFrameStates": 512,
+            "sensorPixels": (
+                job["renderSpec"]["width"]
+                * job["renderSpec"]["height"]
+                * len(job["renderSpec"]["cameras"])
+            ),
+            "outputBytes": 2_147_483_648,
+            "maxCameraWidth": job["renderSpec"]["width"] if job["renderSpec"]["cameras"] else 0,
+            "maxCameraHeight": job["renderSpec"]["height"] if job["renderSpec"]["cameras"] else 0,
+            "pixelsPerFrame": (
+                job["renderSpec"]["width"]
+                * job["renderSpec"]["height"]
+                * len(job["renderSpec"]["cameras"])
+            ),
+        },
     }
     reseal_control(package)
     return value
@@ -2044,8 +2065,17 @@ def test_duration_frame_pixel_sensor_and_output_budgets(monkeypatch):
         {"id": f"camera-{index}", "kind": "rgb", "attachTo": "ego", "mount": "chase"}
         for index in range(17)
     ]
+    sensor_heavy = seal_lease(sensor_heavy)
+    sensor_heavy["job"]["executionPackage"]["runtimeRequirements"]["resources"]["sensors"] = 16
+    reseal_control(sensor_heavy["job"]["executionPackage"])
     with pytest.raises(ContractError, match="1..16 cameras"):
-        parse_lease(seal_lease(sensor_heavy))
+        parse_lease(sensor_heavy)
+
+    invalid_resources = lease_value()
+    invalid_resources["job"]["executionPackage"]["runtimeRequirements"]["resources"]["actors"] = 257
+    reseal_control(invalid_resources["job"]["executionPackage"])
+    with pytest.raises(ContractError, match="resources.actors must be between 1 and 256"):
+        parse_lease(invalid_resources)
 
     monkeypatch.setattr(worker_runner, "MAX_ARTIFACT_BYTES", 3)
     with pytest.raises(ContractError, match="artifact trace"):
