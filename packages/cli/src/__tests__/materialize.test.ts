@@ -132,7 +132,7 @@ describe.skipIf(!haveArtifacts)('materialize — LTAP on yale-street', () => {
     expect(input.interactions.find((interaction) => interaction.id === 'ego-takes-bound-left-turn')).toMatchObject({
       actorId: 'ego',
       verb: 'route',
-      target: { kind: 'lanePath' },
+      target: { kind: 'nextJunction', turn: 'Left' },
     });
     expect(input.actors.find((actor) => actor.id === 'ego')?.behavior.rules.collisionAvoidance).toBe(false);
   });

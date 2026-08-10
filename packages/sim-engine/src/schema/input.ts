@@ -116,6 +116,15 @@ export const routeSpecSchema = z.discriminatedUnion('kind', [
 ]);
 export type RouteSpec = z.infer<typeof routeSpecSchema>;
 
+/** A route command resolved against the actor's live lane when it fires. */
+export const nextJunctionRouteTargetSchema = z.object({
+  kind: z.literal('nextJunction'),
+  turn: turnRelationSchema,
+  maxLengthM: positive.default(2000),
+});
+export const routeActionTargetSchema = z.union([routeSpecSchema, nextJunctionRouteTargetSchema]);
+export type RouteActionTarget = z.infer<typeof routeActionTargetSchema>;
+
 /* ------------------------------------------------------------------- rules */
 
 /**
@@ -297,7 +306,7 @@ export const verbSchema = z.discriminatedUnion('verb', [
   }),
   z.object({
     verb: z.literal('route'),
-    target: routeSpecSchema,
+    target: routeActionTargetSchema,
     /** Connect the actor's live pose to the first authored waypoint when the interaction fires. */
     joinFromCurrentPose: z.boolean().optional(),
     /** Follow literal world-space points without road, signal, or avoidance governors. */

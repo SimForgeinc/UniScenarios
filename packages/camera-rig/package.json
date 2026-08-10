@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/camera-rig",
-  "version": "0.1.0-rc.11",
+  "version": "0.1.0-rc.12",
   "description": "Portable authored-camera presentation, attachment, companion metadata, and Three.js editor helpers for UniScenarios.",
   "repository": {
     "type": "git",

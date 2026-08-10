@@ -89,7 +89,6 @@ import {
   type Interaction as SimInteraction,
   type LaneGraph,
   type NearMissCriterion,
-  type TurnRelation,
   type Occluder,
   type OcclusionPair,
   type RoadControl,
@@ -2542,54 +2541,27 @@ class Materializer {
         const t = it.target;
         if (t.mode === 'nextJunction') {
           const actor = this.actors.find((candidate) => candidate.id === it.actor);
-          const startRsl = actor?.initial.laneRef?.rsl;
-          if (!actor || !startRsl) {
+          if (!actor?.initial.laneRef?.rsl) {
             throw new CliError(
               'route_turn_unbindable',
               `next-junction route for "${it.actor}" needs a lane-bound actor`,
               { path: `${path}.target` },
             );
           }
-          const ordered = this.template.choreography.interactions
-            .map((candidate, index) => ({ candidate, index }))
-            .filter(({ candidate }) =>
-              candidate.actor === it.actor &&
-              candidate.verb === 'route' &&
-              candidate.target.mode === 'nextJunction')
-            .sort((a, b) => {
-              const time = (candidate: V2Interaction): number =>
-                candidate.trigger.kind === 'at'
-                  ? evalNum(candidate.trigger.t, scope, `choreography.${candidate.id}.trigger.t`)
-                  : Number.POSITIVE_INFINITY;
-              return time(a.candidate) - time(b.candidate) || a.index - b.index;
-            });
-          const through = ordered.findIndex(({ candidate }) => candidate.id === it.id);
-          const turns: TurnRelation[] = ordered.slice(0, through + 1).map(({ candidate }) => {
-            if (candidate.verb !== 'route' || candidate.target.mode !== 'nextJunction') {
-              throw new Error('filtered next-junction interaction lost its type');
-            }
-            return candidate.target.turn === 'straight'
-              ? 'Straight'
-              : candidate.target.turn === 'left'
-                ? 'Left'
-                : 'Right';
-          });
           const distance = Math.max(
             100,
             actor.initial.speedMps *
               (this.template.choreography.clipSeconds + this.template.choreography.warmupSeconds) *
               1.6,
           );
-          const built = buildFollowRoute(this.bundle.graph, startRsl, turns, distance);
-          if (!built.ok) {
-            throw new CliError(built.error.code, built.error.reason, {
-              path: `${path}.target`, detail: built.error.detail,
-            });
-          }
           return parseInteraction({
             ...base,
             verb: 'route',
-            target: { kind: 'lanePath', lanes: built.route.legs.map((leg) => leg.rsl) },
+            target: {
+              kind: 'nextJunction',
+              turn: t.turn === 'straight' ? 'Straight' : t.turn === 'left' ? 'Left' : 'Right',
+              maxLengthM: distance,
+            },
           });
         }
         if (t.mode === 'lanePath') {

@@ -27,6 +27,7 @@ import { localFromScene, toSceneXZ } from '../frames.js';
 import { issue, SimEngineError, type SimIssue } from '../errors.js';
 import type { LaneGraph } from '../map/lane-graph.js';
 import {
+  buildFollowRoute,
   buildRoute,
   retargetToLane,
   retargetToNeighbour,
@@ -1277,10 +1278,40 @@ class Simulation {
         const target = joinsLivePose
           ? { ...polylineTarget, points: [toSceneXZ(a.position), ...polylineTarget.points] }
           : it.target;
-        const built = buildRoute(this.graph, target);
+        const currentPose = a.route.poseAt(a.routeS);
+        const currentLeg = a.route.legs[currentPose.legIndex];
+        const built = target.kind === 'nextJunction' && currentPose.rsl
+          ? buildFollowRoute(
+              this.graph,
+              currentPose.rsl,
+              [target.turn],
+              target.maxLengthM,
+              currentLeg?.reversed,
+              { strictTurns: true },
+            )
+          : target.kind === 'nextJunction'
+            ? {
+                ok: false as const,
+                error: {
+                  code: 'route_turn_unavailable' as const,
+                  reason: `actor ${a.id} has no live lane identity from which to find the next junction`,
+                  detail: { actorId: a.id, requestedTurn: target.turn },
+                },
+              }
+            : buildRoute(this.graph, target);
         if (!built.ok) {
+          if (target.kind === 'nextJunction') {
+            this.events.push({
+              t,
+              kind: 'route_change_rejected',
+              actorId: a.id,
+              interactionId: it.id,
+              reason: built.error.reason,
+              requestedTurn: target.turn,
+            });
+          }
           this.issues.push(
-            issue('route_disconnected', `interactions.${it.id}.target`, built.error.reason, built.error.detail, 'warning'),
+            issue(built.error.code, `interactions.${it.id}.target`, built.error.reason, built.error.detail, 'warning'),
           );
           break;
         }
@@ -1293,7 +1324,7 @@ class Simulation {
         a.lateralReferenceRateMps = 0;
         a.lateralReferenceAccelMps2 = 0;
         a.lateralRestOffsetM = a.lateralOffsetM;
-        a.remainingTurns = it.target.kind === 'follow' ? [...it.target.turns] : [];
+        a.remainingTurns = target.kind === 'follow' ? [...target.turns] : [];
         // Re-routing is an explicit new motion path. An actor that reached its
         // previous route end must be allowed to move again (rollback, rebound,
         // multi-leg pedestrian motion) without a fake despawn/respawn cycle.
