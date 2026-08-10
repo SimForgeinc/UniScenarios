@@ -15,8 +15,8 @@ implementation.
 3. GitHub Actions builds and verifies the complete package set, creates the
    deterministic stack manifest, smoke-installs the packed npm tarballs and
    CARLA wheel, and uses npm and PyPI trusted publishing/provenance
-   (`id-token: write`). The Python `0.1.0rc14` spelling is the PEP 440 form of
-   stack version `0.1.0-rc.14`.
+   (`id-token: write`). The Python `0.1.0rc15` spelling is the PEP 440 form of
+   stack version `0.1.0-rc.15`.
 4. The npm environment provides `NPM_TOKEN` only until trusted publishing is
    configured for every package. Secrets never enter repository files or build
    artifacts.
