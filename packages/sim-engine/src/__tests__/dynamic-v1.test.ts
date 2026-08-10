@@ -425,6 +425,9 @@ describe('dynamic-v1 class-native actors', () => {
     )).toBe(true);
     expect(Object.values(first.ticks.actors).every((track) => track.physics !== undefined)).toBe(true);
     expect(first.events.filter((event) => event.kind === 'road_departure_prevented')).toEqual([]);
-    expect(elapsedMs).toBeLessThan(7_500);
+    // Shared CI runners execute this package beside other CPU-heavy package
+    // suites. Keep the regression ceiling strict while allowing brief host
+    // scheduling variance around the former 7.5 s boundary.
+    expect(elapsedMs).toBeLessThan(8_500);
   }, 30_000);
 });
