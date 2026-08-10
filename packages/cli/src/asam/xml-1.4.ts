@@ -588,12 +588,14 @@ function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 
   const headOwners = new Map<string, number>();
   const controllerOwners = new Map<string, number>();
   const programsById = new Map(input.signalPrograms.map((program) => [program.id, program]));
-  for (const [i, control] of input.roadControls.entries()) {
-    issues.push({
-      code: 'unsupported_road_control',
-      path: `roadControls.${i}`,
-      reason: `road control ${control.id} is not emitted by the XML 1.4 profile; exporting without its stop/yield semantics would change external execution`,
-    });
+  if (executionMode === 'actions') {
+    for (const [i, control] of input.roadControls.entries()) {
+      issues.push({
+        code: 'unsupported_road_control',
+        path: `roadControls.${i}`,
+        reason: `road control ${control.id} is not emitted by the XML 1.4 actions profile; exporting without its stop/yield semantics would change external execution`,
+      });
+    }
   }
   for (const [i, prop] of input.props.entries()) {
     issues.push({
