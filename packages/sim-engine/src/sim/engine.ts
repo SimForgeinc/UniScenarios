@@ -116,6 +116,13 @@ export interface RunOptions {
 }
 
 export interface SimResult {
+  /**
+   * Exact canonical input executed by the engine after deterministic
+   * normalization and control/arrival resolution. Persist this alongside the
+   * trace: `contentHash(input)` is the identity recorded by
+   * `trace.header.inputHash`.
+   */
+  readonly input: SimScenarioInput;
   readonly trace: SimTrace;
   readonly issues: SimIssue[];
   readonly arrival: ArrivalSolution[];
@@ -647,7 +654,7 @@ class Simulation {
 
   run(): SimResult {
     const result = this.advance(Number.POSITIVE_INFINITY);
-    return { trace: result.trace, issues: result.issues, arrival: result.arrival };
+    return { input: result.input, trace: result.trace, issues: result.issues, arrival: result.arrival };
   }
 
   get done(): boolean {
@@ -686,6 +693,7 @@ class Simulation {
       advanced += 1;
     }
     return {
+      input: this.resolvedInput,
       trace: this.buildTrace(),
       issues: this.issues,
       arrival: this.arrivalSolutions,

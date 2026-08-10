@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/scenario-materializer",
-  "version": "0.1.0-rc.10",
+  "version": "0.1.0-rc.11",
   "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/scenario-materializer" },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",
