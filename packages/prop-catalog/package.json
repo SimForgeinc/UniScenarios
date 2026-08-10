@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/prop-catalog",
-  "version": "0.1.0-rc.10",
+  "version": "0.1.0-rc.12",
   "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/prop-catalog" },
   "publishConfig": { "access": "public", "provenance": true },
   "license": "Apache-2.0",

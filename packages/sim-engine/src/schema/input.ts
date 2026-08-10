@@ -231,6 +231,11 @@ export const actorSchema = z.object({
       speedFactor: 1,
     }),
     route: routeSpecSchema,
+    /** Human comfort targets supplied by the authored actor profile. */
+    drivingProfile: z.strictObject({
+      comfortableLateralAccelerationMps2: positive,
+      comfortableDecelerationMps2: positive,
+    }).optional(),
     /**
      * Free-flow cruise speed override, m/s. Without it the actor cruises at
      * `speedFactor × laneSpeedLimit`.

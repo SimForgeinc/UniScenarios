@@ -201,7 +201,7 @@ describe('after and until', () => {
     expect(trace.ticks.actors['ego']!.speedMps.at(-1)!).toBeCloseTo(12, 1);
   });
 
-  it('until releases the axis back to default cruise', () => {
+  it('keeps a reached target as the new cruise speed after release', () => {
     const input = scenario(graph, {
       actors: [vehicle(graph, { id: 'ego', s: 20, speedMps: 12, cruiseSpeedMps: 12 })],
       interactions: [
@@ -219,8 +219,27 @@ describe('after and until', () => {
     const { trace } = runSimulation(input, { graph, guards: 'collect' });
     const released = trace.events.find((e) => e.kind === 'released');
     expect(released).toMatchObject({ axis: 'longitudinal', interactionId: 'creep', reason: 'until' });
-    // Back on the default cruise law, it returns to 12 m/s.
-    expect(trace.ticks.actors['ego']!.speedMps.at(-1)!).toBeCloseTo(12, 1);
+    // The action has released ownership, but its reached speed remains the
+    // actor's desired cruise state until another speed action changes it.
+    expect(trace.ticks.actors['ego']!.speedMps.at(-1)!).toBeCloseTo(3, 1);
+  });
+
+  it('continues toward a target after the editor eligibility window ends', () => {
+    const input = scenario(graph, {
+      clipSeconds: 8,
+      actors: [vehicle(graph, { id: 'ego', s: 20, speedMps: 10, cruiseSpeedMps: 10 })],
+      interactions: [{
+        id: 'accelerate-to', actorId: 'ego', trigger: { kind: 'at', t: 1 },
+        window: { startS: 1, endS: 2 }, verb: 'speed',
+        target: { mode: 'absolute', value: 16 },
+        dynamics: { shape: 'linear', constraint: 'time', value: 3 },
+      }],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.events).toContainEqual(expect.objectContaining({
+      kind: 'released', interactionId: 'accelerate-to', reason: 'window', t: 2,
+    }));
+    expect(trace.ticks.actors.ego!.speedMps.at(-1)!).toBeCloseTo(16, 1);
   });
 
   it('after(end) measures from the source window end, not its start', () => {

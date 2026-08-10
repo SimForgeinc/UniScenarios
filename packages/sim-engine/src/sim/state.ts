@@ -100,6 +100,8 @@ export interface DriverBehaviorProfile {
   readonly comfortBrakeScale: number;
   readonly reactionTimeS: number;
   readonly startDelayS: number;
+  readonly comfortableLateralAccelerationMps2: number;
+  readonly comfortableDecelerationMps2: number;
 }
 
 export interface ActorRuntime {
