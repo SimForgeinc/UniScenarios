@@ -67,7 +67,9 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
       : xmlActions
         ? decision('preserved', 'approximate', 'mapped to traffic-signal controller phases after profile validation')
         : decision('omitted', 'none', 'the concrete DSL profile has no traffic-light program mapping'),
-    roadControls: decision('omitted', 'none', 'road-control declarations are not emitted by the current profiles'),
+    roadControls: replay
+      ? decision('derived', 'approximate', 'stop/yield responses are baked into sampled actor motion; portable lane-control declarations are flattened')
+      : decision('omitted', 'none', 'road-control declarations are not emitted by the current actions profiles'),
     props: decision('omitted', 'none', 'render-catalog props are not emitted by the current profiles'),
     occluders: decision('preserved', 'approximate', 'exported as stationary bounding-box objects without catalog appearance'),
     occlusionPairs: decision('omitted', 'none', 'line-of-sight evaluation pairs are not an ASAM execution concept'),

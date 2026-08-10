@@ -617,7 +617,7 @@ describe('ASAM OpenSCENARIO DSL 2.2.0 export', () => {
 });
 
 describe('honest unsupported-feature failures', () => {
-  it('fails closed for omitted props, road controls, and action-mode ambient semantics', () => {
+  it('fails closed for omitted props, action-mode road controls, and action-mode ambient semantics', () => {
     const input = parseSimScenarioInput({
       ...fixture(),
       operationalConditions: {
@@ -641,14 +641,51 @@ describe('honest unsupported-feature failures', () => {
       } catch (error) {
         expect(error).toBeInstanceOf(AsamExportError);
         expect((error as AsamExportError).issues).toEqual(expect.arrayContaining([
-          expect.objectContaining({ code: 'unsupported_road_control', path: 'roadControls.0' }),
           expect.objectContaining({ code: 'unsupported_prop', path: 'props.0' }),
           ...(executionMode === 'actions'
-            ? [expect.objectContaining({ code: 'unsupported_operational_conditions', path: 'operationalConditions' })]
+            ? [
+                expect.objectContaining({ code: 'unsupported_road_control', path: 'roadControls.0' }),
+                expect.objectContaining({ code: 'unsupported_operational_conditions', path: 'operationalConditions' }),
+              ]
             : []),
         ]));
       }
     }
+  });
+
+  it('bakes static road-control outcomes into XML 1.4 trajectory replay', () => {
+    const input = parseSimScenarioInput({
+      mapId: 'lane-export-fixture', clipSeconds: 12, warmupSeconds: 0, dt: 0.02,
+      physics: { mode: 'kinematic-v1' }, metricSubject: 'ego',
+      actors: [{
+        id: 'ego', kind: 'vehicle', dims: { l: 4.5, w: 1.9, h: 1.5 },
+        initial: { laneRef: { rsl: '1:0:-1', s: 10, tFrac: 0 }, pose: { x: 10, z: 0, headingRad: 0 }, speedMps: 5 },
+        behavior: { route: { kind: 'lanePath', lanes: ['1:0:-1'] }, cruiseSpeedMps: 5 },
+      }],
+      roadControls: [{
+        id: 'stop-control', kind: 'stop', dwellS: 1,
+        stopLines: [{ rsl: '1:0:-1', s: 30, connectingLaneRsls: [] }],
+      }],
+    });
+
+    const result = exportOpenScenarioXml14(input, {
+      graph: laneGraph,
+      executionMode: 'trajectory-replay',
+    });
+    const speeds = [...result.content.matchAll(/<Motion speed_longitudinal="([^"]+)"\/>/g)]
+      .map((match) => Number(match[1]));
+
+    expect(speeds.length).toBeGreaterThan(100);
+    expect(speeds.some((speed) => Math.abs(speed) < 1e-6)).toBe(true);
+    expect(result.capabilityReport.fields).toContainEqual(expect.objectContaining({
+      path: 'roadControls',
+      disposition: 'derived',
+      fidelity: 'approximate',
+    }));
+    expect(result.warnings).toContainEqual(expect.objectContaining({
+      code: 'semantic_intent_flattened',
+      path: 'roadControls',
+    }));
   });
 
   it('reports exact paths instead of silently degrading controller semantics', () => {
