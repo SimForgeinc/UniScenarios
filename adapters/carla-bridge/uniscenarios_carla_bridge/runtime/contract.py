@@ -26,6 +26,7 @@ MAX_ARTIFACT_BYTES = 4 * 1024 * 1024 * 1024
 MAX_OUTPUT_BYTES = 8 * 1024 * 1024 * 1024
 ASSET_CATALOG_SCHEMA = "uniscenario.asset-catalog/v1"
 RUNTIME_REQUIREMENTS_SCHEMA = "uniscenario.runtime-requirements/v1"
+RENDER_RESOURCE_REQUEST_SCHEMA = "uniscenario.render-resource-request/v1"
 CAPABILITY_PROFILE = "xml-1.4-trajectory-replay"
 EMPTY_AMBIENT_CONFIG_SHA256 = "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
 EMPTY_AMBIENT_RESULT_SHA256 = "1925590408012373ea3cc6b9d02703527531492efb52aa39689d541a0581f840"
@@ -208,6 +209,97 @@ class AssetCatalogAsset(Asset):
 
 
 @dataclass(frozen=True)
+class RenderResourceRequest:
+    schema: str
+    duration_s: float
+    sensors: int
+    capture_frames: int
+    actors: int
+    actor_frame_states: int
+    sensor_pixels: int
+    output_bytes: int
+    max_camera_width: int
+    max_camera_height: int
+    pixels_per_frame: int
+
+    @classmethod
+    def parse(cls, value: Any) -> "RenderResourceRequest":
+        if not isinstance(value, Mapping):
+            raise ContractError("runtimeRequirements.resources must be an object")
+        expected_fields = {
+            "schema", "durationS", "sensors", "captureFrames", "actors",
+            "actorFrameStates", "sensorPixels", "outputBytes", "maxCameraWidth",
+            "maxCameraHeight", "pixelsPerFrame",
+        }
+        if set(value) != expected_fields:
+            raise ContractError("runtimeRequirements.resources has invalid fields")
+        if value.get("schema") != RENDER_RESOURCE_REQUEST_SCHEMA:
+            raise ContractError(
+                f"runtimeRequirements.resources.schema must equal {RENDER_RESOURCE_REQUEST_SCHEMA}"
+            )
+
+        duration = value.get("durationS")
+        if (
+            not isinstance(duration, (int, float))
+            or isinstance(duration, bool)
+            or not math.isfinite(float(duration))
+            or not 0 < float(duration) <= MAX_DURATION_SECONDS
+        ):
+            raise ContractError(
+                f"runtimeRequirements.resources.durationS must be in (0, {MAX_DURATION_SECONDS}]"
+            )
+
+        def bounded_integer(field: str, minimum: int, maximum: int) -> int:
+            result = value.get(field)
+            if (
+                not isinstance(result, int)
+                or isinstance(result, bool)
+                or result < minimum
+                or result > maximum
+            ):
+                raise ContractError(
+                    f"runtimeRequirements.resources.{field} must be between {minimum} and {maximum}"
+                )
+            return result
+
+        sensors = bounded_integer("sensors", 0, MAX_SENSOR_COUNT)
+        capture_frames = bounded_integer("captureFrames", 0, MAX_CAPTURE_FRAMES)
+        actors = bounded_integer("actors", 1, MAX_ACTOR_COUNT)
+        actor_frame_states = bounded_integer("actorFrameStates", 1, MAX_ACTOR_FRAME_STATES)
+        sensor_pixels = bounded_integer("sensorPixels", 0, MAX_SENSOR_PIXELS)
+        output_bytes = bounded_integer("outputBytes", 1, MAX_OUTPUT_BYTES)
+        max_camera_width = bounded_integer("maxCameraWidth", 0, MAX_SENSOR_PIXELS)
+        max_camera_height = bounded_integer("maxCameraHeight", 0, MAX_SENSOR_PIXELS)
+        pixels_per_frame = bounded_integer("pixelsPerFrame", 0, MAX_SENSOR_PIXELS)
+        if sensors == 0 and any(
+            (capture_frames, sensor_pixels, max_camera_width, max_camera_height, pixels_per_frame)
+        ):
+            raise ContractError("runtimeRequirements.resources declares capture work without sensors")
+        if sensors > 0 and any(
+            item == 0
+            for item in (
+                capture_frames, sensor_pixels, max_camera_width, max_camera_height, pixels_per_frame,
+            )
+        ):
+            raise ContractError("runtimeRequirements.resources omits required sensor capture bounds")
+        if actor_frame_states < actors:
+            raise ContractError("runtimeRequirements.resources.actorFrameStates must cover every actor")
+        return cls(
+            RENDER_RESOURCE_REQUEST_SCHEMA,
+            float(duration),
+            sensors,
+            capture_frames,
+            actors,
+            actor_frame_states,
+            sensor_pixels,
+            output_bytes,
+            max_camera_width,
+            max_camera_height,
+            pixels_per_frame,
+        )
+
+
+@dataclass(frozen=True)
 class RuntimeRequirements:
     schema: str
     xosc_version: str
@@ -218,6 +310,7 @@ class RuntimeRequirements:
     execution_mode: str
     camera_kinds: tuple[str, ...]
     outputs: tuple[str, ...]
+    resources: RenderResourceRequest
 
     @classmethod
     def parse(cls, value: Any) -> "RuntimeRequirements":
@@ -225,7 +318,7 @@ class RuntimeRequirements:
             raise ContractError("executionPackage.runtimeRequirements must be an object")
         expected_fields = {
             "schema", "xoscVersion", "capabilityProfile", "fixedTimestepS", "jobMode",
-            "trafficMode", "executionMode", "cameraKinds", "outputs",
+            "trafficMode", "executionMode", "cameraKinds", "outputs", "resources",
         }
         if set(value) != expected_fields:
             raise ContractError("executionPackage.runtimeRequirements has invalid fields")
@@ -258,6 +351,7 @@ class RuntimeRequirements:
         return cls(
             RUNTIME_REQUIREMENTS_SCHEMA, "1.4", CAPABILITY_PROFILE, 0.02,
             job_mode, traffic_mode, execution_mode, tuple(camera_kinds), tuple(outputs),
+            RenderResourceRequest.parse(value.get("resources")),
         )
 
 
@@ -565,4 +659,3 @@ def parse_lease(value: Any) -> Lease:
         uploads,
         job_mode,
     )
-
