@@ -100,6 +100,8 @@ export interface DriverBehaviorProfile {
   readonly comfortBrakeScale: number;
   readonly reactionTimeS: number;
   readonly startDelayS: number;
+  readonly comfortableLateralAccelerationMps2: number;
+  readonly comfortableDecelerationMps2: number;
 }
 
 export interface ActorRuntime {
@@ -117,6 +119,8 @@ export interface ActorRuntime {
 
   route: Route;
   routeS: number;
+  /** Exact absolute-time world keyframes; cleared permanently on collision. */
+  timedRoute: readonly { timeS: number; point: Vec2 }[] | null;
   /** Literal editor-authored polyline: bypass traffic governors, but not physical contact. */
   bestEffortWorldPath: boolean;
   /** Remaining turn preferences, consumed when a route is rebuilt. */

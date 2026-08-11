@@ -29,6 +29,7 @@ import { issue, SimEngineError, type SimIssue } from '../errors.js';
 import type { LaneGraph } from '../map/lane-graph.js';
 import type { LaneRsl } from '../map/topology.js';
 import {
+  buildFollowRoute,
   buildRoute,
   retargetToLane,
   retargetToNeighbour,
@@ -76,8 +77,8 @@ import {
   ACTOR_PHYSICS_PROFILES,
   DynamicV1Backend,
   DYNAMIC_V1_DEFAULT_SUBSTEP_S,
-  type ResolvedVehiclePhysicsProfile,
 } from './dynamic-v1.js';
+import { corneringPlan } from './cornering.js';
 import type { MotionBackend, PhysicsTelemetrySample } from './motion-backend.js';
 import { actorPhysicsBackends } from './physics-provenance.js';
 import {
@@ -99,12 +100,23 @@ import {
   type LongitudinalCommand,
   type WorldState,
 } from './state.js';
-import { makeTriggerRuntime, shouldFire, type ConditionContext, type TriggerRuntime } from './triggers.js';
+import {
+  makeTriggerRuntime,
+  shouldFire,
+  triggerPredicateValue,
+  type ConditionContext,
+  type TriggerRuntime,
+} from './triggers.js';
 import { evaluateCondition } from './triggers.js';
 import { buildOccluders, hasLineOfSight, type OccluderShape } from './visibility.js';
 import { DEFAULT_PERCEPTION_CONFIG } from '../perception/schema.js';
 import { PerceptionRuntime, type PerceptionActorView } from '../perception/runtime.js';
 import { TRACE_FORMAT_VERSION, type ActorTrack, type SignalTrack, type SimEvent, type SimTrace } from '../trace/trace.js';
+import {
+  buildSemanticLedger,
+  semanticResolvedRouteRef,
+  type TriggerTruthTransition,
+} from '../trace/semantic-ledger.js';
 import { computeMetrics, type MetricAccumulator, newMetricAccumulator, observeTick } from '../trace/metrics.js';
 import { checkFeasibility } from '../solve/guards.js';
 import { resolveArrivalTriggers, type ArrivalSolution } from '../solve/arrival.js';
@@ -130,6 +142,13 @@ export interface RunOptions {
 }
 
 export interface SimResult {
+  /**
+   * Exact canonical input executed by the engine after deterministic
+   * normalization and control/arrival resolution. Persist this alongside the
+   * trace: `contentHash(input)` is the identity recorded by
+   * `trace.header.inputHash`.
+   */
+  readonly input: SimScenarioInput;
   readonly trace: SimTrace;
   readonly issues: SimIssue[];
   readonly arrival: ArrivalSolution[];
@@ -167,52 +186,6 @@ const CONFLICT_WINDOW_S = 2.5;
 const CONFLICT_MIN_ANGLE_RAD = 0.4;
 /** Uniform-grid size; larger than ordinary road-user footprints and one tick's motion. */
 const COLLISION_GRID_CELL_M = 20;
-
-/**
- * Cap approach speed using the authored route's upcoming curvature. Dynamic
- * bodies cannot negotiate a sharp connector at the straight-road cruise speed;
- * planning the braking envelope here keeps physics authoritative without
- * allowing a vehicle to cut across the inside of a turn.
- */
-function curveAwareSpeedCapMps(
-  route: Route,
-  routeS: number,
-  currentSpeedMps: number,
-  profile: ResolvedVehiclePhysicsProfile,
-): number {
-  const comfortableBrakeMps2 = Math.max(1, profile.maxLongitudinalDecelMps2 * 0.5);
-  // Road-going actors should corner well below their physical tyre limit. An
-  // 18% envelope is comparable to an ordinary urban manoeuvre and leaves
-  // steering authority for cross-track correction instead of saturating the
-  // tyres merely to stay on the centreline.
-  const lateralBudgetMps2 = Math.max(0.6, profile.maxLateralAccelerationMps2 * 0.18);
-  const brakingDistanceM = currentSpeedMps ** 2 / (2 * comfortableBrakeMps2);
-  const horizonM = clamp(brakingDistanceM + 15, 18, 65);
-  const endS = Math.min(route.lengthM, routeS + horizonM);
-  const sampleStepM = 2.5;
-  let priorS = routeS;
-  let priorHeading = route.poseAt(routeS).headingRad;
-  let capMps = Number.POSITIVE_INFINITY;
-
-  for (let sampleS = Math.min(endS, routeS + sampleStepM); sampleS <= endS + 1e-6; sampleS = Math.min(endS, sampleS + sampleStepM)) {
-    const pose = route.poseAt(sampleS);
-    const segmentM = Math.max(0.1, sampleS - priorS);
-    const curvaturePerM = Math.abs(angleDelta(priorHeading, pose.headingRad)) / segmentM;
-    if (curvaturePerM > 1e-4) {
-      const turnSpeedMps = Math.sqrt(lateralBudgetMps2 / curvaturePerM);
-      const distanceToCurveM = Math.max(0, priorS - routeS);
-      const approachSpeedMps = Math.sqrt(
-        turnSpeedMps ** 2 + 2 * comfortableBrakeMps2 * distanceToCurveM,
-      );
-      capMps = Math.min(capMps, approachSpeedMps);
-    }
-    if (sampleS >= endS) break;
-    priorS = sampleS;
-    priorHeading = pose.headingRad;
-  }
-
-  return Math.max(0.75, capMps);
-}
 
 function collisionGridCells(bounds: Omit<SpatialBounds, 'id'> | SpatialBounds): string[] {
   const x0 = Math.floor(bounds.minX / COLLISION_GRID_CELL_M);
@@ -258,6 +231,49 @@ interface Plan {
 interface CollisionSnapshot {
   readonly shapes: ReadonlyMap<string, Obb>;
   readonly live: boolean;
+}
+
+interface TimedRouteSample {
+  readonly position: Vec2;
+  readonly headingRad: number;
+  readonly speedMps: number;
+}
+
+function sampleTimedRoute(
+  points: NonNullable<ActorRuntime['timedRoute']>,
+  timeS: number,
+): TimedRouteSample {
+  const first = points[0]!;
+  const last = points[points.length - 1]!;
+  if (timeS <= first.timeS) {
+    const next = points[1]!;
+    return {
+      position: first.point,
+      headingRad: Math.atan2(next.point.y - first.point.y, next.point.x - first.point.x),
+      speedMps: 0,
+    };
+  }
+  if (timeS >= last.timeS) {
+    const previous = points[points.length - 2]!;
+    return {
+      position: last.point,
+      headingRad: Math.atan2(last.point.y - previous.point.y, last.point.x - previous.point.x),
+      speedMps: 0,
+    };
+  }
+  let nextIndex = 1;
+  while (points[nextIndex]!.timeS < timeS) nextIndex += 1;
+  const from = points[nextIndex - 1]!;
+  const to = points[nextIndex]!;
+  const durationS = to.timeS - from.timeS;
+  const fraction = (timeS - from.timeS) / durationS;
+  const dx = to.point.x - from.point.x;
+  const dy = to.point.y - from.point.y;
+  return {
+    position: { x: from.point.x + dx * fraction, y: from.point.y + dy * fraction },
+    headingRad: Math.atan2(dy, dx),
+    speedMps: Math.hypot(dx, dy) / durationS,
+  };
 }
 
 interface StaticCollisionShape {
@@ -307,11 +323,17 @@ class Simulation {
   private readonly attachedPropsByActor = new Map<string, StaticProp[]>();
   private readonly attachedOccluderIds: ReadonlySet<string>;
   private readonly events: SimEvent[] = [];
+  /** Predicate edge evidence, independent of action eligibility/forcing. */
+  private readonly triggerTruthTransitions = new Map<string, TriggerTruthTransition[]>();
   /** Non-lateral legacy windows already released on their terminal tick. */
   private readonly releasedWindows = new Set<string>();
   private readonly lateralClampDiagnostics = new Set<string>();
   private readonly issues: SimIssue[] = [];
   private readonly tracks = new Map<string, ActorTrack>();
+  /** Hash identity of the route actually owned by each actor on every sample. */
+  private readonly initialRouteRefByActor = new Map<string, string>();
+  private readonly routeRefByActor = new Map<string, string>();
+  private readonly routeRefTracks = new Map<string, string[]>();
   private readonly signalTracks = new Map<string, SignalTrack>();
   private readonly tArray: number[] = [];
   private readonly metrics: MetricAccumulator;
@@ -516,6 +538,10 @@ class Simulation {
           },
         } : {}),
       });
+      const initialRouteRef = semanticResolvedRouteRef(rt.route);
+      this.initialRouteRefByActor.set(rt.id, initialRouteRef);
+      this.routeRefByActor.set(rt.id, initialRouteRef);
+      this.routeRefTracks.set(rt.id, []);
     }
     for (const it of [...input.interactions].sort((a, b) => (a.id < b.id ? -1 : 1))) {
       const tr = makeTriggerRuntime(it);
@@ -641,6 +667,9 @@ class Simulation {
         : spec.behavior.cruiseSpeedMps * this.resolvedInput.operationalConditions.effects.trafficSpeedFactor,
       route,
       routeS,
+      timedRoute: spec.behavior.route.kind === 'timedPolyline'
+        ? spec.behavior.route.points.map((point) => ({ timeS: point.timeS, point: localFromScene(point) }))
+        : null,
       bestEffortWorldPath: false,
       remainingTurns:
         spec.behavior.route.kind === 'follow' ? [...spec.behavior.route.turns] : ([] as TurnRelation[]),
@@ -681,12 +710,17 @@ class Simulation {
   /** Seeded, actor-local variation used by the lightweight preview driver.
    * It is independent of actor declaration order and never reads wall time. */
   private driverProfile(spec: SimActor, aggression: number): NonNullable<ActorRuntime['driver']> {
+    const comfort = spec.behavior.drivingProfile ?? {
+      comfortableLateralAccelerationMps2: 2.2,
+      comfortableDecelerationMps2: 2.5,
+    };
     if (!isRoadActorKind(spec.kind) || !this.hasAmbientTraffic) {
       return {
         naturalistic: false,
         desiredSpeedFactor: 1, timeHeadwayS: 1, minimumGapM: 1,
         accelScale: 1, comfortBrakeScale: 1, reactionTimeS: 0,
         startDelayS: 0,
+        ...comfort,
       };
     }
     const random = this.rng.fork(`driver:${spec.id}`);
@@ -699,6 +733,7 @@ class Simulation {
       comfortBrakeScale: random.range(0.85, 1.1),
       reactionTimeS: Math.max(0.25, random.range(0.4, 0.8) - aggression * 0.1),
       startDelayS: random.range(0.25, 0.65),
+      ...comfort,
     };
   }
 
@@ -710,35 +745,11 @@ class Simulation {
     return (g ? g.speedLimitMps : 13.4) * factor;
   }
 
-  /** Preview-speed cap from upcoming route curvature. This is deliberately a
-   * small controller calculation, not a second trajectory planner: dynamic-v1
-   * still owns steering/yaw and the authored route remains authoritative. */
-  private curvatureSpeedCap(a: ActorRuntime, freeFlowMps: number): number {
-    if (this.physicsConfig.mode !== 'dynamic-v1' || a.route.isFreeform) return freeFlowMps;
-    const horizonEnd = a.routeS + 30;
-    const hasUpcomingTurn = a.route.legs.some((leg) => {
-      if (leg.sStart > horizonEnd) return false;
-      if (leg.sStart + leg.lengthM < a.routeS) return false;
-      return leg.turnRelation !== null && leg.turnRelation !== 'Straight';
-    });
-    if (!hasUpcomingTurn) return freeFlowMps;
-    const here = a.route.poseAt(a.routeS).headingRad;
-    let cap = freeFlowMps;
-    // Two look-ahead horizons catch both the connector itself and the braking
-    // approach without turning a 32-car preview into a route-resampling job.
-    for (const distanceM of [10, 22]) {
-      const ahead = a.route.poseAt(Math.min(a.route.lengthM, a.routeS + distanceM)).headingRad;
-      const curvature = Math.abs(normalizeAngle(ahead - here)) / distanceM;
-      if (curvature > 1e-4) cap = Math.min(cap, Math.sqrt(2.4 / curvature));
-    }
-    return Math.max(2.2, cap);
-  }
-
   /* -------------------------------------------------------------- main loop */
 
   run(): SimResult {
     const result = this.advance(Number.POSITIVE_INFINITY);
-    return { trace: result.trace, issues: result.issues, arrival: result.arrival };
+    return { input: result.input, trace: result.trace, issues: result.issues, arrival: result.arrival };
   }
 
   get done(): boolean {
@@ -789,6 +800,7 @@ class Simulation {
       advanced += 1;
     }
     return {
+      input: this.resolvedInput,
       trace: this.buildTrace(),
       issues: this.issues,
       arrival: this.arrivalSolutions,
@@ -1036,6 +1048,7 @@ class Simulation {
         if (!actor || actor.static || actor.crashDisabledAtS != null) continue;
         actor.crashDisabledAtS = contact.t;
         actor.crashDisabledReason = `material-collision:${otherId}`;
+        actor.timedRoute = null;
         if (actor.latCmd) {
           this.abortLateral(actor.latCmd.interactionId, actorId, contact.t, 'collision');
         }
@@ -1160,6 +1173,11 @@ class Simulation {
     const ctx = this.conditionContext(t, collisions);
     for (const tr of this.triggers) {
       if (tr.status !== 'pending') continue;
+      this.recordTriggerTruth(
+        tr.interaction.id,
+        t,
+        triggerPredicateValue(ctx, tr, this.triggerById),
+      );
       const window = tr.interaction.window;
       if (window && t < window.startS - 1e-9) continue;
       // Clip bounds form a half-open trigger eligibility window. Once fired,
@@ -1238,6 +1256,14 @@ class Simulation {
       this.applyInteraction(tr.interaction, t);
       const axis = axisOf(tr.interaction);
       if (axis === 'route' || axis === 'existence' || axis.startsWith('state:')) tr.endedAt = t;
+    }
+  }
+
+  private recordTriggerTruth(interactionId: string, t: number, value: boolean): void {
+    const transitions = this.triggerTruthTransitions.get(interactionId) ?? [];
+    if (transitions.length === 0 || transitions[transitions.length - 1]!.value !== value) {
+      transitions.push({ t, value });
+      this.triggerTruthTransitions.set(interactionId, transitions);
     }
   }
 
@@ -1367,6 +1393,11 @@ class Simulation {
           target,
           speedTarget: it,
         };
+        // A SpeedAction changes the actor's desired cruise state. The profile
+        // owns how the target is reached; its editor clip is not a temporary
+        // throttle press that restores the pre-action speed when it ends.
+        a.cruiseOverrideMps = target;
+        a.cruiseSpeedMps = target;
         a.longCmd = cmd;
         break;
       }
@@ -1419,23 +1450,57 @@ class Simulation {
         const target = joinsLivePose
           ? { ...polylineTarget, points: [toSceneXZ(a.position), ...polylineTarget.points] }
           : it.target;
-        const built = buildRoute(this.graph, target);
+        const currentPose = a.route.poseAt(a.routeS);
+        const currentLeg = a.route.legs[currentPose.legIndex];
+        const built = target.kind === 'nextJunction' && currentPose.rsl
+          ? buildFollowRoute(
+              this.graph,
+              currentPose.rsl,
+              [target.turn],
+              target.maxLengthM,
+              currentLeg?.reversed,
+              { strictTurns: true },
+            )
+          : target.kind === 'nextJunction'
+            ? {
+                ok: false as const,
+                error: {
+                  code: 'route_turn_unavailable' as const,
+                  reason: `actor ${a.id} has no live lane identity from which to find the next junction`,
+                  detail: { actorId: a.id, requestedTurn: target.turn },
+                },
+              }
+            : buildRoute(this.graph, target);
         if (!built.ok) {
+          if (target.kind === 'nextJunction') {
+            this.events.push({
+              t,
+              kind: 'route_change_rejected',
+              actorId: a.id,
+              interactionId: it.id,
+              reason: built.error.reason,
+              requestedTurn: target.turn,
+            });
+          }
           this.issues.push(
-            issue('route_disconnected', `interactions.${it.id}.target`, built.error.reason, built.error.detail, 'warning'),
+            issue(built.error.code, `interactions.${it.id}.target`, built.error.reason, built.error.detail, 'warning'),
           );
           break;
         }
         const proj = joinsLivePose ? { s: 0 } : built.route.projectPoint(a.position);
         a.route = built.route;
         a.routeS = proj.s;
+        a.timedRoute = target.kind === 'timedPolyline'
+          ? target.points.map((point) => ({ timeS: point.timeS, point: localFromScene(point) }))
+          : null;
+        this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
         a.bestEffortWorldPath = it.bestEffortWorldPath === true;
         a.lateralOffsetM = joinsLivePose ? 0 : built.route.lateralOffsetAt(proj.s, a.position);
         a.lateralReferenceOffsetM = a.lateralOffsetM;
         a.lateralReferenceRateMps = 0;
         a.lateralReferenceAccelMps2 = 0;
         a.lateralRestOffsetM = a.lateralOffsetM;
-        a.remainingTurns = it.target.kind === 'follow' ? [...it.target.turns] : [];
+        a.remainingTurns = target.kind === 'follow' ? [...target.turns] : [];
         // Re-routing is an explicit new motion path. An actor that reached its
         // previous route end must be allowed to move again (rollback, rebound,
         // multi-leg pedestrian motion) without a fake despawn/respawn cycle.
@@ -1608,6 +1673,7 @@ class Simulation {
       const flipped = a.route.reversedRoute();
       a.routeS = clamp(a.route.lengthM - a.routeS, 0, flipped.lengthM);
       a.route = flipped;
+      this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
       a.remainingTurns = [];
       // "Left" is measured relative to the direction of travel, so flipping the
       // traversal negates every lateral quantity with it.
@@ -2084,16 +2150,54 @@ class Simulation {
       return plan;
     }
 
+    if (a.timedRoute) {
+      const sampleAt = Math.min(t + this.dt, this.resolvedInput.clipSeconds);
+      const sample = sampleTimedRoute(a.timedRoute, sampleAt);
+      const projected = a.route.projectPoint(sample.position);
+      plan.position = sample.position;
+      plan.heading = normalizeAngle(sample.headingRad);
+      plan.speed = sample.speedMps;
+      plan.accel = (sample.speedMps - a.speedMps) / this.dt;
+      plan.routeS = projected.s;
+      plan.lateralOffset = a.route.lateralOffsetAt(projected.s, sample.position);
+      plan.lateralRate = 0;
+      plan.lateralAccel = 0;
+      plan.lateralReferenceOffset = plan.lateralOffset;
+      plan.lateralReferenceRate = 0;
+      plan.lateralReferenceAccel = 0;
+      plan.retire = false;
+      return plan;
+    }
+
     const lim = limitsFor(a);
-    const limit = this.curvatureSpeedCap(a, this.speedLimitAt(a));
+    const laneSpeedLimitMps = this.speedLimitAt(a);
 
     // Re-resolve dynamic longitudinal targets (match / gap follow a moving ref).
     if (a.longCmd?.kind === 'speed' && a.longCmd.speedTarget?.target.mode === 'match') {
       a.longCmd.target = this.resolveSpeedTarget(a, a.longCmd.speedTarget);
+      a.cruiseOverrideMps = a.longCmd.target;
+      a.cruiseSpeedMps = a.longCmd.target;
     }
     if (a.longCmd?.kind === 'gap' && a.longCmd.gap) {
       a.longCmd.target = desiredGapM(a, a.longCmd.gap.value, a.longCmd.gap.mode, true);
     }
+
+    const dynamicProfile = this.dynamicActorIds.has(a.id) ? this.dynamicBackend?.profile(a.id) : undefined;
+    const desiredSpeedMps = a.longCmd?.kind === 'speed'
+      ? a.longCmd.target
+      : cruiseSpeed(a, laneSpeedLimitMps);
+    const corner = isRoadActorKind(a.kind)
+      ? corneringPlan({
+          route: a.route,
+          routeS: a.routeS,
+          currentSpeedMps: Math.abs(a.speedMps),
+          desiredSpeedMps,
+          comfortableLateralAccelerationMps2: a.driver?.comfortableLateralAccelerationMps2 ?? 2.2,
+          comfortableDecelerationMps2: a.driver?.comfortableDecelerationMps2 ?? 2.5,
+          physicalLateralAccelerationMps2: dynamicProfile?.maxLateralAccelerationMps2 ?? lim.lateralAccelMax,
+          physicalDecelerationMps2: dynamicProfile?.maxLongitudinalDecelMps2 ?? lim.brakeHard,
+        })
+      : { speedLimitMps: Number.POSITIVE_INFINITY, accelerationCapMps2: Number.POSITIVE_INFINITY };
 
     const commandedLeader =
       a.longCmd?.kind === 'gap' && a.longCmd.gap ? this.leaderFromId(a, a.longCmd.gap.actorId) : null;
@@ -2125,7 +2229,7 @@ class Simulation {
       actor: a,
       t,
       dt: this.dt,
-      laneSpeedLimitMps: limit,
+      laneSpeedLimitMps,
       leader: commandedLeader ?? nearestLeader,
     });
 
@@ -2138,6 +2242,7 @@ class Simulation {
     const conflict = a.bestEffortWorldPath ? null : this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
+    if (corner.accelerationCapMps2 < accel) accel = corner.accelerationCapMps2;
     const frictionScale = this.frictionScaleFor(a);
     accel = Math.max(accel, -lim.brakeHard * frictionScale);
     // The body still brakes for a generated car in front — `accel` above is
@@ -2181,14 +2286,8 @@ class Simulation {
     }
 
     if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
-      const dynamicProfile = this.dynamicBackend?.profile(a.id);
-      const curveSpeedCap = dynamicProfile
-        ? curveAwareSpeedCapMps(a.route, a.routeS, Math.abs(a.speedMps), dynamicProfile)
-        : Number.POSITIVE_INFINITY;
-      const dynamicTargetSpeed = Math.min(speed, curveSpeedCap);
-      const dynamicTargetAcceleration = dynamicTargetSpeed < Math.abs(a.speedMps) - 0.05
-        ? Math.min(accel, (dynamicTargetSpeed - Math.abs(a.speedMps)) / 0.35)
-        : accel;
+      const dynamicTargetSpeed = speed;
+      const dynamicTargetAcceleration = accel;
       const shortSteeringLookaheadM = dynamicProfile
         ? Math.max(dynamicProfile.wheelbaseM * 0.85, Math.abs(a.speedMps) * 0.25)
         : Math.max(5, Math.abs(a.speedMps) * 0.8);
@@ -2270,11 +2369,16 @@ class Simulation {
         ? Math.max(Math.abs(a.latCmd.from), Math.abs(a.latCmd.to)) + a.dims.w / 2 + 0.25
         : 0;
       const allowedCenterOffsetM = Math.max(roadCenterAllowanceM, commandedLateralAllowanceM);
-      if (!a.tags.includes('motion:off-road') && Math.abs(projectedOffset) > allowedCenterOffsetM) {
-        // Never publish the first off-corridor integration. Hold the last valid
-        // map pose and retire this generated actor; a later population refresh
-        // may replace it from a new connected candidate. Authored off-road and
-        // wrong-way edge cases remain explicit opt-in intent.
+      if (
+        this.ambientActorIdSet.has(a.id) &&
+        !a.tags.includes('motion:off-road') &&
+        Math.abs(projectedOffset) > allowedCenterOffsetM
+      ) {
+        // Never publish the first off-corridor integration for generated
+        // traffic. Hold the last valid map pose and retire this ambient actor;
+        // a later population refresh may replace it from a connected candidate.
+        // Authored actors keep their physically integrated motion: silently
+        // stopping one is a safety-policy intervention, not realistic driving.
         plan.speed = 0;
         plan.accel = -a.speedMps / this.dt;
         plan.routeS = a.routeS;
@@ -2386,6 +2490,20 @@ class Simulation {
       a.lateralReferenceAccelMps2 = plan.lateralReferenceAccel;
       a.position = plan.position;
       a.headingRad = plan.heading;
+      if (a.timedRoute && a.crashDisabledAtS == null && this.motionBackend && this.dynamicActorIds.has(a.id)) {
+        const current = this.motionBackend.state(a.id);
+        this.motionBackend.setState(a.id, {
+          x: plan.position.x,
+          y: plan.position.y,
+          yawRad: plan.heading,
+          longitudinalVelocityMps: plan.speed * (isReverseMotion(a) ? -1 : 1),
+          lateralVelocityMps: 0,
+          yawRateRadps: 0,
+          steerRad: current?.steerRad ?? 0,
+          wheelAngularSpeedRadps: current?.wheelAngularSpeedRadps ?? 0,
+          longitudinalAccelerationMps2: plan.accel * (isReverseMotion(a) ? -1 : 1),
+        });
+      }
       if (t >= 0) a.requiredDecelMax = Math.max(a.requiredDecelMax, plan.requiredDecel);
 
       if (a.speedMps < 0.05) {
@@ -2435,6 +2553,7 @@ class Simulation {
         const completedPosition = a.position;
         const projected = plan.swap.route.projectPoint(completedPosition);
         a.route = plan.swap.route;
+        this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
         a.routeS = projected.s;
         // The preflighted separation targets this route's centreline exactly.
         // Completing with a residual projection error makes the authored end
@@ -2565,6 +2684,7 @@ class Simulation {
       // `retired` means motion/interaction has finished. Pedestrians remain
       // visibly present at their terminal pose until an explicit despawn.
       track.present.push(a.present ? 1 : 0);
+      this.routeRefTracks.get(a.id)!.push(this.routeRefByActor.get(a.id)!);
       if (track.physics) {
         const state = this.motionBackend?.state(a.id);
         const telemetry = this.physicsTelemetry.get(a.id) ?? this.motionBackend?.telemetry(a.id);
@@ -2644,7 +2764,7 @@ class Simulation {
     for (const a of this.actors) {
       this.metrics.requiredDecelMax[a.id] = a.requiredDecelMax;
     }
-    return {
+    const trace: Omit<SimTrace, 'semanticLedger'> = {
       header: {
         traceVersion: TRACE_FORMAT_VERSION,
         engineVersion: ENGINE_VERSION,
@@ -2704,6 +2824,18 @@ class Simulation {
         ...computeMetrics(this.metrics, input.clipSeconds),
         ...(this.perception ? { perception: this.perception.metrics() } : {}),
       },
+    };
+    return {
+      ...trace,
+      semanticLedger: buildSemanticLedger({
+        trace,
+        input,
+        triggers: this.triggers,
+        triggerTruthTransitions: this.triggerTruthTransitions,
+        initialRouteRefs: this.initialRouteRefByActor,
+        routeRefs: this.routeRefTracks,
+        complete: this.finished,
+      }),
     };
   }
 }

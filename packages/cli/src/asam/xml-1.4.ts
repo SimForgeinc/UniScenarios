@@ -101,6 +101,60 @@ function trafficSignalStateAction(headId: string, state: SignalProgram['phases']
   return `<GlobalAction><InfrastructureAction><TrafficSignalAction><TrafficSignalStateAction name="${xml(headId)}" state="${state}"/></TrafficSignalAction></InfrastructureAction></GlobalAction>`;
 }
 
+function environmentAction(input: SimScenarioInput): string {
+  const conditions = input.operationalConditions;
+  const time = {
+    dawn: '2020-06-21T06:00:00Z',
+    day: '2020-06-21T12:00:00Z',
+    dusk: '2020-06-21T18:00:00Z',
+    night: '2020-06-21T00:00:00Z',
+  }[conditions.timeOfDay];
+  const weather = {
+    clear: { clouds: 'zeroOktas', precipitation: 'dry', intensity: 0, sunElevation: 1.0472, illuminance: 100_000 },
+    overcast: { clouds: 'eightOktas', precipitation: 'dry', intensity: 0, sunElevation: 0.6, illuminance: 20_000 },
+    rain: { clouds: 'eightOktas', precipitation: 'rain', intensity: 0.6, sunElevation: 0.45, illuminance: 10_000 },
+  }[conditions.weather];
+  const visibilityRange = Math.min(100_000, conditions.effects.visibilityRangeM);
+  return [
+    '<GlobalAction><EnvironmentAction>',
+    '  <Environment name="uniscenarios_environment">',
+    `    <TimeOfDay animation="false" dateTime="${time}"/>`,
+    `    <Weather fractionalCloudCover="${weather.clouds}">`,
+    `      <Sun azimuth="0" elevation="${finite(weather.sunElevation)}" illuminance="${finite(weather.illuminance)}"/>`,
+    `      <Fog visualRange="${finite(visibilityRange)}"/>`,
+    `      <Precipitation precipitationType="${weather.precipitation}" precipitationIntensity="${finite(weather.intensity)}"/>`,
+    '    </Weather>',
+    `    <RoadCondition frictionScaleFactor="${finite(conditions.effects.frictionScale)}">`,
+    '      <Properties>',
+    `        <Property name="uniscenarios.environment.trafficSpeedFactor" value="${finite(conditions.effects.trafficSpeedFactor)}"/>`,
+    `        <Property name="uniscenarios.environment.visibilityClass" value="${xml(conditions.visibility)}"/>`,
+    '      </Properties>',
+    '    </RoadCondition>',
+    '  </Environment>',
+    '</EnvironmentAction></GlobalAction>',
+  ].join('\n');
+}
+
+function compactSignalTracks(input: SimScenarioInput, trace: SimTrace) {
+  return input.signalPrograms.map((program) => {
+    const phases = trace.ticks.signals?.[program.id]?.phase;
+    if (!phases || phases.length !== trace.ticks.t.length) {
+      throw new AsamExportError([{
+        code: 'missing_signal_replay_track',
+        path: `signalPrograms.${program.id}`,
+        reason: `simulation did not produce a complete logical signal track for ${program.id}`,
+      }]);
+    }
+    return {
+      programId: program.id,
+      headIds: program.mapBinding?.headIds ?? [],
+      changes: phases.flatMap((state, index) => index === 0 || state !== phases[index - 1]
+        ? [{ t: trace.ticks.t[index]! + input.warmupSeconds, state }]
+        : []),
+    };
+  });
+}
+
 function primaryPhysicalSignalController(program: SignalProgram): string {
   return program.mapBinding!.controllerHeadGroups![0]!.controllerId;
 }
@@ -419,6 +473,13 @@ function interactionActions(
       return typeof action === 'string' ? [action] : action;
     }
     case 'route': {
+      if (interaction.target.kind === 'nextJunction') {
+        return {
+          code: 'dynamic_next_junction_requires_trajectory_replay',
+          path: `interactions.${interaction.id}.target`,
+          reason: 'a live-position next-junction turn cannot be represented faithfully as a precomputed OSC action; use trajectory-replay export',
+        };
+      }
       const built = buildRoute(options.graph, interaction.target);
       if (!built.ok) {
         return { code: built.error.code, path: `interactions.${interaction.id}.target`, reason: built.error.reason };
@@ -588,6 +649,18 @@ function validateXmlProfile(input: SimScenarioInput, executionMode: 'actions' | 
   const headOwners = new Map<string, number>();
   const controllerOwners = new Map<string, number>();
   const programsById = new Map(input.signalPrograms.map((program) => [program.id, program]));
+  if (executionMode === 'trajectory-replay') {
+    for (const [path, seconds] of [['warmupSeconds', input.warmupSeconds], ['clipSeconds', input.clipSeconds]] as const) {
+      const ticks = seconds / input.dt;
+      if (Math.abs(ticks - Math.round(ticks)) > 1e-9) {
+        issues.push({
+          code: 'non_integral_replay_duration',
+          path,
+          reason: `${path}=${seconds} is not an integer number of dt=${input.dt} fixed steps; exporting the rounded engine trace would change the authored clock`,
+        });
+      }
+    }
+  }
   if (executionMode === 'actions') {
     for (const [i, control] of input.roadControls.entries()) {
       issues.push({
@@ -1185,6 +1258,7 @@ export function exportOpenScenarioXml14(
   const date = options.headerDate ?? '1970-01-01T00:00:00.000Z';
   const physics = resolvePhysicsConfig(input);
   const inputActorBackends = actorPhysicsBackends(input.actors, physics);
+  const replaySignalTracks = replayTrace ? compactSignalTracks(input, replayTrace) : null;
   const headerProperties = [
     `<Property name="uniscenarios.executionMode" value="${executionMode}"/>`,
     `<Property name="uniscenarios.export.profile" value="${capabilities.report.profile}"/>`,
@@ -1194,16 +1268,32 @@ export function exportOpenScenarioXml14(
     `<Property name="uniscenarios.physics.mode" value="${physics.mode}"/>`,
     `<Property name="uniscenarios.physics.substepS" value="${finite(physics.substepS ?? (physics.mode === 'dynamic-v1' ? DYNAMIC_V1_DEFAULT_SUBSTEP_S : input.dt))}"/>`,
     `<Property name="uniscenarios.physics.actorBackends" value="${xml(Object.entries(inputActorBackends).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}:${backend.profile}`).join(','))}"/>`,
+    `<Property name="uniscenarios.export.constructCapabilities.v1" value="${xml(JSON.stringify(capabilities.report.constructs ?? []))}"/>`,
     ...(replayTrace ? [
       `<Property name="uniscenarios.trajectoryReplay.inputHash" value="${xml(replayTrace.header.inputHash)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.engineVersion" value="${xml(replayTrace.header.engineVersion)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.mapId" value="${xml(replayTrace.header.mapId)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.dt" value="${finite(replayTrace.header.dt)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.warmupSeconds" value="${finite(replayTrace.header.warmupSeconds)}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.clipSeconds" value="${finite(replayTrace.header.clipSeconds)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.mode" value="${xml(replayTrace.header.physics.mode)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.substepS" value="${finite(replayTrace.header.physics.substepS)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.solver" value="${xml(replayTrace.header.physics.solver)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.solverVersion" value="${xml(replayTrace.header.physics.solverVersion)}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.vehicleProfileDigest" value="${xml(replayTrace.header.physics.vehicleProfileDigest ?? 'none')}"/>`,
       `<Property name="uniscenarios.trajectoryReplay.physics.actorBackends" value="${xml(Object.entries(replayTrace.header.physics.actorBackends ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(([actorId, backend]) => `${actorId}:${backend.mode}:${backend.reason}:${backend.profile}`).join(','))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.actorIds.v1" value="${xml(JSON.stringify(replayTrace.header.actorIds))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.authoredActorIds.v1" value="${xml(JSON.stringify(input.actors.map((actor) => actor.id)))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.actorMetadata.v1" value="${xml(JSON.stringify(replayTrace.header.actorMetadata ?? {}))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.interactions.v1" value="${xml(JSON.stringify(input.interactions))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.events.v1" value="${xml(JSON.stringify(replayTrace.events))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.signals.v1" value="${xml(JSON.stringify(replaySignalTracks))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.environment.v1" value="${xml(JSON.stringify(input.operationalConditions))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.surfacePatches.v1" value="${xml(JSON.stringify(input.surfacePatches))}"/>`,
+      `<Property name="uniscenarios.trajectoryReplay.occluders.v1" value="${xml(JSON.stringify(input.occluders))}"/>`,
+      ...(input.perception
+        ? [`<Property name="uniscenarios.trajectoryReplay.perception.v1" value="${xml(JSON.stringify(input.perception))}"/>`]
+        : []),
     ] : []),
     ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, value]) => `<Property name="uniscenarios.provenance.${xml(key)}" value="${xml(String(value))}"/>`,
@@ -1249,6 +1339,7 @@ export function exportOpenScenarioXml14(
     '  </Entities>',
     '  <Storyboard>',
     '    <Init><Actions>',
+    ...(executionMode === 'trajectory-replay' ? [lines(environmentAction(input), 6)] : []),
     ...replaySignalInit.map((action) => lines(action, 6)),
     ...initPrivate.map((action) => lines(action, 6)),
     ...initOccluders.map((action) => lines(action, 6)),

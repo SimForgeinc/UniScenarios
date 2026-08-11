@@ -1,4 +1,4 @@
-import type { CatalogEntry, PropClass, PropTag } from './types';
+import type { CatalogActorClass, CatalogEntry, PropClass, PropTag } from './types';
 
 /**
  * The catalog is the contract: other packages address props by `id` and select
@@ -14,6 +14,7 @@ export const CATALOG = [
     id: 'vehicle.sedan',
     label: 'Sedan',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Mid-size four-door passenger car. The default other-vehicle: use it for lead, following and oncoming traffic when nothing special is required.',
     dims: { l: 4.7, w: 1.82, h: 1.45 },
@@ -24,6 +25,7 @@ export const CATALOG = [
     id: 'vehicle.hatchback',
     label: 'Hatchback',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Compact five-door hatchback. Short, agile city car — good for tight parking rows and gap-acceptance scenarios.',
     dims: { l: 4.05, w: 1.75, h: 1.46 },
@@ -34,6 +36,7 @@ export const CATALOG = [
     id: 'vehicle.suv',
     label: 'SUV',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Mid-size sport-utility vehicle. Tall enough to hide a child or a cyclist from a following driver; the common suburban parked vehicle.',
     dims: { l: 4.85, w: 1.95, h: 1.78 },
@@ -44,6 +47,8 @@ export const CATALOG = [
     id: 'vehicle.pickup',
     label: 'Pickup truck',
     class: 'vehicle',
+    actorClass: 'truck',
+    compatibleActorClasses: ['car'],
     description:
       'Full-size crew-cab pickup with an open bed. Long and tall; a parked one at a kerb blocks the sightline into a driveway.',
     dims: { l: 5.9, w: 2.03, h: 1.95 },
@@ -54,6 +59,7 @@ export const CATALOG = [
     id: 'vehicle.van',
     label: 'Cargo van',
     class: 'vehicle',
+    actorClass: 'van',
     description:
       'High-roof delivery van. A double-parked one is the canonical occluder for a pedestrian stepping out mid-block.',
     dims: { l: 5.3, w: 2.0, h: 2.4 },
@@ -64,6 +70,7 @@ export const CATALOG = [
     id: 'vehicle.box_truck',
     label: 'Box truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Two-axle straight truck with a 24 ft cargo body. Completely blocks the sightline across an adjacent lane.',
     dims: { l: 7.6, w: 2.44, h: 3.4 },
@@ -74,6 +81,7 @@ export const CATALOG = [
     id: 'vehicle.semi_truck',
     label: 'Semi tractor-trailer',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Conventional tractor with a 53 ft box trailer. The strongest mobile occluder in the catalog and the reference articulated vehicle for turning and blind-spot cases.',
     dims: { l: 20.1, w: 2.6, h: 4.1 },
@@ -84,6 +92,7 @@ export const CATALOG = [
     id: 'vehicle.bus',
     label: 'Transit bus',
     class: 'vehicle',
+    actorClass: 'bus',
     description:
       'Forty-foot city bus with kerb-side doors. Stopped at a bus stop it hides boarding and alighting pedestrians from through traffic.',
     dims: { l: 12.2, w: 2.55, h: 3.2 },
@@ -94,6 +103,7 @@ export const CATALOG = [
     id: 'vehicle.motorcycle',
     label: 'Motorcycle',
     class: 'vehicle',
+    actorClass: 'motorcycle',
     description:
       'Standard motorcycle, no rider. Narrow silhouette used for lane-filtering, late-detection and misclassification cases.',
     dims: { l: 2.1, w: 0.75, h: 1.23 },
@@ -104,6 +114,7 @@ export const CATALOG = [
     id: 'vehicle.bicycle',
     label: 'Cyclist',
     class: 'vehicle',
+    actorClass: 'bicycle',
     description:
       'Bicycle with a seated rider. The reference vulnerable road user for bike-lane, dooring and right-hook conflicts.',
     dims: { l: 1.75, w: 0.5, h: 1.71 },
@@ -114,6 +125,8 @@ export const CATALOG = [
     id: 'vehicle.ambulance',
     label: 'Ambulance',
     class: 'vehicle',
+    actorClass: 'van',
+    compatibleActorClasses: ['truck'],
     description:
       'Box-body emergency ambulance with a roof light bar. Use lights.emergency and audio.horn timeline state keys for emergency-response conflicts.',
     dims: { l: 6.1, w: 2.1, h: 2.65 },
@@ -124,6 +137,8 @@ export const CATALOG = [
     id: 'vehicle.tram',
     label: 'Tram / streetcar',
     class: 'vehicle',
+    actorClass: 'bus',
+    compatibleActorClasses: ['truck'],
     description:
       'Single articulated urban tram for rail-crossing, mixed-traffic and platform conflicts. Its long fixed-path body is a strong moving occluder.',
     dims: { l: 30, w: 2.65, h: 3.5 },
@@ -134,6 +149,7 @@ export const CATALOG = [
     id: 'vehicle.mobility_scooter',
     label: 'Mobility scooter',
     class: 'vehicle',
+    actorClass: 'scooter',
     description:
       'Low-speed powered mobility scooter with a seated rider. Treat as a vulnerable road user for crossing and sidewalk-edge interactions.',
     dims: { l: 1.35, w: 0.68, h: 1.35 },
@@ -144,6 +160,7 @@ export const CATALOG = [
     id: 'vehicle.honda_civic',
     label: 'Honda Civic',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Contemporary Honda Civic compact sedan for recognizable everyday traffic, commuter, parking and intersection scenarios.',
     dims: { l: 4.67, w: 1.8, h: 1.42 },
@@ -154,6 +171,7 @@ export const CATALOG = [
     id: 'vehicle.toyota_camry',
     label: 'Toyota Camry',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Modern Toyota Camry family sedan for common commuter traffic, rideshare pickup and parked-car occlusion scenes.',
     dims: { l: 4.88, w: 1.84, h: 1.45 },
@@ -164,6 +182,7 @@ export const CATALOG = [
     id: 'vehicle.tesla_model_3',
     label: 'Tesla Model 3',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Tesla Model 3 electric fastback with a low grille-free nose for modern mixed-fleet and charging-area scenarios.',
     dims: { l: 4.72, w: 1.85, h: 1.44 },
@@ -174,6 +193,7 @@ export const CATALOG = [
     id: 'vehicle.ford_mustang',
     label: 'Ford Mustang',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Ford Mustang two-door performance coupe with a long hood for recognizable enthusiast and high-acceleration traffic scenes.',
     dims: { l: 4.81, w: 1.92, h: 1.4 },
@@ -184,6 +204,7 @@ export const CATALOG = [
     id: 'vehicle.chevrolet_corvette',
     label: 'Chevrolet Corvette',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Chevrolet Corvette low sports car with a wide stance for performance-driving and difficult low-profile detection scenarios.',
     dims: { l: 4.63, w: 1.93, h: 1.23 },
@@ -194,6 +215,7 @@ export const CATALOG = [
     id: 'vehicle.porsche_911',
     label: 'Porsche 911',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Porsche 911 sports coupe with its compact rounded roofline for premium urban traffic and performance scenarios.',
     dims: { l: 4.52, w: 1.85, h: 1.3 },
@@ -204,6 +226,7 @@ export const CATALOG = [
     id: 'vehicle.jeep_wrangler',
     label: 'Jeep Wrangler',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Four-door Jeep Wrangler with an upright cabin and exposed spare-wheel silhouette for urban and trail-access scenes.',
     dims: { l: 4.79, w: 1.88, h: 1.87 },
@@ -214,6 +237,7 @@ export const CATALOG = [
     id: 'vehicle.minivan',
     label: 'Passenger minivan',
     class: 'vehicle',
+    actorClass: 'van',
     description:
       'Seven-seat passenger minivan for school pickup, family travel, rideshare and sliding-door curbside conflicts.',
     dims: { l: 5.15, w: 2, h: 1.78 },
@@ -224,6 +248,7 @@ export const CATALOG = [
     id: 'vehicle.taxi',
     label: 'City taxi',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Marked city taxi with a roof sign for curb pickup, sudden stopping, passenger loading and dense downtown traffic.',
     dims: { l: 4.9, w: 1.85, h: 1.55 },
@@ -234,6 +259,7 @@ export const CATALOG = [
     id: 'vehicle.police_cruiser',
     label: 'Police cruiser',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Marked police sedan with a roof light bar for traffic stops, pursuits, blocked lanes and emergency-priority scenarios.',
     dims: { l: 5.1, w: 2, h: 1.55 },
@@ -244,6 +270,7 @@ export const CATALOG = [
     id: 'vehicle.police_suv',
     label: 'Police SUV',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Marked police utility vehicle with emergency lighting for incident command, pursuits and roadside response scenes.',
     dims: { l: 5.1, w: 2, h: 1.9 },
@@ -254,6 +281,7 @@ export const CATALOG = [
     id: 'vehicle.fire_command_suv',
     label: 'Fire command SUV',
     class: 'vehicle',
+    actorClass: 'car',
     description:
       'Red fire-department command SUV with warning lights for advance response, road closures and incident staging.',
     dims: { l: 5.2, w: 2, h: 1.95 },
@@ -264,6 +292,7 @@ export const CATALOG = [
     id: 'vehicle.fire_engine',
     label: 'Fire engine',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Full-size structural fire engine with equipment body, ladder and emergency light bar for active incident scenes.',
     dims: { l: 10.2, w: 2.55, h: 3.3 },
@@ -274,6 +303,7 @@ export const CATALOG = [
     id: 'vehicle.dump_truck',
     label: 'Dump truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Three-axle dump truck with a raised-sided aggregate bed for construction traffic, work zones and blind-spot cases.',
     dims: { l: 8.5, w: 2.55, h: 3.3 },
@@ -284,6 +314,7 @@ export const CATALOG = [
     id: 'vehicle.garbage_truck',
     label: 'Garbage truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Municipal refuse collection truck with a tall compactor body for frequent curb stops and neighborhood occlusion scenarios.',
     dims: { l: 9.2, w: 2.55, h: 3.45 },
@@ -294,6 +325,7 @@ export const CATALOG = [
     id: 'vehicle.tow_truck',
     label: 'Tow truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Medium-duty rollback tow truck for disabled-vehicle recovery, shoulder operations and partially blocked traffic lanes.',
     dims: { l: 7.5, w: 2.45, h: 2.8 },
@@ -304,6 +336,7 @@ export const CATALOG = [
     id: 'vehicle.cement_mixer',
     label: 'Cement mixer',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Heavy concrete mixer truck with a rotating-drum silhouette for construction deliveries, turns and large blind spots.',
     dims: { l: 8.8, w: 2.5, h: 3.7 },
@@ -314,6 +347,7 @@ export const CATALOG = [
     id: 'vehicle.utility_bucket_truck',
     label: 'Utility bucket truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Utility service truck with a folded aerial bucket boom for roadside maintenance, lane closures and worker-safety scenes.',
     dims: { l: 8.2, w: 2.5, h: 3.6 },
@@ -324,6 +358,7 @@ export const CATALOG = [
     id: 'vehicle.tanker_truck',
     label: 'Tanker truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Rigid tanker truck with a cylindrical liquid tank for hazardous-goods routing, turning and high-occlusion scenarios.',
     dims: { l: 10.5, w: 2.55, h: 3.6 },
@@ -334,6 +369,7 @@ export const CATALOG = [
     id: 'vehicle.flatbed_truck',
     label: 'Flatbed truck',
     class: 'vehicle',
+    actorClass: 'truck',
     description:
       'Medium-duty flatbed truck for oversized cargo, loading activity and variable roadside obstruction scenarios.',
     dims: { l: 8, w: 2.5, h: 2.65 },
@@ -344,6 +380,7 @@ export const CATALOG = [
     id: 'vehicle.school_bus',
     label: 'School bus',
     class: 'vehicle',
+    actorClass: 'bus',
     description:
       'Conventional yellow school bus for pupil loading, flashing-stop conflicts and child pedestrian occlusion scenarios.',
     dims: { l: 10.7, w: 2.55, h: 3.2 },
@@ -354,6 +391,7 @@ export const CATALOG = [
     id: 'vehicle.shuttle_bus',
     label: 'Shuttle bus',
     class: 'vehicle',
+    actorClass: 'bus',
     description:
       'Medium passenger shuttle bus for airport, hotel, campus and paratransit pickup and drop-off interactions.',
     dims: { l: 7.4, w: 2.3, h: 2.8 },
@@ -364,6 +402,7 @@ export const CATALOG = [
     id: 'vehicle.delivery_van',
     label: 'Parcel delivery van',
     class: 'vehicle',
+    actorClass: 'van',
     description:
       'Long-wheelbase parcel delivery van for frequent curb stops, double parking and driver-exit conflict scenarios.',
     dims: { l: 6, w: 2.05, h: 2.65 },
@@ -699,6 +738,7 @@ export const CATALOG = [
     id: 'construction.flagger',
     label: 'Flagger',
     class: 'construction',
+    actorClass: 'pedestrian',
     description:
       'Worker in a hi-vis vest and hard hat holding a STOP/SLOW paddle out to the side. A vulnerable road user standing in the roadway.',
     dims: { l: 0.73, w: 0.7, h: 2.19 },
@@ -853,6 +893,7 @@ export const CATALOG = [
     id: 'street.shopping_cart',
     label: 'Shopping cart',
     class: 'street',
+    actorClass: 'scooter',
     description:
       'Small rolling wire shopping cart that can enter a roadway from a kerb or parking area and create a low-mass obstacle conflict.',
     dims: { l: 1.05, w: 0.65, h: 1.05 },
@@ -1014,6 +1055,30 @@ export function getEntry(id: CatalogId): CatalogEntry {
   const entry = BY_ID.get(id);
   if (!entry) throw new Error(`Unknown catalog id: ${id}`);
   return entry;
+}
+
+/**
+ * Resolve actor behavior from catalog metadata, never from an id allowlist.
+ * Imported vehicle manifests use the same contract as the built-in catalog.
+ */
+export function actorClassForCatalogEntry(entry: CatalogEntry): CatalogActorClass {
+  if (entry.actorClass) return entry.actorClass;
+  switch (entry.class) {
+    case 'pedestrian': return 'pedestrian';
+    case 'sidewalk_robot': return 'sidewalk_robot';
+    case 'drone': return 'drone';
+    case 'animal': return 'animal';
+    default: return 'static_object';
+  }
+}
+
+/** Actor classes that may legitimately use this model, including parked use. */
+export function actorClassesForCatalogEntry(entry: CatalogEntry): readonly CatalogActorClass[] {
+  return [...new Set([
+    actorClassForCatalogEntry(entry),
+    ...(entry.compatibleActorClasses ?? []),
+    'static_object' as const,
+  ])];
 }
 
 export interface CatalogQuery {

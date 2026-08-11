@@ -230,7 +230,7 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
 
   /** Q turns left and E turns right for props and pedestrians, never vehicles. */
   protected rotateStaticPreview(direction: 1 | -1): boolean {
-    if (this.mode === 'placing' && this.placing && actorKindFor(this.placing) !== 'vehicle') {
+    if (this.mode === 'placing' && this.placing && (actorKindFor(this.placing) !== 'vehicle' || this.placingFreeformStatic)) {
       this.placementHeadingOffsetRad = normalizeHeading(
         this.placementHeadingOffsetRad + direction * PROP_ROTATE_STEP_RAD,
       );
@@ -239,7 +239,7 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
     }
     const session = this.grab;
     if (this.mode !== 'grab' || !session?.direct
-      || [...session.origin.values()].some((actor) => actor.kind === 'vehicle')) return false;
+      || [...session.origin.values()].some((actor) => actor.kind === 'vehicle' && !actor.static)) return false;
     session.headingOffsetRad = normalizeHeading(session.headingOffsetRad + direction * PROP_ROTATE_STEP_RAD);
     this.updateGrab();
     return true;

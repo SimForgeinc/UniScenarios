@@ -21,6 +21,7 @@
 
 export type {
   CatalogEntry,
+  CatalogActorClass,
   CatalogAnimationProfile,
   Dims,
   ParamValue,
@@ -34,6 +35,8 @@ export {
   CATALOG_ALIASES,
   CATALOG_IDS,
   AUTHORING_CATALOG,
+  actorClassForCatalogEntry,
+  actorClassesForCatalogEntry,
   type CatalogId,
   type CatalogQuery,
   getEntry,

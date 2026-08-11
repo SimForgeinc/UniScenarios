@@ -125,6 +125,36 @@ export interface Dims {
   h: number;
 }
 
+/** Physics/controller family used when a catalog model becomes an actor. */
+export type CatalogActorClass =
+  | 'car'
+  | 'truck'
+  | 'bus'
+  | 'van'
+  | 'motorcycle'
+  | 'bicycle'
+  | 'scooter'
+  | 'pedestrian'
+  | 'sidewalk_robot'
+  | 'drone'
+  | 'animal'
+  | 'static_object';
+
+export const CATALOG_ACTOR_CLASSES: readonly CatalogActorClass[] = [
+  'car',
+  'truck',
+  'bus',
+  'van',
+  'motorcycle',
+  'bicycle',
+  'scooter',
+  'pedestrian',
+  'sidewalk_robot',
+  'drone',
+  'animal',
+  'static_object',
+] as const;
+
 /** Build parameters are plain JSON so the catalog can round-trip as data. */
 export type ParamValue = number | string | boolean;
 
@@ -134,6 +164,13 @@ export interface CatalogEntry {
   /** Human label for pickers. */
   readonly label: string;
   readonly class: PropClass;
+  /**
+   * Authoritative simulation/physics class. Vehicle entries must declare it;
+   * other classes may override their broad catalog class for mobile exceptions.
+   */
+  readonly actorClass?: CatalogActorClass;
+  /** Additional legacy or deliberately interchangeable actor classes. */
+  readonly compatibleActorClasses?: readonly CatalogActorClass[];
   /**
    * One sentence, written for an LLM choosing props for a scenario: what it is
    * and what it is useful for in a driving scene.

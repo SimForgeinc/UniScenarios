@@ -14,6 +14,7 @@
  */
 
 import { quantize } from '../core/math.js';
+import type { SemanticLedger } from '@uniscenarios/scenario-model';
 import { toSceneXZ } from '../frames.js';
 import type { ActorKind, ControlIndication, Dims, MotionPhysicsMode, OperationalConditions, StaticProp } from '../schema/input.js';
 import {
@@ -104,6 +105,7 @@ export type SimEvent =
   | { t: number; kind: 'lateral_maneuver_planned'; actorId: string; interactionId: string; requestedDurationS: number; effectiveDurationS: number; displacementM: number }
   | { t: number; kind: 'lane_change'; actorId: string; fromRsl: string | null; toRsl: string | null; legal: boolean }
   | { t: number; kind: 'lane_change_rejected'; actorId: string; interactionId: string; reason: string }
+  | { t: number; kind: 'route_change_rejected'; actorId: string; interactionId: string; reason: string; requestedTurn?: string }
   | { t: number; kind: 'collision'; a: string; b: string; colliderA?: string; colliderB?: string }
   | {
       t: number;
@@ -377,6 +379,12 @@ export interface SimTrace {
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
+  /**
+   * Runtime-neutral behavioral evidence for browser/OpenSCENARIO/CARLA parity.
+   * Optional only for read compatibility with traces written before ledger v1;
+   * every trace produced by the current engine includes it.
+   */
+  readonly semanticLedger?: SemanticLedger;
 }
 
 function quantizeMetricValue(value: unknown): unknown {
@@ -448,6 +456,9 @@ export function quantizeTrace(trace: SimTrace): SimTrace {
     },
     events: trace.events.map((event) => ({ ...event, t: quantize(event.t, TRACE_PRECISION.event) })),
     metrics: quantizeMetrics(trace.metrics),
+    ...(trace.semanticLedger
+      ? { semanticLedger: quantizeMetricValue(trace.semanticLedger) as SemanticLedger }
+      : {}),
   };
 }
 
@@ -464,6 +475,8 @@ export interface SceneTrace {
   };
   readonly events: SimEvent[];
   readonly metrics: EpisodeMetrics;
+  /** Canonical ledger remains in its declared frame (`xodr-local`). */
+  readonly semanticLedger?: SemanticLedger;
 }
 
 /** A copy with `ticks` rewritten into the y-up scene frame (`x`, `z`). */
@@ -514,6 +527,7 @@ export function traceToSceneFrame(trace: SimTrace): SceneTrace {
     },
     events: trace.events,
     metrics: trace.metrics,
+    ...(trace.semanticLedger ? { semanticLedger: trace.semanticLedger } : {}),
   };
 }
 

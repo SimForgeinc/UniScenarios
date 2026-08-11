@@ -167,11 +167,12 @@ export class EditorController extends EditorControllerInput {
     catalogId: CatalogId,
     clientX: number,
     clientY: number,
-    modifiers: { altKey?: boolean; shiftKey?: boolean } = {},
+    modifiers: { altKey?: boolean; shiftKey?: boolean; freeformStatic?: boolean } = {},
   ): boolean {
     if (!this.authoringEnabled) return false;
-    if (this.mode !== 'placing' || this.placing !== catalogId) {
-      this.togglePlacement(catalogId);
+    const freeformStatic = Boolean(modifiers.freeformStatic);
+    if (this.mode !== 'placing' || this.placing !== catalogId || this.placingFreeformStatic !== freeformStatic) {
+      this.togglePlacement(catalogId, { freeformStatic });
     }
     this.altDown = Boolean(modifiers.altKey);
     this.shiftDown = Boolean(modifiers.shiftKey);
@@ -212,10 +213,10 @@ export class EditorController extends EditorControllerInput {
   protected computeGhostPose(catalogId: CatalogId, ground: Vector3): GhostPose {
     const kind = actorKindFor(catalogId);
     const dims = getEntry(catalogId).dims;
-    const requiresLane = isRoadBoundMotorVehicle(catalogId);
+    const requiresLane = !this.placingFreeformStatic && isRoadBoundMotorVehicle(catalogId);
     // Preserve the existing opt-in driving-lane behavior for VRUs and other
     // mobile catalog actors, while motor vehicles can never bypass it.
-    const wantsLane = kind === 'vehicle' && (requiresLane || !this.altDown);
+    const wantsLane = !this.placingFreeformStatic && kind === 'vehicle' && (requiresLane || !this.altDown);
 
     if (wantsLane) {
       const nearest = this.laneIndex.nearestForVehiclePlacement(ground.x, ground.z, SNAP_RADIUS_M);
@@ -330,13 +331,13 @@ export class EditorController extends EditorControllerInput {
     const pose = this.ghostPose;
     const catalogId = this.placing;
     if (!pose || !catalogId) return;
-    const requiresLane = isRoadBoundMotorVehicle(catalogId);
+    const requiresLane = !this.placingFreeformStatic && isRoadBoundMotorVehicle(catalogId);
     if (!pose.valid && (requiresLane || !altClick)) {
       this.flash(pose.reason ?? 'cannot place here');
       return;
     }
     const actorId = this.pendingActorId ?? this.doc.allocateActorId(catalogId);
-    const drivingSpeedKph = defaultDrivingSpeedKph(catalogId);
+    const drivingSpeedKph = this.placingFreeformStatic ? null : defaultDrivingSpeedKph(catalogId);
     if (drivingSpeedKph !== null) {
       if (!pose.laneRef) {
         this.flash('Place road vehicles on a valid driving lane');
@@ -352,6 +353,7 @@ export class EditorController extends EditorControllerInput {
       headingRad: pose.headingRad,
       ...(pose.laneRef ? { laneRef: pose.laneRef } : {}),
       ...(drivingSpeedKph === null ? {} : { initialSpeedKph: drivingSpeedKph }),
+      ...(this.placingFreeformStatic ? { static: true } : {}),
       ...(actorKindFor(catalogId) === 'vehicle'
         ? { bodyColor: defaultBodyColor(catalogId) }
         : {})
@@ -401,7 +403,7 @@ export class EditorController extends EditorControllerInput {
     for (const actor of session.origin.values()) {
       const targetX = actor.x + dx;
       const targetZ = actor.z + dz;
-      if (isRoadBoundMotorVehicle(actor.catalogId)) {
+      if (!actor.static && isRoadBoundMotorVehicle(actor.catalogId)) {
         const snapped = this.snapMotorVehicle(actor.catalogId, new Vector3(targetX, actor.y, targetZ), {
           lateralM: actor.laneRef?.t ?? 0,
           fallbackHeadingRad: actor.headingRad
@@ -487,7 +489,7 @@ export class EditorController extends EditorControllerInput {
         x: targetX,
         y: this.groundY(targetX, targetZ, actor.y),
         z: targetZ,
-        headingRad: normalizeHeading(actor.headingRad + (actor.kind !== 'vehicle' ? session.headingOffsetRad : 0)),
+        headingRad: normalizeHeading(actor.headingRad + (actor.kind !== 'vehicle' || actor.static ? session.headingOffsetRad : 0)),
         laneRef: breakAnchor && actor.laneRef ? null : undefined,
         routeLaneRsls: breakAnchor && actor.laneRef ? null : undefined
       });
@@ -680,6 +682,7 @@ export class EditorController extends EditorControllerInput {
     this.placingKind = null;
     this.pendingActorId = null;
     this.placementHeadingOffsetRad = 0;
+    this.placingFreeformStatic = false;
     this.ghost.hide();
     this.ghostPose = null;
     this.mode = 'idle';
@@ -924,6 +927,9 @@ export class EditorController extends EditorControllerInput {
         return `${this.customRouteDraft?.points.length ?? 0} route points · click add point · Enter finish · Backspace remove last · Esc cancel`;
       case 'placing': {
         const kind: ActorKind = this.placing ? actorKindFor(this.placing) : 'prop';
+        if (this.placingFreeformStatic) {
+          return 'free placement · click place · click-drag set heading · Q / E rotate 5° · right-click cancel';
+        }
         if (kind === 'vehicle') {
           if (this.placing && isRoadBoundMotorVehicle(this.placing)) {
             return this.ghostPose?.laneRef
@@ -940,8 +946,8 @@ export class EditorController extends EditorControllerInput {
       }
       case 'grab': {
         if (this.grab?.direct) {
-          const rotatable = [...this.grab.origin.values()].every((actor) => actor.kind !== 'vehicle');
-          const roadVehicle = [...this.grab.origin.values()].some((actor) => isRoadBoundMotorVehicle(actor.catalogId));
+          const rotatable = [...this.grab.origin.values()].every((actor) => actor.kind !== 'vehicle' || actor.static);
+          const roadVehicle = [...this.grab.origin.values()].some((actor) => !actor.static && isRoadBoundMotorVehicle(actor.catalogId));
           if (roadVehicle) {
             return this.grab.valid
               ? `snapped to ${laneLabelFromPreview(this.preview, this.grab.origin) ?? 'driving lane'} · release confirm · Esc cancel`

@@ -209,6 +209,7 @@ export abstract class EditorControllerCommands {
   protected customRouteDraft: {
     interactionId: string;
     points: Array<{ x: number; z: number }>;
+    timed: boolean;
     cursor: { x: number; z: number } | null;
     removeOnCancel: boolean;
     seedLocked: boolean;
@@ -222,6 +223,7 @@ export abstract class EditorControllerCommands {
   protected headingDrag: { x: number; z: number } | null = null;
   protected freeHeading = 0;
   protected placementHeadingOffsetRad = 0;
+  protected placingFreeformStatic = false;
   protected altDown = false;
   protected shiftDown = false;
   protected lastGroundY = 0;
@@ -394,13 +396,15 @@ export abstract class EditorControllerCommands {
   // ---------------------------------------------------------- commands (UI)
 
   /** Enter placement mode with a catalog item, or leave it if it is already active. */
-  togglePlacement(catalogId: CatalogId): void {
+  togglePlacement(catalogId: CatalogId, options: { freeformStatic?: boolean } = {}): void {
     if (!this.authoringEnabled) return;
-    if (this.mode === 'placing' && this.placing === catalogId) {
+    const freeformStatic = Boolean(options.freeformStatic);
+    if (this.mode === 'placing' && this.placing === catalogId && this.placingFreeformStatic === freeformStatic) {
       this.cancel();
       return;
     }
     this.cancelModal();
+    this.placingFreeformStatic = freeformStatic;
     this.placingKind = null;
     this.pendingActorId = null;
     this.mode = 'placing';
@@ -458,7 +462,7 @@ export abstract class EditorControllerCommands {
   } = {}): boolean {
     if (!this.authoringEnabled) return false;
     const interaction = this.doc.data.choreography.interactions.find((item) => item.id === interactionId);
-    if (interaction?.verb !== 'route' || interaction.target.mode !== 'customRoute') return false;
+    if (interaction?.verb !== 'route' || (interaction.target.mode !== 'customRoute' && interaction.target.mode !== 'customTimedRoute')) return false;
     this.cancelModal();
     const actor = this.doc.actor(interaction.actor);
     const startPose = options.startPose;
@@ -475,9 +479,10 @@ export abstract class EditorControllerCommands {
     this.mode = 'drawingRoute';
     this.customRouteDraft = {
       interactionId,
+      timed: interaction.target.mode === 'customTimedRoute',
       points: startPose
         ? [{ x: Number(startPose.x.toFixed(3)), z: Number(startPose.z.toFixed(3)) }]
-        : options.reset ? [] : interaction.target.points.map((point) => ({ ...point })),
+        : options.reset ? [] : interaction.target.points.map((point) => ({ x: point.x, z: point.z })),
       cursor: null,
       removeOnCancel: options.removeOnCancel ?? false,
       seedLocked: Boolean(startPose),
@@ -491,19 +496,40 @@ export abstract class EditorControllerCommands {
 
   finishCustomRouteAuthoring(): boolean {
     const draft = this.customRouteDraft;
-    if (!draft || draft.points.length < 2) {
+    if (!draft) {
+      this.flash('Place at least two route points');
+      return false;
+    }
+    const cursor = draft.cursor
+      ? { x: Number(draft.cursor.x.toFixed(3)), z: Number(draft.cursor.z.toFixed(3)) }
+      : null;
+    const previous = draft.points.at(-1);
+    if (cursor && draft.points.length < 128 && (!previous || Math.hypot(previous.x - cursor.x, previous.z - cursor.z) >= 0.1)) {
+      draft.points.push(cursor);
+    }
+    if (draft.points.length < 2) {
       this.flash('Place at least two route points');
       return false;
     }
     const interaction = this.doc.data.choreography.interactions.find((item) => item.id === draft.interactionId);
-    if (interaction?.verb !== 'route' || interaction.target.mode !== 'customRoute') return false;
+    if (interaction?.verb !== 'route' || (interaction.target.mode !== 'customRoute' && interaction.target.mode !== 'customTimedRoute')) return false;
     this.customRouteDraft = null;
     this.mode = 'idle';
     this.preview.clear();
     this.routeRenderer.setDraftRoute(null);
     this.doc.replaceInteraction(interaction.id, {
       ...interaction,
-      target: { mode: 'customRoute', points: draft.points },
+      target: draft.timed
+        ? {
+            mode: 'customTimedRoute',
+            points: draft.points.map((point, index) => ({
+              timeS: Number(((interaction.trigger.kind === 'at' && typeof interaction.trigger.t === 'number'
+                ? interaction.trigger.t
+                : 0) + index).toFixed(3)),
+              ...point,
+            })),
+          }
+        : { mode: 'customRoute', points: draft.points },
     });
     this.syncScene();
     this.notify();
@@ -690,7 +716,10 @@ export abstract class EditorControllerCommands {
       this.flash('select something first');
       return;
     }
-    if (this.selection.some((id) => this.doc.actor(id)?.kind === 'vehicle')) {
+    if (this.selection.some((id) => {
+      const actor = this.doc.actor(id);
+      return actor?.kind === 'vehicle' && !actor.static;
+    })) {
       this.flash('Vehicles follow lane travel direction and cannot be freely rotated');
       return;
     }
@@ -742,7 +771,7 @@ export abstract class EditorControllerCommands {
       patch.headingDeg === undefined
         ? actor.headingRad
         : normalizeHeading((patch.headingDeg * Math.PI) / 180);
-    if (isRoadBoundMotorVehicle(actor.catalogId)) {
+    if (!actor.static && isRoadBoundMotorVehicle(actor.catalogId)) {
       const snapped = this.snapMotorVehicle(actor.catalogId, new Vector3(x, actor.y, z), {
         lateralM: actor.laneRef?.t ?? 0,
         fallbackHeadingRad: actor.headingRad

@@ -108,6 +108,8 @@ export type TurnRelation = z.infer<typeof turnRelationSchema>;
  * - `polyline` — an explicit ground path in scene coordinates. The pedestrian
  *   escape hatch (crossings, jaywalk diagonals); vehicles may use it too but
  *   then have no lane identity in the trace.
+ * - `timedPolyline` — exact scene-space keyframes. Time, rather than cruise
+ *   speed, owns the actor until a material collision hands it to physics.
  */
 export const routeSpecSchema = z.discriminatedUnion('kind', [
   z.object({
@@ -124,8 +126,25 @@ export const routeSpecSchema = z.discriminatedUnion('kind', [
     kind: z.literal('polyline'),
     points: z.array(scenePointSchema).min(2),
   }),
+  z.object({
+    kind: z.literal('timedPolyline'),
+    points: z.array(z.object({
+      timeS: nonNeg,
+      x: finite,
+      z: finite,
+    })).min(2),
+  }),
 ]);
 export type RouteSpec = z.infer<typeof routeSpecSchema>;
+
+/** A route command resolved against the actor's live lane when it fires. */
+export const nextJunctionRouteTargetSchema = z.object({
+  kind: z.literal('nextJunction'),
+  turn: turnRelationSchema,
+  maxLengthM: positive.default(2000),
+});
+export const routeActionTargetSchema = z.union([routeSpecSchema, nextJunctionRouteTargetSchema]);
+export type RouteActionTarget = z.infer<typeof routeActionTargetSchema>;
 
 /* ------------------------------------------------------------------- rules */
 
@@ -231,6 +250,11 @@ export const actorSchema = z.object({
       speedFactor: 1,
     }),
     route: routeSpecSchema,
+    /** Human comfort targets supplied by the authored actor profile. */
+    drivingProfile: z.strictObject({
+      comfortableLateralAccelerationMps2: positive,
+      comfortableDecelerationMps2: positive,
+    }).optional(),
     /**
      * Free-flow cruise speed override, m/s. Without it the actor cruises at
      * `speedFactor × laneSpeedLimit`.
@@ -323,7 +347,7 @@ export const verbSchema = z.discriminatedUnion('verb', [
   }),
   z.object({
     verb: z.literal('route'),
-    target: routeSpecSchema,
+    target: routeActionTargetSchema,
     /** Connect the actor's live pose to the first authored waypoint when the interaction fires. */
     joinFromCurrentPose: z.boolean().optional(),
     /** Follow literal world-space points without road, signal, or avoidance governors. */

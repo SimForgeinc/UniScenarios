@@ -425,10 +425,21 @@ export function authoringRoutes(
       ? role.extensions['studio.presentation.bodyColor'] as string
       : undefined,
   ]));
-  return routesFromSimulation(concrete, index, trace, authoredColors).map((route) => ({
-    ...route,
-    planned: route.actual,
-  }));
+  return routesFromSimulation(concrete, index, trace, authoredColors).map((route) => {
+    const customRoute = template.choreography.interactions.find((interaction) =>
+      interaction.actor === route.actorId &&
+      interaction.verb === 'route' &&
+      (interaction.target.mode === 'customRoute' || interaction.target.mode === 'customTimedRoute'),
+    );
+    const customRoutePoints = customRoute?.verb === 'route' &&
+      (customRoute.target.mode === 'customRoute' || customRoute.target.mode === 'customTimedRoute')
+      ? customRoute.target.points.map((point) => ({ x: point.x, z: point.z }))
+      : null;
+    return {
+      ...route,
+      planned: customRoutePoints ?? route.actual,
+    };
+  });
 }
 
 /**

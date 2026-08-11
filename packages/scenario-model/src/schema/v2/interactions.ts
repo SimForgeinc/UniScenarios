@@ -381,6 +381,19 @@ export const RouteTargetSchema = z.discriminatedUnion('mode', [
     })).min(2).max(128),
   }),
   /**
+   * Exact scene-space keyframes. Unlike `customRoute`, time owns motion: the
+   * actor is linearly interpolated between these positions and its inherent
+   * cruise speed and longitudinal commands are ignored until contact occurs.
+   */
+  z.strictObject({
+    mode: z.literal('customTimedRoute'),
+    points: z.array(z.strictObject({
+      timeS: z.number().finite().min(0),
+      x: z.number().finite(),
+      z: z.number().finite(),
+    })).min(2).max(1024),
+  }),
+  /**
    * Exact map-bound lane chain authored by Studio placement. This target is
    * only portable together with scene_absolute roles and deliberately retains
    * the concrete directed-road choice for deterministic save/reopen playback.

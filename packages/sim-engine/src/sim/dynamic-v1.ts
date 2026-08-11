@@ -323,6 +323,14 @@ export class DynamicV1Backend implements MotionBackend {
     return value ? { ...value } : undefined;
   }
 
+  setState(actorId: string, state: VehicleMotionState): void {
+    const entry = this.vehicles.get(actorId);
+    if (!entry) throw new Error(`dynamic-v1 actor is not registered: ${actorId}`);
+    entry.previous = { x: state.x, y: state.y, yawRad: state.yawRad };
+    Object.assign(entry.state, state);
+    entry.commandedAccelerationMps2 = state.longitudinalAccelerationMps2;
+  }
+
   telemetry(actorId: string): PhysicsTelemetrySample | undefined {
     const value = this.vehicles.get(actorId)?.telemetry;
     return value ? { ...value, control: { ...value.control } } : undefined;

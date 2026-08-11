@@ -224,6 +224,8 @@ export interface CityViewerStats {
   uiTicksPerSecond: number;
   /** Runtime semantic material classification and shader-application telemetry. */
   surfaceMaterials: import('./surface-materials').SurfaceMaterialReport;
+  /** Runtime snow-overlay residency and coverage telemetry. */
+  snowCover: import('./snow-cover').SnowCoverStats;
   assetVariants: {
     manifest: boolean;
     loaded: Record<'original' | 'geometry-only' | 'roads-only' | 'ktx2', number>;

@@ -536,6 +536,28 @@
                   "properties": {
                     "mode": {
                       "type": "string",
+                      "const": "customTimedRoute"
+                    },
+                    "points": {
+                      "minItems": 2,
+                      "maxItems": 1024,
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/$defs/__schema20"
+                      }
+                    }
+                  },
+                  "required": [
+                    "mode",
+                    "points"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "mode": {
+                      "type": "string",
                       "const": "lanePath"
                     },
                     "lanes": {
@@ -543,7 +565,7 @@
                       "maxItems": 128,
                       "type": "array",
                       "items": {
-                        "$ref": "#/$defs/__schema20"
+                        "$ref": "#/$defs/__schema21"
                       }
                     }
                   },
@@ -1601,6 +1623,27 @@
       "additionalProperties": false
     },
     "__schema20": {
+      "type": "object",
+      "properties": {
+        "timeS": {
+          "type": "number",
+          "minimum": 0
+        },
+        "x": {
+          "type": "number"
+        },
+        "z": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "timeS",
+        "x",
+        "z"
+      ],
+      "additionalProperties": false
+    },
+    "__schema21": {
       "type": "string",
       "minLength": 1
     }

@@ -392,6 +392,9 @@ importers:
       '@uniscenarios/map-intel':
         specifier: workspace:*
         version: link:../map-intel
+      '@uniscenarios/prop-catalog':
+        specifier: workspace:*
+        version: link:../prop-catalog
       '@uniscenarios/scenario-model':
         specifier: workspace:*
         version: link:../scenario-model
@@ -433,6 +436,9 @@ importers:
 
   packages/sim-engine:
     dependencies:
+      '@uniscenarios/scenario-model':
+        specifier: workspace:*
+        version: link:../scenario-model
       zod:
         specifier: ^4.4.3
         version: 4.4.3

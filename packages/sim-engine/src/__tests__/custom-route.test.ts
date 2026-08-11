@@ -8,6 +8,91 @@ import { syntheticTopology } from './fixtures/synthetic-map.js';
 const graph = buildLaneGraph(syntheticTopology());
 
 describe('custom route runtime semantics', () => {
+  it('places an actor at exact timed points and ignores inherent speed commands', () => {
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02,
+      seed: 'custom-timed-route',
+      actors: [{
+        id: 'actor', kind: 'car',
+        initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 25 },
+        behavior: {
+          route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 100, z: 0 }] },
+          cruiseSpeedMps: 25,
+          rules: { collisionAvoidance: false, yield: false },
+        },
+      }],
+      interactions: [
+        {
+          id: 'timed-route', actorId: 'actor', trigger: { kind: 'at', t: 0 }, verb: 'route',
+          target: {
+            kind: 'timedPolyline',
+            points: [
+              { timeS: 0, x: 0, z: 0 },
+              { timeS: 1, x: 4, z: 2 },
+              { timeS: 2, x: 10, z: 2 },
+              { timeS: 3, x: 10, z: 8 },
+            ],
+          },
+        },
+        {
+          id: 'ignored-speed', actorId: 'actor', trigger: { kind: 'at', t: 0.5 }, verb: 'speed',
+          target: { mode: 'absolute', value: 60 },
+          dynamics: { shape: 'linear', constraint: 'time', value: 0.1 },
+        },
+      ],
+    });
+
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    const track = trace.ticks.actors.actor!;
+    for (const [timeS, x, z] of [[0, 0, 0], [1, 4, 2], [2, 10, 2], [3, 10, 8]] as const) {
+      const index = trace.ticks.t.findIndex((time) => Math.abs(time - timeS) < 1e-9);
+      expect(track.x[index]).toBeCloseTo(x, 8);
+      expect(track.y[index]).toBeCloseTo(-z, 8);
+    }
+  });
+
+  it('permanently hands a timed route to physics after material contact', () => {
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02,
+      seed: 'custom-timed-route-contact',
+      actors: [
+        {
+          id: 'actor', kind: 'car', dims: { l: 4, w: 2, h: 1.5 },
+          initial: { pose: { x: 0, z: 8, headingRad: 0 }, speedMps: 0 },
+          behavior: {
+            route: { kind: 'polyline', points: [{ x: 0, z: 8 }, { x: 30, z: 8 }] },
+            rules: { collisionAvoidance: false, yield: false },
+          },
+        },
+        {
+          id: 'obstacle', kind: 'static_object', dims: { l: 2, w: 2, h: 2 }, static: true,
+          initial: { pose: { x: 7, z: 8, headingRad: 0 }, speedMps: 0 },
+          behavior: {
+            route: { kind: 'polyline', points: [{ x: 7, z: 8 }, { x: 8, z: 8 }] },
+            rules: { collisionAvoidance: true },
+          },
+        },
+      ],
+      interactions: [{
+        id: 'timed-route', actorId: 'actor', trigger: { kind: 'at', t: 0 }, verb: 'route',
+        target: {
+          kind: 'timedPolyline',
+          points: [
+            { timeS: 0, x: 0, z: 8 },
+            { timeS: 1, x: 10, z: 8 },
+            { timeS: 2, x: 20, z: 8 },
+            { timeS: 3, x: 30, z: 8 },
+          ],
+        },
+      }],
+    });
+
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    expect(trace.events).toContainEqual(expect.objectContaining({ kind: 'crash_disabled', actorId: 'actor' }));
+    expect(trace.ticks.actors.actor!.x.at(-1)).toBeLessThan(20);
+    expect(trace.ticks.actors.actor!.speedMps.at(-1)).toBeLessThan(0.05);
+  });
+
   it.each(['car', 'pedestrian', 'animal', 'sidewalk_robot', 'bicycle', 'scooter', 'drone'] as const)(
     'keeps %s speed ownership separate and retains the route after its editor window',
     (kind: ActorKind) => {

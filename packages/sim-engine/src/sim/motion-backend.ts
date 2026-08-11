@@ -76,6 +76,8 @@ export interface MotionBackend {
   readonly version: number;
   readonly substepS: number;
   register(input: MotionActorInitialization): void;
+  /** Replace body state when an authored exact-time trajectory owns motion. */
+  setState(actorId: string, state: VehicleMotionState): void;
   step(actorId: string, intent: MotionIntent, dtS: number, frictionScale: number): MotionStepResult;
   state(actorId: string): VehicleMotionState | undefined;
   telemetry(actorId: string): PhysicsTelemetrySample | undefined;

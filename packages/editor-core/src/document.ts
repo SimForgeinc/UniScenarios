@@ -40,7 +40,7 @@ import {
   type DriverProfile,
 } from '@uniscenarios/scenario-model';
 import { reconcileTemplateMapIdentity } from './map-identity';
-import { getEntry, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
+import { actorClassForCatalogEntry, getEntry, type CatalogActorClass, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import { editorMapVersionId, editorSourceMapId, type MapEntry } from './map';
 import { defaultSpeedKph, isActionCompatible } from './timeline-actions';
 
@@ -104,6 +104,8 @@ export interface NewActor {
   initialSpeedKph?: number;
   bodyColor?: string;
   driverProfile?: DriverProfile;
+  /** Place the actor as a fixed body with no inherent motion. */
+  static?: boolean;
 }
 
 /** A partial edit of one actor. `laneRef: null` clears the anchor. */
@@ -138,20 +140,8 @@ export function actorKindFor(catalogId: CatalogId): ActorKind {
 }
 
 /** Preserve the semantic simulation class for specialized catalog actors. */
-export function simulationClassFor(catalogId: CatalogId): 'car' | 'truck' | 'bus' | 'van' | 'motorcycle' | 'bicycle' | 'scooter' | 'pedestrian' | 'sidewalk_robot' | 'drone' | 'animal' | 'static_object' {
-  if (catalogId === 'vehicle.tram') return 'bus';
-  if (catalogId === 'vehicle.bus') return 'bus';
-  if (catalogId === 'vehicle.van' || catalogId === 'vehicle.ambulance' || catalogId === 'vehicle.minivan' || catalogId === 'vehicle.delivery_van') return 'van';
-  if (['vehicle.pickup', 'vehicle.box_truck', 'vehicle.semi_truck', 'vehicle.fire_engine', 'vehicle.dump_truck', 'vehicle.garbage_truck', 'vehicle.tow_truck', 'vehicle.cement_mixer', 'vehicle.utility_bucket_truck', 'vehicle.tanker_truck', 'vehicle.flatbed_truck'].includes(catalogId)) return 'truck';
-  if (catalogId === 'vehicle.school_bus' || catalogId === 'vehicle.shuttle_bus') return 'bus';
-  if (catalogId === 'vehicle.motorcycle') return 'motorcycle';
-  if (catalogId === 'vehicle.bicycle') return 'bicycle';
-  if (catalogId === 'vehicle.mobility_scooter' || catalogId === 'street.shopping_cart') return 'scooter';
-  const kind = actorKindFor(catalogId);
-  if (kind === 'pedestrian') return 'pedestrian';
-  if (kind === 'sidewalk_robot' || kind === 'drone' || kind === 'animal') return kind;
-  if (kind === 'prop') return 'static_object';
-  return 'car';
+export function simulationClassFor(catalogId: CatalogId): CatalogActorClass {
+  return actorClassForCatalogEntry(getEntry(catalogId));
 }
 
 export interface AuthoringGraphPrunePlan {
@@ -647,7 +637,7 @@ export class EditorDocument {
             class: simulationClassFor(input.catalogId),
             catalogId: input.catalogId,
             dims: { length: dims.l, width: dims.w, height: dims.h },
-            static: kind === 'prop',
+            static: kind === 'prop' || input.static === true,
             sensors: [],
           },
           pose: {
@@ -655,7 +645,7 @@ export class EditorDocument {
             headingRad: q(input.headingRad),
           },
           ...(input.label === undefined ? {} : { label: input.label }),
-          initialSpeedKph: q(Math.max(0, input.initialSpeedKph ?? defaultSpeedKph(simulationClassFor(input.catalogId), input.catalogId))),
+          initialSpeedKph: input.static === true ? 0 : q(Math.max(0, input.initialSpeedKph ?? defaultSpeedKph(simulationClassFor(input.catalogId), input.catalogId))),
           ...(kind === 'vehicle' ? { driverProfile: input.driverProfile ?? 'lawful' } : {}),
           ...(input.laneRef ? { laneRef: quantizeAnchor(input.laneRef) } : {}),
           essentiality: kind === 'prop' ? 'preferred' : 'required',
