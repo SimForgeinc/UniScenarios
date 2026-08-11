@@ -210,6 +210,8 @@ export interface CityViewerStats {
   queued: number;
   /** Assets parsed and waiting on the paced GPU upload. */
   uploading: number;
+  /** Live byte-level network telemetry for the current map or preset load. */
+  downloads: import('./download-progress').AssetDownloadStats;
   jsHeapMB: number | null;
   cameraMode: 'orbit' | 'fly';
   /** True when GPU rendering and scene streaming are bypassed but integrations still tick. */

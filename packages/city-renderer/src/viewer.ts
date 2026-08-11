@@ -19,6 +19,7 @@ import type { CameraView } from './camera-controls';
 import type { CameraControlPreferences } from './camera-drag';
 import { cameraEnvelopeFromBounds, constrainCameraToEnvelope, initialEditorCameraPose } from './camera-envelope';
 import { FrameStats, jsHeapMB } from './frame-stats';
+import { AssetDownloadTracker, readResponseBufferWithProgress } from './download-progress';
 import {
   collectResources,
   disposeResources,
@@ -218,6 +219,7 @@ export class CityViewer {
   private readonly canvas: HTMLCanvasElement;
   private readonly options: Required<CityViewerOptions>;
   private readonly frameStats = new FrameStats(150);
+  private readonly downloadTracker = new AssetDownloadTracker();
   private readonly phaseStats = {
     controls: new FrameStats(150),
     streaming: new FrameStats(150),
@@ -351,7 +353,7 @@ export class CityViewer {
       maxConcurrentDerivatives: 2,
       loadDerivative: async (derivative, signal) => {
         const loader = getGLTFLoader(this.renderer);
-        const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, derivative.file), signal);
+        const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, derivative.file), signal, derivative.bytes);
         const gltf = await loader.parseAsync(buffer, '');
         const root = gltf.scene;
         this.prepareTree(root);
@@ -413,6 +415,7 @@ export class CityViewer {
       if (this.disposed) return;
       if (this.mapLoaded) this.releaseMapResources();
       this.mapLoaded = true;
+      this.downloadTracker.reset();
       this.mapLoadActive = true;
       try {
         await this.loadMapInner(manifestUrl);
@@ -621,10 +624,14 @@ export class CityViewer {
     };
   }
 
-  private async fetchBuffer(url: string, signal: AbortSignal): Promise<ArrayBuffer> {
+  private async fetchBuffer(
+    url: string,
+    signal: AbortSignal,
+    expectedBytes?: number | null,
+  ): Promise<ArrayBuffer> {
     const res = await fetch(url, { signal });
     if (!res.ok) throw new Error(`${res.status} ${url}`);
-    return res.arrayBuffer();
+    return readResponseBufferWithProgress(res, this.downloadTracker, expectedBytes);
   }
 
   private async loadVariantManifest(): Promise<CityAssetVariantManifest | null> {
@@ -641,7 +648,7 @@ export class CityViewer {
   }
 
   /** Parse an optimized local derivative, then retry source unless Ultra Low forbids textures. */
-  private async parseAsset(sourceFile: string, signal: AbortSignal) {
+  private async parseAsset(sourceFile: string, signal: AbortSignal, sourceBytes?: number | null) {
     const declaredKtxPath = this.variantManifest?.variants.ktx2?.runtime?.ktx2TranscoderPath ?? '';
     const ktx2TranscoderPath = this.options.ktx2TranscoderPath
       || (declaredKtxPath ? resolveUrl(this.assetBase, declaredKtxPath) : '');
@@ -650,6 +657,9 @@ export class CityViewer {
       roadsOnly: this.roadsOnlyFidelity,
       ktx2Ready: Boolean(ktx2TranscoderPath),
     });
+    const selectedBytes = selected.variant === 'original'
+      ? sourceBytes
+      : this.variantManifest?.variants[selected.variant]?.files[sourceFile]?.bytes;
     const requiredVariant = this.roadsOnlyFidelity ? 'roads-only' : this.ultraLowFidelity ? 'geometry-only' : null;
     if (requiredVariant && selected.variant !== requiredVariant) {
       this.canvas.dataset.assetVariant = `${requiredVariant}-unavailable`;
@@ -657,7 +667,11 @@ export class CityViewer {
     }
     const loader = getGLTFLoader(this.renderer, ktx2TranscoderPath);
     try {
-      const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, selected.file), signal);
+      const buffer = await this.fetchBuffer(
+        resolveUrl(this.assetBase, selected.file),
+        signal,
+        selectedBytes,
+      );
       const parsed = await loader.parseAsync(buffer, '');
       this.variantLoads[selected.variant]++;
       this.canvas.dataset.assetVariant = selected.variant;
@@ -675,7 +689,7 @@ export class CityViewer {
       if (!allowsSourceAssetFallback(selected.variant, this.ultraLowFidelity)
         || (error as { name?: string } | null)?.name === 'AbortError') throw error;
       this.variantFallbacks++;
-      const source = await this.fetchBuffer(resolveUrl(this.assetBase, sourceFile), signal);
+      const source = await this.fetchBuffer(resolveUrl(this.assetBase, sourceFile), signal, sourceBytes);
       const parsed = await loader.parseAsync(source, '');
       this.variantLoads.original++;
       this.canvas.dataset.assetVariant = 'original-fallback';
@@ -688,12 +702,13 @@ export class CityViewer {
     file: string,
     signal: AbortSignal,
     variant: 'geometry-only' | 'roads-only' | 'ktx2',
+    expectedBytes?: number | null,
   ) {
     const declaredKtxPath = this.variantManifest?.variants.ktx2?.runtime?.ktx2TranscoderPath ?? '';
     const ktx2TranscoderPath = this.options.ktx2TranscoderPath
       || (declaredKtxPath ? resolveUrl(this.assetBase, declaredKtxPath) : '');
     const loader = getGLTFLoader(this.renderer, ktx2TranscoderPath);
-    const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, file), signal);
+    const buffer = await this.fetchBuffer(resolveUrl(this.assetBase, file), signal, expectedBytes);
     const parsed = await loader.parseAsync(buffer, '');
     this.variantLoads[variant]++;
     this.canvas.dataset.assetVariant = variant;
@@ -774,8 +789,8 @@ export class CityViewer {
       maxDesiredIndex: () => this.ultraLowFidelity ? 0 : progressiveRoad.length - 1,
       build: async (tileDef, lod, signal) => {
         const gltf = lod.level === -1 && !this.ultraLowFidelity
-          ? await this.parseResolvedAsset(lod.file, signal, 'geometry-only')
-          : await this.parseAsset(road.file, signal);
+          ? await this.parseResolvedAsset(lod.file, signal, 'geometry-only', lod.fileSize)
+          : await this.parseAsset(road.file, signal, road.fileSize);
         const root = gltf.scene;
         root.name = tileDef.id;
         this.prepareTree(root);
@@ -825,7 +840,7 @@ export class CityViewer {
       pinCoarsest: true,
       want: () => !this.roadsOnlyFidelity,
       build: async (def, lod, signal) => {
-        const gltf = await this.parseAsset(lod.file, signal);
+        const gltf = await this.parseAsset(lod.file, signal, lod.fileSize);
         const root = gltf.scene;
         root.name = `${def.id}.lod${lod.level}`;
         this.prepareTree(root);
@@ -897,7 +912,7 @@ export class CityViewer {
       build: async (def, lod, signal) => {
         const data = this.vegetationData.get(def.id);
         if (!data) throw new Error(`no instance data for ${def.id}`);
-        const gltf = await this.parseAsset(lod.file, signal);
+        const gltf = await this.parseAsset(lod.file, signal, lod.fileSize);
         this.prepareTree(gltf.scene);
         const built = buildVegetation(gltf.scene, data, VEG_BAND_KEEP_ROW);
         built.object.name = `${def.id}.lod${lod.level}`;
@@ -1127,6 +1142,7 @@ export class CityViewer {
         + this.auxiliaryLoads + snowStreaming.loading,
       queued: sum((s) => s.queued) + snowStreaming.queued,
       uploading: sum((s) => s.uploading),
+      downloads: this.downloadTracker.snapshot(),
       jsHeapMB: jsHeapMB(),
       cameraMode: this.controls.mode,
       renderingSuspended: this.renderingSuspended,
