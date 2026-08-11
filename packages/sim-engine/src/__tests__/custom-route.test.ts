@@ -49,6 +49,46 @@ describe('custom route runtime semantics', () => {
       expect(track.x[index]).toBeCloseTo(x, 8);
       expect(track.y[index]).toBeCloseTo(-z, 8);
     }
+    const beforeTurn = trace.ticks.t.findIndex((time) => Math.abs(time - 0.98) < 1e-9);
+    const afterTurn = trace.ticks.t.findIndex((time) => Math.abs(time - 1.02) < 1e-9);
+    const headingDelta = Math.abs(Math.atan2(
+      Math.sin(track.headingRad[afterTurn]! - track.headingRad[beforeTurn]!),
+      Math.cos(track.headingRad[afterTurn]! - track.headingRad[beforeTurn]!),
+    ));
+    expect(headingDelta).toBeLessThan(0.15);
+  });
+
+  it('warns when exact waypoint timing exceeds the actor physical envelope', () => {
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 1, warmupSeconds: 0, dt: 0.02,
+      seed: 'custom-timed-route-impossible',
+      actors: [{
+        id: 'actor', kind: 'car',
+        initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+        behavior: {
+          route: { kind: 'polyline', points: [{ x: 0, z: 0 }, { x: 400, z: 200 }] },
+          rules: { collisionAvoidance: false, yield: false },
+        },
+      }],
+      interactions: [{
+        id: 'timed-route', actorId: 'actor', trigger: { kind: 'at', t: 0 }, verb: 'route',
+        target: {
+          kind: 'timedPolyline',
+          points: [
+            { timeS: 0, x: 0, z: 0 },
+            { timeS: 0.5, x: 200, z: 0 },
+            { timeS: 1, x: 200, z: 200 },
+          ],
+        },
+      }],
+    });
+
+    const result = runSimulation(input, { graph, guards: 'collect' });
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: 'timed_route_speed_unreachable', severity: 'warning' }),
+      expect.objectContaining({ code: 'timed_route_acceleration_unreachable', severity: 'warning' }),
+      expect.objectContaining({ code: 'timed_route_turn_unreachable', severity: 'warning' }),
+    ]));
   });
 
   it('permanently hands a timed route to physics after material contact', () => {

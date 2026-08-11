@@ -239,13 +239,132 @@ interface TimedRouteSample {
   readonly speedMps: number;
 }
 
+interface TimedRouteKinematics extends TimedRouteSample {
+  readonly velocity: Vec2;
+  readonly acceleration: Vec2;
+}
+
+const TIMED_ROUTE_SPEED_ENVELOPE_MPS: Readonly<Record<ActorRuntime['kind'], number>> = {
+  vehicle: 55,
+  car: 55,
+  truck: 36,
+  bus: 32,
+  van: 45,
+  motorcycle: 60,
+  bicycle: 16,
+  pedestrian: 4.5,
+  scooter: 12,
+  sidewalk_robot: 4,
+  drone: 30,
+  animal: 15,
+  static_object: 0,
+};
+
+function timedRouteTangent(
+  points: NonNullable<ActorRuntime['timedRoute']>,
+  index: number,
+): Vec2 {
+  const point = points[index]!;
+  if (index === 0) {
+    const next = points[1]!;
+    const dt = next.timeS - point.timeS;
+    return dt > 0
+      ? { x: (next.point.x - point.point.x) / dt, y: (next.point.y - point.point.y) / dt }
+      : { x: 0, y: 0 };
+  }
+  if (index === points.length - 1) {
+    const previous = points[index - 1]!;
+    const dt = point.timeS - previous.timeS;
+    return dt > 0
+      ? { x: (point.point.x - previous.point.x) / dt, y: (point.point.y - previous.point.y) / dt }
+      : { x: 0, y: 0 };
+  }
+
+  const previous = points[index - 1]!;
+  const next = points[index + 1]!;
+  const incomingDt = point.timeS - previous.timeS;
+  const outgoingDt = next.timeS - point.timeS;
+  if (incomingDt <= 0 || outgoingDt <= 0) return { x: 0, y: 0 };
+  const incoming = {
+    x: (point.point.x - previous.point.x) / incomingDt,
+    y: (point.point.y - previous.point.y) / incomingDt,
+  };
+  const outgoing = {
+    x: (next.point.x - point.point.x) / outgoingDt,
+    y: (next.point.y - point.point.y) / outgoingDt,
+  };
+  const incomingSpeed = Math.hypot(incoming.x, incoming.y);
+  const outgoingSpeed = Math.hypot(outgoing.x, outgoing.y);
+  if (incomingSpeed < 1e-9 || outgoingSpeed < 1e-9) return { x: 0, y: 0 };
+  const direction = {
+    x: incoming.x / incomingSpeed + outgoing.x / outgoingSpeed,
+    y: incoming.y / incomingSpeed + outgoing.y / outgoingSpeed,
+  };
+  const directionLength = Math.hypot(direction.x, direction.y);
+  if (directionLength < 1e-6) return { x: 0, y: 0 };
+  // The harmonic mean keeps the tangent below the faster adjacent segment.
+  // Averaging unit directions rounds the corner without skipping the waypoint.
+  const speed = (2 * incomingSpeed * outgoingSpeed) / (incomingSpeed + outgoingSpeed);
+  return {
+    x: direction.x / directionLength * speed,
+    y: direction.y / directionLength * speed,
+  };
+}
+
+function timedRouteSegmentKinematics(
+  points: NonNullable<ActorRuntime['timedRoute']>,
+  segmentIndex: number,
+  fraction: number,
+): TimedRouteKinematics {
+  const from = points[segmentIndex]!;
+  const to = points[segmentIndex + 1]!;
+  const durationS = to.timeS - from.timeS;
+  const u = clamp(fraction, 0, 1);
+  const u2 = u * u;
+  const u3 = u2 * u;
+  const fromTangent = timedRouteTangent(points, segmentIndex);
+  const toTangent = timedRouteTangent(points, segmentIndex + 1);
+  const h00 = 2 * u3 - 3 * u2 + 1;
+  const h10 = u3 - 2 * u2 + u;
+  const h01 = -2 * u3 + 3 * u2;
+  const h11 = u3 - u2;
+  const position = {
+    x: h00 * from.point.x + h10 * durationS * fromTangent.x + h01 * to.point.x + h11 * durationS * toTangent.x,
+    y: h00 * from.point.y + h10 * durationS * fromTangent.y + h01 * to.point.y + h11 * durationS * toTangent.y,
+  };
+  const dh00 = 6 * u2 - 6 * u;
+  const dh10 = 3 * u2 - 4 * u + 1;
+  const dh01 = -6 * u2 + 6 * u;
+  const dh11 = 3 * u2 - 2 * u;
+  const velocity = durationS > 0 ? {
+    x: (dh00 * from.point.x + dh10 * durationS * fromTangent.x + dh01 * to.point.x + dh11 * durationS * toTangent.x) / durationS,
+    y: (dh00 * from.point.y + dh10 * durationS * fromTangent.y + dh01 * to.point.y + dh11 * durationS * toTangent.y) / durationS,
+  } : { x: 0, y: 0 };
+  const ddh00 = 12 * u - 6;
+  const ddh10 = 6 * u - 4;
+  const ddh01 = -12 * u + 6;
+  const ddh11 = 6 * u - 2;
+  const acceleration = durationS > 0 ? {
+    x: (ddh00 * from.point.x + ddh10 * durationS * fromTangent.x + ddh01 * to.point.x + ddh11 * durationS * toTangent.x) / (durationS * durationS),
+    y: (ddh00 * from.point.y + ddh10 * durationS * fromTangent.y + ddh01 * to.point.y + ddh11 * durationS * toTangent.y) / (durationS * durationS),
+  } : { x: 0, y: 0 };
+  const speedMps = Math.hypot(velocity.x, velocity.y);
+  return {
+    position,
+    velocity,
+    acceleration,
+    speedMps,
+    headingRad: speedMps > 1e-8 ? Math.atan2(velocity.y, velocity.x) : 0,
+  };
+}
+
 function sampleTimedRoute(
   points: NonNullable<ActorRuntime['timedRoute']>,
   timeS: number,
 ): TimedRouteSample {
   const first = points[0]!;
   const last = points[points.length - 1]!;
-  if (timeS <= first.timeS) {
+  if (timeS < first.timeS) {
     const next = points[1]!;
     return {
       position: first.point,
@@ -253,7 +372,7 @@ function sampleTimedRoute(
       speedMps: 0,
     };
   }
-  if (timeS >= last.timeS) {
+  if (timeS > last.timeS) {
     const previous = points[points.length - 2]!;
     return {
       position: last.point,
@@ -263,17 +382,78 @@ function sampleTimedRoute(
   }
   let nextIndex = 1;
   while (points[nextIndex]!.timeS < timeS) nextIndex += 1;
-  const from = points[nextIndex - 1]!;
+  const segmentIndex = nextIndex - 1;
+  const from = points[segmentIndex]!;
   const to = points[nextIndex]!;
-  const durationS = to.timeS - from.timeS;
-  const fraction = (timeS - from.timeS) / durationS;
-  const dx = to.point.x - from.point.x;
-  const dy = to.point.y - from.point.y;
-  return {
-    position: { x: from.point.x + dx * fraction, y: from.point.y + dy * fraction },
-    headingRad: Math.atan2(dy, dx),
-    speedMps: Math.hypot(dx, dy) / durationS,
-  };
+  const fraction = (timeS - from.timeS) / (to.timeS - from.timeS);
+  return timedRouteSegmentKinematics(points, segmentIndex, fraction);
+}
+
+function timedRouteFeasibilityIssues(
+  actor: Pick<ActorRuntime, 'id' | 'kind' | 'driver' | 'timedRoute'>,
+  path: string,
+): SimIssue[] {
+  const points = actor.timedRoute;
+  if (!points || points.length < 2 || actor.kind === 'static_object') return [];
+  const limits = limitsFor(actor);
+  const speedEnvelopeMps = TIMED_ROUTE_SPEED_ENVELOPE_MPS[actor.kind];
+  const lateralEnvelopeMps2 = Math.max(
+    limits.lateralAccelMax,
+    (actor.driver?.comfortableLateralAccelerationMps2 ?? limits.lateralAccelMax) * 1.5,
+  );
+  let maxSpeed = { value: 0, segment: 0 };
+  let maxLongitudinalAcceleration = { value: 0, segment: 0 };
+  let maxLateralAcceleration = { value: 0, segment: 0 };
+  for (let segment = 0; segment < points.length - 1; segment += 1) {
+    for (let sample = 0; sample <= 16; sample += 1) {
+      const state = timedRouteSegmentKinematics(points, segment, sample / 16);
+      if (state.speedMps > maxSpeed.value) maxSpeed = { value: state.speedMps, segment };
+      if (state.speedMps < 1e-6) continue;
+      const longitudinal = Math.abs(
+        (state.velocity.x * state.acceleration.x + state.velocity.y * state.acceleration.y) / state.speedMps,
+      );
+      const lateral = Math.abs(
+        (state.velocity.x * state.acceleration.y - state.velocity.y * state.acceleration.x) / state.speedMps,
+      );
+      if (longitudinal > maxLongitudinalAcceleration.value) {
+        maxLongitudinalAcceleration = { value: longitudinal, segment };
+      }
+      if (lateral > maxLateralAcceleration.value) {
+        maxLateralAcceleration = { value: lateral, segment };
+      }
+    }
+  }
+
+  const findings: SimIssue[] = [];
+  if (maxSpeed.value > speedEnvelopeMps + 1e-6) {
+    findings.push(issue(
+      'timed_route_speed_unreachable',
+      path,
+      `timed waypoint ${maxSpeed.segment + 1} requires up to ${maxSpeed.value.toFixed(1)} m/s, above the ${speedEnvelopeMps.toFixed(1)} m/s ${actor.kind} envelope; add more time or move the point closer`,
+      { actorId: actor.id, segmentIndex: maxSpeed.segment, requiredMps: maxSpeed.value, envelopeMps: speedEnvelopeMps },
+      'warning',
+    ));
+  }
+  const longitudinalEnvelopeMps2 = Math.max(limits.accelMax, limits.brakeHard);
+  if (maxLongitudinalAcceleration.value > longitudinalEnvelopeMps2 + 1e-6) {
+    findings.push(issue(
+      'timed_route_acceleration_unreachable',
+      path,
+      `timed waypoint ${maxLongitudinalAcceleration.segment + 1} requires ${maxLongitudinalAcceleration.value.toFixed(1)} m/s² longitudinal acceleration, above the ${longitudinalEnvelopeMps2.toFixed(1)} m/s² ${actor.kind} envelope; add more time between points`,
+      { actorId: actor.id, segmentIndex: maxLongitudinalAcceleration.segment, requiredMps2: maxLongitudinalAcceleration.value, envelopeMps2: longitudinalEnvelopeMps2 },
+      'warning',
+    ));
+  }
+  if (maxLateralAcceleration.value > lateralEnvelopeMps2 + 1e-6) {
+    findings.push(issue(
+      'timed_route_turn_unreachable',
+      path,
+      `timed waypoint ${maxLateralAcceleration.segment + 1} requires ${maxLateralAcceleration.value.toFixed(1)} m/s² lateral acceleration, above the ${lateralEnvelopeMps2.toFixed(1)} m/s² ${actor.kind} turning envelope; widen the turn or add more time`,
+      { actorId: actor.id, segmentIndex: maxLateralAcceleration.segment, requiredMps2: maxLateralAcceleration.value, envelopeMps2: lateralEnvelopeMps2 },
+      'warning',
+    ));
+  }
+  return findings;
 }
 
 interface StaticCollisionShape {
@@ -700,6 +880,7 @@ class Simulation {
       hasMoved: false,
     };
     rt.cruiseSpeedMps = spec.static ? 0 : cruiseSpeed(rt, this.speedLimitAt(rt));
+    this.issues.push(...timedRouteFeasibilityIssues(rt, `actors.${spec.id}.behavior.route`));
     // Seed both gear keys so a trace consumer can read the gear at t = 0 without
     // having to know that "absent means forward".
     rt.stateKeys.set(MOTION_GEAR_KEY, gearOfMotionDirection(motionDirection));
@@ -1493,6 +1674,7 @@ class Simulation {
         a.timedRoute = target.kind === 'timedPolyline'
           ? target.points.map((point) => ({ timeS: point.timeS, point: localFromScene(point) }))
           : null;
+        this.issues.push(...timedRouteFeasibilityIssues(a, `interactions.${it.id}.target`));
         this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
         a.bestEffortWorldPath = it.bestEffortWorldPath === true;
         a.lateralOffsetM = joinsLivePose ? 0 : built.route.lateralOffsetAt(proj.s, a.position);
