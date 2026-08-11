@@ -60,6 +60,7 @@ import { firstOverlap, type Footprint } from './obb';
 import { authoringRoutes } from './routeOverlay';
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';
+export type CustomRouteTool = 'add' | 'move';
 
 /** Everything the panels render from. Replaced wholesale on every change. */
 export interface EditorState {
@@ -82,6 +83,8 @@ export interface EditorState {
   /** Non-blocking route warning for the lane under the placement ghost. */
   readonly placementWarning: string | null;
   readonly customRoutePointCount: number;
+  readonly customRouteTool: CustomRouteTool | null;
+  readonly customRouteSelectedPointIndex: number | null;
   /** One-line status hint: mode plus the modifiers that apply to it. */
   readonly hint: string;
   /** Transient feedback (a refused placement, a broken anchor). */
@@ -712,6 +715,11 @@ export class EditorController extends EditorControllerInput {
     return null;
   }
 
+  protected routePointIndexAt(event: PointerEvent): number | null {
+    this.setRay(event);
+    return this.routeRenderer.draftPointIndexAt(this.raycaster);
+  }
+
   protected selectPickedActor(id: string, additive: boolean, frame: boolean): void {
     if (additive) {
       const next = this.selection.includes(id)
@@ -909,6 +917,8 @@ export class EditorController extends EditorControllerInput {
       valid: this.mode === 'grab' ? this.grab?.valid ?? true : this.ghostPose?.valid ?? true,
       placementWarning: this.mode === 'placing' ? this.ghostPose?.warning ?? null : null,
       customRoutePointCount: this.customRouteDraft?.points.length ?? 0,
+      customRouteTool: this.customRouteDraft?.tool ?? null,
+      customRouteSelectedPointIndex: this.customRouteDraft?.selectedPointIndex ?? null,
       hint: this.buildHint(),
       message: this.message,
       rotationDeg:
@@ -924,7 +934,9 @@ export class EditorController extends EditorControllerInput {
   protected buildHint(): string {
     switch (this.mode) {
       case 'drawingRoute':
-        return `${this.customRouteDraft?.points.length ?? 0} route points · click add point · Enter finish · Backspace remove last · Esc cancel`;
+        return this.customRouteDraft?.tool === 'move'
+          ? `${this.customRouteDraft.points.length} route points · drag a 3D point to move · Delete removes selected · Esc closes`
+          : `${this.customRouteDraft?.points.length ?? 0} route points · click to draw or insert · Enter finishes drawing · Esc closes`;
       case 'placing': {
         const kind: ActorKind = this.placing ? actorKindFor(this.placing) : 'prop';
         if (this.placingFreeformStatic) {

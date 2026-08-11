@@ -60,6 +60,7 @@ import {
 import { VehicleRouteOverlayRenderer } from './routeOverlay';
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';
+export type CustomRouteTool = 'add' | 'move';
 
 /** Everything the panels render from. Replaced wholesale on every change. */
 export interface EditorState {
@@ -82,6 +83,8 @@ export interface EditorState {
   /** Non-blocking route warning for the lane under the placement ghost. */
   readonly placementWarning: string | null;
   readonly customRoutePointCount: number;
+  readonly customRouteTool: CustomRouteTool | null;
+  readonly customRouteSelectedPointIndex: number | null;
   /** One-line status hint: mode plus the modifiers that apply to it. */
   readonly hint: string;
   /** Transient feedback (a refused placement, a broken anchor). */
@@ -213,6 +216,9 @@ export abstract class EditorControllerCommands {
     cursor: { x: number; z: number } | null;
     removeOnCancel: boolean;
     seedLocked: boolean;
+    tool: CustomRouteTool;
+    selectedPointIndex: number | null;
+    draggingPointIndex: number | null;
   } | null = null;
 
   /** Pointer bookkeeping for the click-vs-drag discrimination. */
@@ -486,6 +492,9 @@ export abstract class EditorControllerCommands {
       cursor: null,
       removeOnCancel: options.removeOnCancel ?? false,
       seedLocked: Boolean(startPose),
+      tool: startPose || options.reset ? 'add' : 'move',
+      selectedPointIndex: null,
+      draggingPointIndex: null,
     };
     this.selection = [interaction.actor];
     this.syncCustomRouteDraft();
@@ -513,27 +522,68 @@ export abstract class EditorControllerCommands {
     }
     const interaction = this.doc.data.choreography.interactions.find((item) => item.id === draft.interactionId);
     if (interaction?.verb !== 'route' || (interaction.target.mode !== 'customRoute' && interaction.target.mode !== 'customTimedRoute')) return false;
-    this.customRouteDraft = null;
-    this.mode = 'idle';
-    this.preview.clear();
-    this.routeRenderer.setDraftRoute(null);
+    this.commitCustomRouteDraft(interaction);
+    draft.cursor = null;
+    draft.removeOnCancel = false;
+    draft.seedLocked = false;
+    draft.tool = 'move';
+    draft.selectedPointIndex = null;
+    draft.draggingPointIndex = null;
+    this.syncCustomRouteDraft();
+    this.syncScene();
+    this.notify();
+    return true;
+  }
+
+  setCustomRouteTool(tool: CustomRouteTool): void {
+    const draft = this.customRouteDraft;
+    if (!draft) return;
+    draft.tool = tool;
+    draft.cursor = null;
+    draft.selectedPointIndex = null;
+    draft.draggingPointIndex = null;
+    this.viewer.controls.setEnabled(true);
+    this.syncCustomRouteDraft();
+    this.notify();
+  }
+
+  deleteSelectedCustomRoutePoint(): void {
+    const draft = this.customRouteDraft;
+    const index = draft?.selectedPointIndex;
+    if (!draft || index === null || index === undefined || index < 0) return;
+    if (draft.points.length <= 2) {
+      this.flash('A route needs at least two points');
+      return;
+    }
+    draft.points.splice(index, 1);
+    draft.selectedPointIndex = Math.min(index, draft.points.length - 1);
+    const interaction = this.doc.data.choreography.interactions.find((item) => item.id === draft.interactionId);
+    if (interaction?.verb === 'route' && (interaction.target.mode === 'customRoute' || interaction.target.mode === 'customTimedRoute')) {
+      this.commitCustomRouteDraft(interaction);
+    }
+    this.syncCustomRouteDraft();
+    this.syncScene();
+    this.notify();
+  }
+
+  protected commitCustomRouteDraft(interaction: Extract<ScenarioTemplateV2['choreography']['interactions'][number], { verb: 'route' }>): void {
+    const draft = this.customRouteDraft;
+    if (!draft) return;
+    const triggerStartS = interaction.trigger.kind === 'at' && typeof interaction.trigger.t === 'number'
+      ? interaction.trigger.t
+      : 0;
     this.doc.replaceInteraction(interaction.id, {
       ...interaction,
       target: draft.timed
         ? {
             mode: 'customTimedRoute',
             points: draft.points.map((point, index) => ({
-              timeS: Number(((interaction.trigger.kind === 'at' && typeof interaction.trigger.t === 'number'
-                ? interaction.trigger.t
-                : 0) + index).toFixed(3)),
+              timeS: Number((triggerStartS + index).toFixed(3)),
               ...point,
             })),
           }
         : { mode: 'customRoute', points: draft.points },
     });
-    this.syncScene();
-    this.notify();
-    return true;
   }
 
   removeLastCustomRoutePoint(): void {
@@ -558,9 +608,26 @@ export abstract class EditorControllerCommands {
     const draft = this.customRouteDraft;
     if (!draft || draft.points.length >= 128) return;
     const next = { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
-    const previous = draft.points.at(-1);
-    if (previous && Math.hypot(previous.x - next.x, previous.z - next.z) < .1) return;
-    draft.points.push(next);
+    let insertionIndex = draft.points.length;
+    let nearestDistance = Infinity;
+    for (let index = 1; index < draft.points.length; index += 1) {
+      const a = draft.points[index - 1]!;
+      const b = draft.points[index]!;
+      const dx = b.x - a.x;
+      const dz = b.z - a.z;
+      const spanSquared = dx * dx + dz * dz;
+      const fraction = spanSquared > 1e-9
+        ? Math.max(0, Math.min(1, ((next.x - a.x) * dx + (next.z - a.z) * dz) / spanSquared))
+        : 0;
+      const distance = Math.hypot(next.x - (a.x + dx * fraction), next.z - (a.z + dz * fraction));
+      if (distance < nearestDistance) {
+        nearestDistance = distance;
+        insertionIndex = index;
+      }
+    }
+    if (draft.points.some((existing) => Math.hypot(existing.x - next.x, existing.z - next.z) < .1)) return;
+    if (nearestDistance <= 1.5) draft.points.splice(insertionIndex, 0, next);
+    else draft.points.push(next);
     this.syncCustomRouteDraft();
     this.notify();
   }
@@ -583,7 +650,7 @@ export abstract class EditorControllerCommands {
       ? interaction.trigger.t
       : 0;
     this.routeRenderer.setDraftRoute(
-      [...draft.points, ...(draft.cursor && draft.points.length ? [draft.cursor] : [])],
+      [...draft.points, ...(draft.tool === 'add' && draft.cursor && draft.points.length ? [draft.cursor] : [])],
       {
         timeLabels: draft.timed
           ? draft.points.map((_, index) => {
@@ -591,6 +658,8 @@ export abstract class EditorControllerCommands {
               return `${timeS}s`;
             })
           : undefined,
+        selectedPointIndex: draft.selectedPointIndex,
+        committedPointCount: draft.points.length,
       },
     );
   }

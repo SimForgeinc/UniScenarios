@@ -48,6 +48,7 @@ import {
 import { normalizeHeading, type LaneIndex } from './laneIndex';
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';
+export type CustomRouteTool = 'add' | 'move';
 
 /** Everything the panels render from. Replaced wholesale on every change. */
 export interface EditorState {
@@ -70,6 +71,8 @@ export interface EditorState {
   /** Non-blocking route warning for the lane under the placement ghost. */
   readonly placementWarning: string | null;
   readonly customRoutePointCount: number;
+  readonly customRouteTool: CustomRouteTool | null;
+  readonly customRouteSelectedPointIndex: number | null;
   /** One-line status hint: mode plus the modifiers that apply to it. */
   readonly hint: string;
   /** Transient feedback (a refused placement, a broken anchor). */
@@ -174,7 +177,8 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
       case 'Delete':
         event.preventDefault();
         event.stopPropagation();
-        this.deleteSelection();
+        if (this.mode === 'drawingRoute') this.deleteSelectedCustomRoutePoint();
+        else this.deleteSelection();
         return;
       case 'Tab':
         if (this.mode === 'placing') {
@@ -199,7 +203,8 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
         if (this.mode === 'drawingRoute') {
           event.preventDefault();
           event.stopPropagation();
-          this.removeLastCustomRoutePoint();
+          if (this.customRouteDraft?.tool === 'move') this.deleteSelectedCustomRoutePoint();
+          else this.removeLastCustomRoutePoint();
         } else {
           event.preventDefault();
           event.stopPropagation();
@@ -278,8 +283,21 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
       if (event.button === 0) {
         event.preventDefault();
         event.stopPropagation();
-        const ground = this.groundPoint(event);
-        if (ground) this.addCustomRoutePoint(ground);
+        const draft = this.customRouteDraft;
+        if (draft?.tool === 'move') {
+          const pointIndex = this.routePointIndexAt(event);
+          draft.selectedPointIndex = pointIndex;
+          draft.draggingPointIndex = pointIndex;
+          if (pointIndex !== null) {
+            try { this.viewer.renderer.domElement.setPointerCapture(event.pointerId); } catch { /* optional */ }
+            this.viewer.controls.setEnabled(false);
+          }
+          this.syncCustomRouteDraft();
+          this.notify();
+        } else {
+          const ground = this.groundPoint(event);
+          if (ground) this.addCustomRoutePoint(ground);
+        }
       }
       return;
     }
@@ -362,7 +380,22 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
 
     switch (this.mode) {
       case 'drawingRoute':
-        this.updateCustomRouteCursor(this.groundPoint(event));
+        if (this.customRouteDraft?.tool === 'move' && this.customRouteDraft.draggingPointIndex !== null) {
+          event.preventDefault();
+          event.stopPropagation();
+          const ground = this.groundPoint(event);
+          const pointIndex = this.customRouteDraft.draggingPointIndex;
+          if (ground && pointIndex !== null && this.customRouteDraft.points[pointIndex]) {
+            this.customRouteDraft.points[pointIndex] = {
+              x: Number(ground.x.toFixed(3)),
+              z: Number(ground.z.toFixed(3)),
+            };
+            this.syncCustomRouteDraft();
+            this.notify();
+          }
+        } else if (this.customRouteDraft?.tool === 'add') {
+          this.updateCustomRouteCursor(this.groundPoint(event));
+        }
         return;
       case 'placing': {
         const ground = this.groundPoint(event);
@@ -397,6 +430,21 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
       if (this.isCanvasEvent(event)) {
         event.preventDefault();
         event.stopPropagation();
+      }
+      const draft = this.customRouteDraft;
+      if (draft?.tool === 'move' && draft.draggingPointIndex !== null) {
+        draft.draggingPointIndex = null;
+        try {
+          const canvas = this.viewer.renderer.domElement;
+          if (canvas.hasPointerCapture?.(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+        } catch { /* optional */ }
+        this.viewer.controls.setEnabled(true);
+        const interaction = this.doc.data.choreography.interactions.find((item) => item.id === draft.interactionId);
+        if (interaction?.verb === 'route' && (interaction.target.mode === 'customRoute' || interaction.target.mode === 'customTimedRoute')) {
+          this.commitCustomRouteDraft(interaction);
+        }
+        this.syncScene();
+        this.notify();
       }
       return;
     }
@@ -514,6 +562,7 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
   protected abstract commitModal(): void;
   protected abstract pick(event: PointerEvent): void;
   protected abstract actorIdAt(event: PointerEvent): string | null;
+  protected abstract routePointIndexAt(event: PointerEvent): number | null;
   protected abstract selectPickedActor(id: string, additive: boolean, frame: boolean): void;
   protected abstract groundPoint(event: { clientX: number; clientY: number }): Vector3 | null;
 }

@@ -5,14 +5,18 @@ import {
   Group,
   LineBasicMaterial,
   LineSegments,
+  Mesh,
+  MeshBasicMaterial,
   Points,
   PointsMaterial,
+  SphereGeometry,
   Sprite,
   SpriteMaterial,
   CanvasTexture,
   LinearFilter,
   SRGBColorSpace,
   type Texture,
+  type Raycaster,
 } from 'three';
 import {
   buildRoute,
@@ -66,6 +70,8 @@ export interface RouteOverlayOptions {
 export interface DraftRouteOptions {
   /** Labels for committed points; a trailing cursor preview intentionally has none. */
   readonly timeLabels?: readonly string[];
+  readonly selectedPointIndex?: number | null;
+  readonly committedPointCount?: number;
 }
 
 export type RouteHeightSampler = (x: number, z: number) => number | null;
@@ -629,11 +635,14 @@ function cachedArrowSegments(points: readonly RoutePoint[]): readonly number[] {
 export class VehicleRouteOverlayRenderer {
   readonly group = new Group();
   private objects: Array<LineSegments | Points | Sprite> = [];
-  private draftObjects: Array<LineSegments | Points | Sprite> = [];
+  private draftObjects: Array<LineSegments | Mesh | Points | Sprite> = [];
+  private draftPointHandles: Mesh[] = [];
   private textures: Texture[] = [];
   private draftTextures: Texture[] = [];
   private draftRoute: readonly RoutePoint[] | null = null;
   private draftTimeLabels: readonly string[] = [];
+  private draftSelectedPointIndex: number | null = null;
+  private draftCommittedPointCount = 0;
   private labelGeneration = 0;
 
   constructor(private readonly sampleHeight?: RouteHeightSampler) {
@@ -799,7 +808,17 @@ export class VehicleRouteOverlayRenderer {
     this.clearDraftRoute();
     this.draftRoute = points ? [...points] : null;
     this.draftTimeLabels = points ? [...(options.timeLabels ?? [])] : [];
+    this.draftSelectedPointIndex = options.selectedPointIndex ?? null;
+    this.draftCommittedPointCount = points ? Math.min(points.length, options.committedPointCount ?? points.length) : 0;
     this.renderDraftRoute();
+  }
+
+  /** Pick an individually editable 3D waypoint handle. */
+  draftPointIndexAt(raycaster: Raycaster): number | null {
+    const hit = raycaster.intersectObjects(this.draftPointHandles, false)[0];
+    return typeof hit?.object.userData.routePointIndex === 'number'
+      ? hit.object.userData.routePointIndex
+      : null;
   }
 
   dispose(): void {
@@ -816,7 +835,7 @@ export class VehicleRouteOverlayRenderer {
     name = 'route-lines',
     linewidth = 1,
     renderOrder = opacity > .9 ? 22 : 21,
-    collection: Array<LineSegments | Points | Sprite> = this.objects,
+    collection: Array<LineSegments | Mesh | Points | Sprite> = this.objects,
   ): void {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(Float32Array.from(positions), 3));
@@ -861,6 +880,19 @@ export class VehicleRouteOverlayRenderer {
     markers.raycast = () => undefined;
     this.group.add(markers);
     this.draftObjects.push(markers);
+    points.slice(0, this.draftCommittedPointCount).forEach((point, index) => {
+      const selected = index === this.draftSelectedPointIndex;
+      const geometry = new SphereGeometry(selected ? .48 : .36, 16, 10);
+      const material = new MeshBasicMaterial({ color: selected ? '#ffffff' : '#E8E044', depthTest: false, depthWrite: false });
+      const handle = new Mesh(geometry, material);
+      handle.position.set(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + .72, point.z);
+      handle.name = index === 0 ? 'custom-route-waypoints-3d' : 'custom-route-waypoint-3d';
+      handle.renderOrder = 37;
+      handle.userData.routePointIndex = index;
+      this.group.add(handle);
+      this.draftObjects.push(handle);
+      this.draftPointHandles.push(handle);
+    });
     for (let index = 0; index < Math.min(points.length, this.draftTimeLabels.length); index += 1) {
       const label = this.draftTimeLabels[index]!;
       this.addTimeLabel({
@@ -887,9 +919,12 @@ export class VehicleRouteOverlayRenderer {
       for (const material of materials) material.dispose();
     }
     this.draftObjects = [];
+    this.draftPointHandles = [];
     for (const texture of this.draftTextures) texture.dispose();
     this.draftTextures = [];
     this.draftTimeLabels = [];
+    this.draftSelectedPointIndex = null;
+    this.draftCommittedPointCount = 0;
   }
 
   private addTimeLabel(
@@ -897,7 +932,7 @@ export class VehicleRouteOverlayRenderer {
     destination: {
       readonly name: string;
       readonly renderOrder: number;
-      readonly objects: Array<LineSegments | Points | Sprite>;
+      readonly objects: Array<LineSegments | Mesh | Points | Sprite>;
       readonly textures: Texture[];
     } = {
       name: 'selected-route-time-label',
