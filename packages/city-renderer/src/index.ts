@@ -50,6 +50,7 @@ export type {
 } from './surface-materials';
 export { buildVegetation } from './vegetation';
 export type { VegetationBuildResult, VegPrototypeGroup } from './vegetation';
+export * from './weather';
 export { boundsToBox3, normalizeLods, resolveUrl, estimateLodBytes } from './manifest';
 export type {
   BenchResult,

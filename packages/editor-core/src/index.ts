@@ -8,4 +8,5 @@ export * from "./map-identity";
 export * from "./obb";
 export * from "./routeOverlay";
 export * from "./timeline-actions";
+export * from "./interaction-palette";
 export * from "./viewer-contract";

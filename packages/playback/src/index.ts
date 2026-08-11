@@ -14,3 +14,4 @@ export * from './traffic-provider/protocol';
 export * from './traffic-provider/signalState';
 export * from './traffic-provider/sumoRuntimeInstantiation';
 export * from './traffic-provider/sumoWasmProvider';
+export * from './capture';

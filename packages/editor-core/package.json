@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/editor-core",
-  "version": "0.1.0-rc.21",
+  "version": "0.1.0-rc.22",
   "description": "Framework-neutral UniScenarios v2 authoring document, interaction controller, route overlays, and editor contracts.",
   "repository": {
     "type": "git",
