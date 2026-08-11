@@ -91,7 +91,7 @@ describe('custom route runtime semantics', () => {
     ]));
   });
 
-  it('releases a timed route to physics after its final authored timestamp', () => {
+  it('releases a timed route to physics braking after its final authored timestamp', () => {
     const input = parseSimScenarioInput({
       mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02,
       seed: 'custom-timed-route-release',
@@ -117,6 +117,7 @@ describe('custom route runtime semantics', () => {
     expect(track.x[atFinalConstraint]).toBeCloseTo(10, 8);
     expect(track.x[afterRelease]).toBeGreaterThan(10.5);
     expect(track.speedMps[afterRelease]).toBeGreaterThan(1);
+    expect(track.speedMps[afterRelease]).toBeLessThan(track.speedMps[atFinalConstraint]!);
   });
 
   it('permanently hands a timed route to physics after material contact', () => {

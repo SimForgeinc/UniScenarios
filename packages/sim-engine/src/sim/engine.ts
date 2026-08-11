@@ -2394,6 +2394,13 @@ class Simulation {
       a.lateralReferenceOffsetM = 0;
       a.lateralRestOffsetM = 0;
       a.timedRoute = null;
+      // The final timed point is a handoff to physics-controlled braking, not
+      // an implicit return to cruise. Ignore commands that fired while the
+      // pose constraint owned motion; later commands can take ownership again.
+      a.longCmd = null;
+      a.untilByAxis.delete('longitudinal');
+      a.cruiseOverrideMps = 0;
+      a.cruiseSpeedMps = 0;
       this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
       plan.routeS = 0;
       plan.lateralOffset = 0;

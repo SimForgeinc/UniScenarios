@@ -110,7 +110,8 @@ export type TurnRelation = z.infer<typeof turnRelationSchema>;
  *   then have no lane identity in the trace.
  * - `timedPolyline` — exact scene-space position constraints. Time, rather
  *   than cruise speed, owns the actor through the final authored timestamp;
- *   normal physics takes over immediately afterward (or on material contact).
+ *   normal physics takes over and brakes immediately afterward (or on
+ *   material contact).
  */
 export const routeSpecSchema = z.discriminatedUnion('kind', [
   z.object({
