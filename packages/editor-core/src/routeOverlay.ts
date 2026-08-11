@@ -290,6 +290,39 @@ function actionMarkers(actorId: string, interactions: readonly SimScenarioInput[
   return result;
 }
 
+function authoredTimedRouteAnnotations(
+  actor: SimActor,
+  interactions: readonly SimScenarioInput['interactions'][number][],
+): RouteTimeAnnotation[] {
+  const interactionPoints = interactions.flatMap((interaction) =>
+    interaction.actorId === actor.id
+      && interaction.verb === 'route'
+      && interaction.target.kind === 'timedPolyline'
+      ? interaction.target.points
+      : []);
+  const points = interactionPoints.length
+    ? interactionPoints
+    : actor.behavior.route.kind === 'timedPolyline' ? actor.behavior.route.points : [];
+  const clusterIndices = new Map<string, number[]>();
+  points.forEach((point, index) => {
+    const key = `${point.x.toFixed(3)},${point.z.toFixed(3)}`;
+    const cluster = clusterIndices.get(key);
+    if (cluster) cluster.push(index); else clusterIndices.set(key, [index]);
+  });
+  const stack = new Map<number, { index: number; count: number }>();
+  for (const indices of clusterIndices.values()) {
+    indices.forEach((pointIndex, stackIndex) => stack.set(pointIndex, { index: stackIndex, count: indices.length }));
+  }
+  return points.map((point, index) => ({
+    startTimeS: point.timeS,
+    endTimeS: point.timeS,
+    label: compactTime(point.timeS),
+    point: { x: point.x, z: point.z },
+    stackIndex: stack.get(index)?.index ?? 0,
+    stackCount: stack.get(index)?.count ?? 1,
+  }));
+}
+
 /** Build overlays from the exact concrete simulator input. Static actors and pedestrians are excluded. */
 export function routesFromSimulation(
   input: Pick<SimScenarioInput, 'actors' | 'interactions' | 'nearMissCriteria'>,
@@ -303,6 +336,7 @@ export function routesFromSimulation(
     .map((actor) => {
       const planned = routePoints(actor, index);
       const canonical = canonicalTracePath(actor.id, trace);
+      const authoredTimedAnnotations = authoredTimedRouteAnnotations(actor, input.interactions);
       const actual = canonical.points;
       const nearMiss = input.nearMissCriteria?.find((criterion) => criterion.pedestrianId === actor.id);
       let nearMissPoint: RoutePoint | undefined;
@@ -320,7 +354,10 @@ export function routesFromSimulation(
         color: routeColor(actor.id, authoredColors.get(actor.id)),
         planned,
         actual,
-        ...(canonical.spans.length ? { canonicalSpans: canonical.spans, timeAnnotations: canonical.annotations } : {}),
+        ...(canonical.spans.length ? {
+          canonicalSpans: canonical.spans,
+          timeAnnotations: authoredTimedAnnotations.length ? authoredTimedAnnotations : canonical.annotations,
+        } : {}),
         markers: [...turnMarkers(planned), ...actionMarkers(actor.id, input.interactions, trace)],
         ...(nearMissPoint && nearMiss ? { triggerPoint: nearMissPoint, triggerRadiusM: nearMiss.clearanceM } : {}),
       };
