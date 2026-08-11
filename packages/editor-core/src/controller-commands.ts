@@ -574,9 +574,25 @@ export abstract class EditorControllerCommands {
 
   protected syncCustomRouteDraft(): void {
     const draft = this.customRouteDraft;
-    this.routeRenderer.setDraftRoute(draft
-      ? [...draft.points, ...(draft.cursor && draft.points.length ? [draft.cursor] : [])]
-      : null);
+    if (!draft) {
+      this.routeRenderer.setDraftRoute(null);
+      return;
+    }
+    const interaction = this.doc.data.choreography.interactions.find((item) => item.id === draft.interactionId);
+    const triggerStartS = interaction?.trigger.kind === 'at' && typeof interaction.trigger.t === 'number'
+      ? interaction.trigger.t
+      : 0;
+    this.routeRenderer.setDraftRoute(
+      [...draft.points, ...(draft.cursor && draft.points.length ? [draft.cursor] : [])],
+      {
+        timeLabels: draft.timed
+          ? draft.points.map((_, index) => {
+              const timeS = Number((triggerStartS + index).toFixed(3));
+              return `${timeS}s`;
+            })
+          : undefined,
+      },
+    );
   }
 
   setSelection(ids: readonly string[]): void {

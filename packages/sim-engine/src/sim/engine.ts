@@ -186,6 +186,8 @@ const CONFLICT_WINDOW_S = 2.5;
 const CONFLICT_MIN_ANGLE_RAD = 0.4;
 /** Uniform-grid size; larger than ordinary road-user footprints and one tick's motion. */
 const COLLISION_GRID_CELL_M = 20;
+/** Straight-ahead runway used after the final timed position releases to physics. */
+const TIMED_ROUTE_RELEASE_RUNWAY_M = 2_000;
 
 function collisionGridCells(bounds: Omit<SpatialBounds, 'id'> | SpatialBounds): string[] {
   const x0 = Math.floor(bounds.minX / COLLISION_GRID_CELL_M);
@@ -387,6 +389,40 @@ function sampleTimedRoute(
   const to = points[nextIndex]!;
   const fraction = (timeS - from.timeS) / (to.timeS - from.timeS);
   return timedRouteSegmentKinematics(points, segmentIndex, fraction);
+}
+
+/**
+ * Timed points own pose only through their final timestamp. Once released, a
+ * freeform runway gives the motion backend somewhere to continue naturally
+ * with the terminal speed and heading instead of treating the last point as a
+ * permanent route end.
+ */
+function releasedTimedRoute(
+  points: NonNullable<ActorRuntime['timedRoute']>,
+  fallbackHeadingRad: number,
+): Route {
+  const last = points.at(-1)!;
+  let previous = points.at(-2)!;
+  for (let index = points.length - 2; index >= 0; index -= 1) {
+    const candidate = points[index]!;
+    if (Math.hypot(last.point.x - candidate.point.x, last.point.y - candidate.point.y) > 1e-6) {
+      previous = candidate;
+      break;
+    }
+  }
+  const dx = last.point.x - previous.point.x;
+  const dy = last.point.y - previous.point.y;
+  const length = Math.hypot(dx, dy);
+  const direction = length > 1e-6
+    ? { x: dx / length, y: dy / length }
+    : { x: Math.cos(fallbackHeadingRad), y: Math.sin(fallbackHeadingRad) };
+  return Route.fromPolyline([
+    last.point,
+    {
+      x: last.point.x + direction.x * TIMED_ROUTE_RELEASE_RUNWAY_M,
+      y: last.point.y + direction.y * TIMED_ROUTE_RELEASE_RUNWAY_M,
+    },
+  ]);
 }
 
 function timedRouteFeasibilityIssues(
@@ -2332,7 +2368,7 @@ class Simulation {
       return plan;
     }
 
-    if (a.timedRoute) {
+    if (a.timedRoute && t + this.dt <= a.timedRoute.at(-1)!.timeS + 1e-9) {
       const sampleAt = Math.min(t + this.dt, this.resolvedInput.clipSeconds);
       const sample = sampleTimedRoute(a.timedRoute, sampleAt);
       const projected = a.route.projectPoint(sample.position);
@@ -2349,6 +2385,19 @@ class Simulation {
       plan.lateralReferenceAccel = 0;
       plan.retire = false;
       return plan;
+    }
+
+    if (a.timedRoute) {
+      a.route = releasedTimedRoute(a.timedRoute, a.headingRad);
+      a.routeS = 0;
+      a.lateralOffsetM = 0;
+      a.lateralReferenceOffsetM = 0;
+      a.lateralRestOffsetM = 0;
+      a.timedRoute = null;
+      this.routeRefByActor.set(a.id, semanticResolvedRouteRef(a.route));
+      plan.routeS = 0;
+      plan.lateralOffset = 0;
+      plan.lateralReferenceOffset = 0;
     }
 
     const lim = limitsFor(a);

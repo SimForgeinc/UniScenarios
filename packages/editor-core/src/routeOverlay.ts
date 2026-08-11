@@ -63,6 +63,11 @@ export interface RouteOverlayOptions {
   readonly primarySelectedActorId?: string | null;
 }
 
+export interface DraftRouteOptions {
+  /** Labels for committed points; a trailing cursor preview intentionally has none. */
+  readonly timeLabels?: readonly string[];
+}
+
 export type RouteHeightSampler = (x: number, z: number) => number | null;
 
 const VEHICLE_KINDS = new Set<SimActor['kind']>(['vehicle', 'car', 'truck', 'bus', 'van', 'motorcycle', 'bicycle', 'scooter']);
@@ -587,9 +592,11 @@ function cachedArrowSegments(points: readonly RoutePoint[]): readonly number[] {
 export class VehicleRouteOverlayRenderer {
   readonly group = new Group();
   private objects: Array<LineSegments | Points | Sprite> = [];
-  private draftObjects: Array<LineSegments | Points> = [];
+  private draftObjects: Array<LineSegments | Points | Sprite> = [];
   private textures: Texture[] = [];
+  private draftTextures: Texture[] = [];
   private draftRoute: readonly RoutePoint[] | null = null;
+  private draftTimeLabels: readonly string[] = [];
   private labelGeneration = 0;
 
   constructor(private readonly sampleHeight?: RouteHeightSampler) {
@@ -751,9 +758,10 @@ export class VehicleRouteOverlayRenderer {
   }
 
   /** Show the exact in-progress points captured by the custom-route map tool. */
-  setDraftRoute(points: readonly RoutePoint[] | null): void {
+  setDraftRoute(points: readonly RoutePoint[] | null, options: DraftRouteOptions = {}): void {
     this.clearDraftRoute();
     this.draftRoute = points ? [...points] : null;
+    this.draftTimeLabels = points ? [...(options.timeLabels ?? [])] : [];
     this.renderDraftRoute();
   }
 
@@ -816,6 +824,22 @@ export class VehicleRouteOverlayRenderer {
     markers.raycast = () => undefined;
     this.group.add(markers);
     this.draftObjects.push(markers);
+    for (let index = 0; index < Math.min(points.length, this.draftTimeLabels.length); index += 1) {
+      const label = this.draftTimeLabels[index]!;
+      this.addTimeLabel({
+        startTimeS: 0,
+        endTimeS: 0,
+        label,
+        point: points[index]!,
+        stackIndex: 0,
+        stackCount: 1,
+      }, {
+        name: 'custom-route-time-label',
+        renderOrder: 36,
+        objects: this.draftObjects,
+        textures: this.draftTextures,
+      });
+    }
   }
 
   private clearDraftRoute(): void {
@@ -826,9 +850,25 @@ export class VehicleRouteOverlayRenderer {
       for (const material of materials) material.dispose();
     }
     this.draftObjects = [];
+    for (const texture of this.draftTextures) texture.dispose();
+    this.draftTextures = [];
+    this.draftTimeLabels = [];
   }
 
-  private addTimeLabel(annotation: RouteTimeAnnotation): void {
+  private addTimeLabel(
+    annotation: RouteTimeAnnotation,
+    destination: {
+      readonly name: string;
+      readonly renderOrder: number;
+      readonly objects: Array<LineSegments | Points | Sprite>;
+      readonly textures: Texture[];
+    } = {
+      name: 'selected-route-time-label',
+      renderOrder: 31 + annotation.stackIndex,
+      objects: this.objects,
+      textures: this.textures,
+    },
+  ): void {
     if (typeof document === 'undefined') return;
     const canvas = document.createElement('canvas');
     canvas.width = 256;
@@ -862,14 +902,14 @@ export class VehicleRouteOverlayRenderer {
     const baseY = (this.sampleHeight?.(annotation.point.x, annotation.point.z) ?? 0) + 1.25;
     sprite.position.set(annotation.point.x, baseY + annotation.stackIndex * .62, annotation.point.z);
     sprite.scale.set(2.35, .88, 1);
-    sprite.name = 'selected-route-time-label';
-    sprite.renderOrder = 31 + annotation.stackIndex;
+    sprite.name = destination.name;
+    sprite.renderOrder = destination.renderOrder;
     sprite.frustumCulled = true;
     sprite.userData.routeTimeAnnotation = annotation;
     sprite.raycast = () => undefined;
     this.group.add(sprite);
-    this.objects.push(sprite);
-    this.textures.push(texture);
+    destination.objects.push(sprite);
+    destination.textures.push(texture);
   }
 
   private clear(): void {

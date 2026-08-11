@@ -91,6 +91,34 @@ describe('custom route runtime semantics', () => {
     ]));
   });
 
+  it('releases a timed route to physics after its final authored timestamp', () => {
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02,
+      seed: 'custom-timed-route-release',
+      actors: [{
+        id: 'actor', kind: 'car',
+        initial: { pose: { x: 0, z: 0, headingRad: 0 }, speedMps: 0 },
+        behavior: {
+          route: {
+            kind: 'timedPolyline',
+            points: [{ timeS: 0, x: 0, z: 0 }, { timeS: 1, x: 10, z: 0 }],
+          },
+          cruiseSpeedMps: 10,
+          rules: { collisionAvoidance: false, yield: false },
+        },
+      }],
+      interactions: [],
+    });
+
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    const track = trace.ticks.actors.actor!;
+    const atFinalConstraint = trace.ticks.t.findIndex((time) => Math.abs(time - 1) < 1e-9);
+    const afterRelease = trace.ticks.t.findIndex((time) => Math.abs(time - 1.5) < 1e-9);
+    expect(track.x[atFinalConstraint]).toBeCloseTo(10, 8);
+    expect(track.x[afterRelease]).toBeGreaterThan(10.5);
+    expect(track.speedMps[afterRelease]).toBeGreaterThan(1);
+  });
+
   it('permanently hands a timed route to physics after material contact', () => {
     const input = parseSimScenarioInput({
       mapId: 'synthetic-straight', clipSeconds: 3, warmupSeconds: 0, dt: 0.02,

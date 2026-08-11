@@ -108,8 +108,9 @@ export type TurnRelation = z.infer<typeof turnRelationSchema>;
  * - `polyline` — an explicit ground path in scene coordinates. The pedestrian
  *   escape hatch (crossings, jaywalk diagonals); vehicles may use it too but
  *   then have no lane identity in the trace.
- * - `timedPolyline` — exact scene-space keyframes. Time, rather than cruise
- *   speed, owns the actor until a material collision hands it to physics.
+ * - `timedPolyline` — exact scene-space position constraints. Time, rather
+ *   than cruise speed, owns the actor through the final authored timestamp;
+ *   normal physics takes over immediately afterward (or on material contact).
  */
 export const routeSpecSchema = z.discriminatedUnion('kind', [
   z.object({
