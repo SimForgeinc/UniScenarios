@@ -15,24 +15,28 @@
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./import": { "types": "./dist/import.d.ts", "default": "./dist/import.js" },
+    "./export": { "types": "./dist/export/index.d.ts", "default": "./dist/export/index.js" },
+    "./types": { "types": "./dist/export/types.d.ts", "default": "./dist/export/types.js" },
+    "./xml-1.4": { "types": "./dist/export/xml-1.4.d.ts", "default": "./dist/export/xml-1.4.js" },
+    "./node": { "types": "./dist/node/index.d.ts", "default": "./dist/node/index.js" },
     "./conformance/*": "./conformance/*",
     "./schema/*": "./schema/*"
   },
   "files": ["dist", "conformance", "schema"],
   "scripts": {
-    "build": "tsup src/index.ts src/import.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "build": "tsup src/index.ts src/import.ts src/export/index.ts src/export/types.ts src/export/xml-1.4.ts src/node/index.ts --format esm --dts --sourcemap --clean --out-dir dist",
     "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniscenarios/cli": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*",
     "fast-xml-parser": "^5.5.6"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
+    "execa": "^9.5.2",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"
   }

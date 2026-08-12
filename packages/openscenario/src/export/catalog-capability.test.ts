@@ -1,6 +1,6 @@
 import { parseSimScenarioInput } from '@uniscenarios/sim-engine';
 import { describe, expect, it } from 'vitest';
-import { analyzeAsamCapabilities } from '../asam/common.js';
+import { analyzeAsamCapabilities } from './common.js';
 
 describe('special catalog OpenSCENARIO capability reporting', () => {
   it('warns about procedural appearance and nonportable emergency audio', () => {

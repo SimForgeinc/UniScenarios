@@ -1,8 +1,8 @@
 /// <reference lib="webworker" />
 
 import { matchAnchorReport, normalizeDerivedMapIndex } from '@uniscenarios/anchor-matcher';
-import { exportOpenScenarioXml14 } from '@uniscenarios/cli/asam/xml-1.4';
-import { AsamExportError } from '@uniscenarios/cli/asam/types';
+import { exportOpenScenarioXml14 } from '@uniscenarios/openscenario/xml-1.4';
+import { AsamExportError } from '@uniscenarios/openscenario/types';
 import { adaptTemplate, buildMapControlPlan, buildSignalControlIndex, compileMapSignalPlans, materializationSemanticLosses, materialize, materializeMapBound, parseMapSignalCatalog, topologyWithMapSpeedLimits, type MapBundle, type MapControlPlan, type MapSignalCatalog, type SignalControlIndex } from '@uniscenarios/scenario-materializer';
 import {
   buildLaneGraph,

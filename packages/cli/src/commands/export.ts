@@ -3,7 +3,7 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-import { exportAsamScenario, AsamExportError, type AsamFormat } from '../asam/index.js';
+import { exportAsamScenario, AsamExportError, type AsamFormat } from '@uniscenarios/openscenario/export';
 import { CliError, EXIT } from '../errors.js';
 import { loadMap } from '../maps.js';
 import { emit, emitLines } from '../output.js';

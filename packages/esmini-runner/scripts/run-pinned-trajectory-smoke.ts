@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
-import { exportOpenScenarioXml13Esmini } from '../../cli/src/index.js';
+import { exportOpenScenarioXml13Esmini } from '../../openscenario/src/export/index.js';
 import { buildLaneGraph, parseSimScenarioInput, runSimulation, type TopologyIndex } from '../../sim-engine/src/index.js';
 import { compareNormalizedTraces, normalizeCanonicalTrace, normalizeExternalTrace } from '../../trace-comparator/src/index.js';
 import { parseEsminiCsv } from '../src/esmini-csv.js';

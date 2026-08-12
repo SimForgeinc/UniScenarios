@@ -1,4 +1,4 @@
-import type { AsamCapabilityReport, AsamExportIssue, AsamExportWarning } from '@uniscenarios/cli/asam/types';
+import type { AsamCapabilityReport, AsamExportIssue, AsamExportWarning } from './export/types.js';
 import type { SimScenarioInput, SimTrace } from '@uniscenarios/sim-engine';
 
 export type OpenScenarioValidationStatus = 'passed' | 'failed' | 'pending' | 'not-run' | 'unavailable';

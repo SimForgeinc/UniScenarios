@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import type { AsamCapabilityEntry } from '@uniscenarios/cli/asam/types';
+import type { AsamCapabilityEntry } from '@uniscenarios/openscenario/types';
 import {
   downloadSnapshotFile,
   type OpenScenarioExportProfile,

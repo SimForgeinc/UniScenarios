@@ -4,7 +4,8 @@ import path from 'node:path';
 import { gunzipSync } from 'node:zlib';
 
 import { buildLaneGraph, parseSimScenarioInput, type LaneGraph, type TopologyIndex } from '@uniscenarios/sim-engine';
-import { AsamExportError, exportOpenScenarioXml14, validateOpenScenarioXml14 } from '../asam/index.js';
+import { AsamExportError, exportOpenScenarioXml14 } from '@uniscenarios/openscenario/export';
+import { validateOpenScenarioXml14 } from '@uniscenarios/openscenario/node';
 import { DEV_ASSETS } from '../maps.js';
 
 export type AuditVerdict = 'xsd-validated' | 'unsupported-fail-closed' | 'asset-blocked' | 'unexpected-failure';

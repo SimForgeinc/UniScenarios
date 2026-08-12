@@ -19,7 +19,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@uniscenarios/cli": "workspace:*",
+    "@uniscenarios/openscenario": "workspace:*",
     "@uniscenarios/trace-comparator": "workspace:*"
   },
   "devDependencies": {
