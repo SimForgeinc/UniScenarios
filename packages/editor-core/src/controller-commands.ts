@@ -37,11 +37,12 @@
  */
 
 import { Raycaster, Vector2, Vector3 } from 'three';
-import type { EditorViewer } from './viewer-contract';
+import { getViewerSurfaceRect, type EditorViewer } from './viewer-contract';
 import { getEntry, type CatalogId } from '@uniscenarios/prop-catalog';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { SceneTrace, SimScenarioInput } from '@uniscenarios/sim-engine';
 import { ActorRenderer, GhostActor, type ActorView } from './actorRenderer';
+
 import {
   actorKindFor,
   type ActorRecord,
@@ -58,6 +59,13 @@ import {
   type LaneIndex
 } from './laneIndex';
 import { VehicleRouteOverlayRenderer } from './routeOverlay';
+
+/**
+ * Screen-space radius, in pixels, within which clicking the last drawn point of a
+ * timed route repeats it as a one-second wait instead of adding a new position.
+ */
+const ROUTE_WAIT_SNAP_PX = 5;
+
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';
 export type CustomRouteTool = 'add' | 'move';
@@ -607,25 +615,48 @@ export abstract class EditorControllerCommands {
   /**
    * Place one drawn route point at the end of the path.
    *
-   * Drawing only ever appends. This used to measure the click against every
-   * existing segment and splice it in when it landed within 1.5 m of one, but
-   * that distance was computed from a projection clamped to the segment's ends
-   * — which for a click past the final vertex is just the stride length. Every
-   * stride shorter than the radius therefore looked like a mid-path click, and
-   * because a straight path's segments are collinear the earliest one won the
-   * tie, so each new point was spliced in behind the first and the path drew
-   * itself backwards. Walkers hit it hardest: their strides are shorter than
-   * the radius, so nearly every click misfired.
+   * Drawing only ever appends. Measuring the click against every existing
+   * segment and splicing it in when it landed within a metre or so of one
+   * cannot work: that distance is computed from a projection clamped to the
+   * segment's ends, and past the final vertex it is just the stride length, so
+   * every stride shorter than the radius reads as a mid-path click. A straight
+   * path's segments are collinear and the earliest wins the tie, so each new
+   * point lands behind the first and the path draws itself backwards — worst on
+   * walkers, whose strides are shorter than the radius. A point in the wrong
+   * place is moved by dragging its handle, which acts on the point itself
+   * instead of guessing intent from proximity.
    *
-   * Appending is also the behaviour authors expect. A point in the wrong place
-   * is moved by dragging its handle, which is a direct gesture on the point
-   * itself rather than a proximity rule that has to guess the intent of a click.
+   * ## Clicking the last point again is a wait, on timed routes only
+   *
+   * Two keyframes on one spot is how an author writes a dwell, so a click
+   * within a few pixels of the last point's screen position repeats that point
+   * exactly rather than sampling the ground under the cursor. The test is in
+   * screen space on purpose: at a grazing camera angle the ground point a few
+   * pixels away is tens of metres away, so a world-space radius would either
+   * miss the gesture or swallow deliberate nearby steps. An untimed route has
+   * no time axis and therefore no dwell to express, so it never snaps.
    */
-  protected addCustomRoutePoint(point: Vector3): void {
+  protected addCustomRoutePoint(point: Vector3, event?: { clientX: number; clientY: number }): void {
     const draft = this.customRouteDraft;
     if (!draft || draft.points.length >= 128) return;
-    const next = { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
-    if (draft.points.some((existing) => Math.hypot(existing.x - next.x, existing.z - next.z) < .1)) return;
+    const latest = draft.points.at(-1);
+    const bounds = getViewerSurfaceRect(this.viewer);
+    const projected = latest
+      ? new Vector3(
+          latest.x,
+          (this.sampleHeight(latest.x, latest.z) ?? this.lastGroundY) + .1,
+          latest.z,
+        ).project(this.viewer.camera)
+      : null;
+    const latestClientX = projected ? bounds.left + (projected.x + 1) * bounds.width / 2 : Infinity;
+    const latestClientY = projected ? bounds.top + (1 - projected.y) * bounds.height / 2 : Infinity;
+    const waiting = Boolean(
+      draft.timed && latest && event && projected && projected.z >= -1 && projected.z <= 1
+      && Math.hypot(event.clientX - latestClientX, event.clientY - latestClientY) <= ROUTE_WAIT_SNAP_PX,
+    );
+    const next = waiting
+      ? { ...latest! }
+      : { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
     draft.points.push(next);
     this.syncCustomRouteDraft();
     this.notify();

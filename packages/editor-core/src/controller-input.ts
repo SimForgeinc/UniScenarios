@@ -296,7 +296,7 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
           this.notify();
         } else {
           const ground = this.groundPoint(event);
-          if (ground) this.addCustomRoutePoint(ground);
+          if (ground) this.addCustomRoutePoint(ground, event);
         }
       }
       return;
