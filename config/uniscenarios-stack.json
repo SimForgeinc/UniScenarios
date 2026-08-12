@@ -79,7 +79,7 @@
     {
       "path": "adapters/carla-bridge",
       "name": "uniscenarios-carla-bridge",
-      "version": "0.1.0rc23",
+      "version": "0.1.0rc24",
       "role": "optional-carla-execution-adapter",
       "registry": "pypi"
     }
