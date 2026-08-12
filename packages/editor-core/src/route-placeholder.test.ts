@@ -99,6 +99,21 @@ describe('custom route placeholders', () => {
     }
   });
 
+  // A five-centimetre step is a real authored move, and it is exactly the size
+  // the editors' "has the author drawn this yet?" radius uses. Reusing that
+  // radius here flattened such a route onto its actor and lost the step.
+  it('keeps a small authored step near the origin', () => {
+    const step = {
+      ...catalogRoute('custom_timed_route'),
+      target: {
+        mode: 'customTimedRoute',
+        points: [{ timeS: 0, x: 0, z: 0 }, { timeS: 1, x: 0.05, z: 0 }],
+      },
+    } as Interaction;
+    expect(isRoutePlaceholder(step)).toBe(false);
+    expect(routePlaceholderOnActor(step, ANCHOR)).toBe(step);
+  });
+
   it('leaves the placeholder alone when the actor has no resolved pose', () => {
     const placeholder = catalogRoute('custom_timed_route');
     expect(routePlaceholderOnActor(placeholder, undefined)).toBe(placeholder);

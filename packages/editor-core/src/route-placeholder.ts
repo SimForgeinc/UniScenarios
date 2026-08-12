@@ -1,10 +1,16 @@
 import type { Interaction } from '@uniscenarios/scenario-model';
 
 /**
- * Radius within which a custom route's points count as one spot rather than a
- * path. Shared with the editors' "has the author drawn this yet?" checks.
+ * How far a placeholder's points may sit from the scene origin, in metres.
+ *
+ * Deliberately a float-noise tolerance rather than a human-scale radius. The
+ * catalog emits its points at exactly the origin, so nothing wider is needed to
+ * recognise one — and anything wider destroys real authoring. A five-centimetre
+ * radius, the figure the editors use to ask "has the author drawn this yet?",
+ * swallows a genuine five-centimetre pedestrian step taken near the origin and
+ * flattens that route onto its actor.
  */
-export const ROUTE_PLACEHOLDER_EPSILON_M = 0.05;
+export const ROUTE_PLACEHOLDER_EPSILON_M = 1e-6;
 
 /** Ground-plane position, in scene metres, a placeholder route is seeded on. */
 export interface RouteAnchor {
