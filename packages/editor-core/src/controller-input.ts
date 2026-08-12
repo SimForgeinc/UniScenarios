@@ -127,6 +127,17 @@ export abstract class EditorControllerInput extends EditorControllerCommands {
     if (isTextEditingTarget(event.target)) return;
     if (!this.authoringEnabled) return;
 
+    // While drawing, undo belongs to the gesture, not the document. The points
+    // placed so far are not committed yet, so document undo would step over the
+    // whole drawing and reverse whatever the author did before it.
+    const undoRoutePoint = (event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'z' && !event.shiftKey;
+    if (undoRoutePoint && this.mode === 'drawingRoute' && this.customRouteDraft?.tool === 'add') {
+      event.preventDefault();
+      event.stopPropagation();
+      this.removeLastCustomRoutePoint();
+      return;
+    }
+
     if (handleEditorHistoryKey(event, {
       enabled: this.authoringEnabled,
       canUndo: this.doc.canUndo,
