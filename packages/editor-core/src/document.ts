@@ -43,6 +43,7 @@ import { reconcileTemplateMapIdentity } from './map-identity';
 import { actorClassForCatalogEntry, getEntry, type CatalogActorClass, type CatalogId, type Dims } from '@uniscenarios/prop-catalog';
 import { editorMapVersionId, editorSourceMapId, type MapEntry } from './map';
 import { defaultSpeedKph, isActionCompatible } from './timeline-actions';
+import { routePlaceholderOnActor } from './route-placeholder';
 
 /** Where an actor is stored. */
 export type ActorSource = 'role' | 'prop';
@@ -795,9 +796,16 @@ export class EditorDocument {
     this.#emit();
   }
 
-  /** Add one semantic timeline interaction as an undoable/autosaved gesture. */
+  /**
+   * Add one semantic timeline interaction as an undoable/autosaved gesture.
+   *
+   * An unconfigured custom route is seeded on its actor first. Doing it here
+   * rather than at each call site makes it an invariant of the document: no
+   * caller can add a route that starts somewhere its actor is not.
+   */
   addInteraction(interaction: Interaction): void {
-    this.#transaction(() => { this.#doc.addInteraction(interaction); });
+    const seeded = routePlaceholderOnActor(interaction, this.actor(interaction.actor));
+    this.#transaction(() => { this.#doc.addInteraction(seeded); });
   }
 
   /**

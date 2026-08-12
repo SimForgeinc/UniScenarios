@@ -13,8 +13,12 @@ const customRoute = (): ActionDefinition => ({
   label: 'Custom route',
   group: 'Routes',
   verb: 'route',
-  // Replaced with clicked scene points before the drawing gesture commits.
-  target: { mode: 'customRoute', points: [{ x: 0, z: 0 }, { x: 1, z: 0 }] },
+  // Replaced with clicked scene points before the drawing gesture commits, and
+  // re-seeded onto the actor by `EditorDocument.addInteraction` if it is added
+  // without one. Both points share the origin so that re-seeding can recognise
+  // the placeholder: geometry that covers ground is indistinguishable from a
+  // drawn path, and would be committed as a real world route to the map centre.
+  target: { mode: 'customRoute', points: [{ x: 0, z: 0 }, { x: 0, z: 0 }] },
   resource: 'topology',
   durationS: 1,
 });
@@ -24,9 +28,13 @@ const customTimedRoute = (): ActionDefinition => ({
   group: 'Routes',
   verb: 'route',
   // The drawing gesture replaces these placeholders with one-second keyframes.
+  // Both keyframes hold the origin so an undrawn route stays recognisable as a
+  // placeholder — see `customRoute` above. A timed route is the harsher of the
+  // two to get wrong: its points are absolute positions at absolute times, so a
+  // committed placeholder pins the actor to the map centre at t=0.
   target: {
     mode: 'customTimedRoute',
-    points: [{ timeS: 0, x: 0, z: 0 }, { timeS: 1, x: 1, z: 0 }],
+    points: [{ timeS: 0, x: 0, z: 0 }, { timeS: 1, x: 0, z: 0 }],
   },
   resource: 'topology',
   durationS: 1,
