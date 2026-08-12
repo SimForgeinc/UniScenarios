@@ -30,7 +30,9 @@ describe('custom route placeholders', () => {
     (id) => {
       const seeded = routePlaceholderOnActor(catalogRoute(id), ANCHOR);
       const points = (seeded.target as { points: { x: number; z: number }[] }).points;
-      expect(points.length).toBeGreaterThanOrEqual(2);
+      // One point is the whole placeholder: the actor stands where it is until
+      // the author draws somewhere to go.
+      expect(points).toHaveLength(1);
       for (const point of points) {
         expect(point.x).toBe(412.346);
         expect(point.z).toBe(-87.654);
@@ -41,7 +43,23 @@ describe('custom route placeholders', () => {
   it('preserves the keyframes of a timed placeholder', () => {
     const seeded = routePlaceholderOnActor(catalogRoute('custom_timed_route'), ANCHOR);
     const points = (seeded.target as { points: { timeS: number }[] }).points;
-    expect(points.map((point) => point.timeS)).toEqual([0, 1]);
+    expect(points.map((point) => point.timeS)).toEqual([0]);
+  });
+
+  // Seeding must not collapse an author's dwell into one keyframe.
+  it('keeps every keyframe of a multi-point timed placeholder', () => {
+    const stacked = {
+      ...catalogRoute('custom_timed_route'),
+      target: {
+        mode: 'customTimedRoute',
+        points: [{ timeS: 0, x: 0, z: 0 }, { timeS: 2, x: 0, z: 0 }],
+      },
+    } as Interaction;
+    const points = (routePlaceholderOnActor(stacked, ANCHOR).target as {
+      points: { timeS: number; x: number }[];
+    }).points;
+    expect(points.map((point) => point.timeS)).toEqual([0, 2]);
+    expect(points.every((point) => point.x === 412.346)).toBe(true);
   });
 
   it('leaves a drawn path alone', () => {
@@ -53,7 +71,9 @@ describe('custom route placeholders', () => {
     expect(routePlaceholderOnActor(drawn, ANCHOR)).toBe(drawn);
   });
 
-  it('leaves a deliberate hold away from the origin alone', () => {
+  // Time owns motion in a timed route, so two keyframes on one spot is an
+  // instruction — wait here — not an unfinished route.
+  it('leaves a timed hold away from the origin alone', () => {
     const hold = {
       ...catalogRoute('custom_timed_route'),
       target: {
@@ -63,6 +83,20 @@ describe('custom route placeholders', () => {
     } as Interaction;
     expect(isRoutePlaceholder(hold)).toBe(false);
     expect(routePlaceholderOnActor(hold, ANCHOR)).toBe(hold);
+  });
+
+  // An untimed route has no time axis, so stacked points cannot mean a dwell.
+  // A route with no extent is undrawn wherever it sits.
+  it('treats an untimed route with no extent as undrawn wherever it sits', () => {
+    const stacked = {
+      ...catalogRoute('custom_route'),
+      target: { mode: 'customRoute', points: [{ x: 50, z: 30 }, { x: 50, z: 30 }] },
+    } as Interaction;
+    expect(isRoutePlaceholder(stacked)).toBe(true);
+    const seeded = routePlaceholderOnActor(stacked, ANCHOR);
+    for (const point of (seeded.target as { points: { x: number; z: number }[] }).points) {
+      expect(point).toEqual({ x: 412.346, z: -87.654 });
+    }
   });
 
   it('leaves the placeholder alone when the actor has no resolved pose', () => {

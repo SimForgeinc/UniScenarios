@@ -852,9 +852,17 @@ export class EditorDocument {
     });
   }
 
-  /** Replace one timeline interaction while retaining its stable identity. */
+  /**
+   * Replace one timeline interaction while retaining its stable identity.
+   *
+   * Seeds an unconfigured custom route on its actor for the same reason
+   * `addInteraction` does: switching an existing interaction's target mode
+   * produces a fresh placeholder, and it must not land at the scene origin
+   * either. Drawn geometry covers ground, so committing a gesture is untouched.
+   */
   replaceInteraction(id: string, interaction: Interaction): void {
-    this.#transaction(() => { this.#doc.replaceInteraction(id, interaction); });
+    const seeded = routePlaceholderOnActor(interaction, this.actor(interaction.actor));
+    this.#transaction(() => { this.#doc.replaceInteraction(id, seeded); });
   }
 
   /** Commit a timeline gesture's semantic edit and presentation layout as one

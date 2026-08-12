@@ -126,15 +126,17 @@ export const routeSpecSchema = z.discriminatedUnion('kind', [
   }),
   z.object({
     kind: z.literal('polyline'),
-    points: z.array(scenePointSchema).min(2),
+    /** A single point is a zero-length route: the actor stays where it is. */
+    points: z.array(scenePointSchema).min(1),
   }),
   z.object({
     kind: z.literal('timedPolyline'),
+    /** A single keyframe holds the actor on that spot for the whole clip. */
     points: z.array(z.object({
       timeS: nonNeg,
       x: finite,
       z: finite,
-    })).min(2),
+    })).min(1),
   }),
 ]);
 export type RouteSpec = z.infer<typeof routeSpecSchema>;

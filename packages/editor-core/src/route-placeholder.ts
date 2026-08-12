@@ -15,18 +15,32 @@ export interface RouteAnchor {
 /**
  * True when a custom route still holds catalog geometry rather than a path.
  *
- * The action catalog is static, so it cannot know where the actor stands and
- * emits every point at the scene origin. That is the signature this recognises:
- * a drawn path covers ground, and a deliberate hold sits somewhere other than
- * the origin, so neither is mistaken for an unconfigured route.
+ * The two route kinds need different tests, because repeated points mean
+ * different things in each:
+ *
+ * - `customRoute` has no time axis, so stacking points on one spot expresses
+ *   nothing an author would want. A route with no extent is undrawn wherever it
+ *   sits, and the schema's two-point minimum is the only reason it has a second
+ *   point at all.
+ * - `customTimedRoute` interpolates between keyframes, so two coincident points
+ *   at different times is a real instruction — hold here. Only the catalog's
+ *   signature counts as undrawn there: every point still on the scene origin.
+ *
+ * A drawn path covers ground either way, so neither test can mistake one.
  */
 export function isRoutePlaceholder(interaction: Interaction): boolean {
   if (interaction.verb !== 'route') return false;
   const { target } = interaction;
   if (target.mode !== 'customRoute' && target.mode !== 'customTimedRoute') return false;
   const points: readonly { x: number; z: number }[] = target.points;
-  if (points.length === 0) return false;
-  return points.every((point) => Math.hypot(point.x, point.z) <= ROUTE_PLACEHOLDER_EPSILON_M);
+  const first = points[0];
+  if (!first) return false;
+  const withoutExtent = points.every(
+    (point) => Math.hypot(point.x - first.x, point.z - first.z) <= ROUTE_PLACEHOLDER_EPSILON_M,
+  );
+  if (!withoutExtent) return false;
+  if (target.mode === 'customRoute') return true;
+  return Math.hypot(first.x, first.z) <= ROUTE_PLACEHOLDER_EPSILON_M;
 }
 
 /**

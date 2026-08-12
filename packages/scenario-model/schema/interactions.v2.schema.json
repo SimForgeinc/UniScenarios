@@ -517,7 +517,7 @@
                       "const": "customRoute"
                     },
                     "points": {
-                      "minItems": 2,
+                      "minItems": 1,
                       "maxItems": 128,
                       "type": "array",
                       "items": {
@@ -539,7 +539,7 @@
                       "const": "customTimedRoute"
                     },
                     "points": {
-                      "minItems": 2,
+                      "minItems": 1,
                       "maxItems": 1024,
                       "type": "array",
                       "items": {
