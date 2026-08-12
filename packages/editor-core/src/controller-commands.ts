@@ -682,10 +682,26 @@ export abstract class EditorControllerCommands {
     this.routeRenderer.setDraftRoute(
       [...draft.points, ...(draft.tool === 'add' && draft.cursor && draft.points.length ? [draft.cursor] : [])],
       {
+        // A run of points on one spot is a wait, and labelling each of them with
+        // its own second stacks unreadable text on a single marker. Label the
+        // run once, on its last point, with the span it covers; the earlier
+        // members render nothing.
         timeLabels: draft.timed
-          ? draft.points.map((_, index) => {
-              const timeS = Number((triggerStartS + index).toFixed(3));
-              return `${timeS}s`;
+          ? draft.points.map((point, index) => {
+              let runStart = index;
+              let runEnd = index;
+              while (
+                runStart > 0
+                && Math.hypot(point.x - draft.points[runStart - 1]!.x, point.z - draft.points[runStart - 1]!.z) <= 1e-6
+              ) runStart--;
+              while (
+                runEnd + 1 < draft.points.length
+                && Math.hypot(point.x - draft.points[runEnd + 1]!.x, point.z - draft.points[runEnd + 1]!.z) <= 1e-6
+              ) runEnd++;
+              if (index !== runEnd) return '';
+              const startTimeS = Number((triggerStartS + runStart).toFixed(3));
+              const endTimeS = Number((triggerStartS + runEnd).toFixed(3));
+              return runStart === runEnd ? `${endTimeS}s` : `${startTimeS}–${endTimeS}s`;
             })
           : undefined,
         selectedPointIndex: draft.selectedPointIndex,
