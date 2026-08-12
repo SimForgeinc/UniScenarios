@@ -900,6 +900,10 @@ export class VehicleRouteOverlayRenderer {
     });
     for (let index = 0; index < Math.min(points.length, this.draftTimeLabels.length); index += 1) {
       const label = this.draftTimeLabels[index]!;
+      // A point inside a wait carries an empty label: the run is labelled once,
+      // on its last point. Rendering the blanks would stack invisible sprites
+      // on the marker the author is trying to see past.
+      if (!label) continue;
       this.addTimeLabel({
         startTimeS: 0,
         endTimeS: 0,
