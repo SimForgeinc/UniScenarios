@@ -874,7 +874,10 @@ export class VehicleRouteOverlayRenderer {
     const geometry = new BufferGeometry();
     geometry.setAttribute('position', new BufferAttribute(Float32Array.from(pointPositions), 3));
     geometry.setAttribute('color', new BufferAttribute(Float32Array.from(pointColors), 3));
-    const markers = new Points(geometry, new PointsMaterial({ size: .95, vertexColors: true, depthTest: false, depthWrite: false }));
+    // Half the original .95. These sit on the ground the author is aiming at,
+    // so at the zoom used to place a point accurately the old dots covered the
+    // spot being picked.
+    const markers = new Points(geometry, new PointsMaterial({ size: .475, vertexColors: true, depthTest: false, depthWrite: false }));
     markers.name = 'custom-route-waypoints';
     markers.renderOrder = 35;
     markers.raycast = () => undefined;
@@ -882,7 +885,9 @@ export class VehicleRouteOverlayRenderer {
     this.draftObjects.push(markers);
     points.slice(0, this.draftCommittedPointCount).forEach((point, index) => {
       const selected = index === this.draftSelectedPointIndex;
-      const geometry = new SphereGeometry(selected ? .48 : .36, 16, 10);
+      // Half of .48/.36, matching the dots above so the grab handle stays the
+      // same size as the mark it belongs to.
+      const geometry = new SphereGeometry(selected ? .24 : .18, 16, 10);
       const material = new MeshBasicMaterial({ color: selected ? '#ffffff' : '#E8E044', depthTest: false, depthWrite: false });
       const handle = new Mesh(geometry, material);
       handle.position.set(point.x, (this.sampleHeight?.(point.x, point.z) ?? 0) + .72, point.z);

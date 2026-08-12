@@ -604,30 +604,29 @@ export abstract class EditorControllerCommands {
     this.syncScene();
   }
 
+  /**
+   * Place one drawn route point at the end of the path.
+   *
+   * Drawing only ever appends. This used to measure the click against every
+   * existing segment and splice it in when it landed within 1.5 m of one, but
+   * that distance was computed from a projection clamped to the segment's ends
+   * — which for a click past the final vertex is just the stride length. Every
+   * stride shorter than the radius therefore looked like a mid-path click, and
+   * because a straight path's segments are collinear the earliest one won the
+   * tie, so each new point was spliced in behind the first and the path drew
+   * itself backwards. Walkers hit it hardest: their strides are shorter than
+   * the radius, so nearly every click misfired.
+   *
+   * Appending is also the behaviour authors expect. A point in the wrong place
+   * is moved by dragging its handle, which is a direct gesture on the point
+   * itself rather than a proximity rule that has to guess the intent of a click.
+   */
   protected addCustomRoutePoint(point: Vector3): void {
     const draft = this.customRouteDraft;
     if (!draft || draft.points.length >= 128) return;
     const next = { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
-    let insertionIndex = draft.points.length;
-    let nearestDistance = Infinity;
-    for (let index = 1; index < draft.points.length; index += 1) {
-      const a = draft.points[index - 1]!;
-      const b = draft.points[index]!;
-      const dx = b.x - a.x;
-      const dz = b.z - a.z;
-      const spanSquared = dx * dx + dz * dz;
-      const fraction = spanSquared > 1e-9
-        ? Math.max(0, Math.min(1, ((next.x - a.x) * dx + (next.z - a.z) * dz) / spanSquared))
-        : 0;
-      const distance = Math.hypot(next.x - (a.x + dx * fraction), next.z - (a.z + dz * fraction));
-      if (distance < nearestDistance) {
-        nearestDistance = distance;
-        insertionIndex = index;
-      }
-    }
     if (draft.points.some((existing) => Math.hypot(existing.x - next.x, existing.z - next.z) < .1)) return;
-    if (nearestDistance <= 1.5) draft.points.splice(insertionIndex, 0, next);
-    else draft.points.push(next);
+    draft.points.push(next);
     this.syncCustomRouteDraft();
     this.notify();
   }
