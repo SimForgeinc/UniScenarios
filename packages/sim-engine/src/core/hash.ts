@@ -25,7 +25,11 @@ function rotr(x: number, n: number): number {
 export function sha256Bytes(input: Uint8Array): string {
   const len = input.length;
   const bitLen = len * 8;
-  const paddedLen = (((len + 9) >> 6) + 1) << 6;
+  // Smallest 64-byte multiple that fits message + 0x80 + 8-byte length:
+  // ceil((len + 9) / 64) blocks. Using `len + 9` here instead of `len + 8`
+  // appended a spurious all-zero block whenever len % 64 == 55, yielding a
+  // digest no standard SHA-256 implementation agrees with.
+  const paddedLen = (((len + 8) >> 6) + 1) << 6;
   const msg = new Uint8Array(paddedLen);
   msg.set(input);
   msg[len] = 0x80;
