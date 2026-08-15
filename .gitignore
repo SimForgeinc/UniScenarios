@@ -20,3 +20,7 @@ campaigns/*/batches/
 campaigns/**/*.trace.json.gz
 campaigns/**/work/*.match.json
 .tools/
+
+# python bytecode from lane tooling
+__pycache__/
+*.pyc
