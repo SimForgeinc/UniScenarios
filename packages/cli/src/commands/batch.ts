@@ -39,6 +39,7 @@ import { EXIT } from '../errors.js';
 import { emit, emitLines, fixed, pad } from '../output.js';
 import { cellSeed, paramsVersion, templateId } from '../params.js';
 import { matchOnMaps } from '../sites.js';
+import { workerShimUrl } from '../worker-shim.js';
 import { readTemplate, writeJsonFile } from '../template-io.js';
 import type { EvaluateFilterMode } from './evaluate.js';
 
@@ -336,7 +337,7 @@ async function runPool(
 ): Promise<Map<string, CellResult>> {
   const out = new Map<string, CellResult>();
   const queue = [...cells];
-  const workerUrl = new URL('../batch-worker.mjs', import.meta.url);
+  const workerUrl = workerShimUrl('batch-worker.mjs', import.meta.url);
 
   await new Promise<void>((resolve, reject) => {
     let active = 0;

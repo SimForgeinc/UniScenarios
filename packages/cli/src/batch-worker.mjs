@@ -1,14 +1,23 @@
 /**
- * Worker-thread entry.
+ * Worker-thread entry, valid in BOTH module layouts.
  *
- * A plain `.mjs` shim rather than the TypeScript module itself: a worker thread
- * gets its own module registry, so it needs its own `tsx` registration before
- * it can resolve `./batch-cell.js` onto `batch-cell.ts`. Doing that with
- * `execArgv: ['--import', 'tsx']` registers hooks for the worker's *entry* but
- * not for the `.js`-specifier rewrite its imports rely on; registering inside
- * the thread — exactly as `bin/uniscenarios.js` does for the main thread — does.
+ * A plain `.mjs` shim rather than the TypeScript module itself: a worker thread gets its own module
+ * registry, so under `tsx` it needs its own registration before it can resolve `./batch-cell.js`
+ * onto `batch-cell.ts`.
+ *
+ * When a built `batch-worker-impl.js` sits beside this file (the bundled `dist/` layout) it is
+ * imported directly -- registering `tsx` there would be wrong, because the `.ts` sources are not
+ * shipped. Otherwise we are running from `src/` and register `tsx` exactly as before.
  */
-import { register } from 'tsx/esm/api';
+import { existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
-register();
-await import('./batch-worker-impl.ts');
+const built = new URL('./batch-worker-impl.js', import.meta.url);
+
+if (existsSync(fileURLToPath(built))) {
+  await import(built.href);
+} else {
+  const { register } = await import('tsx/esm/api');
+  register();
+  await import('./batch-worker-impl.ts');
+}

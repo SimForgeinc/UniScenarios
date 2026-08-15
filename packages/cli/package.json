@@ -24,7 +24,7 @@
     "bin"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/main.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "build": "tsup src/index.ts src/main.ts src/batch-worker-impl.ts src/catalog-batch-worker-impl.ts --format esm --dts --sourcemap --clean --out-dir dist && node scripts/copy-worker-shims.mjs",
     "prepack": "pnpm run build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

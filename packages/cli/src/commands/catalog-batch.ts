@@ -32,6 +32,7 @@ import { emit, emitLines } from '../output.js';
 import { CATALOG_EXACT_SITE_OPTIONS, matchOnMap } from '../sites.js';
 import { REPO_ROOT } from '../maps.js';
 import { readTemplate, readTraceFile, type InstanceFile } from '../template-io.js';
+import { workerShimUrl } from '../worker-shim.js';
 import type { EvaluateFilterMode } from './evaluate.js';
 
 export const CATALOG_EXECUTOR_VERSION = '1.0.1' as const;
@@ -810,7 +811,7 @@ function setCatalogStatus(
 }
 
 async function runWorker(templateFile: string, options: CellOptions, signal: AbortSignal): Promise<CellResult> {
-  const workerUrl = new URL('../catalog-batch-worker.mjs', import.meta.url);
+  const workerUrl = workerShimUrl('catalog-batch-worker.mjs', import.meta.url);
   return new Promise<CellResult>((resolve) => {
     const worker = new Worker(workerUrl, { workerData: { templateFile, options } });
     let settled = false;
