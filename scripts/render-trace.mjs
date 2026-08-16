@@ -15,6 +15,8 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { gunzipSync } from 'node:zlib';
 
+import { underlayFromTopology, underlaySvgLayers } from './render-trace-underlay-lib.mjs';
+
 const require = createRequire(import.meta.url);
 let sharp;
 try {
@@ -24,7 +26,7 @@ try {
 }
 
 function parseArgs(argv) {
-  const out = { times: null, width: 960, height: 600, scale: 8, fps: 2 };
+  const out = { times: null, width: 960, height: 600, scale: 8, fps: 2, devAssets: null, redact: false };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     const next = () => {
@@ -42,6 +44,8 @@ function parseArgs(argv) {
       out.height = h;
     } else if (a === '--scale') out.scale = Number(next());
     else if (a === '--fps') out.fps = Number(next());
+    else if (a === '--dev-assets') out.devAssets = next();
+    else if (a === '--redact') out.redact = true;
     else if (a === '--help') usage(0);
     else throw new Error(`unknown argument ${a}`);
   }
@@ -54,7 +58,7 @@ function parseArgs(argv) {
 
 function usage(code) {
   process.stderr.write(
-    'usage: node scripts/render-trace.mjs --instance <instance.json> --trace <trace.json.gz> --out <dir> [--times t0,t1,t2,t3] [--size 960x600] [--scale pxPerM] [--fps 2]\n',
+    'usage: node scripts/render-trace.mjs --instance <instance.json> --trace <trace.json.gz> --out <dir> [--times t0,t1,t2,t3] [--size 960x600] [--scale pxPerM] [--fps 2] [--dev-assets <root>] [--redact]\n',
   );
   process.exit(code);
 }
@@ -201,7 +205,7 @@ function actorStatic(instanceDoc) {
   return out;
 }
 
-function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, width, height, scale }) {
+function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, width, height, scale, underlay, redact }) {
   const dims = actorDims(instanceDoc);
   const staticIds = actorStatic(instanceDoc);
   const actorIds = sortedActorIdsFromTrace(trace);
@@ -218,6 +222,12 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     layers.push(`<line x1="0" y1="${y.toFixed(1)}" x2="${width}" y2="${y.toFixed(1)}"/>`);
   }
   layers.push(`</g>`);
+
+  // Lane/junction underlay so a vision judge sees roads, not boxes on a grid.
+  if (underlay) {
+    const project = (p) => pointToScreen(p, camera, scale, width, height);
+    layers.push(...underlaySvgLayers(underlay, { camera, scale, width, height }, project));
+  }
 
   // Recent trace paths around the incident, by actor id.
   const start = Math.max(0, index - 75);
@@ -236,8 +246,10 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     const c = { x: occ.obb.center.x, y: -occ.obb.center.z };
     const pts = obbCorners(c, occ.obb.headingRad, occ.obb.lengthM, occ.obb.widthM).map((p) => pointToScreen(p, camera, scale, width, height));
     layers.push(`<polygon points="${polygon(pts)}" fill="#9b6b2f" fill-opacity="0.28" stroke="#ffc166" stroke-width="2" stroke-dasharray="5 3"/>`);
-    const label = pointToScreen(c, camera, scale, width, height);
-    layers.push(`<text x="${label.x.toFixed(1)}" y="${label.y.toFixed(1)}" fill="#ffc166" font-family="monospace" font-size="13" text-anchor="middle">${esc(occ.id)}</text>`);
+    if (!redact) {
+      const label = pointToScreen(c, camera, scale, width, height);
+      layers.push(`<text x="${label.x.toFixed(1)}" y="${label.y.toFixed(1)}" fill="#ffc166" font-family="monospace" font-size="13" text-anchor="middle">${esc(occ.id)}</text>`);
+    }
   }
 
   for (const id of actorIds) {
@@ -249,23 +261,69 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
       const c = pointToScreen(p, camera, scale, width, height);
       layers.push(`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${Math.max(4, d.w * scale / 2).toFixed(1)}" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>`);
       layers.push(`<line x1="${c.x.toFixed(1)}" y1="${c.y.toFixed(1)}" x2="${(c.x + Math.cos(p.headingRad) * 10).toFixed(1)}" y2="${(c.y - Math.sin(p.headingRad) * 10).toFixed(1)}" stroke="#fff"/>`);
-      layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}</text>`);
+      if (!redact) layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}</text>`);
     } else {
       const pts = obbCorners(p, p.headingRad, d.l, d.w).map((q) => pointToScreen(q, camera, scale, width, height));
       layers.push(`<polygon points="${polygon(pts)}" fill="${color}" fill-opacity="0.9" stroke="#ffffff" stroke-width="1.5"/>`);
       const c = pointToScreen(p, camera, scale, width, height);
-      layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}${staticIds.has(id) ? ' (static)' : ''}</text>`);
+      if (!redact) layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}${staticIds.has(id) ? ' (static)' : ''}</text>`);
     }
   }
 
-  const r = trace.metrics?.revealToConflict;
-  const minTtc = trace.metrics?.minTTC;
   layers.push(`<g font-family="monospace" font-size="14" fill="#e7edf5">`);
-  layers.push(`<text x="18" y="26">${esc(trace.header.mapId)} frame ${frameNo} t=${frameTime.toFixed(3)}s camera=${camera.basis}</text>`);
-  layers.push(`<text x="18" y="46">actors=${actorIds.join(', ')} minTTC=${minTtc ? `${minTtc.value.toFixed(3)}s @ ${minTtc.t.toFixed(3)}s ${minTtc.pair.join('/')}` : '—'}</text>`);
-  layers.push(`<text x="18" y="66">reveal=${r ? `${r.value.toFixed(3)}s open=${r.losOpenT.toFixed(3)} conflict=${r.conflictT.toFixed(3)} occ=${r.occluderId ?? 'any'}` : '—'}</text>`);
+  if (redact) {
+    // The vision judge must not see gate metrics, ids, or camera provenance.
+    layers.push(`<text x="18" y="26">t=${frameTime.toFixed(3)}s</text>`);
+  } else {
+    const r = trace.metrics?.revealToConflict;
+    const minTtc = trace.metrics?.minTTC;
+    layers.push(`<text x="18" y="26">${esc(trace.header.mapId)} frame ${frameNo} t=${frameTime.toFixed(3)}s camera=${camera.basis}</text>`);
+    layers.push(`<text x="18" y="46">actors=${actorIds.join(', ')} minTTC=${minTtc ? `${minTtc.value.toFixed(3)}s @ ${minTtc.t.toFixed(3)}s ${minTtc.pair.join('/')}` : '—'}</text>`);
+    layers.push(`<text x="18" y="66">reveal=${r ? `${r.value.toFixed(3)}s open=${r.losOpenT.toFixed(3)} conflict=${r.conflictT.toFixed(3)} occ=${r.occluderId ?? 'any'}` : '—'}</text>`);
+  }
   layers.push(`</g>`);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${layers.join('\n')}</svg>`;
+}
+
+/**
+ * Load the map underlay for `mapId` from a dev-assets root. The topology index
+ * is required once the flag is given — a missing map is a hard error, because a
+ * judge-facing render silently missing its roads would poison verdicts. The
+ * derived locations file (crosswalk anchors) is optional.
+ */
+function loadUnderlayAssets(devAssetsRoot, mapId) {
+  const mapDir = resolve(devAssetsRoot, mapId);
+  const topologyPath = join(mapDir, 'topology-index.json.gz');
+  if (!existsSync(topologyPath)) {
+    throw new Error(`--dev-assets: ${topologyPath} does not exist for map "${mapId}"`);
+  }
+  const topologyBytes = readFileSync(topologyPath);
+  const topology = JSON.parse(gunzipSync(topologyBytes).toString('utf8'));
+  const locationsPath = join(mapDir, 'derived', 'locations.json.gz');
+  let locationsDoc = null;
+  let locationsSha256 = null;
+  if (existsSync(locationsPath)) {
+    const locationsBytes = readFileSync(locationsPath);
+    locationsDoc = JSON.parse(gunzipSync(locationsBytes).toString('utf8'));
+    locationsSha256 = sha256Bytes(locationsBytes);
+  }
+  const underlay = underlayFromTopology(topology, locationsDoc);
+  return {
+    underlay,
+    provenance: {
+      mapDir,
+      topologyFile: topologyPath,
+      topologySha256: sha256Bytes(topologyBytes),
+      topologyMapName: underlay.mapName,
+      locationsFile: locationsDoc ? locationsPath : null,
+      locationsSha256,
+      laneCount: underlay.lanes.length,
+      crosswalkCount: underlay.crosswalks.length,
+      // Crosswalk bands are anchor+heading approximations from derived
+      // locations, not surveyed outlines. Recorded so nobody mistakes them.
+      crosswalksApproximate: underlay.crosswalks.length > 0,
+    },
+  };
 }
 
 async function main() {
@@ -274,6 +332,7 @@ async function main() {
   mkdirSync(outDir, { recursive: true });
   const instanceDoc = JSON.parse(readFileSync(args.instance, 'utf8'));
   const { trace, canonicalBytes } = readTrace(args.trace);
+  const underlayAssets = args.devAssets ? loadUnderlayAssets(args.devAssets, trace.header.mapId) : null;
   const evidence = assertEvidence(instanceDoc, trace, canonicalBytes);
   const selectedTimes = (args.times ?? defaultFrameTimes(trace)).map((t) => trace.ticks.t[nearestIndex(trace.ticks.t, t)]);
   const framesDir = join(outDir, 'frames');
@@ -284,7 +343,7 @@ async function main() {
     const frameTime = selectedTimes[i];
     const index = nearestIndex(trace.ticks.t, frameTime);
     const camera = cameraFor(trace, index);
-    const svg = renderSvg({ instanceDoc, trace, index, frameNo: i, frameTime, camera, width: args.width, height: args.height, scale: args.scale });
+    const svg = renderSvg({ instanceDoc, trace, index, frameNo: i, frameTime, camera, width: args.width, height: args.height, scale: args.scale, underlay: underlayAssets?.underlay ?? null, redact: args.redact });
     const svgPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.svg`);
     const pngPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.png`);
     writeFileSync(svgPath, svg);
@@ -315,7 +374,9 @@ async function main() {
     manifestVersion: 1,
     generatedAt: null,
     deterministic: true,
-    renderer: 'scripts/render-trace.mjs@1',
+    renderer: 'scripts/render-trace.mjs@2',
+    redact: args.redact,
+    underlay: underlayAssets ? underlayAssets.provenance : null,
     scenarioId: instanceDoc.manifest?.replayKey?.templateId ?? null,
     instanceId: instanceDoc.manifest?.instanceId ?? null,
     mapId: trace.header.mapId,
