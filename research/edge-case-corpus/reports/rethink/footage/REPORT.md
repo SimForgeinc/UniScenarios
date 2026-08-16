@@ -303,6 +303,28 @@ p=0.012 paired), heavier densities trade plausibility for aliveness.
 **Cumulative: 2452 cells / 6306 verdicts / 31.13 M tokens**, gate-vs-judge AUC 0.615
 all-corpus (W7-only unchanged at chance), inter-model ρ 0.59-0.69.
 
+### Round 5 — EmergentLane h2 harvest (stage-1) + vista growth
+
+Resumed `judge --agree-every 1`: 2199 verdicts, 0 errors, 3223 s. **Harvest world-cells
+(dense ambient, no authored challenger; n=379 judged so far, sol/medium):**
+
+| profile | n | realism μ | dynamism μ/med | plausible |
+|---|---|---|---|---|
+| heavy16 | 132 | 5.51 | 5.36 / 6 | 0.55 |
+| aggr24-aggressive | 127 | 5.31 | 5.65 / 6 | 0.46 |
+| dense32-heterogeneous | 120 | 5.12 | 5.42 / 6 | 0.45 |
+
+Harvest scenes are the most ALIVE footage measured in the whole rethink (dynamism
+median 6 vs corpus-wide 3) at scripted-corpus realism (μ 5.1-5.5 vs W7 5.38), with
+plausibility ~0.5 (dense worlds read busier than believable to the judge about half
+the time). Emergence delivers aliveness; realism is not the casualty — plausibility is
+the axis to watch.
+
+**Cumulative: 3147 cells / 8505 verdicts / 41.97 M tokens, 0 judge errors across every
+round.** Gate-vs-judge AUC all-corpus 0.623 (W7-only unchanged at chance). Inter-model
+ρ: luna~sol 0.600, luna~terra 0.637, sol~terra 0.709. Still pending: FreeformLane
+freedom arm, EmergentLane h2 completion, vista tail — standing resumable procedure.
+
 
 ## Cost ledger (updated per stage)
 
@@ -319,4 +341,5 @@ all-corpus (W7-only unchanged at chance), inter-model ρ 0.59-0.69.
 | scaled round 2 (emergent) | 1488 judge | (cumulative below) | 2230 s |
 | scaled round 3 (freeform base) | 1572 judge | (cumulative below) | 1884 s |
 | scaled round 4 (pair1 full + vista) | 1884 judge | (cumulative below) | 2913 s |
-| **scaled cumulative** | **6306 judge** | **31,132,107 total** | — |
+| scaled round 5 (h2 + vista) | 2199 judge | (cumulative below) | 3223 s |
+| **scaled cumulative** | **8505 judge** | **41,970,384 total** | — |
