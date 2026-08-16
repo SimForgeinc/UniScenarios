@@ -65,6 +65,8 @@ def load_briefs(spec):
     corpus = json.load(open(os.path.join(ROOT, 'research', 'edge-case-corpus',
                                          'agent-authoring', 'brief-corpus-full.json')))
     byid = {b['id']: b for b in corpus['briefs']}
+    s = json.load(open(sample_path))
+    byid.update({b['id']: b for b in s['dev'] + s['owner']})
     out = []
     for bid in spec.split(','):
         bid = bid.strip()
