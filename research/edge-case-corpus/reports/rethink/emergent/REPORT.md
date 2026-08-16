@@ -117,13 +117,71 @@ Note: the shared briefs sample (CONTRACTS §5) governs brief-authoring arms; arm
 template re-run design per RETHINK-PLAN §3C ("N admitted W7 templates re-run with ambient
 on/off"), so it draws from the W7 template family, not the briefs sample.
 
-Main run (in flight, `emergent-pair` under hub): 18 templates × {off, light, city, heavy} ×
-3 maps × ≤3 sites × 3 draws, `--ambient-seed pairseed1`, settle 20 s (CLI default), plus a
-determinism re-run subset (first-ranked site per map, same coordinates ⇒ same cellSeed) per arm.
-Dynamism census: shared `tools/research/shared/dynamism_census.py` frozen at sha256
-`e22b25d73930804f08145db344a7f8751e2d2fbf3c8f25dba5de8975682f43c5`.
+Main run: 18 templates × {off, light, city, heavy}, `--ambient-seed pairseed1`, settle 20 s (CLI
+default). First 2 templates at 3 maps × ≤3 sites × 3 draws with per-arm determinism re-runs
+(`pair_arm.py … --max-sites 3 --draws 3 --rerun 9`, report `pair-report-stage1.json`); measured at
+~38 min/template that projected to 11 h, so the remaining 16 ran at `--max-sites 2 --draws 2
+--skip-determinism` (report `pair-report.json`). Both stages on the fixed build, gated per cell by
+the frozen gate. Dynamism census: shared `tools/research/shared/dynamism_census.py` frozen at
+sha256 `e22b25d73930804f08145db344a7f8751e2d2fbf3c8f25dba5de8975682f43c5`.
 
-*(results pending)*
+### Results (964 cells, 241 gated pairs per arm)
+
+**Gate survival (headline):**
+
+| arm | density veh/km | passed/cells | rate |
+|---|---|---|---|
+| off | 0 | 96/249 | **38.6%** |
+| light | 3 | 89/249 | **35.7%** |
+| city | 8 | 80/249 | **32.1%** |
+| heavy | 16 | 79/249 | **31.7%** |
+
+(249 = gated cells incl. no-trace errors; census rows = 241 cells/arm with traces. Aggregation:
+`python - <<merge stage1+stage2 pair-report jsons>>`, table in session log; per-template rows in
+`pair-report*.json`.)
+
+Ambient costs the gate 3–7 pp of survival — **no collapse** (falsifier "C5 rejects everything from
+ambient contacts": FALSE). Death-census movement off→heavy: `C5:collision-with-ambient` appears at
+17/20/20 cells (light/city/heavy; 6.8–8.0% of cells); `C5:trigger-never-fired` appears at city (8)
+— ambient-perturbed dynamics make scripted `when` triggers miss; C4 *drops* slightly under ambient
+(50→41/44/43) because traffic pressure creates genuine decel demand in cells that were C4-dead when
+empty. Ambient RESCUES some templates outright: c1-lead-hard-brake off 5/27 → 9/27 every ambient
+arm; c7-crest-occludes off 4/12 → light 7/12; c5-reversing-ped 8/12 → 9/12 (light/city).
+Direction is template-dependent and non-monotonic in density (c1-stop-and-go: 15/12/6/11).
+
+**Replay determinism: PASS.** 36/36 re-run traces byte-identical after decompression (9 per arm ×
+4 arms on c1-stop-and-go at 3 maps; `determinism` rows in `pair-report-stage1.json`), plus the
+CLI≡programmatic double-run (§1 fact 5) with identical traceDigest. Falsifier "ambient breaks
+replay determinism": FALSE.
+
+**Dynamism census delta (off → light/city/heavy, per-cell means, 241 cells/arm,
+`census-delta.json`):**
+
+| metric | off | light | city | heavy |
+|---|---|---|---|---|
+| actorsMoving | 1.74 | 10.93 | 20.69 | 26.89 |
+| interactingPairs (TTC<5s) | 1.12 | 20.74 | 56.08 | 90.96 |
+| hardBrakeEvents | 1.67 | 7.39 | 13.63 | 15.46 |
+| swerveEvents | 0.05 | 0.33 | 0.89 | 0.94 |
+| laneChangesExecuted | 0.07 | 0.08 | 0.10 | 0.07 |
+| authoredEventsFired | 2.74 | 2.75 | 2.76 | 2.73 |
+| speedVarianceEgoPath | 15.75 | 15.90 | 15.95 | 16.01 |
+
+The world comes alive (interaction density up ~80×, hard braking up ~9×) while authored
+choreography still fires identically (authoredEventsFired flat) and the ego's own speed profile is
+barely touched. Lane changes stay flat — ambient routes don't lane-change; that is an engine
+vocabulary gap worth naming for EngineLane, not a census artifact.
+
+**Footage judge (FootageLane, sol/medium, n=111–117/arm on the first 456 cells):** dynamism judged
+UP decisively in every ambient arm (Δ +1.9…+2.2; e.g. 96 up / 4 down at city); realism judged UP at
+light (Δ +0.31, sign-test p=0.007), flat at city/heavy with plausibility sliding 0.69→0.52 —
+the "identical sedans" monotony effect is real but shows as *no gain past light*, not a penalty.
+Falsifier "footage judge scores ambient scenes less realistic": FALSE (light arm is judged MORE
+realistic; details in FootageLane REPORT §5).
+
+**Cell artifacts:** 964 contract-§2 cell dirs at `/tmp/tgr-emergent-pair1/cells/` (announced;
+FootageLane judged 456, second round in flight).
+
 
 
 ## 3. Arm (ii) — emergent harvest (no scripted challenger)

@@ -10,6 +10,7 @@ Usage: census_delta.py <pair-out-dir> [--workers 6] [--out file.json]
 import argparse
 import hashlib
 import json
+import re
 import os
 import sys
 from concurrent.futures import ProcessPoolExecutor
@@ -24,11 +25,11 @@ ARMS = ('off', 'light', 'city', 'heavy')
 
 
 def cell_arm_tpl(cid):
-    # emergent-<runid>-<tpl>.<arm>-<map>-<site8>-<draw>
-    body = cid.split('-', 2)[2]
-    tpl_arm = body.split('-', 1)[0]
-    tpl, arm = tpl_arm.rsplit('.', 1)
-    return tpl, arm
+    # emergent-<runid>-<tpl>.<arm>-<map>-<site8>-<draw>; template ids contain hyphens
+    m = re.match(r'^emergent-[^-]+-(?P<tpl>.+)\.(?P<arm>off|light|city|heavy)-', cid)
+    if not m:
+        return None, None
+    return m.group('tpl'), m.group('arm')
 
 
 def one(args):
@@ -58,7 +59,9 @@ def main():
         for row in ex.map(one, jobs, chunksize=8):
             if row is None:
                 continue
-            tpl, arm = cell_arm_tpl(row['cell'])
+            tpl, arm = cell_arm_tpl(row["cell"])
+            if arm is None:
+                continue
             if arm not in by_arm:
                 continue
             by_arm[arm].append(row)
