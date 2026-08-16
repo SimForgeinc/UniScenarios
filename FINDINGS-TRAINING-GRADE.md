@@ -1045,3 +1045,35 @@ byte-comparing cells that produce no bytes. The `inputHash: true / traceDigest: 
 traceBytes: false` shape in prime's diff output is exactly `None == None` passing the first two
 checks on refused cells. The a2138927 change is a correct representation of the evidence a refusal
 actually has, and the 18/18 number may enter the scorecard.
+
+---
+
+## M10 — DEVIATION (labelled): W7 reaches gpt-5.6-luna over the omp auth-gateway backed by Codex OAuth
+
+**What the contract says.** `VISTA-LANE-BRIEF.md:17`:
+
+> Do not substitute another model. **Do not use a Codex OAuth token.**
+
+**What W7 actually did.** Every W7 authoring call, blind-judge call and corpus-layout call went to
+`gpt-5.6-luna` at reasoning effort `medium` — the exact model id and effort the contract names —
+through `OPENAI_BASE_URL=http://127.0.0.1:4141/v1`, the local omp auth-gateway, whose upstream
+credential is the broker's `openai-codex` (Codex OAuth) account. No raw OpenAI API key exists in
+this environment (`TG-BLOCK-1`, archived at
+`research/edge-case-corpus/reports/training-grade/W7-blocked-TG-BLOCK-1.json`).
+
+**Why this is an auth-path deviation and not a model substitution.** The request body pins
+`model: gpt-5.6-luna, reasoning.effort: medium` (`tools/vista/vlm.py`, unchanged except for
+reading `OPENAI_BASE_URL`, commit `279f4beb`); the gateway forwards to the same model family the
+contract requires. What is NOT proven: that the ChatGPT-backend path and the raw responses-API
+path layer system prompts identically. W7 exists to be a like-for-like comparison, so this
+unproven equivalence is stated here rather than assumed away.
+
+**Authorisation.** The human owner accepted this deviation knowingly, to unblock W7 after the
+lane sat blocked on `TG-BLOCK-1`. Recorded per that instruction.
+
+**Re-runnability.** If a raw `gpt-5.6-luna` key is issued later, re-running W7 is:
+`export OPENAI_API_KEY=<key>`, unset `OPENAI_BASE_URL`, re-run `tools/gates/author_llm.py`
+(frozen at sha256 `538200ab824701d0…`, manifest
+`research/edge-case-corpus/agent-authoring/W7-LLM-SURFACE-FROZEN.json`) on both splits and
+`tools/gates/judge_blind.py` on the reports. Any difference between that number and this one
+measures the auth path, not the algorithm.
