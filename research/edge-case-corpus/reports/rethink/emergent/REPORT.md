@@ -194,7 +194,65 @@ otherwise, evaluate, then gate with the frozen gate. The promoted run is a new d
 (the pair becomes mutually visible to conflict logic and metrics); yield is counted on the PROMOTED
 cell's gate verdict, cost on the full pipeline (world-runs + promotion re-runs).
 
+### Stage 1 results (648 world cells: 3 templates × 3 maps × 2 sites × 3 profiles × 12 seeds)
+
+Commands: `node tools/research/emergent/harvest.mjs plan --out /tmp/tgr-emergent-h2 --sites 2 --seeds 12`
+then `… run --shard i --shards 6` × 6 under hub; `harvest_mine.py /tmp/tgr-emergent-h2 --workers 6`;
+`promote_tagstrip.mjs --out … --max 12|24|84 --tier T1` (3 rounds; round 1 naive, rounds 2–3 with
+gate-aware selection measured off round-1 deaths); `harvest_gate.py raw|promoted /tmp/tgr-emergent-h2`.
+
+**Structural-fail demonstration (registered):** all **648/648 raw world cells fail the frozen gate
+with `clearanceM = None`** — ambient counterparts are gate-invisible (mining/raw-gate.json,
+`structuralFailConfirmed: true`). A raw ambient world can never pass; promotion is load-bearing.
+
+**Mining (pre-registered thresholds, reused miner sha in git at 58cb59a):** 29 808 near-critical
+events + 9 230 collision-bucket events from 648 cells (46/cell); T1 (gate-grade kinematics) 21 129;
+ego-involved 1 551; 284 distinct kinematic signatures. Category spectrum: C6 42.7%, C10 16.4%,
+C3 16.1%, C2 14.0%, C1-adjacent 5.4%, C1 3.6%, C9 1.3%, C11 0.4% — **8 categories, 4 above 5%:
+falsifier "spectrum collapse / rear-end soup" FALSE** (C1 total is 9%).
+
+**Tag-strip promotion → frozen gate:** 120 attempts (one per cell, severity-ordered), 41
+evaluation-accepts, **11 ADMITTED by the frozen gate** = **17.0 admitted / 1000 world-runs**
+(promotion budget deliberately capped; 468 cells still hold unpromoted eligible events — 17/1000 is
+a floor, not a ceiling). Falsifier "harvest yield ≈ 0": **FALSE** (PREREG F1 threshold ~1/1000).
+Admitted mechanisms: C10 oncoming-squeeze ×7, C6 cyclist-conflict ×3, C3 junction-crossing ×1;
+all three world templates and all three profiles are represented. Honest caveats: (a) one
+el-camino site (17dfd660) produces 5 of 11 admits — site concentration is real; (b) admitted cells
+are site-pinned instances; portability is NOT claimed (only re-cast templates could claim it).
+Promotion death census (120): C4 58 — the counterpart becomes mutually visible after tag-strip and
+the ego yields, dissolving the demand (this is the engine's authored-conflict governor working as
+designed; a per-actor policy hook would remove the need for relabeling — flagged to EngineLane);
+C5 29 (real collisions in the promoted world, incl. counterpart×ambient contacts that count once
+promoted); C2 19 (queue-adjacency at clip start; round-1 selection fixed most); C3 3.
+
+**Owner-list negotiation scenarios — do they appear organically? YES, in the mined set:**
+- *Unprotected left across dense traffic*: 325 ego-involved events in jL worlds (315
+  crossing/opposing); **2 admitted** through the frozen gate (jL.heavy16.s8 yale-street,
+  clearance 2.47 m TTC 1.86 s; jL.heavy16.s12 el-camino).
+- *Four-way-stop hesitation*: 8 913 yield-forced stops (5 744 in junction worlds, 159 ego-involved);
+  347 low-speed-both hesitation-deadlock proxies. None admitted — hesitation is low-speed, so C4
+  (demand) rejects it BY CONSTRUCTION: the frozen gate cannot certify a hesitation scenario. That is
+  an instrument statement, not an absence of the phenomenon.
+- *Zipper merge*: 2 934 same-direction lateral-convergence negotiation events (138 ego-involved) —
+  present, mostly ambient↔ambient; ml admits (5) are adjacent-lane/oncoming conflicts, not zippers.
+
+**Cost per admitted cell:** stage-1 world-runs mean 115 s/cell 1-proc (dense ambient + 20 s settle;
+vs ~0.3 core-s plain authored cells), promotions mean 24 s. Pipeline total ≈ 24 core-h → **≈ 2.2
+core-h per admitted cell** (11 admits), vs the authored path's ~35 s LLM per brief at ~0.75 DEV
+admission (≈ 47 s per admitted cell + trivial compute). **Harvest is ~2 orders of magnitude more
+compute-expensive per admitted cell** — but it buys mechanisms the authored path does not produce
+(multi-party oncoming squeezes, organic VRU conflicts, left-turn negotiation with real traffic),
+zero LLM tokens, and every admit carries a full living-traffic context that FootageLane scores as
+more dynamic. The honest framing: harvest is not an admission-rate engine; it is a mechanism-
+diversity engine whose per-cell cost is dominated by engine throughput (EngineLane's lane).
+
+### Stage 2 (depth, ≥50 seeds/config — in flight)
+
+Top-6 ego-productive configs (from stage-1 egoT1 counts), seeds 13–62 (→ 62 seeds/config total):
+jS.aggr24@el-camino/0345f435, ml.dense32@el-camino/228606bf, jS.aggr24@belmont/0516b055,
+jL.dense32@el-camino/024dbd44, jL.dense32@belmont/023f6c42, jS.dense32@yale/0123925723.
 *(results pending)*
+
 
 ## 4. Bonus probe — signal blackout
 
