@@ -70,6 +70,7 @@ Report as a per-cell row + per-arm aggregate. No metric added/removed after firs
 - Authoring & judging calls: codex pool via `OPENAI_BASE_URL=http://127.0.0.1:4141/v1` (gateway already running under hub as `auth-gateway`, `OPENAI_API_KEY=x` placeholder). Default author = `gpt-5.6-luna`/`medium`; deviations recorded in the report.
 - Vision: `assert_vision.py` per model per session, fatal on FAIL. Anthropic models never on an image path.
 - Owner wants codex quota SPENT. Don't ration; do record token/wall cost per arm.
+- **Owner amendment (2026-08-16): exercise different gpt-5.6 models AND efforts.** Authoring (A): pre-registered {luna,sol,terra}×{low,medium,high} grid on a fixed subset before the full run; selection rule declared before results. Judging (B): calibration AUC per model×effort; cheapest adequate judge scales. Cost recorded per arm everywhere.
 - Before blaming research for a failure: `omp usage` / gateway health (`hub logs auth-gateway`).
 
 ## 7. Engine/CLI facts every stream needs
