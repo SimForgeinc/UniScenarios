@@ -175,9 +175,9 @@ def all_cells(run):
     return cells
 
 
-def stage_judge(run, calib_run, workers, render_workers):
+def stage_judge(run, calib_run, workers, render_workers, agree_every=AGREE_EVERY):
     model, effort, strategy = chosen_judge(calib_run)
-    print(f'frozen judge: {model}/{effort} strategy={strategy}')
+    print(f'frozen judge: {model}/{effort} strategy={strategy} agreeEvery={agree_every}')
     cells = all_cells(run)
     # render whatever lacks a redacted render
     need = [c for c in cells if not os.path.isfile(
@@ -196,7 +196,7 @@ def stage_judge(run, calib_run, workers, render_workers):
     rng.shuffle(ordered)
     jobs = []
     for i, c in enumerate(ordered):
-        models = [model] if i % AGREE_EVERY else list(futil.MODELS)
+        models = [model] if i % agree_every else list(futil.MODELS)
         for m in models:
             if not os.path.isfile(os.path.join(c, f'review-{m}.json')):
                 jobs.append((c, m))
@@ -306,6 +306,8 @@ def main():
     ap.add_argument('--roots', nargs='*', default=[])
     ap.add_argument('--workers', type=int, default=12)
     ap.add_argument('--render-workers', type=int, default=4)
+    ap.add_argument('--agree-every', type=int, default=AGREE_EVERY,
+                    help='1 = all three models on every cell')
     args = ap.parse_args()
     for s in args.stages:
         if s == 'w7':
@@ -313,7 +315,8 @@ def main():
         elif s == 'roots':
             stage_roots(args.run, args.roots)
         elif s == 'judge':
-            stage_judge(args.run, args.calib, args.workers, min(args.render_workers, 4))
+            stage_judge(args.run, args.calib, args.workers, min(args.render_workers, 4),
+                        args.agree_every)
         elif s == 'analyze':
             stage_analyze(args.run, args.calib)
 

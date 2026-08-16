@@ -9,9 +9,9 @@ and the command is printed beside it.
 - `tools/tg-research/openvocab/harness.py` — **REUSED (adapted)** into
   `tools/research/freeform/harness.py`: per-brief loop (author → validate/site/gate
   repair → final), lane contract, engine plumbing and feedback text are its design;
-  changes are contract-driven only (frozen briefs-sample input, unified 3-round repair
-  budget, W7-convention final batch draws=10/max-sites=10, per-cell dynamism census,
-  rethink cell-artifact export, per-run model/effort for the grid).
+  changes are contract-driven only (frozen briefs-sample input, pooled repair budgets,
+  W7-convention final batch, per-cell dynamism census, rethink cell-artifact export,
+  per-run model/effort for the grid).
 - `tools/tg-research/openvocab/llm.py` — **REUSED verbatim** as
   `tools/research/freeform/llm.py` (per-call model/effort + usage capture; only the
   docstring changed).
@@ -19,7 +19,8 @@ and the command is printed beside it.
   `tools/research/freeform/VOCAB.md`: fixed the `signal:*.phase` value enum
   (`flashing_yellow_arrow`/`flashing_red_arrow` do not exist in SIGNAL_PHASES;
   `proceed`/`stop` are control-key-only), added the measured structure-inventory table
-  from `tools/gates/structure-inventory.json`.
+  from `tools/gates/structure-inventory.json`, added the exact-enum pitfall list from
+  pilot1.
 - `tools/tg-research/openvocab/census.py` — **SUPERSEDED** by
   `tools/research/shared/dynamism_census.py`: it measured an un-contracted metric set
   (verbsFired, unscriptedStops, …) per admitted brief; the shared census implements the
@@ -54,12 +55,13 @@ and the command is printed beside it.
    `set signal:*.phase`, `laneOffset` swerves, `changeLane`, ambient presets, weather).
    Context: `VOCAB.md` (schema digest + verified MAP/PHYSICS/GATE facts + structure
    inventory) + 2 gold templates (shape reference).
-2. Unified repair loop, budget **3** repair/revise calls total (RETHINK-PLAN §3A
-   "2–3 repair rounds"): `template validate` errors verbatim → repair; zero sites on
-   every map → site repair with per-map matcher failureSummary; probe batch
-   (draws=4, max-sites=4, all ready maps) → frozen tg_gate census per criterion +
-   refusal codes + raw-trace facts → revise. A repair that breaks validation at budget
-   exhaustion falls back to the last valid+sited template (recorded).
+2. Repair loop, three pooled budgets per brief (post-pilot1; see §4): schema repairs
+   ≤3 (`template validate` errors verbatim), site repairs ≤2 (zero sites on every map →
+   per-map matcher failureSummary), gate revises ≤3 (probe batch draws=4,
+   max-sites=2/map, all ready maps → frozen tg_gate census per criterion + refusal
+   codes with actionable hints + raw-trace facts). A repair that breaks validation or
+   loses all sites at budget exhaustion falls back to the last valid+sited template
+   (recorded).
 3. Final measured batch: **draws=10, max-sites=10, all ready maps** — exactly the
    frozen `author_llm.py` defaults, so the baseline arm is like-for-like.
 4. Frozen gate v2 on raw traces + portability (≥2 maps, ≥3 sites) decide admission;
@@ -84,14 +86,17 @@ Baseline cells are exported to the same cell contract (arm=`baseline`).
 
 **Model/effort grid (owner directive):** {gpt-5.6-luna, sol, terra} × {low, medium,
 high} on a fixed 15-brief subset of the frozen sample (9 DEV stratified by category +
-6 owner stratified by group, seed 20260817). Selection rule, declared before looking:
+6 owner stratified by group, seed 20260817). Grid arms run a reduced final (draws=6,
+max-sites=6; declared here before any arm ran) purely to bound wall time — selection is
+internal to the grid and all arms are identical; grid numbers are never pooled with
+main-arm numbers. Selection rule, declared before looking:
 
 1. higher admitted count on the subset;
 2. tie → higher mean `interactingPairs` over gate-passing cells (shared census);
 3. tie → lower total tokens.
 
-The winner authors the full 50-brief frozen sample. Per-arm tokens and wall time are
-recorded from the run reports (`usageTotal`, `wallSeconds`).
+The winner authors the full 50-brief frozen sample with the full protocol. Per-arm
+tokens and wall time are recorded from the run reports (`usageTotal`, `wallSeconds`).
 
 **Effort hypothesis (stated before running):** W8 (compiler surface, merged 2026-08-16)
 falsified "effort raises admission" — flat-to-down across 30 arms while reasoning
@@ -115,11 +120,48 @@ Any of these, measured honestly, kills or reshapes the stream.
 shared/dynamism_census.py) is printed by every run (`surfaceSha256`) and recorded here
 before the main arms; pilot may still change the surface, grid/main runs may not.
 
-## 4. Pilot — pending
+## 4. Pilot
 
 5 DEV briefs outside the frozen sample (avoiding VistaLane's shakedown set):
 `c3-ltap-ld, c2-weave, c5-bus-stop-emergence, c13b-preemption, c9b-spill`.
 Purpose: harness-level defects only (prompt/plumbing/feedback); no per-brief tuning.
+
+**pilot1** (luna/medium, surface 22b474ec6ab9fe55, interrupted at the 3600 s shell
+deadline with c9b-spill's final batch still running):
+`OPENAI_BASE_URL=http://127.0.0.1:4141/v1 OPENAI_API_KEY=x .venv/bin/python
+tools/research/freeform/harness.py --run-id pilot1 --pilot --model gpt-5.6-luna
+--effort medium --workers 5 --batch-concurrency 1 --keep-batches`
+→ 0/4 completed briefs admitted; c2-weave & c3-ltap-ld `template_invalid` after
+budget; c13b-preemption & c5-bus-stop-emergence reached the final with 90–102 feasible
+cells, 0 passing.
+
+Harness-level defects found and fixed (surface changed; new sha printed by pilot2):
+1. **Unified 3-call repair budget measured schema wrestling, not authoring** — c13b
+   burned 2 validate + 1 site repair and got ZERO gate-feedback revises, while its
+   template was mechanism-correct (mid-clip signal preemption via
+   `set signal:feature:…phase`, `arrival`-synced ambulance, param reaction delay) and
+   failed only on conflict geometry (C3 20/32) — exactly what a revise round fixes.
+   Re-read of RETHINK-PLAN §3A: a "repair round" is the full
+   validate→sites→probe→census→revise cycle. New budgets: schema repairs ≤3, site
+   repairs ≤2, gate revises ≤3, each its own pool.
+2. **Probe size**: max-sites is per map — 4/map gave 80-cell probes at ~8–11 s/cell
+   with ambient (measured from pilot batch summaries: 8.2–10.9 s/cell, conc 1).
+   Probe now max-sites=2/map (≤40 cells).
+3. **Refusal-code feedback**: `arrival_unconverged` (80/80 cells on c5's first probe)
+   and `signal_unbindable` now carry actionable hints in the revise prompt.
+4. **VOCAB gaps**: exact enums the validator rejected live (invariant `unit`
+   time|distance, leaf condition kinds, one-level logicals) added; both
+   `template_invalid` briefs died on exactly these.
+5. **Census**: spurious numpy divide warning silenced (semantics unchanged; masked
+   ticks were already excluded — `valid` requires closing > 0.05 m/s).
+6. **Ops**: long runs move under hub process supervision (pilot1 died to a shell
+   timeout, losing c9b-spill's final).
+
+Vocabulary use observed in pilot1 (recorded, not tuned): luna/medium chose ambient in
+3/5 briefs (light/moderate), signal-phase manipulation where the brief named it,
+arrival triggers, params; actor counts stayed small (2 roles typical).
+
+**pilot2** — pending (fixed surface, same 5 briefs).
 
 ## 5. Grid — pending
 

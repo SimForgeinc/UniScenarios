@@ -5,6 +5,11 @@ Arms: {gpt-5.6-luna, gpt-5.6-sol, gpt-5.6-terra} x {low, medium, high} on a fixe
 15-brief subset of the frozen sample (9 DEV + 6 owner, seeded, written once to
 grid-subset.json and never regenerated). Arms run sequentially; each arm uses the
 frozen harness with its default worker budget (<= 6 concurrent batch workers).
+Grid arms run a REDUCED final batch (draws=6, max-sites=6; declared here and in
+REPORT.md before any arm ran) purely to bound wall time: selection is internal to the
+grid, all arms identical. The winner reruns the FULL protocol (draws=10, max-sites=10)
+on the whole sample; grid numbers are never pooled with main-arm numbers.
+
 
 SELECTION RULE (declared before any grid arm ran; also in REPORT.md):
   1. higher admitted count on the 15-brief subset;
@@ -88,6 +93,7 @@ def main():
             cmd = [PY, os.path.join(HERE, 'harness.py'), '--run-id', run_id,
                    '--sample', 'all', '--only', ids, '--model', model,
                    '--effort', effort, '--arm', run_id,
+                   '--final-draws', '6', '--final-max-sites', '6',
                    '--workers', str(a.workers), '--batch-concurrency', '1']
             print('=== ARM %s ===' % run_id, flush=True)
             rc = subprocess.call(cmd, cwd=ROOT)

@@ -232,7 +232,8 @@ def _interacting_pairs(trace):
             valid = both & (closing > TTC_MIN_CLOSING)
             if not valid.any():
                 continue
-            ttc = np.maximum(dist - pad, 0.0) / closing
+            with np.errstate(divide='ignore', invalid='ignore'):
+                ttc = np.maximum(dist - pad, 0.0) / closing
             if bool((ttc[valid] < TTC_INTERACT_S).any()):
                 pairs.append((ids[i], ids[j]))
     return len(pairs), pairs

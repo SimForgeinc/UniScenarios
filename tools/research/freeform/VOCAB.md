@@ -358,6 +358,20 @@ motion verbs), `metric_subject_missing`, `anchor_unconstrained`, `non_portable_r
 `runway_insufficient` / `route_disconnected` (map-checked placement problems — move the
 pose or relax the anchor).
 
+EXACT ENUMS the validator rejects most often (get these right the first time):
+- `gap`/`headway` invariant `unit`: `"time"` or `"distance"` — nothing else (no "s",
+  no "seconds", no "m").
+- Condition `kind` is EXACTLY one of: distance | ttc | headway | reaches | speed |
+  signal | visible | detected | standstill | collision, or logical and | or | not over
+  those (ONE level deep; a logical inside a logical is invalid).
+- `dynamics` is REQUIRED on every speed/gap/changeLane/laneOffset interaction:
+  `{shape: step|linear|sinusoidal|cubic, constraint: rate|time|distance, value: <num>}`.
+- `signal:*.phase` values: green | yellow | red | flashing_yellow | flashing_red |
+  off | green_arrow | yellow_arrow | red_x (arrow-flashing variants DO NOT exist;
+  proceed/stop are control:-key only).
+- Every `when` trigger needs `byLatest`; every id must match
+  `^[A-Za-z][A-Za-z0-9_-]{0,63}$` and be declared before it is referenced.
+
 ## DESIGN DOCTRINE
 
 1. Express the brief's MECHANISM, not a lookalike: if the brief says "merge gap

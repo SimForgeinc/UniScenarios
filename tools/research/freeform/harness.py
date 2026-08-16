@@ -7,8 +7,8 @@ the rethink contracts; the per-brief loop, lane contract and engine plumbing are
 design. Differences, all contract-driven:
 
   * briefs come from the frozen tools/research/shared/briefs-sample.json (or --pilot);
-  * ONE unified repair budget: at most MAX_REPAIR_ROUNDS(=3) repair/revise LLM calls per
-    brief across validate/site/gate stages (RETHINK-PLAN 3A: "2-3 repair rounds");
+  * repair budgets: schema repairs <=3, site repairs <=2, gate-feedback revises <=3
+    (RETHINK-PLAN 3A "2-3 repair rounds" = full validate->sites->probe->revise cycles);
   * final batch matches the W7 baseline convention exactly (draws=10, max-sites=10);
   * every feasible final cell gets a dynamism census row (shared frozen instrument);
   * up to KEEP_CELLS cells per brief are exported to the rethink cell-artifact contract
@@ -49,8 +49,14 @@ PILOT_IDS = ('c3-ltap-ld', 'c2-weave', 'c5-bus-stop-emergence', 'c13b-preemption
              'c9b-spill')
 
 # Frozen protocol constants.
-MAX_REPAIR_ROUNDS = 3                     # unified budget: validate+site+revise calls
-PROBE_DRAWS, PROBE_MAX_SITES = 4, 4
+# Repair budgets (pilot1 finding: a unified 3-call budget was consumed by schema
+# wrestling before any engine feedback — c13b/c5 got 0 gate-revise rounds. "3 repair
+# rounds" = 3 full validate->sites->probe->census->revise cycles; schema/site repairs
+# are sub-steps with their own pools.)
+MAX_VALIDATE_REPAIRS = 3                  # schema-error fixes, total per brief
+MAX_SITE_REPAIRS = 2                      # zero-sites anchor rethinks, total per brief
+MAX_REVISES = 3                           # gate-feedback revision cycles
+PROBE_DRAWS, PROBE_MAX_SITES = 4, 2       # per-map site cap (pilot: 4/map = 80-cell probes)
 FINAL_DRAWS, FINAL_MAX_SITES = 10, 10     # = author_llm.py defaults (W7 baseline arm)
 KEEP_CELLS = 6                            # exported cell artifacts per brief
 # Ambient CPU policy (prior session, measured: uncapped 'moderate' = 20 actors,
@@ -298,6 +304,24 @@ def feedback_text(probe):
         lines.append('Engine refusals (no trace produced): %s — these cells never simulated; '
                      'change placement/anchor so the solver can place the scene.'
                      % json.dumps(rc))
+        hints = {
+            'arrival_unconverged': 'arrival_unconverged: the arrival solver could not '
+                'back-solve the start for the declared ttc/deltaT — lower the approach '
+                'speed, add requiredUpstreamRunwayM to the role, widen the ttc, or use a '
+                '`when` trigger instead.',
+            'signal_unbindable': 'signal_unbindable: that site\'s junction exposes no '
+                'controllable signal for the approach — require control:["signalized"] '
+                'on the junction feature so only signalized sites match.',
+            'spawn_overlap': 'spawn_overlap: two actors/props materialise on top of each '
+                'other — separate poses (dsM/laneOffset) or drop a repeat row.',
+            'unknown_site': 'unknown_site: the matcher offered a site the solver cannot '
+                'place — tighten the anchor (runway/lane clauses) so unusable sites stop '
+                'matching.',
+        }
+        for code in rc:
+            for k, h in hints.items():
+                if k in str(code):
+                    lines.append(h)
     advice = {
         'C1': 'C1 fails: the ego never really drives — raise its initialSpeedKph / runway.',
         'C2': 'C2 fails: closest approach or minTTC lands before warmup+0.5s — the conflict '
@@ -421,9 +445,11 @@ _print_lock = threading.Lock()
 
 class Author:
     def __init__(self, run_dir, runid, arm, model, effort, maps, concurrency,
-                 keep_batches=False):
+                 keep_batches=False, final_draws=FINAL_DRAWS,
+                 final_max_sites=FINAL_MAX_SITES):
         self.run_dir, self.runid, self.arm = run_dir, runid, arm
         self.model, self.effort = model, effort
+        self.final_draws, self.final_max_sites = final_draws, final_max_sites
         self.maps, self.concurrency = maps, concurrency
         self.keep_batches = keep_batches
         self.llm_dir = os.path.join(run_dir, 'llm')
@@ -447,8 +473,9 @@ class Author:
         os.makedirs(bdir, exist_ok=True)
         usage = {}
         trail = {'id': brief['id'], 'category': brief['category'], 'rounds': []}
-        repairs_used = 0          # unified budget across validate/site/revise
+        pools = {'validate': 0, 'site': 0, 'revise': 0}
         schema_error_rounds = 0
+        seq = [0]
 
         def emit(kind, prompt, tag):
             raw = self.call(brief, prompt, tag, usage)
@@ -461,10 +488,14 @@ class Author:
             return {'ambient': amb, 'settle': settle, 'note': note, 'template': t,
                     'path': path, 'errors': errors}
 
+        def tag(kind):
+            seq[0] += 1
+            return '%s%d' % (kind, seq[0])
+
         def fail(err, detail):
             return {**trail, 'admitted': False, 'error': err, 'detail': detail,
                     'usage': usage, 'wallS': round(time.time() - t0, 1),
-                    'repairRounds': repairs_used, 'schemaErrorRounds': schema_error_rounds}
+                    'repairPools': dict(pools), 'schemaErrorRounds': schema_error_rounds}
 
         # ---- author
         try:
@@ -472,68 +503,69 @@ class Author:
         except Exception as e:                                             # noqa: BLE001
             return fail('author_call_failed', str(e)[:300])
 
-        # ---- unified repair loop (validate -> sites -> probe), budget MAX_REPAIR_ROUNDS
-        probe, last_good, dead = None, None, None
-        while True:
+        def ensure_valid(cur):
+            """Schema-repair sub-loop drawing on the validate pool."""
+            nonlocal schema_error_rounds
+            while cur['errors'] and pools['validate'] < MAX_VALIDATE_REPAIRS:
+                pools['validate'] += 1
+                schema_error_rounds += 1
+                cur = emit('repair', REPAIR_PROMPT % (
+                    brief['category'], brief['brief'],
+                    json.dumps({'ambient': cur['ambient'], 'structureNote': cur['note'],
+                                'template': cur['template']}, indent=1),
+                    '\n'.join('- ' + e for e in cur['errors'])), tag('v'))
             if cur['errors']:
-                if repairs_used >= MAX_REPAIR_ROUNDS:
-                    schema_error_rounds += 1
+                schema_error_rounds += 1
+            return cur
+
+        # ---- validate -> sites -> probe/revise cycles
+        probe, last_good, dead = None, None, None
+        try:
+            cur = ensure_valid(cur)
+            while True:
+                if cur['errors']:
                     dead = ('template_invalid', cur['errors'][:8])
                     break
-                repairs_used += 1
-                schema_error_rounds += 1
-                try:
-                    cur = emit('repair', REPAIR_PROMPT % (
-                        brief['category'], brief['brief'],
-                        json.dumps({'ambient': cur['ambient'], 'structureNote': cur['note'],
-                                    'template': cur['template']}, indent=1),
-                        '\n'.join('- ' + e for e in cur['errors'])), 'rep%d' % repairs_used)
-                except Exception as e:                                     # noqa: BLE001
-                    return fail('repair_call_failed', str(e)[:300])
-                continue
 
-            total, with_sites, failures = match_sites(cur['path'], self.maps)
-            trail['rounds'][-1]['sitesMatched'] = total
-            if total == 0:
-                if repairs_used >= MAX_REPAIR_ROUNDS:
-                    dead = ('no_sites', dict(list(failures.items())[:5]))
-                    break
-                repairs_used += 1
-                try:
-                    cur = emit('site_repair', SITE_PROMPT % (
+                total, with_sites, failures = match_sites(cur['path'], self.maps)
+                trail['rounds'][-1]['sitesMatched'] = total
+                if total == 0:
+                    if pools['site'] >= MAX_SITE_REPAIRS:
+                        dead = ('no_sites', dict(list(failures.items())[:5]))
+                        break
+                    pools['site'] += 1
+                    cur = ensure_valid(emit('site_repair', SITE_PROMPT % (
                         brief['category'], brief['brief'],
                         json.dumps({'ambient': cur['ambient'], 'structureNote': cur['note'],
                                     'template': cur['template']}, indent=1),
                         '\n'.join('- %s: %s' % kv for kv in sorted(failures.items()))),
-                        'rep%d' % repairs_used)
-                except Exception as e:                                     # noqa: BLE001
-                    return fail('site_repair_call_failed', str(e)[:300])
-                continue
+                        tag('s')))
+                    continue
 
-            last_good = dict(cur)                 # validates AND matches >=1 site
-            probe_dir = os.path.join(bdir, 'probe-%d' % int(time.time() * 1000))
-            probe = run_and_gate(brief, cur['path'], probe_dir, self.maps, PROBE_DRAWS,
-                                 PROBE_MAX_SITES, self.concurrency,
-                                 cur['ambient'], cur['settle'])
-            trail['rounds'].append({'kind': 'probe', 'result': {
-                k: probe.get(k) for k in ('admitted', 'cells', 'feasibleCells',
-                                          'passingCells', 'maps', 'sites', 'firstFailure',
-                                          'refusalCodes', 'error')}})
-            fb = feedback_text(probe)
-            if not self.keep_batches:
-                shutil.rmtree(probe_dir, ignore_errors=True)
-            if probe.get('admitted') or repairs_used >= MAX_REPAIR_ROUNDS:
-                break
-            repairs_used += 1
-            try:
-                cur = emit('revise', REVISE_PROMPT % (
+                last_good = dict(cur)             # validates AND matches >=1 site
+                probe_dir = os.path.join(bdir, 'probe-%d' % int(time.time() * 1000))
+                probe = run_and_gate(brief, cur['path'], probe_dir, self.maps, PROBE_DRAWS,
+                                     PROBE_MAX_SITES, self.concurrency,
+                                     cur['ambient'], cur['settle'])
+                trail['rounds'].append({'kind': 'probe', 'result': {
+                    k: probe.get(k) for k in ('admitted', 'cells', 'feasibleCells',
+                                              'passingCells', 'maps', 'sites',
+                                              'firstFailure', 'refusalCodes', 'error')}})
+                fb = feedback_text(probe)
+                if not self.keep_batches:
+                    shutil.rmtree(probe_dir, ignore_errors=True)
+                if probe.get('admitted') or pools['revise'] >= MAX_REVISES:
+                    break
+                pools['revise'] += 1
+                cur = ensure_valid(emit('revise', REVISE_PROMPT % (
                     brief['category'], brief['brief'],
                     json.dumps({'ambient': cur['ambient'], 'structureNote': cur['note'],
-                                'template': cur['template']}, indent=1), fb),
-                    'rep%d' % repairs_used)
-            except Exception as e:                                         # noqa: BLE001
-                trail['rounds'].append({'kind': 'revise_failed', 'detail': str(e)[:200]})
-                break
+                                'template': cur['template']}, indent=1), fb), tag('r')))
+        except Exception as e:                                             # noqa: BLE001
+            if last_good is None:
+                return fail('llm_call_failed', str(e)[:300])
+            trail['rounds'].append({'kind': 'llm_call_failed', 'detail': str(e)[:200]})
+            cur, dead = last_good, None
 
         # A repair/revise that broke validation or lost every site at budget exhaustion:
         # fall back to the last template that validated and matched sites (recorded).
@@ -547,8 +579,8 @@ class Author:
 
         # ---- final measured batch (W7 convention)
         final_dir = os.path.join(bdir, 'final-%d' % int(time.time() * 1000))
-        final = run_and_gate(brief, cur['path'], final_dir, self.maps, FINAL_DRAWS,
-                             FINAL_MAX_SITES, self.concurrency,
+        final = run_and_gate(brief, cur['path'], final_dir, self.maps, self.final_draws,
+                             self.final_max_sites, self.concurrency,
                              cur['ambient'], cur['settle'])
         recs = final.pop('_recs', []) or []
 
@@ -572,7 +604,7 @@ class Author:
                'ambient': cur['ambient'], 'ambientSettleS': cur['settle'],
                'structureNote': cur['note'], 'templateSha256': tsha,
                'usage': usage, 'wallS': round(time.time() - t0, 1),
-               'repairRounds': repairs_used, 'schemaErrorRounds': schema_error_rounds,
+               'repairPools': dict(pools), 'schemaErrorRounds': schema_error_rounds,
                'cellsExported': exported,
                'censusAggAll': DC.aggregate(feas),
                'censusAggPassing': DC.aggregate([c for c in feas if c.get('pass')])}
@@ -636,6 +668,8 @@ def main():
     ap.add_argument('--arm', default=None, help='arm label for cell meta (default runid)')
     ap.add_argument('--workers', type=int, default=6)
     ap.add_argument('--batch-concurrency', type=int, default=1)
+    ap.add_argument('--final-draws', type=int, default=FINAL_DRAWS)
+    ap.add_argument('--final-max-sites', type=int, default=FINAL_MAX_SITES)
     ap.add_argument('--only')
     ap.add_argument('--limit', type=int)
     ap.add_argument('--min-maps', type=int, default=2)
@@ -674,11 +708,12 @@ def main():
 
     arm = a.arm or a.run_id
     author = Author(run_dir, a.run_id, arm, a.model, a.effort, maps,
-                    a.batch_concurrency, a.keep_batches)
+                    a.batch_concurrency, a.keep_batches,
+                    final_draws=a.final_draws, final_max_sites=a.final_max_sites)
     ssha = surface_sha()
     print('freeform authoring: %d briefs, model %s effort %s, maps=%d, probe=%d final=%d '
           'surfaceSha=%s' % (len(sel), a.model, a.effort, len(maps), PROBE_DRAWS,
-                             FINAL_DRAWS, ssha[:16]))
+                             a.final_draws, ssha[:16]))
 
     def run(b):
         try:
@@ -692,7 +727,7 @@ def main():
                   % ('ADM' if r.get('admitted') else '----', r['id'],
                      r.get('feasibleCells', 0) or 0, r.get('passingCells', 0) or 0,
                      r.get('maps', 0) or 0, r.get('sites', 0) or 0,
-                     r.get('ambient', '?'), r.get('repairRounds', 0),
+                     r.get('ambient', '?'), sum((r.get('repairPools') or {}).values()),
                      r.get('error', '')), flush=True)
         return r
 
@@ -740,8 +775,9 @@ def main():
            'gateHashBefore': hash_before, 'gateHashAfter': hash_after,
            'briefs': len(rows), 'admitted': admitted,
            'admissionRate': round(admitted / len(rows), 4) if rows else 0.0,
-           'probeDraws': PROBE_DRAWS, 'draws': FINAL_DRAWS, 'maxSites': FINAL_MAX_SITES,
-           'maxRepairRounds': MAX_REPAIR_ROUNDS, 'keepCells': KEEP_CELLS,
+           'probeDraws': PROBE_DRAWS, 'draws': a.final_draws, 'maxSites': a.final_max_sites,
+           'budgets': {'validate': MAX_VALIDATE_REPAIRS, 'site': MAX_SITE_REPAIRS,
+                       'revise': MAX_REVISES}, 'keepCells': KEEP_CELLS,
            'perCategory': dict(sorted(by_cat.items())),
            'categoriesCovered': sum(1 for c in by_cat.values() if c['admitted'] > 0),
            'firstFailureAcrossRejected': dict(sorted(fails.items(), key=lambda kv: -kv[1])),
