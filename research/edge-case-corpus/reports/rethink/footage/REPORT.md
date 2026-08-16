@@ -222,6 +222,16 @@ realism AUC gate-pass-vs-fail **0.465** (chance); inter-model Spearman n=316:
 luna~sol 0.638, luna~terra 0.713, sol~terra 0.749. Cumulative scaled-run cost
 4,575,010 tokens / 948 verdicts (mean 4826 tok, 11.7 s).
 
+### Instrument property: test-retest reliability (chosen judge)
+
+20 calibration cells (10/10 seeded) × 5 repeats × sol/medium/spread8 (100 verdicts,
+`/tmp/tgr-footage-calib1/retest-sol-medium.json`): within-cell realism SD mean **0.69**
+(median 0.71, worst 1.92; worst range 5 on one ambiguous cell); the boolean `plausible`
+flipped across repeats on **6/20** cells. AUC of the 5-repeat mean (0.82) ≈ single-shot
+AUC on the same cells (0.845): repeats do not buy separation. Read: single verdicts are
+fine for RANKING and population statistics; a single `plausible` bool or a hard per-cell
+threshold is noisy — consume realism as a score, not a verdict.
+
 Remaining rounds: EmergentLane paired-ambient cells (`/tmp/tgr-emergent-pair1/cells`,
 in flight, ~2-4 h) and harvest cells; FreeformLane freedom/baseline arms (announced as
 they land); VistaLane main run (progressive, ~6-10 h). Judge stage is resumable
