@@ -161,7 +161,40 @@ Vocabulary use observed in pilot1 (recorded, not tuned): luna/medium chose ambie
 3/5 briefs (light/moderate), signal-phase manipulation where the brief named it,
 arrival triggers, params; actor counts stayed small (2 roles typical).
 
-**pilot2** — pending (fixed surface, same 5 briefs).
+**pilot2** (luna/medium, surface 4d7a79b0c55628f6, budgets 3/2/3, probe 2/map;
+`ff-pilot2` under hub):
+`.venv/bin/python tools/research/freeform/harness.py --run-id pilot2 --pilot --model
+gpt-5.6-luna --effort medium --workers 5 --batch-concurrency 1`
+→ **0/5 admitted**, 612,918 tokens / 35 calls, wall 5,624 s. First-failures across
+rejected cells: C3 87, C1 80, C2 68, C5 39, C4 16; one template_invalid, one
+batch_failed (3400 s subprocess timeout — raised to 7200 s). Two more systematic
+authoring-failure modes diagnosed from kept cells (raw traces):
+- **Ambient smothers the ego**: c2-weave ego authored 60 kph realized mean 1.1 m/s
+  behind 8 `moderate` ambient actors → C1/C2 dead. VOCAB now states ambient is
+  physically real; C1 advice names the cause and egoVmax/egoDist are printed per cell.
+- **Challenger spawns inside 5 m**: c2-weave closest approach at t=0 with
+  `secondWeaver` → C2 unrecoverable. Feedback now prints `with=<actor>@t`; VOCAB
+  demands >15–20 m spawn separation.
+Signal channel verified end-to-end with a controlled probe (template with
+`set signal:feature:jx:ego.phase` flips on a yale-street signalized junction →
+`ticks.signals` records red→green→red→green, census `signalPhaseChanges`=4).
+
+**pilot3** (luna/medium, fixed surface, `ff-pilot3` under hub, 19 min):
+`.venv/bin/python tools/research/freeform/harness.py --run-id pilot3 --pilot --model
+gpt-5.6-luna --effort medium --workers 3 --batch-concurrency 1`
+→ **1/5 admitted** (c9b-spill: 17 passing cells, 3 maps / 4 sites), 572,461 tokens /
+32 calls, wall 1,136 s. c2-weave reached 14 passing cells but 1 map / 2 sites
+(portability short). The feedback loop demonstrably drives repair (c2-weave went from
+spawn-adjacent C2 death to passing cells across revisions). All five briefs chose
+`ambient: off` after the honesty warning — recorded; ambient use is the model's call
+and the census will price it. Remaining failures are authoring skill, not harness
+defects — surface is FROZEN for the measured arms:
+
+**FROZEN authoring surface sha256 =
+`c5fb6a8086f67d402cb149e7d846dbd6fbcd6b606e35b1f92d3da5ff271cfecb`**
+(VOCAB.md + harness.py + llm.py + shared/dynamism_census.py, commit 7cc25e0). Every
+run report prints it as `surfaceSha256`; grid and main arms must match it.
+
 
 ## 5. Grid — pending
 
