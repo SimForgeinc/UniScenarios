@@ -239,7 +239,22 @@ judged-realism claims from this arm must be externally validated (FootageLane).
 
 ### 5.3 Supplementary run: the 11 defect-affected owner briefs (harness v2)
 
-(running — `vista2-ownerfix`, `/tmp/tgr-vista-main2ownerfix/`)
+Command: `run_vista2.py --run-id main2ownerfix --briefs <the 11 ids> --model
+gpt-5.6-sol --effort high --budget 40 --guide /tmp/tgr-vista-main1/GUIDE.md`
+(continuation of main1's learning trajectory, labeled; harness v2
+`b08de7d453e6a944…`). 57 min, 10.4M input tokens.
+
+**9/11 admitted.** Mean 19 actions per admitted brief; `newly-painted-lanes` in 10
+actions / 87 s at 4 maps / 10 sites. Losses: `human-intentionally-confusing-an-av`
+(C4 demand never achieved) and `blind-crest-of-hill` (2 maps / 2 sites — one site
+short of portability; crest occlusion exists on too few mapped corridors).
+
+**Corrected owner-list picture: 18/20 admitted** (9/9 unaffected in main1 + 9/11
+here). Rows the compiler pipeline never reached — police manually directing traffic,
+double-parked negotiation, texting drift, freeway-shoulder reversing, snow-altered
+geometry — admitted portably. Combined sample admission, honestly labeled
+(39 briefs under v1 + 11 under v2): **36/50 = 0.72**.
+
 
 ### 5.4 Effort cell: sol/low, same 50 briefs
 
