@@ -1014,3 +1014,34 @@ Requiring upstream runway halves it — the ego spawns 70 m upstream and without
 matcher accepts sites with no road there, so the spawn is clamped (`ENDPOINT_CLAMP`). The remaining
 half is **not isolated**, and I am recording it rather than claiming a cause. It is the same family
 as the VISTA lane's open `DEFECT-instance-hash-mismatch.md`.
+
+---
+
+## M9 — the a2138927 determinism result, independently re-derived (harness handover: prime -> omp)
+
+The lane changed harnesses here (prime retired; see `/tmp/tg-lane/HANDOVER.md`). Commit `a2138927`
+was prime's last edit, committed unchanged: it changed `tools/gates/verify_replay.py` to compare
+solver **refusals** on status + error code instead of on `traceBytes`, raising the reported
+work-zone determinism from 3/18 to 18/18. Because that raises a number in lane-authored tooling the
+no-relaxation tripwire does not cover, it was re-derived independently before entering the
+scorecard.
+
+**Method** (`/tmp/tg-rederive/rederive_workzone_determinism.py`, report at
+`research/edge-case-corpus/reports/training-grade/W7-determinism-rederived.json`): does **not**
+import `verify_replay.py`; runs the workzone template for `c8-taper-merge` twice via the CLI into
+fresh dirs; compares the **entire per-cell result record** minus volatile fields (paths, timings)
+— strictly stronger than status+error-code — plus sha256 of the **decompressed** trace bytes; any
+cell with a trace in one run only is an immediate failure.
+
+```
+cells 60   asymmetricCells []
+tracePairs 15/15 bit-identical
+refusalPairs 45/45 fully identical (whole record)   refusalCodes {"closure_lane_too_narrow": 45}
+verdict DETERMINISTIC
+```
+
+**CONFIRMED.** The engine is deterministic on the work-zone family; the old 3/18 was an artifact of
+byte-comparing cells that produce no bytes. The `inputHash: true / traceDigest: true /
+traceBytes: false` shape in prime's diff output is exactly `None == None` passing the first two
+checks on refused cells. The a2138927 change is a correct representation of the evidence a refusal
+actually has, and the 18/18 number may enter the scorecard.
