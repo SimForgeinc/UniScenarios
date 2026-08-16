@@ -4,7 +4,7 @@ import httpx
 
 MODEL = 'gpt-5.6-luna'
 EFFORT = 'medium'
-URL = 'https://api.openai.com/v1/responses'
+URL = os.environ.get('OPENAI_BASE_URL', 'https://api.openai.com/v1').rstrip('/') + '/responses'
 
 
 def _content(prompt, images):
