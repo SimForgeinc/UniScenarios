@@ -82,6 +82,7 @@ import {
   solvePedestrianNearMiss,
   applyArrivalSolution,
   resolveArrivalTriggers,
+  resolveOverlappingControlLanes,
   buildOccluders,
   blockingOccluder,
   localFromScene,
@@ -4364,6 +4365,29 @@ class Materializer {
           };
         }
       }
+    }
+
+    // The engine applies `resolveOverlappingControlLanes` to whatever input it
+    // receives and hashes the REPAIRED document into `trace.header.inputHash`.
+    // Bake the same resolution here — after ambient placement, because ambient
+    // routes are exactly what introduces coincident control-lane traffic in
+    // practice — so the instance stays a fully resolved document and the
+    // evidence join (`manifest.inputHash` == `trace.header.inputHash`) holds.
+    // Idempotent on the engine side: every repaired binding is already present,
+    // so the engine repairs nothing and hashes the same bytes.
+    const controlResolution = resolveOverlappingControlLanes(
+      normalizeSimScenarioInput(input),
+      this.bundle.graph,
+    );
+    input = controlResolution.input;
+    for (const repair of controlResolution.repairs) {
+      issues.push({
+        code: 'traffic_control_binding_repaired',
+        path: `${repair.source}.${repair.controlId}`,
+        reason: `A coincident OpenDRIVE lane was bound to ${repair.routeRsl} so this route can obey the physical control. Choose an unambiguous lane when portability matters.`,
+        detail: { ...repair },
+        severity: 'warning',
+      });
     }
 
     const key: ReplayKey = {
