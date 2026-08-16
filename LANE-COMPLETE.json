@@ -1,0 +1,1033 @@
+{
+ "id": "training-grade-lane",
+ "status": "COMPLETE",
+ "writtenAt": "2026-08-16T08:51:51.235645+00:00",
+ "branch": "training-grade-lane",
+ "headCommitAtWrite": "eb7e48a21600a9fd532387805c1e5eea3fb28e2f",
+ "harnessHistory": "W1-W4, W6 and the M8 primary objective under prime (session 01a007ca); determinism re-derivation, W7 frozen run, judges and this marker under omp. Handover at /tmp/tg-lane/HANDOVER.md. Reopened for W8/W9 (owner-added, pre-registered by the supervising thread); both completed under omp.",
+ "scorecard": {
+  "W1_warmup_compensation": {
+   "verdict": "PASS",
+   "exitCriterion": "C2 share of failures < 0.10 on a fixed 200-cell probe; realised-vs-requested gap r > 0.9",
+   "measured": {
+    "c2Share": "0.4497 -> 0.0245",
+    "gapCorrelationR": 0.9853,
+    "medianGapErrorM": "15.556 -> 0.002"
+   }
+  },
+  "W2_verge_lateral_placement": {
+   "verdict": "PASS",
+   "exitCriterion": ">=50% occlusion proven on >=2 maps / >=3 sites for a C7 brief; >=5 C7 archetypes pass gate v2",
+   "measured": {
+    "provenShare": "0.56-0.84 on all five archetypes",
+    "portability": "5 maps / 23-30 sites",
+    "c7ArchetypesAdmitted": "5/5"
+   }
+  },
+  "W3_lane_closure": {
+   "verdict": "PASS (both criteria; second met in M7 after two self-found probe defects TG-P1/TG-P2)",
+   "exitCriterion": "0 ego-into-device contacts on a 40-cell probe; a work-zone archetype admitted on >=2 maps / >=3 sites",
+   "measured": {
+    "contacts": "0 on 100 cells, 100/100 with the ego driving",
+    "archetype": "23 admitted, 2 maps / 3 sites, 0 admitted cells with device contact"
+   }
+  },
+  "W4_mechanism_rubrics": {
+   "verdict": "PASS",
+   "exitCriterion": "<=20 rubrics, pre-registered by sha256 before solving; reject >=1 archetype the old 259 accepted",
+   "measured": {
+    "rubricFiles": 15,
+    "preRegisteredDrift": 0,
+    "newlyRejected": 28
+   }
+  },
+  "W5_solver_objective": {
+   "verdict": "NOT ATTEMPTED",
+   "reason": "forbidden pending human review; never begun"
+  },
+  "W6_feasibility_precheck": {
+   "verdict": "PASS",
+   "exitCriterion": "agreement >=0.85 with the blind plausibility measurement; ranked category gap list delivered",
+   "measured": {
+    "agreement": 0.8571,
+    "gapList": "48/208 briefs name a structure the five maps lack; C8.workzone 14/14, C12.school 12/12, C4.roundabout 10/10 infeasible; no corridor posted <=60 kph on any map"
+   }
+  },
+  "W7_frozen_run": {
+   "verdict": "COMPLETE",
+   "exitCriterion": "author DEV then HELDOUT once through a hash-frozen surface; report admissions, gap with p-value, per-category counts, replay determinism, blind judge, corpus-layout verdict",
+   "surface": {
+    "file": "tools/gates/author_llm.py",
+    "sha256": "538200ab824701d072402b993af6216e81c4d5502de50cc7b8bfd25aa8cfdebb",
+    "verifiedUnchangedAfterHeldout": true,
+    "manifest": "research/edge-case-corpus/agent-authoring/W7-LLM-SURFACE-FROZEN.json"
+   },
+   "model": {
+    "id": "gpt-5.6-luna",
+    "reasoningEffort": "medium"
+   },
+   "notComparableTo0466": "the round-6 tool surface is not on disk (12/16 ops reference undefined names; notebook-only runner); this is a REBUILT surface -- same model, effort, gate and split, different authoring vocabulary",
+   "deviation": {
+    "id": "M10",
+    "what": "gpt-5.6-luna reached over the omp auth-gateway (OPENAI_BASE_URL=http://127.0.0.1:4141/v1) backed by Codex OAuth, while VISTA-LANE-BRIEF.md:17 forbids a Codex OAuth token",
+    "character": "auth-path deviation, NOT a model substitution: model id and reasoning effort match the contract exactly; system-prompt equivalence between the two paths is not proven",
+    "authorisedBy": "human owner, knowingly, to unblock W7 after TG-BLOCK-1",
+    "reRunRecipe": "export a raw OPENAI_API_KEY, unset OPENAI_BASE_URL, re-run author_llm.py (frozen sha) on both splits and judge_blind.py"
+   }
+  },
+  "W8_model_effort_sweep": {
+   "verdict": "COMPLETE (30/30 arms)",
+   "exitCriterion": "pre-registered sweep: 6 models x 5 efforts on a fixed stratified n=20 sample, same pipeline, same frozen gate; report the 6x5 table and the three hypothesis verdicts",
+   "preRegistration": "research/edge-case-corpus/W8-MODEL-EFFORT-EXPERIMENT.md + AMENDMENT 1 + arm-count ratification 687a54ef (sixth model claude-sonnet-5)",
+   "ownerOverride": "single-model restriction (VISTA-LANE-BRIEF.md:17, vlm.py contract line) OVERRIDDEN BY OWNER DECISION; recorded in FINDINGS M13 as an owner decision, not a lane choice. W7 luna/medium kept as calibration.",
+   "deviation": "every arm reaches its model over the omp auth-gateway backed by Codex OAuth -- same labelled deviation as M10"
+  },
+  "W9_production_arm": {
+   "verdict": "COMPLETE",
+   "exitCriterion": "author full DEV and HELDOUT with the stage-1 W8 winner through the same unmodified frozen gate; report W7 and W9 side by side with delta, gap, p-value; a DEV-only win is overfitting and must be reported as such"
+  }
+ },
+ "frozenRun": {
+  "DEV": {
+   "admitted": 51,
+   "n": 73,
+   "rate": 0.6986
+  },
+  "HELDOUT": {
+   "admitted": 84,
+   "n": 135,
+   "rate": 0.6222,
+   "authoredOnce": true,
+   "perBriefTuning": "none"
+  },
+  "generalizationGap": 0.0764,
+  "pValue": 0.2705,
+  "perCategoryAdmitted": {
+   "C1.car-following": 14,
+   "C10.oncoming": 3,
+   "C11.parking": 7,
+   "C12.school": 11,
+   "C13.control": 3,
+   "C14.loss-of-control": 9,
+   "C15.adversarial": 10,
+   "C2.cut-in-merge": 13,
+   "C3.intersection": 7,
+   "C4.roundabout": 5,
+   "C5.pedestrian": 16,
+   "C6.cyclist-ptw": 10,
+   "C7.occlusion": 13,
+   "C8.workzone": 1,
+   "C9.hazard": 13
+  },
+  "perCategoryTotals": {
+   "C1.car-following": 14,
+   "C10.oncoming": 13,
+   "C11.parking": 13,
+   "C12.school": 12,
+   "C13.control": 14,
+   "C14.loss-of-control": 10,
+   "C15.adversarial": 13,
+   "C2.cut-in-merge": 15,
+   "C3.intersection": 21,
+   "C4.roundabout": 10,
+   "C5.pedestrian": 16,
+   "C6.cyclist-ptw": 15,
+   "C7.occlusion": 14,
+   "C8.workzone": 14,
+   "C9.hazard": 14
+  },
+  "categoriesCovered": 15,
+  "categoriesAtTarget6": 11,
+  "categoriesBelow4": {
+   "C8.workzone": 1,
+   "C10.oncoming": 3,
+   "C13.control": 3
+  },
+  "balanceTarget": ">=6 per category, none below 4: NOT MET -- the shortfall sits exactly on the W6 map-inventory gaps (no work-zone-ready corridor, no rail crossing, oncoming structurally weak)"
+ },
+ "replayDeterminism": {
+  "w7Corpus": "210/210 bit-identical: one authored template per family x 2 runs (crossing 30/30, junction 24/24, lateral 10/10, longitudinal 26/26, occluded 30/30, oncoming 30/30, parking 30/30, workzone 30/30)",
+  "a2138927Rederivation": {
+   "claim": "work-zone determinism 3/18 -> 18/18 after comparing refusals on status+error code",
+   "independentDerivation": "M9: fresh comparator (no verify_replay import), full result record minus volatile fields + decompressed trace bytes, 60 cells x 2 runs: 15/15 trace pairs bit-identical, 45/45 refusals identical on the whole record (closure_lane_too_narrow)",
+   "verdict": "CONFIRMED; admitted to this scorecard"
+  }
+ },
+ "blindJudge": {
+  "model": "gpt-5.6-luna, effort medium, outside the authoring loop, facts from the raw trace",
+  "n": 199,
+  "nAdmitted": 135,
+  "criticalAgreementAdmitted": 0.9185,
+  "categoryAgreement": 0.3065,
+  "categoryKappa": 0.2552,
+  "publishedBaselines": {
+   "criticalAgreement": 0.98,
+   "categoryAgreement": 0.384,
+   "kappa": 0.336
+  },
+  "axis3_mechanismProvenance_admitted": {
+   "yes": 0.4889,
+   "partial": 0.163,
+   "no": 0.3481,
+   "note": "the 0.348 no-share is a recorded negative: criticality is real more often than the NAMED mechanism is its cause, concentrated in categories whose structure the maps cannot host plus late-reaction longitudinal scenes"
+  },
+  "axis4_plausibility": {
+   "n": 208,
+   "plausibleShare": 0.9327,
+   "meanScore": 0.8482,
+   "admitted": {
+    "n": 135,
+    "plausibleShare": 0.9259,
+    "meanScore": 0.8379
+   },
+   "rejected": {
+    "n": 73,
+    "plausibleShare": 0.9452,
+    "meanScore": 0.8673
+   },
+   "sampling": "all 208 briefs, judged from the authored scene, gate-independent and balanced by construction"
+  }
+ },
+ "corpusLayoutJudge": {
+  "coverageVerdict": "inadequate",
+  "biggestGaps": [
+   "C8.workzone has only 1 admitted archetype, below both the minimum of 4 and the target of 6; the map inventory also has no work-zone-ready corridor.",
+   "C10.oncoming and C13.control each have only 3 admitted archetypes, violating the minimum of 4.",
+   "C4.roundabout has only 5 archetypes, below the target of 6, and none of the five maps contains a roundabout.",
+   "The no-school-zone and no-parking-aisle inventory limits make the stated multi-map, multi-site physical-gate requirement unattainable for those categories despite their reported counts."
+  ],
+  "fitForTrainingData": false,
+  "reasoning": "The corpus is structurally inadequate: four categories miss the target, and three of those also fall below the absolute minimum. Several reported admissions cannot satisfy the frozen physical gate across at least two maps and three sites because the required map features do not exist in the inventory. The DEV/HELDOUT rates and nonsignificant generalization gap do not compensate for these coverage and feasibility failures."
+ },
+ "priorResultsPreserved": {
+  "headlineNegative": "the published DEV baseline 0.466 does not survive a correct gate: re-gating rejects 15/98 archetypes (15/16 first failures C2); honest baseline DEV ~0.401 / HELDOUT ~0.341; cause TG-G1, an unsound cull still present in main's tools/vista/gate.py:206",
+  "primaryObjective": "MET at commit 4f358ebf: deterministic surface DEV 0.466 -> 0.7534, HELDOUT 0.6963, gap +0.057 (p=0.383)",
+  "representationDefectsFixed": [
+   "TG-B0 built CLI could not run batch",
+   "TG-A1 0-kph actor driven to 20 kph by warm-up (actor.static)",
+   "TG-A2 site-dependent dsM clamp (constant compensation)",
+   "B1 lane closure as first-class closures (contacts 45/60 -> 0/100)"
+  ],
+  "openDefect": "TG-H1 junction trace_input_hash_mismatch, halved by runwayUpstreamM>=110, remainder not isolated"
+ },
+ "gateIntegrity": {
+  "tripwire": "PASS on every continuation of both harnesses; frozen gate v1 1a08698e95fca4bc / v2 3823182614e5a5ba unchanged; proven to fire under code relaxation and manifest tamper",
+  "relaxations": "none; the only gate-adjacent changes were the TG-G1 correction (tightening) and the a2138927 refusal comparison in lane tooling, independently re-derived in M9"
+ },
+ "evidence": {
+  "findings": "FINDINGS-TRAINING-GRADE.md (M0-M11)",
+  "w7Reports": [
+   "research/edge-case-corpus/reports/training-grade/W7-luna-DEV.json",
+   "research/edge-case-corpus/reports/training-grade/W7-luna-HELDOUT.json",
+   "research/edge-case-corpus/reports/training-grade/W7-luna-combined-stats.json"
+  ],
+  "judgeReport": "research/edge-case-corpus/reports/training-grade/JUDGE-W7.json",
+  "determinismRederivation": "research/edge-case-corpus/reports/training-grade/W7-determinism-rederived.json",
+  "mapInventoryHandoff": "research/edge-case-corpus/reports/training-grade/W6-precheck.json"
+ },
+ "concurrentWork": {
+  "commits": [
+   "53559ccb W8 sweep pre-registration",
+   "5bcfb36d W8 amendment + W9 + vlm.py env overrides + assert_vision.py"
+  ],
+  "w7Impact": "NONE, verified (FINDINGS M12): vlm.py amendment defaults to gpt-5.6-luna/medium with VISTA_MODEL/VISTA_EFFORT unset; both W7 run reports self-record luna/medium at runtime; frozen manifest sha matches the file HELDOUT imported",
+  "scope": "W8/W9 are owner-initiated follow-on experiments pre-registered by a parallel thread; the W8 document states W7 is deliberately not part of it. Not claimed by this scorecard."
+ },
+ "W8": {
+  "sample": {
+   "seed": 8,
+   "n": 20,
+   "briefIds": [
+    "c1-lead-hard-brake",
+    "c1-stop-and-go",
+    "c10b-distracted-drift",
+    "c11-contested-spot",
+    "c12-stop-arm-bus",
+    "c13b-stop-sign-rolling",
+    "c14-friction-patch",
+    "c15-curb-standing",
+    "c2-cut-out-reveals",
+    "c2-lane-drop",
+    "c3-ltap-od",
+    "c3b-permissive-left",
+    "c4b-mini-roundabout",
+    "c5-adult-midblock",
+    "c5-multiple-threat",
+    "c6b-cargo-bike",
+    "c6b-cyclist-ahead-swerve",
+    "c7b-bus-shelter",
+    "c8-worker-intrusion",
+    "c9b-open-door-parked"
+   ],
+   "extraSlotCategories": [
+    "C3.intersection",
+    "C5.pedestrian",
+    "C2.cut-in-merge",
+    "C6.cyclist-ptw",
+    "C1.car-following"
+   ],
+   "determinismRepeatIds": [
+    "c1-lead-hard-brake",
+    "c1-stop-and-go",
+    "c10b-distracted-drift",
+    "c11-contested-spot",
+    "c12-stop-arm-bus"
+   ]
+  },
+  "gateHash": {
+   "beforeFirstArm": "PASS 1a08698e95fca4bc / 3823182614e5a5ba",
+   "afterLastArm": "PASS 1a08698e95fca4bc / 3823182614e5a5ba"
+  },
+  "admissionTable_raw_preRegisteredPrimary": {
+   "claude-fable-5": {
+    "low": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "medium": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "high": {
+     "admitted": 12,
+     "n": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ]
+    },
+    "xhigh": {
+     "admitted": 12,
+     "n": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ]
+    },
+    "max": {
+     "admitted": 14,
+     "n": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ]
+    }
+   },
+   "claude-opus-5": {
+    "low": {
+     "admitted": 1,
+     "n": 20,
+     "rate": 0.05,
+     "ci95": [
+      0.0089,
+      0.2361
+     ]
+    },
+    "medium": {
+     "admitted": 2,
+     "n": 20,
+     "rate": 0.1,
+     "ci95": [
+      0.0279,
+      0.301
+     ]
+    },
+    "high": {
+     "admitted": 9,
+     "n": 20,
+     "rate": 0.45,
+     "ci95": [
+      0.2582,
+      0.6579
+     ]
+    },
+    "xhigh": {
+     "admitted": 10,
+     "n": 20,
+     "rate": 0.5,
+     "ci95": [
+      0.2993,
+      0.7007
+     ]
+    },
+    "max": {
+     "admitted": 0,
+     "n": 20,
+     "rate": 0.0,
+     "ci95": [
+      0.0,
+      0.1611
+     ]
+    }
+   },
+   "claude-sonnet-5": {
+    "low": {
+     "admitted": 11,
+     "n": 20,
+     "rate": 0.55,
+     "ci95": [
+      0.3421,
+      0.7418
+     ]
+    },
+    "medium": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "high": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "xhigh": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "max": {
+     "admitted": 1,
+     "n": 20,
+     "rate": 0.05,
+     "ci95": [
+      0.0089,
+      0.2361
+     ]
+    }
+   },
+   "gpt-5.6-luna": {
+    "low": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "medium": {
+     "admitted": 14,
+     "n": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ]
+    },
+    "high": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "xhigh": {
+     "admitted": 12,
+     "n": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ]
+    },
+    "max": {
+     "admitted": 9,
+     "n": 20,
+     "rate": 0.45,
+     "ci95": [
+      0.2582,
+      0.6579
+     ]
+    }
+   },
+   "gpt-5.6-sol": {
+    "low": {
+     "admitted": 15,
+     "n": 20,
+     "rate": 0.75,
+     "ci95": [
+      0.5313,
+      0.8881
+     ]
+    },
+    "medium": {
+     "admitted": 14,
+     "n": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ]
+    },
+    "high": {
+     "admitted": 15,
+     "n": 20,
+     "rate": 0.75,
+     "ci95": [
+      0.5313,
+      0.8881
+     ]
+    },
+    "xhigh": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "max": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    }
+   },
+   "gpt-5.6-terra": {
+    "low": {
+     "admitted": 14,
+     "n": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ]
+    },
+    "medium": {
+     "admitted": 13,
+     "n": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ]
+    },
+    "high": {
+     "admitted": 14,
+     "n": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ]
+    },
+    "xhigh": {
+     "admitted": 12,
+     "n": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ]
+    },
+    "max": {
+     "admitted": 0,
+     "n": 20,
+     "rate": 0.0,
+     "ci95": [
+      0.0,
+      0.1611
+     ]
+    }
+   }
+  },
+  "admissionTable_amongUsableArtifacts": {
+   "claude-fable-5": {
+    "low": {
+     "admitted": 13,
+     "usableN": 17,
+     "rate": 0.7647,
+     "ci95": [
+      0.5274,
+      0.9044
+     ],
+     "tinyDenominator": false
+    },
+    "medium": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "high": {
+     "admitted": 12,
+     "usableN": 18,
+     "rate": 0.6667,
+     "ci95": [
+      0.4375,
+      0.8372
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 12,
+     "usableN": 17,
+     "rate": 0.7059,
+     "ci95": [
+      0.4687,
+      0.8672
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 14,
+     "usableN": 18,
+     "rate": 0.7778,
+     "ci95": [
+      0.5479,
+      0.91
+     ],
+     "tinyDenominator": false
+    }
+   },
+   "claude-opus-5": {
+    "low": {
+     "admitted": 1,
+     "usableN": 3,
+     "rate": 0.3333,
+     "ci95": [
+      0.0615,
+      0.7923
+     ],
+     "tinyDenominator": true
+    },
+    "medium": {
+     "admitted": 2,
+     "usableN": 3,
+     "rate": 0.6667,
+     "ci95": [
+      0.2077,
+      0.9385
+     ],
+     "tinyDenominator": true
+    },
+    "high": {
+     "admitted": 9,
+     "usableN": 11,
+     "rate": 0.8182,
+     "ci95": [
+      0.523,
+      0.9486
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 10,
+     "usableN": 14,
+     "rate": 0.7143,
+     "ci95": [
+      0.4535,
+      0.8828
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 0,
+     "usableN": 3,
+     "rate": 0.0,
+     "ci95": [
+      0.0,
+      0.5615
+     ],
+     "tinyDenominator": true
+    }
+   },
+   "claude-sonnet-5": {
+    "low": {
+     "admitted": 11,
+     "usableN": 20,
+     "rate": 0.55,
+     "ci95": [
+      0.3421,
+      0.7418
+     ],
+     "tinyDenominator": false
+    },
+    "medium": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "high": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 1,
+     "usableN": 1,
+     "rate": 1.0,
+     "ci95": [
+      0.2065,
+      1.0
+     ],
+     "tinyDenominator": true
+    }
+   },
+   "gpt-5.6-luna": {
+    "low": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "medium": {
+     "admitted": 14,
+     "usableN": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ],
+     "tinyDenominator": false
+    },
+    "high": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 12,
+     "usableN": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 9,
+     "usableN": 16,
+     "rate": 0.5625,
+     "ci95": [
+      0.3318,
+      0.769
+     ],
+     "tinyDenominator": false
+    }
+   },
+   "gpt-5.6-sol": {
+    "low": {
+     "admitted": 15,
+     "usableN": 20,
+     "rate": 0.75,
+     "ci95": [
+      0.5313,
+      0.8881
+     ],
+     "tinyDenominator": false
+    },
+    "medium": {
+     "admitted": 14,
+     "usableN": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ],
+     "tinyDenominator": false
+    },
+    "high": {
+     "admitted": 15,
+     "usableN": 20,
+     "rate": 0.75,
+     "ci95": [
+      0.5313,
+      0.8881
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    }
+   },
+   "gpt-5.6-terra": {
+    "low": {
+     "admitted": 14,
+     "usableN": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ],
+     "tinyDenominator": false
+    },
+    "medium": {
+     "admitted": 13,
+     "usableN": 20,
+     "rate": 0.65,
+     "ci95": [
+      0.4329,
+      0.8188
+     ],
+     "tinyDenominator": false
+    },
+    "high": {
+     "admitted": 14,
+     "usableN": 20,
+     "rate": 0.7,
+     "ci95": [
+      0.481,
+      0.8545
+     ],
+     "tinyDenominator": false
+    },
+    "xhigh": {
+     "admitted": 12,
+     "usableN": 20,
+     "rate": 0.6,
+     "ci95": [
+      0.3866,
+      0.7812
+     ],
+     "tinyDenominator": false
+    },
+    "max": {
+     "admitted": 0,
+     "usableN": 0,
+     "rate": null,
+     "ci95": [
+      0.0,
+      1.0
+     ],
+     "tinyDenominator": true
+    }
+   }
+  },
+  "metricLabels": {
+   "raw": "admitted/20; counts an author failure as a non-admission (production question)",
+   "usable": "admitted/(20 - authorErrors); quality question; tinyDenominator cells are not evidence"
+  },
+  "authorFailures": {
+   "gpt-5.6-luna": {
+    "failed": 4,
+    "attempts": 100
+   },
+   "gpt-5.6-sol": {
+    "failed": 0,
+    "attempts": 100
+   },
+   "gpt-5.6-terra": {
+    "failed": 20,
+    "attempts": 100
+   },
+   "claude-opus-5": {
+    "failed": 66,
+    "attempts": 100
+   },
+   "claude-fable-5": {
+    "failed": 10,
+    "attempts": 100
+   },
+   "claude-sonnet-5": {
+    "failed": 19,
+    "attempts": 100
+   }
+  },
+  "hypotheses": {
+   "H1_effortRaisesAdmissionMonotonically": {
+    "verdict": "FALSIFIED",
+    "evidence": "every clean-error-record model trends flat-to-down with effort (luna 0.65->0.56, sol 0.75->0.65, terra 0.70->0.60 among usable artifacts) while reasoning tokens rise ~17-30x; the only apparent rise (claude-opus-5) is its error rate falling on denominators of 3-14"
+   },
+   "H2_modelRankStableAcrossEffort": {
+    "verdict": "PARTIAL",
+    "evidence": "sol >= {terra, luna} at low/medium/high on both metrics and sol is never ranked worse than second, but all pairwise CIs overlap at n=20 and xhigh/max rankings are scrambled by reliability failures; supportable claim is \"sol is never worse\", not a stable total order"
+   },
+   "H3_effortHelpsSpatialCriteria": {
+    "verdict": "NOT SUPPORTED",
+    "evidence": "C2+C4 share of first failures by effort: 0.45, 0.46, 0.43, 0.42, 0.37 -- roughly flat; the drift at max coincides with the reliability collapse, not better spatial reasoning"
+   }
+  },
+  "unplannedFindings": {
+   "reliability": "Reliability, not quality, is the largest measured difference between models: sol completed 100/100 attempts; claude-opus-5 failed 66/100 (HTTP-level author_call_failed on codex arms, unhandled exceptions on Anthropic arms). Not a pre-registered hypothesis; reported as an unplanned finding.",
+   "authoringNondeterminism": "at fixed model+effort, 1/150 re-authored briefs produced an identical template and 20/150 flipped admission; engine replay of a fixed template remains bit-identical (M9/M11)"
+  },
+  "integrityNote": "research/edge-case-corpus/reports/training-grade/W8-ARM-INTEGRITY-NOTE.md -- 100/580 brief-attempts (17.2%) produced no artifact; raw table alone yields two false conclusions (terra/max 0.00 is 20/20 call failures, not quality; opus-5 effort curve is its error rate falling)",
+  "cost": {
+   "inputTokens": 1929842,
+   "outputTokens": 3529515,
+   "llmCalls": 1102,
+   "armWallSeconds": 27284
+  },
+  "report": "research/edge-case-corpus/reports/training-grade/W8-model-effort-sweep.json",
+  "armRecords": "research/edge-case-corpus/reports/training-grade/W8-arms/"
+ },
+ "W9": {
+  "selectedConfiguration": {
+   "model": "gpt-5.6-sol",
+   "reasoningEffort": "low"
+  },
+  "selectionRuleAsApplied": {
+   "primaryMetric": "raw gate admission / 20 (pre-registered; counts author failures as non-admissions)",
+   "topArm": {
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "rate": 0.75,
+    "ci95": [
+     0.5313,
+     0.8881
+    ],
+    "cost": 15877739.399999999
+   },
+   "literalCheapestOverlappingArm": {
+    "model": "claude-fable-5",
+    "effort": "low",
+    "rate": 0.65,
+    "cost": 15739308.0
+   },
+   "appliedRule": "top rate wins; exact rate ties -> cheaper; a CI-overlapping candidate displaces the top only when cheaper by more than 2x (beyond wall-clock co-tenancy noise). Stated before W9 ran.",
+   "costDefinition": "cost = (inputTokens + outputTokens) * arm wall seconds. Anthropic thinking tokens are folded into outputTokens by the gateway (they rise 9k->337k with effort), so families are comparable; wall seconds carry >40% co-tenancy noise, so sub-2x differences are not evidence.",
+   "note": "the literal cheapest-CI-overlapping reading names claude-fable-5/low (rate 0.65) on a 1.3% cost margin inside >40% wall-clock co-tenancy noise; disclosed and rejected rather than silently applied"
+  },
+  "surface": {
+   "file": "tools/gates/author_llm.py",
+   "sha256": "538200ab824701d072402b993af6216e81c4d5502de50cc7b8bfd25aa8cfdebb",
+   "verifiedByteIdenticalBeforeAndAfter": true
+  },
+  "DEV": {
+   "admitted": 54,
+   "n": 73,
+   "rate": 0.7397
+  },
+  "HELDOUT": {
+   "admitted": 92,
+   "n": 135,
+   "rate": 0.6815,
+   "authoredOnce": true,
+   "perBriefTuning": "none"
+  },
+  "generalizationGap": 0.0582,
+  "pValue": 0.3808,
+  "authorFailures": 0,
+  "perCategoryAdmitted": {
+   "C1.car-following": 14,
+   "C10.oncoming": 6,
+   "C11.parking": 11,
+   "C12.school": 12,
+   "C13.control": 2,
+   "C14.loss-of-control": 9,
+   "C15.adversarial": 11,
+   "C2.cut-in-merge": 13,
+   "C3.intersection": 3,
+   "C4.roundabout": 8,
+   "C5.pedestrian": 16,
+   "C6.cyclist-ptw": 13,
+   "C7.occlusion": 14,
+   "C8.workzone": 2,
+   "C9.hazard": 12
+  },
+  "w7VersusW9": {
+   "W7": {
+    "model": "gpt-5.6-luna",
+    "effort": "medium",
+    "DEV": 0.6986,
+    "HELDOUT": 0.6222,
+    "gap": 0.0764,
+    "gapP": 0.2705
+   },
+   "W9": {
+    "model": "gpt-5.6-sol",
+    "effort": "low",
+    "DEV": 0.7397,
+    "HELDOUT": 0.6815,
+    "gap": 0.0582,
+    "gapP": 0.3808
+   },
+   "deltaDEV": 0.0411,
+   "deltaDEVp": 0.5806,
+   "deltaHELDOUT": 0.0593,
+   "deltaHELDOUTp": 0.3068,
+   "verdict": "W9 is nominally ahead on BOTH splits and the improvement is larger on HELDOUT than DEV (no overfitting signature), but neither delta is statistically significant. Supportable claim: sol/low is at least as good as luna/medium, strictly more reliable (0/208 vs sweep 4+/100 author failures), and cheaper at low effort. The binding constraint remains the map inventory, not the authoring model."
+  },
+  "reports": [
+   "research/edge-case-corpus/reports/training-grade/W9-sol-low-DEV.json",
+   "research/edge-case-corpus/reports/training-grade/W9-sol-low-HELDOUT.json",
+   "research/edge-case-corpus/reports/training-grade/W9-sol-low-combined-stats.json"
+  ]
+ },
+ "visionGuard": {
+  "statement": "No W8/W9 path scores images: authoring is text-only (author_llm.py calls vlm.ask_json with no images) and the blind judge (M11) reads SYMBOLIC facts from the raw trace, not rendered rollouts. All judge results in this scorecard were produced by gpt-5.6-luna (4/4 on assert_vision probes). The Anthropic vision blindness (input_image silently dropped, 0/4 probes) therefore touches no number here; tools/gates/assert_vision.py remains mandatory before any future image-scoring run."
+ }
+}
