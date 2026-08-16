@@ -183,9 +183,24 @@ Text-only authoring — all verified live over the gateway:
 | `claude-opus-5` | anthropic-messages | **0/4** | text-only use ONLY |
 | `claude-fable-5` | anthropic-messages | **0/4** | text-only use ONLY |
 
-Add `claude-opus-5` to the sweep as a sixth model arm at each effort level, giving **6 × 5 = 30
-arms**. Authoring is text-only (`author_llm.py:538` calls `vlm.ask_json` with no images), so the
-vision defect does not affect authoring validity.
+**CORRECTION (same amendment, before any arm ran).** As first written this section said "a sixth
+model arm ... 6 x 5 = 30 arms" while the table above listed only five models. The arithmetic was
+wrong, not the table. The lane spotted the contradiction and resolved it by adding
+`claude-sonnet-5`, having verified it answers through the harness path. That resolution is
+**ratified here deliberately**, so the arm count is a fixed decision rather than an inference from a
+typo:
+
+**Pool = 6 models** — `gpt-5.6-luna`, `gpt-5.6-sol`, `gpt-5.6-terra`, `claude-opus-5`,
+`claude-fable-5`, `claude-sonnet-5` — **x 5 efforts = 30 arms.**
+
+Authoring is text-only (`author_llm.py:538` calls `vlm.ask_json` with no images), so the vision
+defect does not affect authoring validity for any of the six. `claude-sonnet-5` inherits the same
+vision prohibition as the other Anthropic models and must be re-probed with `assert_vision.py`
+before it is ever used on an image path.
+
+Note also, observed while preflighting: these models **confabulate their own identity** when asked,
+so a self-reported model name is not evidence of routing. Trust `omp dry-balance`, the gateway's
+`model` field in the response, and per-arm request logs instead.
 
 ## MANDATORY vision guard — do not skip this
 
