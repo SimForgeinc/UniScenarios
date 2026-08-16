@@ -212,6 +212,16 @@ spread), comfortably above chance.
 **Cost/cell:** mean 4806 tokens, 11.3 s latency per verdict; round-1 total 2.04 M tokens
 / 424 verdicts. At this rate ~2400 verdicts/hour/12-workers; quota is not a constraint.
 
+### Round 1b — full 3-model coverage + VistaLane main (progressive)
+
+`scale_run.py roots ... --roots /tmp/tgr-vista-main1/cells` (62 cells at registration;
+progressive) then `judge --agree-every 1` (all three models on every cell; owner wants
+quota spent, and it upgrades agreement from a subsample to the full corpus):
+**316 cells / 948 verdicts, 0 errors.** Findings hold at full coverage:
+realism AUC gate-pass-vs-fail **0.465** (chance); inter-model Spearman n=316:
+luna~sol 0.638, luna~terra 0.713, sol~terra 0.749. Cumulative scaled-run cost
+4,575,010 tokens / 948 verdicts (mean 4826 tok, 11.7 s).
+
 Remaining rounds: EmergentLane paired-ambient cells (`/tmp/tgr-emergent-pair1/cells`,
 in flight, ~2-4 h) and harvest cells; FreeformLane freedom/baseline arms (announced as
 they land); VistaLane main run (progressive, ~6-10 h). Judge stage is resumable
