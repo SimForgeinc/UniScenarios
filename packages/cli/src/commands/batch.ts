@@ -111,6 +111,7 @@ export async function batch(options: BatchOptions): Promise<number> {
           mapId: match.mapId,
           siteId: site.siteId,
           drawIndex: draw,
+          site,
           outDir: options.outDir,
           writeTrace: options.writeTrace,
           filter: options.filter,

@@ -9,6 +9,7 @@
 import path from 'node:path';
 
 import { runSimulation, traceDigest, type AmbientTrafficProfile, type SimTrace } from '@uniscenarios/sim-engine';
+import type { MatchedSite } from '@uniscenarios/anchor-matcher';
 import type { ScenarioTemplateV2 } from '@uniscenarios/scenario-model';
 import type { InstanceManifest } from '@uniscenarios/scenario-materializer';
 
@@ -86,6 +87,14 @@ export interface CellOptions extends CellCoords {
   readonly ambient?: AmbientTrafficProfile | undefined;
   /** Seconds of ambient-ONLY warm-up applied before `t = 0`. */
   readonly ambientSettleSeconds?: number | undefined;
+  /**
+   * The site exactly as the batch plan matched it. Structured-clone-safe plain
+   * data (crosses the `worker_threads` boundary). When present, the cell runs
+   * THIS site — nothing between plan and simulation re-derives it, so a
+   * worker's re-match can never refuse a planned coordinate (`unknown_site`)
+   * or silently disagree with the plan's `--min-score`/`--max-sites` policy.
+   */
+  readonly site?: MatchedSite | undefined;
 }
 
 export interface CellResult extends CellCoords {
@@ -189,8 +198,14 @@ export async function runCell(
     ...(options.catalogSlot === undefined ? {} : { catalogSlot: options.catalogSlot }),
   };
   try {
-    const { bundle, site } = await findSite(template, options.mapId, options.siteId,
-      options.exactCatalogSiteResolution ? { exactCatalogSiteResolution: true } : {});
+    // A plan-resolved site is authoritative: re-matching here (historically
+    // with DIFFERENT policy options than the plan) both duplicated the most
+    // expensive step in the pipeline and, under diversity selection, refused
+    // planned sites outright as `unknown_site`.
+    const { bundle, site } = options.site !== undefined
+      ? { bundle: await loadMap(options.mapId), site: options.site }
+      : await findSite(template, options.mapId, options.siteId,
+        options.exactCatalogSiteResolution ? { exactCatalogSiteResolution: true } : {});
     const { input, manifest } = materialize(template, bundle, site, {
       drawIndex: options.drawIndex,
       ...(options.seed === undefined ? {} : { seed: options.seed }),
