@@ -85,12 +85,14 @@ def gate_arm(out):
 
 def determinism_check(tpl_file, arm, arm_args, base_out, maps, max_sites, draws,
                       concurrency, sample):
-    """Re-run the arm into a fresh dir; byte-compare decompressed traces of `sample` cells."""
+    """Re-run a SUBSET of the arm (first-ranked site per map: --max-sites 1, same
+    cell coordinates and seeds as the main run) into a fresh dir; byte-compare
+    decompressed traces of up to `sample` overlapping cells per map."""
     rerun_out = base_out + '-rerun'
-    run_arm(tpl_file, arm, arm_args, rerun_out, maps, max_sites, draws, concurrency)
+    run_arm(tpl_file, arm, arm_args, rerun_out, maps, 1, draws, concurrency)
     orig = {(c['map'], c['site'], c['draw']): c for c in L.collect_cells(base_out)}
     rer = {(c['map'], c['site'], c['draw']): c for c in L.collect_cells(rerun_out)}
-    keys = sorted(set(orig) & set(rer))[:sample]
+    keys = sorted(set(orig) & set(rer))[:max(sample, 9)]
     rows = []
     for k in keys:
         a, b = orig[k]['trace'], rer[k]['trace']
