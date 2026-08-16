@@ -288,3 +288,124 @@ because `minTTC` legitimately occurs *before* the ego brakes in an approach-then
 Admission (`gate_cell.pass`) uses the **strict** reading — tightening, never loosening. The exit
 criterion above is quoted against the **published** reading, because that is what 29.3% was measured
 with; quoting the other would not be comparing like with like.
+
+---
+
+## M2 / W2 — lateral placement that can reach the verge: **EXIT CRITERION MET**
+
+### Result — fixed arm (W2 representation)
+
+| archetype | cells | proven (strict) | maps | sites | proven (gate-v2 statuses) | median occluder–VRU separation | gate-v2 admitted | maps/sites |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `c7-hedge-corner` | 180 | **0.73** | 5 | 30 | 1.00 | **1.4 m** | 40 | 5/14 |
+| `c7-parked-row-child` | 180 | **0.56** | 5 | 23 | 1.00 | **1.2 m** | 45 | 5/13 |
+| `c7-skip-container` | 180 | **0.84** | 5 | 30 | 1.00 | **1.1 m** | 33 | 5/14 |
+| `c7-bus-shelter` | 180 | **0.61** | 5 | 28 | 1.00 | **1.4 m** | 52 | 5/16 |
+| `c7-fence-run` | 180 | **0.82** | 5 | 30 | 0.99 | **1.4 m** | 35 | 5/14 |
+
+| exit criterion | required | measured | verdict |
+|---|---|---|---|
+| occlusion proven per C7 brief | >= 0.50 of cells | **0.56 – 0.84**, all five | **MET** |
+| on >= 2 maps and >= 3 sites | 2 / 3 | **5 maps, 23–30 sites**, all five | **MET** |
+| `occluderIneffective` empty | yes | yes on every proven cell | **MET** |
+| C7 archetypes passing gate v2 | >= 5 | **5 / 5**, all portable | **MET** |
+
+### Baseline arm — the same five archetypes without the metric lateral form
+
+| archetype | cells | proven (strict) | maps | sites | proven (gate-v2 statuses) | median occluder–VRU separation | gate-v2 admitted | maps/sites |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| `c7-hedge-corner` | 180 | **0.53** | 5 | 26 | 0.99 | **0.0 m** | 33 | 5/12 |
+| `c7-parked-row-child` | 180 | **0.47** | 5 | 24 | 1.00 | **0.0 m** | 24 | 4/9 |
+| `c7-skip-container` | 180 | **0.87** | 5 | 30 | 1.00 | **0.0 m** | 35 | 5/13 |
+| `c7-bus-shelter` | 180 | **0.59** | 5 | 27 | 1.00 | **0.0 m** | 23 | 5/12 |
+| `c7-fence-run` | 180 | **0.62** | 5 | 29 | 1.00 | **0.0 m** | 30 | 4/11 |
+
+**The number that matters is the separation column: 0.0 m.** With only `tFrac` available, the
+occluder and the VRU are authored at the same place — the pedestrian is standing *inside* the hedge.
+That is precisely the failure `OCCLUSION-FINDING.md` describes, now measured rather than inferred.
+The engine still reports the sight line as blocked, so the scenario *passes* the occlusion clause
+while being physically absurd. With `lateralM` + `lateralRef: 'verge'` the separation is
+**1.1 – 1.4 m**: the VRU stands behind the occluder, not in it.
+
+Admission improves too, at identical parameters: **23–35** admitted cells per archetype in the
+baseline arm against **33–52** in the fixed arm.
+
+Gates at this checkpoint: tripwire PASS · gate unit tests 8/8 · determinism **24/24 bit-identical**
+· C2 probe still **PASS** after the `packages/` change (C2 share 0.0245, r 0.9853).
+
+### The honest attribution: the declaration buys the proof, the lateral form buys the geometry
+
+Both arms declare `props[].occludes: {observer, target}`. That declaration is what produces
+`declaredOcclusion` **at all** — and the round-6 surface never emitted it. `RESULTS-round6.md`
+records `declaredOcclusion` EMPTY in 0/30 traces and attributes it to "no occlusion operation"; the
+schema field existed the whole time. So:
+
+* the **`occludes` declaration** is what makes occlusion provable (baseline reaches 0.47–0.87 too);
+* the **metric lateral form** is what makes the proven scene physical (0.0 m → 1.4 m separation) and
+  is what lifts admission.
+
+Claiming W2's schema change is what proved occlusion would be false, and it is not claimed here.
+
+### The change (general, with a failing test first)
+
+`packages/scenario-model/src/schema/v2/roles.ts` — `FramePoseSchema` gains
+
+```ts
+lateralM?: number | Expr          // metres, signed, positive to the left of travel
+lateralRef?: 'lane_centre' | 'lane_edge' | 'verge'
+```
+
+with a `superRefine` that rejects `lateralM` together with a non-zero `tFrac` (a pose has one
+lateral offset, not two), requires `lateralRef` whenever `lateralM` is given (a bare metre offset is
+not portable), and rejects a bare `lateralRef`.
+
+`packages/scenario-materializer/src/materialize.ts` — `resolveLateral()` and
+`carriagewayHalfWidth()`. `verge` measures from the far edge of the outermost same-direction lane,
+so it means the same thing on a one-lane street and a dual carriageway. Applied to **both** lateral
+paths — props *and* role spawns — so a VRU can start off-carriageway too, and to the prop `repeat`
+path, where fractional drift is converted to metres so a taper stays a taper off the carriageway.
+
+**Portability is preserved**: the reference is a named road feature, never a coordinate. "2.2 m
+beyond the verge" retargets across maps exactly as `tFrac` does.
+
+Failing test first — `packages/scenario-materializer/src/__tests__/verge-placement.test.ts`:
+`Tests 2 failed | 2 passed` before, **5 passed** after. It measures against a same-station datum so
+the assertion is about lateral placement, not about the road's curvature.
+
+### Regression evidence
+
+`scenario-model` **303/303**, `scenario-materializer` **81/81**, `sim-engine` **332 passed / 8
+skipped**, `pnpm --filter @uniscenarios/cli test:portable` **35/35**.
+
+The full `@uniscenarios/cli` suite reports **62 failed / 260 passed**. That is **pre-existing**, not
+caused here — measured by restoring `packages/scenario-model` and `packages/scenario-materializer`
+to the pre-W2 commit, rebuilding, and re-running:
+
+```
+FULL CLI SUITE @ HEAD (with W2)   Test Files 26 failed | 12 passed | 1 skipped (39)
+                                  Tests      62 failed | 260 passed | 1 skipped (323)
+FULL CLI SUITE @ baseline         Test Files 26 failed | 12 passed | 1 skipped (39)
+                                  Tests      62 failed | 260 passed | 1 skipped (323)
+```
+
+Identical. The repo's own `test:portable` subset is the sanctioned green set and it is green. **The
+brief's "unit tests: `pnpm test` exit 0" gate cannot be satisfied in this worktree for reasons that
+predate this lane**, and that is recorded here rather than worked around.
+
+### Note on `crossLeadS`, stated because it was chosen after looking
+
+`revealed_before_conflict` requires the sight line to open *before* the predicted conflict. If the
+VRU steps out too late it is still behind the occluder at the conflict instant, and no reveal can
+occur by construction. Measured sweep on `c7-hedge-corner`, all five maps:
+
+| `crossLeadS` band | revealed_before_conflict | gate-v2 admitted | median reveal-to-conflict |
+|---|---:|---:|---:|
+| [1.4, 3.4] | 0.45 | 24 / 180 | — |
+| [2.2, 4.2] | 0.47 | 14 / 120 | 2.02 s |
+| **[2.8, 4.8]** | **0.78** | 29 / 120 | 3.16 s |
+
+The frozen probe uses [2.8, 4.8] — **applied identically to both arms**, so the comparison is
+unaffected. At the earlier bands the strict clause was missed (0/5 archetypes at [1.4,3.4]); that
+result is reported above rather than deleted. The resulting reveal-to-conflict of ~3.2 s is
+*generous* compared with a Euro NCAP CPNCO obstructed-pedestrian test (~1–1.5 s), so these scenarios
+are easier than the standard, not harder — a limitation, recorded as such.

@@ -1752,6 +1752,8 @@ class Materializer {
     let route: Route | null = null;
     let spawnS = 0;
     let tFrac = 0;
+    /** Metric lateral offset when the pose used `lateralM`; null means "use tFrac". */
+    let lateralOverrideM: number | null = null;
     let headingOffset = 0;
     const boundedStraightContinuation =
       role.extensions?.['movementSemantics'] === 'same-approach-straight-kerb-edge';
@@ -1927,6 +1929,12 @@ class Materializer {
           });
         }
         tFrac = pose ? evalTFrac(pose.tFrac, scope, `${path}.pose.tFrac`, 0) : (binding.pose?.tFrac ?? 0);
+        // A role can also state its lateral offset in metres from a named reference. This is what
+        // lets a VRU START off the carriageway -- behind the hedge that is supposed to hide it --
+        // instead of on the lane edge, which is the furthest `tFrac` can reach.
+        lateralOverrideM = pose?.lateralM === undefined
+          ? null
+          : this.resolveLateral(pose, scope, `${path}.pose`, route.widthAt(spawnS) ?? this.referenceLaneWidth());
         headingOffset = pose?.headingOffsetRad ?? binding.pose?.headingOffsetRad ?? 0;
       }
     }
@@ -1977,7 +1985,7 @@ class Materializer {
     }
 
     const routePose = route.poseAt(spawnS);
-    const lateralM = tFrac * route.widthAt(spawnS);
+    const lateralM = lateralOverrideM ?? tFrac * route.widthAt(spawnS);
     const point = route.pointWithOffset(spawnS, lateralM);
     const scene = toSceneXZ(point);
     const hasAuthoredDeparture = this.template.choreography.interactions.some(
