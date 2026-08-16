@@ -230,3 +230,37 @@ appears in vista-corpus `c3-ev-crossing` with `value: true` (not in the enum) �
 `examples/edge-cases` 02/03/12 and new freeform-authored EV cells will light up. Reported to
 FootageLane (with a correction to my initial too-strong "zero corpus usage" claim).
 
+---
+
+## 6. Per-actor policy hook design note (RETHINK-PLAN §3D item 4) — GO received, note delivered
+
+Condition: "if EmergentLane's harvest shows promise." EmergentLane issued an explicit GO over
+hub (2026-08-16, per their PREREG F1) on interim numbers: ≈7.7 admitted/1000 world-runs through
+the frozen gate (3/36 promotion attempts, budget unexhausted), 8-category mechanism spectrum
+with no rear-end collapse, one owner-list left-turn-across-traffic admission. Their dominant
+promotion failure (C4 dissolution — reactive ego dissolves the promoted conflict) is precisely
+the seam the hook controls.
+
+**Deliverable:** `DESIGN-policy-hook.md` (this directory) — design ONLY, no implementation.
+Policies as deterministic default-slot owners under the existing one-axis-one-owner contract
+(`interaction > policy > built-in law`, all capped by `governorCap`), observation struct from
+state the engine already computes, replay determinism by the same argument as existing driver
+diversity, cost ~300-400 engine lines + pass-through schema fields, with pre-registered
+falsifiers (policy diversity must out-yield scalar diversity sweeps; no-policy byte-identity
+must hold).
+
+---
+
+## Session close
+
+- Gate tripwire: PASS at session start and after final commit (v1 `1a08698e95fca4bc` /
+  v2 `3823182614e5a5ba` unchanged).
+- All commits `rethink(engine):` on `tg-rethink` (branch moved from `training-grade-lane` by
+  lead mid-session), pushed: underlay `8acd6e5`, evidence-join `b511f7c`, glyphs `194fc1f`,
+  unknown_site `6dc8e5f`, vocabulary `ec46376`, reports `0dda40f` + final.
+- Hub requests served: FootageLane (underlay, redact, glyph legend — unblocked their
+  calibration), EmergentLane (evidence-join fix — confirmed on their side), VistaLane
+  (worktree unblock).
+- Run dirs `/tmp/tgr-engine-r1..r4` retain only cited artifacts; bulky batch outputs deleted
+  below.
+
