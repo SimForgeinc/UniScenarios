@@ -1,7 +1,8 @@
 # FINDINGS — training-grade lane
 
-> **Scorecard.** W1 **PASS** · W2 **PASS** · W3 **SPLIT** (contact criterion met, archetype admission not) ·
-> W4 **PASS** · W5 **not attempted, forbidden** · W6 **PASS** · W7 **BLOCKED on credentials**, deterministic half run.
+> **Scorecard.** W1 **PASS** · W2 **PASS** · W3 **PASS** (both criteria, see M7) · W4 **PASS** ·
+> W5 **not attempted, forbidden** · W6 **PASS** · W7 **COMPLETE** (M11: luna DEV 0.6986 /
+> HELDOUT 0.6222, gap +0.076 p=0.27, via the labelled M10 auth-path deviation).
 >
 > **The headline negative:** the published DEV baseline of 0.466 does not survive a correct gate.
 > Re-gating the published corpus with the TG-G1 correction rejects **15 of 98 archetypes**, 15 of the
@@ -1077,3 +1078,105 @@ lane sat blocked on `TG-BLOCK-1`. Recorded per that instruction.
 `research/edge-case-corpus/agent-authoring/W7-LLM-SURFACE-FROZEN.json`) on both splits and
 `tools/gates/judge_blind.py` on the reports. Any difference between that number and this one
 measures the auth path, not the algorithm.
+
+---
+
+## M11 / W7 — the frozen LLM run is COMPLETE: gpt-5.6-luna authors DEV 0.6986 / HELDOUT 0.6222
+
+W7's outstanding half — authoring through the contract model — ran end to end once `TG-BLOCK-1`
+was resolved by the auth-gateway (M10 records the labelled deviation). The round-6 surface is not
+on disk (M0.5), so per the archived blocker's `nextAction` the surface was **rebuilt**:
+`tools/gates/author_llm.py`, frozen at sha256 `538200ab824701d0…`
+(`agent-authoring/W7-LLM-SURFACE-FROZEN.json`), verified byte-identical after HELDOUT.
+
+**What the LLM owns:** the per-brief authoring decisions — mechanism family, actors and catalogs,
+gap/timing windows, occluder choice, junction control, works geometry — as one bounded JSON per
+round, two solve rounds against real engine feedback (probe draws=4, fed the measured
+per-criterion census and solver refusal codes), final measured batch at draws=10.
+**What the compiler owns:** only the representation fixes (W1 compensation as a constant,
+`actor.static`, `lateralM`/verge, `closures`, governor-on with late release) and clamping into
+pre-registered physical bounds. The frozen gate v2 and rubrics stay outside the loop.
+
+### The frozen numbers
+
+| | admitted | rate |
+|---|---:|---:|
+| **DEV** (surface developed here, frozen before HELDOUT) | **51 / 73** | **0.6986** |
+| **HELDOUT** (authored ONCE, zero per-brief tuning) | **84 / 135** | **0.6222** |
+| TOTAL | 135 / 208 | 0.6490 |
+| generalization gap | | **+0.0764, p = 0.2705** |
+
+| reference (same model id + effort) | DEV | HELDOUT |
+|---|---:|---:|
+| published round-6 surface (gate v2) | 0.466 | 0.407 |
+| the same after the TG-G1 correction | 0.401 | 0.341 |
+| deterministic surface (M8, no LLM) | 0.7534 | 0.6963 |
+| **this run** | **0.6986** | **0.6222** |
+
+**Stated plainly:** this is NOT like-for-like against 0.466 — the authoring vocabulary is rebuilt,
+not recovered. What the comparison across the four rows does support: with the representation
+fixes in place, luna lands near the deterministic surface, which is more evidence for M8's
+conclusion that **the ceiling was never the authoring model** — and none of it came from relaxing
+anything (tripwire PASS on every continuation).
+
+### Per-category (both splits): 15/15 covered, 11/15 reach 6, three below 4
+
+| category | admitted | | category | admitted |
+|---|---|---|---|---|
+| C1.car-following | 14/14 | | C9.hazard | 13/14 |
+| C2.cut-in-merge | 13/15 | | C10.oncoming | **3/13** |
+| C3.intersection | 7/21 | | C11.parking | 7/13 |
+| C4.roundabout | 5/10 | | C12.school | 11/12 |
+| C5.pedestrian | 16/16 | | **C13.control** | **3/14** |
+| C6.cyclist-ptw | 10/15 | | C14.loss-of-control | 9/10 |
+| C7.occlusion | 13/14 | | C15.adversarial | 10/13 |
+| **C8.workzone** | **1/14** | | | |
+
+C8's 1/14 is honest, not a surface bug: every workzone-family cell is refused
+`closure_lane_too_narrow` / `closure_exceeds_route` — the mechanical face of W6's
+`work_zone_suitable: 0 sites`. Luna kept the true-to-brief closure mechanism rather than
+recategorising work zones as cut-ins; the one admit (`c8b-mobile-works`) is a mobile-works convoy
+authored as a slow lead, which is that brief's actual mechanism. C10/C13 weakness matches both
+prior surfaces (deterministic 5/13 and 2/14; round-6 similar).
+
+### Replay determinism at corpus scale
+
+One authored template per family, run twice through `verify_replay.py` (independently re-derived
+in M9): **210/210 bit-identical** — crossing 30/30, junction 24/24, lateral 10/10, longitudinal
+26/26, occluded 30/30, oncoming 30/30, parking 30/30, workzone 30/30.
+
+### Blind per-scenario judge (gpt-5.6-luna, medium; outside the loop; facts from the raw trace)
+
+`tools/gates/judge_blind.py`, report `reports/training-grade/JUDGE-W7.json`, n=199 archetypes
+with traces (135 admitted):
+
+| measure | this corpus | published baseline |
+|---|---:|---:|
+| is a critical edge case (admitted) | **0.9185** | 0.980 |
+| category agreement | 0.3065 | 0.384 |
+| category kappa | 0.2552 | 0.336 |
+
+**Axis 3 — mechanism provenance** (told the brief, judged against trace facts; physics overrides
+the model on occlusion): among admitted archetypes **yes 0.4889 / partial 0.1630 / no 0.3481**.
+The no-share is a real negative and is recorded as such: its mass sits in categories whose named
+structure the maps cannot host (rail crossings, roundabouts, school zones authored as their
+nearest hostable mechanism) plus late-reaction longitudinal encounters that read as plain
+rear-ends. The corpus admits scenes whose *criticality* is real (0.9185) more reliably than
+scenes whose *named mechanism* is the cause.
+
+**Axis 4 — situational plausibility** (gate-independent by construction: judged from the authored
+scene for all 208 briefs, so sampling is balanced): plausible share **0.9327**, mean score
+**0.8482**; admitted 0.9259 / 0.8379 vs rejected 0.9452 / 0.8673 — no plausibility-for-admission
+trade is visible.
+
+### Corpus-layout judge: **inadequate / fitForTrainingData FALSE — again, and again on balance**
+
+> biggest gaps: C8.workzone 1 (< 4, no work-zone-ready corridor in the inventory) ·
+> C10.oncoming 3 and C13.control 3 (< 4) · C4.roundabout 5 (< 6, no roundabout on any map)
+
+Every round of this project has returned the same verdict for the same reason: **balance, not
+quality** — and the missing categories are exactly the ones the W6 gap list hands to the
+map-authoring dependency. This corpus does not change that, and saying so is the honest result.
+
+Gate battery at this checkpoint: tripwire **PASS**, gate tests **PASS**, `cli` typecheck exit 0,
+determinism 210/210, surface hash unchanged after HELDOUT.
