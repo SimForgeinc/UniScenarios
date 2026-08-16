@@ -133,3 +133,92 @@ Every W8 arm reaches the models over the omp auth-gateway backed by **Codex OAut
 `VISTA-LANE-BRIEF.md:17` tells the lane not to use. The owner accepted this knowingly. Record it
 once in the W8 section as the same labelled deviation noted for W7, so the numbers stay honest and
 re-runnable if raw API keys turn up.
+
+---
+
+# AMENDMENT 1 — the model restriction is relaxed; W9 production arm added
+
+Added 2026-08-15 ~20:45 PDT on the owner's explicit instruction: *"Yes you should run another ARM.
+Relax this model restriction. We want the absolute best model to be used for this process."*
+
+This amendment is made **before any W8 arm has run**, so no result has been observed and the
+pre-registration is still clean. Nothing in the original design is edited; this only widens the
+candidate pool and adds an arm.
+
+## The restriction being relaxed, stated exactly
+
+`VISTA-LANE-BRIEF.md:17` — *"Do not substitute another model. Do not use a Codex OAuth token."* —
+and `vlm.py`'s former contract line, *"The only permitted model: gpt-5.6-luna, reasoning effort
+medium."*
+
+Both are **overridden by owner decision**, recorded here and to be recorded in
+`FINDINGS-TRAINING-GRADE.md`. The owner's stated goal is that the best available model be used for
+the authoring process, not that the lane remain bound to luna.
+
+## What still does not move, and why
+
+**W7 keeps a luna/medium run.** This is not a hedge against the instruction; it is the only thing
+that keeps every other number interpretable. The published DEV 0.466 / HELDOUT 0.452 baselines were
+produced under luna/medium, and the lane has already shown those numbers were inflated by a gate
+bug (`tools/vista/gate.py:206`). If the model changes at the same time as the gate correction, the
+two effects are inseparable and no delta is attributable to either. luna/medium is the calibration
+point. It is cheap — one run — and without it the sweep and the production arm measure nothing
+against history.
+
+So: **W7 = calibration** (luna/medium, unchanged). **W9 = production** (best available model). Both
+are reported, and the difference between them is one of the more useful results here.
+
+## Widened candidate pool
+
+`VISTA_MODEL` and `VISTA_EFFORT` now override the model and effort in `vlm.py`, defaulting to
+`gpt-5.6-luna` / `medium` so an unset environment still reproduces W7 exactly.
+
+Text-only authoring — all verified live over the gateway:
+
+| model | api family | vision | notes |
+|---|---|---|---|
+| `gpt-5.6-luna` | openai-codex-responses | **4/4** | W7 reference cell |
+| `gpt-5.6-sol` | openai-codex-responses | **4/4** | |
+| `gpt-5.6-terra` | openai-codex-responses | 3/4 | sees images; calls pure red "orange" |
+| `claude-opus-5` | anthropic-messages | **0/4** | text-only use ONLY |
+| `claude-fable-5` | anthropic-messages | **0/4** | text-only use ONLY |
+
+Add `claude-opus-5` to the sweep as a sixth model arm at each effort level, giving **6 × 5 = 30
+arms**. Authoring is text-only (`author_llm.py:538` calls `vlm.ask_json` with no images), so the
+vision defect does not affect authoring validity.
+
+## MANDATORY vision guard — do not skip this
+
+The gateway's Anthropic translation **silently drops `input_image`** and answers in confident prose
+anyway. `claude-opus-5` and `claude-fable-5` score 0/4 on solid-colour probes while returning
+`status=completed`.
+
+The blind judge (axes 3–4) and `loccritic` score *rendered rollouts*. Running either on an Anthropic
+model would produce fluent, plausible, completely ungrounded verdicts that no downstream metric
+would expose. Therefore:
+
+- **Every vision path stays on an openai-codex model.** Not negotiable, and not covered by the
+  owner's relaxation, which was about authoring quality — a blind judge is not a better model, it is
+  a broken measurement.
+- **`tools/gates/assert_vision.py` must pass before any run that scores images**, and its failure is
+  fatal. It probes a randomly chosen colour per call, because terra confabulates a fixed "orange"
+  and a red-only probe would misjudge it while a blue-only probe would miss its naming flaw.
+
+## W9 — production arm, best available model
+
+1. Run the **stage-1 W8 sweep** (30 arms, n=20 briefs) to identify the best configuration by the
+   pre-registered primary metric: gate admission rate under the frozen gate.
+2. Select the winner **by that metric alone**, declared before looking at anything else. Break ties
+   on the lower cost arm (tokens × wall time). If two arms overlap within their binomial CIs, say so
+   and take the cheaper — do not manufacture a winner the data does not support.
+3. Run the **full DEV and HELDOUT authoring** with that configuration, through the same unmodified
+   frozen gate, and report admission for both plus the generalization gap with a p-value, exactly as
+   W7 does.
+4. Report **W7 (luna/medium) and W9 (best) side by side.** The headline number is the delta and
+   whether it survives on HELDOUT — a production arm that wins on DEV and not on HELDOUT has bought
+   overfitting, not quality, and must be reported as such.
+5. If the winner is a vision-blind model, W9 still uses it for authoring, but the judge stays on a
+   vision-capable model and the split is stated explicitly in the report.
+
+`LANE-COMPLETE.json` must carry a `W9` key with the selected configuration, the selection rule as
+applied, DEV and HELDOUT admission, the gap and p-value, and the W7-versus-W9 comparison.
