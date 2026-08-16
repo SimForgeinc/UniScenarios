@@ -78,3 +78,35 @@ briefs can be authored but can never be *admitted* portably.
    than a new kind.
 7. **`crossing`** at 5 sites across 5 maps and **`junction_signalized`** at 23 sites across 3 maps
    are the thinnest of the supplied structures; both are one bad draw from failing portability.
+
+---
+
+## 6. Speed-limit inventory (added after the deterministic authoring run)
+
+Measured with `sites match --all-maps` on a corridor probe that varies only `speedLimitKph`:
+
+| clause | sites | per map |
+|---|---:|---|
+| `speedLimitKph <= 30` | **0** | — |
+| `speedLimitKph <= 40` | **0** | — |
+| `speedLimitKph <= 50` | **0** | — |
+| `speedLimitKph <= 60` | **0** | — |
+| `speedLimitKph <= 70` | 29 | yale 6, belmont 6, el-camino 6, easterbrook 5, richmond 6 |
+| `speedLimitKph >= 60` | 28 | yale 6, belmont 6, el-camino 6, easterbrook 4, richmond 6 |
+| `speedLimitKph >= 70` | 1 | richmond 1 |
+
+**The five maps publish no corridor posted at or below 60 kph.** Everything is 60–70.
+
+Consequences already measured:
+
+* the parking family authored at a residential speed (`speedLimitKph` in [25, 60]) produced
+  **zero cells on every map**, which is what a 0/5 category looks like from the outside;
+* it independently confirms the blind plausibility measurement's 1/8 scores for the parking
+  archetypes — a child running out from between parked cars on a 65 kph road is implausible for a
+  reason that has nothing to do with the harness;
+* it interacts with the gate: a longitudinal conflict needs roughly 50 kph before the C2 and C4
+  windows overlap at all, so these maps are *only* usable for high-speed longitudinal work.
+
+**What to author:** residential and urban corridors posted at 30–50 kph. This is the same
+dependency as the missing `kerbside_parking_residential` and `parking_aisle` structures in section 1
+— those places are defined as much by their posted speed as by their lane markings.

@@ -884,3 +884,133 @@ braking. `probe_workzone.py` now reports `cellsWhereEgoDrove` and
 
 All earlier gates re-run and still green: **W1** C2 share 0.0245, r 0.9853 · **W2** 5/5 archetypes
 proven and portable · **W4** 28 newly rejected.
+
+---
+
+## M8 — the primary objective: **DEV admission 0.466 -> 0.7534**, HELDOUT 0.6963
+
+The brief's headline instruction was to raise DEV admission toward 0.60+. Authoring through the
+LLM surface is credential-blocked (M6), so I built a **deterministic authoring path** that needs no
+model and measured both splits against the frozen gate.
+
+```
+$ .venv/bin/python tools/gates/author_corpus.py --split DEV     --draws 10 --max-sites 10
+$ .venv/bin/python tools/gates/author_corpus.py --split HELDOUT --draws 10 --max-sites 10
+```
+
+| | admitted | rate |
+|---|---:|---:|
+| **DEV** | **55 / 73** | **0.7534** |
+| **HELDOUT** (authored once, zero per-brief tuning) | **94 / 135** | **0.6963** |
+| **TOTAL** | **149 / 208** | **0.7163** |
+| generalization gap | | **+0.0571**, p = 0.383 |
+
+| reference | DEV | HELDOUT |
+|---|---:|---:|
+| published baseline (gate v2) | 0.466 | 0.407 |
+| the same corpus after the TG-G1 correction | 0.401 | 0.341 |
+| **this path** | **0.7534** | **0.6963** |
+
+**Target met.** The gap stays statistically indistinguishable from zero, confirming the brief's
+statement that overfitting is not the problem here.
+
+### What this is, and what it is not
+
+It is **not** W7's frozen run. W7 authors through the round-6 LLM tool surface, which needs a
+credential *and* does not exist on disk (M0.5, M6). This is a **different algorithm** measured
+against **the same frozen gate and the same frozen split**, and the number is not comparable to
+0.466 as a like-for-like. What it does establish is that the representation fixes make these briefs
+admittable — the ceiling was never the authoring model.
+
+It is a **general algorithm**: 208 briefs route to **8 mechanism families** by taxonomy category and
+a small keyword vocabulary. Nothing is keyed on a brief id, every parameter belongs to the family,
+and each event time is computed from the geometry against a pre-registered time-to-collision. The
+surface was developed on DEV only, frozen at sha256 `b94c9dd68b1d591a` before either measured run
+(`agent-authoring/DETERMINISTIC-SURFACE-FROZEN.json`), and verified unchanged after HELDOUT.
+
+Gate integrity at this checkpoint: tripwire **PASS**, determinism **24/24 bit-identical** on
+authored templates from two families.
+
+### Per-category, both splits
+
+| category | admitted | | category | admitted |
+|---|---|---|---|---|
+| C1.car-following | 13/14 | | C10.oncoming | 5/13 |
+| C2.cut-in-merge | 14/15 | | C11.parking | 5/13 |
+| C3.intersection | 12/21 | | C12.school | 12/12 |
+| C4.roundabout | 8/10 | | **C13.control** | **2/14** |
+| C5.pedestrian | 14/16 | | C14.loss-of-control | 10/10 |
+| C6.cyclist-ptw | 15/15 | | C15.adversarial | 12/13 |
+| C7.occlusion | 14/14 | | **C8.workzone** | **0/14** |
+| C9.hazard | 13/14 | | | |
+
+Against the brief's restated target — *">=6 admitted in each of the 15 categories, none below 4"* —
+**11/15 categories reach 6** and **four do not**: C8 (0), C13 (2), C10 (5), C11 (5). The corpus-level
+rate is met; the balance requirement is not, which is the same thing every previous round's
+corpus-layout judge said.
+
+### Four mechanism findings that produced most of the gain
+
+**1. The C2 and C4 criteria nearly exclude each other at low speed.**
+C2 wants the conflict after `warmup + 0.5 = 2.5 s`, so `gap >= closing * 3.0`. C4 wants
+`closing^2/(2*gap) >= 1.5`, so `gap <= closing^2/3.6`. Those cross:
+
+| ego speed | window width |
+|---|---|
+| 35 kph | **EMPTY** |
+| 40 kph | **1.0 m** |
+| 50 kph | 11.9 m |
+| 55 kph | 19.0 m |
+
+The round-6 surface seeded the ego at `clamp(0.7*lane.speedLimitKph, 18, 42)` — **capped at
+42 kph** — which puts every longitudinal brief in or below that 1 m window. 189 sites across all
+five maps are posted for 50 kph or more, so this cost admission for no reason.
+
+**2. C5's band subsumes C4's deceleration arm.** `evaluate` bands a trace `trivially_safe` when
+`minTTC > 3 s`, so every admitted scenario must reach `minTTC <= 3 s` — which is C4's *other* arm.
+`requiredDecelMax >= 1.5` can therefore never admit anything on its own. Worth knowing before
+designing around it.
+
+**3. A stopped obstacle in plain view is not an edge case, and the gate is right to say so.**
+With its governor live the ego brakes early, `minTTC` bottoms out near 5 s, and the encounter is
+correctly trivial. The mechanism for "rear-end into a stopped vehicle" is *inattention* — it is an
+inattention crash in the NHTSA typology, not a braking-capability one. Releasing the ego's avoidance
+at a pre-registered TTC (exactly what the repo's own `lead-hard-brake` gold template does with
+`ego-delays-response`) took `c1-lead-stopped` from **0/96 passing to admitted on 5 maps / 10 sites**.
+The same pattern is what made the junction, lateral, oncoming and parking families work.
+
+**4. DEFECT TG-P1, again, in a second place.** `rules.collisionAvoidance: false` bypasses the
+controller terms that produce `requiredDecelMax`. Any family that used it to make the ego "hold
+course" was measuring a quantity it had switched off.
+
+### Two more map-inventory facts for the W6 hand-off
+
+* **The five maps publish no corridor posted at or below 60 kph.** A `speedLimitKph <= 60` clause
+  matches **zero** sites on every map; `[0, 70]` matches 29. The parking family authored at a
+  residential speed produced **no cells at all**. This is an independent, mechanical confirmation of
+  the blind judge's 1/8 plausibility scores for the parking archetypes — those scenes are not just
+  structurally unhostable, they are posted for the wrong speed.
+* **`relative_to` roles could not reach the kerb either.** `RelativeToRoleSchema.tFrac` is a plain
+  number bounded to [-1, 1] — the same W2 gap in the role that most needs it (a parked car, a van
+  protruding from a bay). `lateralM` / `lateralRef` are now accepted there too, with the same
+  mutual-exclusion refinement, and resolved through the same `resolveLateral`.
+
+### DEFECT TG-H1 — junction scenarios can produce self-inconsistent evidence
+
+Reproducible and isolated. On junction-bound scenarios the trace header's `inputHash` disagrees with
+`sha256(canonicalJson(instance.input))` (`trace_input_hash_mismatch`), while the instance and the
+manifest agree with each other. Those cells band `evidence-mismatch` and are excluded from
+admission, so it directly caps C3/C4/C13 — 45 briefs, 22% of the corpus.
+
+| configuration | cells | mismatch |
+|---|---:|---:|
+| stock `lead-hard-brake` (no junction) | 60 | **0** |
+| stock `ltap-od-unsignalized` (junction, untouched) | 56 | **0** |
+| my junction family | 48 | 16 (0.33) |
+| ... minus the `set` interactions | 48 | 8 (0.17) |
+| ... plus `runwayUpstreamM >= 110` | 48 | 8 (0.17) |
+
+Requiring upstream runway halves it — the ego spawns 70 m upstream and without that clause the
+matcher accepts sites with no road there, so the spawn is clamped (`ENDPOINT_CLAMP`). The remaining
+half is **not isolated**, and I am recording it rather than claiming a cause. It is the same family
+as the VISTA lane's open `DEFECT-instance-hash-mismatch.md`.
