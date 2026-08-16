@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { gunzipSync } from 'node:zlib';
 
-import { underlayFromTopology, underlaySvgLayers } from './render-trace-underlay-lib.mjs';
+import { actorGlyph, underlayFromTopology, underlaySvgLayers } from './render-trace-underlay-lib.mjs';
 
 const require = createRequire(import.meta.url);
 let sharp;
@@ -232,20 +232,14 @@ function actorKinds(trace) {
   return out;
 }
 
-function actorColor(id, kind, staticIds) {
-  if (id === 'ego') return '#45a3ff';
-  if (kind === 'pedestrian') return '#ff5a5f';
-  if (kind === 'cyclist' || kind === 'bicycle') return '#e67e22';
-  if (staticIds.has(id)) return '#ffc166';
-  if (kind === 'motorcycle') return '#b8d65a';
-  return '#84d65a';
-}
+// Shape + fill per actor class lives in the lib (`actorGlyph`) so the legend is
+// testable and single-sourced; trail color follows the body color for classes,
+// with the legacy amber for anonymous vehicles.
 
 function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, width, height, scale, underlay, redact }) {
   const dims = actorDims(instanceDoc);
   const staticIds = actorStatic(instanceDoc);
   const kinds = actorKinds(trace);
-  const kindOf = (id) => kinds.get(id) ?? (id === 'ped' ? 'pedestrian' : 'car');
   const actorIds = sortedActorIdsFromTrace(trace);
   const layers = [];
   layers.push(`<rect width="100%" height="100%" fill="#101820"/>`);
@@ -277,11 +271,8 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
       pts.push(pointToScreen({ x: ch.x[i], y: ch.y[i] }, camera, scale, width, height));
     }
     if (pts.length > 1) {
-      const kind = kindOf(id);
-      const trail = id === 'ego' ? '#45a3ff'
-        : kind === 'pedestrian' ? '#ff5a5f'
-        : (kind === 'cyclist' || kind === 'bicycle') ? '#e67e22'
-        : '#e8b65a';
+      const g = actorGlyph(id, kinds.get(id) ?? null, staticIds.has(id));
+      const trail = g.color === '#84d65a' && id !== 'ego' ? '#e8b65a' : g.color;
       layers.push(`<polyline points="${polygon(pts)}" fill="none" stroke="${trail}" stroke-width="2" opacity="0.65"/>`);
     }
   }
@@ -301,9 +292,9 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     const p = poseAt(trace, id, index);
     if (!p.present) continue;
     const d = dims.get(id) ?? { l: 1, w: 1, h: 1 };
-    const kind = kindOf(id);
-    const color = actorColor(id, kind, staticIds);
-    if (kind === 'pedestrian') {
+    const g = actorGlyph(id, kinds.get(id) ?? null, staticIds.has(id));
+    const color = g.color;
+    if (g.shape === 'disc') {
       const c = pointToScreen(p, camera, scale, width, height);
       layers.push(`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${Math.max(5, d.w * scale / 2).toFixed(1)}" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>`);
       layers.push(`<line x1="${c.x.toFixed(1)}" y1="${c.y.toFixed(1)}" x2="${(c.x + Math.cos(p.headingRad) * 10).toFixed(1)}" y2="${(c.y - Math.sin(p.headingRad) * 10).toFixed(1)}" stroke="#fff"/>`);

@@ -273,3 +273,38 @@ export function underlaySvgLayers(underlay, view, project) {
 
   return layers;
 }
+
+// --- actor glyphs ------------------------------------------------------------
+
+/** Disc-rendered kinds: class must be legible to a vision judge at ~5 px. */
+const DISC_KINDS = new Map([
+  ['pedestrian', '#ff5a5f'],
+  ['bicycle', '#e67e22'],
+  ['cyclist', '#e67e22'],
+  ['scooter', '#e67e22'],
+  ['animal', '#d98f4a'],
+  ['sidewalk_robot', '#b48fd9'],
+  ['drone', '#b48fd9'],
+]);
+
+const MOTORCYCLE_FILL = '#c07fe8';
+const EGO_FILL = '#45a3ff';
+const STATIC_FILL = '#ffc166';
+const VEHICLE_FILL = '#84d65a';
+
+/**
+ * Shape and color for one actor, from `trace.header.actorMetadata[id].kind`
+ * (authoritative; pass `null` for pre-metadata traces, which keeps the legacy
+ * literal-id behavior: only 'ped' was ever a disc). Precedence: ego blue >
+ * disc-class color > static amber > motorcycle violet > vehicle green.
+ * Static VRUs keep their class color — the class is what the judge must see.
+ */
+export function actorGlyph(id, kind, isStatic) {
+  if (id === 'ego') return { shape: 'box', color: EGO_FILL };
+  const resolved = kind ?? (id === 'ped' ? 'pedestrian' : null);
+  const disc = resolved === null ? undefined : DISC_KINDS.get(resolved);
+  if (disc !== undefined) return { shape: 'disc', color: disc };
+  if (isStatic) return { shape: 'box', color: STATIC_FILL };
+  if (resolved === 'motorcycle') return { shape: 'box', color: MOTORCYCLE_FILL };
+  return { shape: 'box', color: VEHICLE_FILL };
+}

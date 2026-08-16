@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import {
   LANE_STYLES,
+  actorGlyph,
   crosswalksFromLocations,
   offsetPolyline,
   underlayFromTopology,
@@ -148,4 +149,32 @@ test('underlaySvgLayers works without locations (no crosswalk layer, no throw)',
   const layers = underlaySvgLayers(u, VIEW, project).join('\n');
   assert.ok(!layers.includes('underlay-crosswalk'));
   assert.ok(layers.includes('underlay-lane-driving'));
+});
+
+test('actorGlyph keys off actorMetadata kind, not actor id', () => {
+  // The judge-legibility defect: a pedestrian with id "adult_crossing" must
+  // render as a pedestrian disc, not a default vehicle box.
+  assert.deepEqual(actorGlyph('adult_crossing', 'pedestrian', false), { shape: 'disc', color: '#ff5a5f' });
+  assert.deepEqual(actorGlyph('rider', 'bicycle', false), { shape: 'disc', color: '#e67e22' });
+  assert.deepEqual(actorGlyph('rider', 'cyclist', false), { shape: 'disc', color: '#e67e22' });
+  assert.deepEqual(actorGlyph('rider', 'scooter', false), { shape: 'disc', color: '#e67e22' });
+  assert.deepEqual(actorGlyph('deer', 'animal', false), { shape: 'disc', color: '#d98f4a' });
+  assert.deepEqual(actorGlyph('bot', 'sidewalk_robot', false), { shape: 'disc', color: '#b48fd9' });
+  assert.deepEqual(actorGlyph('ptw', 'motorcycle', false), { shape: 'box', color: '#c07fe8' });
+  assert.deepEqual(actorGlyph('lead', 'car', false), { shape: 'box', color: '#84d65a' });
+  assert.deepEqual(actorGlyph('hauler', 'truck', false), { shape: 'box', color: '#84d65a' });
+});
+
+test('actorGlyph precedence: ego blue beats kind; static amber beats kind for boxes', () => {
+  assert.deepEqual(actorGlyph('ego', 'car', false), { shape: 'box', color: '#45a3ff' });
+  assert.deepEqual(actorGlyph('parked', 'car', true), { shape: 'box', color: '#ffc166' });
+  // A static VRU keeps its class color: the class is what the judge must see.
+  assert.deepEqual(actorGlyph('adult', 'pedestrian', true), { shape: 'disc', color: '#ff5a5f' });
+});
+
+test('actorGlyph falls back to legacy id semantics when kind is missing', () => {
+  assert.deepEqual(actorGlyph('ped', null, false), { shape: 'disc', color: '#ff5a5f' });
+  assert.deepEqual(actorGlyph('lead', null, false), { shape: 'box', color: '#84d65a' });
+  assert.deepEqual(actorGlyph('lead', null, true), { shape: 'box', color: '#ffc166' });
+  assert.deepEqual(actorGlyph('ego', null, false), { shape: 'box', color: '#45a3ff' });
 });
