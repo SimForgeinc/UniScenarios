@@ -72,10 +72,10 @@ C5 evaluator verdict=accept, band=critical, zero collisions, zero never-fired tr
 C6 (only for briefs that name occlusion) a declared occlusion provably blocks, then reveals.
 Portability: passing cells on >=2 maps and >=3 distinct sites.
 
-## Catalog (actors; static:true makes scenery/occluders)
-vehicle: sedan suv hatchback pickup minivan van delivery_van box_truck semi_truck dump_truck flatbed_truck garbage_truck tanker_truck cement_mixer tow_truck bus school_bus shuttle_bus taxi police_cruiser police_suv ambulance fire_engine motorcycle bicycle mobility_scooter
-pedestrian: adult_walking adult_standing child_walking child_standing elderly_walking traffic_marshal
-animal: deer dog cat stray_dog raccoon goose | hazard: tire_debris mattress ladder cardboard_box debris downed_branch trash_bags | construction: traffic_cone channelizer_drum jersey_barrier excavator flagger arrow_board sign_road_work | occluder: dumpster covered_car hedge_run fence_run | street: bus_shelter food_cart shopping_cart
+## Catalog (use FULL ids, e.g. "vehicle.sedan"; static:true makes scenery/occluders)
+vehicle.<sedan|suv|hatchback|pickup|minivan|van|delivery_van|box_truck|semi_truck|dump_truck|flatbed_truck|garbage_truck|tanker_truck|cement_mixer|tow_truck|bus|school_bus|shuttle_bus|taxi|police_cruiser|police_suv|ambulance|fire_engine|motorcycle|bicycle|mobility_scooter>
+pedestrian.<adult_walking|adult_standing|child_walking|child_standing|elderly_walking|traffic_marshal>
+animal.<deer|dog|cat|stray_dog|raccoon|goose> | hazard.<tire_debris|mattress|ladder|cardboard_box|debris|downed_branch|trash_bags> | construction.<traffic_cone|channelizer_drum|jersey_barrier|excavator|flagger|arrow_board|sign_road_work> | occluder.<dumpster|covered_car|hedge_run|fence_run> | street.<bus_shelter|food_cart|shopping_cart>
 """
 
 
@@ -469,7 +469,11 @@ class Episode:
 
     def a_motion(self, do):
         frames = {fid: fr['view'] for fid, fr in self.frames.frames.items()}
-        ok, info = self.scene.set_motion(do.get('actor'), do.get('motion') or {}, frames)
+        try:
+            ok, info = self.scene.set_motion(do.get('actor'), do.get('motion') or {}, frames)
+        except (ValueError, TypeError, KeyError) as e:
+            return ('set_motion rejected: bad arguments (%s). Check the motion forms in '
+                    'the rules.' % e), [], []
         if not ok:
             return ('set_motion rejected: %s %s'
                     % (info.get('error'), '; '.join(info.get('issues', []))[:600])), [], []

@@ -41,6 +41,43 @@ VEHICLE_CLASS = {
     'vehicle.mobility_scooter': 'scooter',
 }
 
+# The known catalog (from packages/scenario-materializer/src/prop-dims.ts). Short names
+# are normalized; unknown ids are rejected with candidates — a bad catalogId otherwise
+# passes `template validate` silently and materializes as a dead static_object.
+KNOWN_CATALOG = set((
+    'vehicle.sedan vehicle.suv vehicle.hatchback vehicle.pickup vehicle.minivan '
+    'vehicle.van vehicle.delivery_van vehicle.box_truck vehicle.semi_truck '
+    'vehicle.dump_truck vehicle.flatbed_truck vehicle.garbage_truck vehicle.tanker_truck '
+    'vehicle.cement_mixer vehicle.tow_truck vehicle.bus vehicle.school_bus '
+    'vehicle.shuttle_bus vehicle.taxi vehicle.police_cruiser vehicle.police_suv '
+    'vehicle.ambulance vehicle.fire_engine vehicle.fire_command_suv vehicle.motorcycle '
+    'vehicle.bicycle vehicle.mobility_scooter vehicle.tram vehicle.utility_bucket_truck '
+    'pedestrian.adult_walking pedestrian.adult_standing pedestrian.child_walking '
+    'pedestrian.child_standing pedestrian.elderly_walking pedestrian.traffic_marshal '
+    'animal.deer animal.dog animal.cat animal.stray_dog animal.raccoon animal.goose '
+    'animal.buck animal.doe '
+    'hazard.tire_debris hazard.mattress hazard.ladder hazard.cardboard_box hazard.debris '
+    'hazard.downed_branch hazard.trash_bags '
+    'construction.traffic_cone construction.channelizer_drum construction.jersey_barrier '
+    'construction.excavator construction.flagger construction.arrow_board '
+    'construction.sign_road_work construction.jersey_barrier_run '
+    'occluder.dumpster occluder.covered_car occluder.hedge_run occluder.fence_run '
+    'street.bus_shelter street.food_cart street.shopping_cart'
+).split())
+_SHORT = {c.split('.', 1)[1]: c for c in KNOWN_CATALOG}
+
+
+def normalize_catalog(catalog):
+    """(id or None, error or None). Accepts full ids and unambiguous short names."""
+    c = str(catalog or '').strip()
+    if c in KNOWN_CATALOG:
+        return c, None
+    if c in _SHORT:
+        return _SHORT[c], None
+    near = [k for k in KNOWN_CATALOG if c and (c in k or k.split('.')[1] in c)][:6]
+    return None, ('unknown catalog id %r; nearest: %s' % (catalog, ', '.join(near) or
+                  'none — see the catalog list in the rules'))
+
 
 def actor_class(catalog):
     head = catalog.split('.')[0]
@@ -290,6 +327,10 @@ class Scene:
         {'dsM':m,'dLane':k,'tFrac':f}/{'s':m,...} relative form. Returns (ok, info)."""
         if self.site is None:
             return False, {'error': 'select a site first (view_site)'}
+        if aid != 'ego':
+            catalog, cerr = normalize_catalog(catalog)
+            if cerr:
+                return False, {'error': cerr}
         diag = {}
         if 'px' in at:
             if view is None:
@@ -460,7 +501,10 @@ class Scene:
         if actor not in self.roles:
             return False, {'error': 'no role %r (props cannot move; place with static:false)' % actor}
         kind = motion.get('kind')
-        trig = self.compile_trigger(motion.get('trigger'), frames)
+        try:
+            trig = self.compile_trigger(motion.get('trigger'), frames)
+        except (ValueError, KeyError, TypeError) as e:
+            return False, {'error': 'bad trigger: %s' % e}
         self._iseq += 1
         iid = 'i%d' % self._iseq
         base = {'id': iid, 'actor': actor, 'trigger': trig}
@@ -468,6 +512,11 @@ class Scene:
         dur = motion.get('durationS')
         if kind == 'speed':
             v = motion.get('speedKph')
+            if v is None and motion.get('stop'):
+                v = 'stop'
+            if v is None:
+                self._iseq -= 1
+                return False, {'error': 'speed motion needs "speedKph": <kph> or "stop"'}
             target = {'mode': 'stop'} if v in ('stop', 0) else {'mode': 'absolute',
                                                                 'valueKph': float(v)}
             it = dict(base, verb='speed', target=target,
