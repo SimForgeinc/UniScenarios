@@ -286,6 +286,12 @@ export function actorClassesForCatalogId(catalogId: string): readonly string[] |
       return ['pedestrian', 'static_object'];
     case 'animal':
       return ['animal', 'static_object'];
+    case 'sidewalk_robot':
+      // A delivery robot is a real slow wheeled ACTOR (owner list: "robot
+      // delivery carts crossing the street"): engine kind exists and is
+      // pedestrian-like, the exporter and editor already carry it. Static-only
+      // here was the last blocker.
+      return ['sidewalk_robot', 'static_object'];
     default:
       // construction / occluder / street / hazard props are inert scenery.
       return ['static_object'];

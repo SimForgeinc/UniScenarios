@@ -308,3 +308,28 @@ export function actorGlyph(id, kind, isStatic) {
   if (resolved === 'motorcycle') return { shape: 'box', color: MOTORCYCLE_FILL };
   return { shape: 'box', color: VEHICLE_FILL };
 }
+
+// --- emergency light state -----------------------------------------------------
+
+/**
+ * Latest `lights.emergency` value for `actorId` at or before `t`, from the
+ * trace's `state_set` events. 'off' when never set. The engine records the
+ * event when a `set(lights.emergency)` interaction fires, so this is the
+ * authoritative runtime state, not the authored intent.
+ */
+export function emergencyLightStateAt(events, actorId, t) {
+  let state = 'off';
+  let stateT = -Infinity;
+  for (const e of events ?? []) {
+    if (e.kind !== 'state_set' || e.actorId !== actorId || e.key !== 'lights.emergency') continue;
+    if (e.t > t || e.t < stateT) continue;
+    state = String(e.value);
+    stateT = e.t;
+  }
+  return state;
+}
+
+/** Deterministic 4 Hz flash phase from frame time: 0 or 1, no wall clock. */
+export function emergencyFlashPhase(t) {
+  return Math.floor(t / 0.25) % 2 === 0 ? 0 : 1;
+}

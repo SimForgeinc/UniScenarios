@@ -171,6 +171,18 @@ describe.skipIf(!HAVE_MAP)('actor class / catalog id agreement', () => {
     expect(() => run(templateWith({ class: 'car', catalogId: 'vehicle.sedan' }))).not.toThrow();
     expect(() => run(templateWith({ class: 'static_object', catalogId: 'object.tyre', static: true }))).not.toThrow();
   });
+
+  it('accepts a delivery robot as a MOVING actor, not just scenery (owner: robot delivery carts crossing the street)', () => {
+    // Every layer downstream already hosts this: engine kind `sidewalk_robot`
+    // is pedestrian-like with route support, the exporter emits it, the editor
+    // has a robot action family. Only this agreement table said static-only.
+    for (const catalogId of ['sidewalk_robot.delivery_rover', 'sidewalk_robot.cooler_bot'] as const) {
+      const result = run(templateWith({ class: 'sidewalk_robot', catalogId }));
+      const robot = actor(result, 'subject');
+      expect(robot.kind).toBe('sidewalk_robot');
+      expect(robot.static).not.toBe(true);
+    }
+  });
 });
 
 describe.skipIf(!HAVE_MAP)('the catalog model carries the footprint', () => {

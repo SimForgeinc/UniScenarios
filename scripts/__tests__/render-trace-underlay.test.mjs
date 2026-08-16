@@ -5,6 +5,8 @@ import {
   LANE_STYLES,
   actorGlyph,
   crosswalksFromLocations,
+  emergencyFlashPhase,
+  emergencyLightStateAt,
   offsetPolyline,
   underlayFromTopology,
   underlaySvgLayers,
@@ -177,4 +179,29 @@ test('actorGlyph falls back to legacy id semantics when kind is missing', () => 
   assert.deepEqual(actorGlyph('lead', null, false), { shape: 'box', color: '#84d65a' });
   assert.deepEqual(actorGlyph('lead', null, true), { shape: 'box', color: '#ffc166' });
   assert.deepEqual(actorGlyph('ego', null, false), { shape: 'box', color: '#45a3ff' });
+});
+
+test('emergencyLightStateAt samples the latest lights.emergency event at or before t', () => {
+  const events = [
+    { t: 1.0, kind: 'state_set', actorId: 'ambulance', key: 'lights.emergency', value: 'flashing' },
+    { t: 4.0, kind: 'state_set', actorId: 'ambulance', key: 'lights.emergency', value: 'flashing_siren' },
+    { t: 6.0, kind: 'state_set', actorId: 'ambulance', key: 'lights.emergency', value: 'off' },
+    { t: 2.0, kind: 'state_set', actorId: 'ambulance', key: 'audio.horn', value: true },
+    { t: 0.0, kind: 'state_set', actorId: 'other', key: 'lights.emergency', value: 'flashing' },
+    { t: 3.0, kind: 'spawn', actorId: 'ambulance' },
+  ];
+  assert.equal(emergencyLightStateAt(events, 'ambulance', 0.5), 'off');
+  assert.equal(emergencyLightStateAt(events, 'ambulance', 1.0), 'flashing');
+  assert.equal(emergencyLightStateAt(events, 'ambulance', 3.9), 'flashing');
+  assert.equal(emergencyLightStateAt(events, 'ambulance', 5.0), 'flashing_siren');
+  assert.equal(emergencyLightStateAt(events, 'ambulance', 7.0), 'off');
+  assert.equal(emergencyLightStateAt(events, 'nobody', 5.0), 'off');
+  assert.equal(emergencyLightStateAt(undefined, 'ambulance', 5.0), 'off');
+});
+
+test('emergencyFlashPhase is deterministic in frame time and alternates', () => {
+  assert.equal(emergencyFlashPhase(1.0), emergencyFlashPhase(1.0));
+  assert.notEqual(emergencyFlashPhase(1.0), emergencyFlashPhase(1.25));
+  assert.ok([0, 1].includes(emergencyFlashPhase(0)));
+  assert.ok([0, 1].includes(emergencyFlashPhase(123.456)));
 });

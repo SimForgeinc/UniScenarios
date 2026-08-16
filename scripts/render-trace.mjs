@@ -15,7 +15,7 @@ import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { gunzipSync } from 'node:zlib';
 
-import { actorGlyph, underlayFromTopology, underlaySvgLayers } from './render-trace-underlay-lib.mjs';
+import { actorGlyph, emergencyFlashPhase, emergencyLightStateAt, underlayFromTopology, underlaySvgLayers } from './render-trace-underlay-lib.mjs';
 
 const require = createRequire(import.meta.url);
 let sharp;
@@ -302,6 +302,25 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     } else {
       const pts = obbCorners(p, p.headingRad, d.l, d.w).map((q) => pointToScreen(q, camera, scale, width, height));
       layers.push(`<polygon points="${polygon(pts)}" fill="${color}" fill-opacity="0.9" stroke="#ffffff" stroke-width="1.5"/>`);
+      // Emergency light bar, from the trace's recorded lights.emergency state.
+      // Flash phase derives from frame time only — deterministic re-renders.
+      const emergency = emergencyLightStateAt(trace.events, id, frameTime);
+      if (emergency === 'flashing' || emergency === 'flashing_siren') {
+        const phase = emergencyFlashPhase(frameTime);
+        const f = { x: Math.cos(p.headingRad), y: Math.sin(p.headingRad) };
+        const r = { x: -Math.sin(p.headingRad), y: Math.cos(p.headingRad) };
+        const lampR = Math.max(2.5, 0.28 * scale);
+        for (const [side, colorPair] of [[1, ['#ff2d2d', '#2d6bff']], [-1, ['#2d6bff', '#ff2d2d']]]) {
+          const lamp = pointToScreen(
+            { x: p.x + r.x * (d.w * 0.22) * side + f.x * d.l * 0.05, y: p.y + r.y * (d.w * 0.22) * side + f.y * d.l * 0.05 },
+            camera, scale, width, height,
+          );
+          layers.push(`<circle cx="${lamp.x.toFixed(1)}" cy="${lamp.y.toFixed(1)}" r="${lampR.toFixed(1)}" fill="${colorPair[phase]}" stroke="#ffffff" stroke-width="0.8"/>`);
+        }
+        const haloC = pointToScreen(p, camera, scale, width, height);
+        const haloR = Math.max(d.l, d.w) * scale * (emergency === 'flashing_siren' ? 1.05 : 0.8);
+        layers.push(`<circle cx="${haloC.x.toFixed(1)}" cy="${haloC.y.toFixed(1)}" r="${haloR.toFixed(1)}" fill="none" stroke="${phase === 0 ? '#ff2d2d' : '#2d6bff'}" stroke-width="${emergency === 'flashing_siren' ? 3 : 2}" opacity="0.55"/>`);
+      }
       const c = pointToScreen(p, camera, scale, width, height);
       if (!redact) layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}${staticIds.has(id) ? ' (static)' : ''}</text>`);
     }
