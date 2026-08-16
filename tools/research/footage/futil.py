@@ -152,12 +152,16 @@ def is_cell_dir(d):
 
 
 def discover_cells(root):
-    """Contract-§2 cell dirs anywhere under root, sorted by cellId."""
+    """Contract-§2 cell dirs anywhere under root, sorted by cellId.
+    Cells may nest (EmergentLane promoted-*/ counterparts live INSIDE their parent
+    cell dir), so descent continues past a match; only render/ output is skipped."""
     out = []
     for dirpath, dirnames, _ in os.walk(root):
+        if os.path.basename(dirpath) == 'render':
+            dirnames[:] = []
+            continue
         if is_cell_dir(dirpath):
             out.append(dirpath)
-            dirnames[:] = []
     return sorted(out, key=lambda d: load_json(os.path.join(d, 'meta.json')).get('cellId', d))
 
 
