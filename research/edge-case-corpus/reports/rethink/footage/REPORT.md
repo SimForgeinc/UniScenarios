@@ -232,11 +232,42 @@ AUC on the same cells (0.845): repeats do not buy separation. Read: single verdi
 fine for RANKING and population statistics; a single `plausible` bool or a hard per-cell
 threshold is noisy — consume realism as a score, not a verdict.
 
-Remaining rounds: EmergentLane paired-ambient cells (`/tmp/tgr-emergent-pair1/cells`,
-in flight, ~2-4 h) and harvest cells; FreeformLane freedom/baseline arms (announced as
-they land); VistaLane main run (progressive, ~6-10 h). Judge stage is resumable
-(existing `review-*.json` skipped); each announced root gets `roots` + `judge` + a
-re-`analyze`, appended here.
+### Round 2 — EmergentLane paired-ambient cells (456) + VistaLane main growth
+
+`scale_run.py roots ... --roots /tmp/tgr-emergent-pair1/cells` (456 cells, gate blocks
+filled by EmergentLane) + `judge --agree-every 1`: 1488 verdicts, 0 errors, 2230 s.
+Terra's red-probe quirk fired once in-session (answered "Orange" to a red probe;
+randomized retry PASSED on blue — both attempts recorded; a blind model cannot pass
+this retry ladder).
+
+**Ambient traffic, judged (sol/medium, paired same map/site/draw vs `off`):**
+
+| arm | n | realism μ/med | dynamism μ/med | plausible | gate-pass | Δrealism (sign p) | Δdynamism up/down |
+|---|---|---|---|---|---|---|---|
+| off | 117 | 5.21 / 5 | 3.02 / 3 | 0.69 | 54/117 | — | — |
+| light | 117 | 5.52 / 5 | 4.95 / 5 | 0.60 | 48/117 | **+0.31 (p=0.007)** | 92/9 |
+| city | 111 | 5.08 / 5 | 4.98 / 5 | 0.51 | 41/111 | −0.18 (p=0.74) | 96/4 |
+| heavy | 111 | 5.03 / 4 | 5.23 / 5 | 0.52 | 43/111 | −0.23 (p=0.65) | 99/4 |
+
+Reading: ambient decisively raises judged **aliveness** at every density; **light**
+density also raises judged realism (paired sign-test p=0.007); city/heavy buy no further
+realism and slide plausibility (the "identical sedans" effect is a plateau, not a
+penalty). Judge-side answer to Stream C hypothesis (i): **ambient ON, light, is strictly
+better footage** — and it costs some gate admissions (54→48/117 paired).
+
+### Cumulative scaled-run state (at report time)
+
+**1094 cells / 2850 verdicts / 14.03 M tokens** (mean 4924 tok, 13.5 s per verdict);
+streams: w7-regen 170 (realism μ 5.38), vista 324 (μ 4.94), emergent 456 (μ 5.22).
+Gate-pass-vs-fail realism AUC over everything: 0.586 (weak — the emergent arms add a
+mild correlation; the W7-only figure stays chance at 0.465-0.499). Inter-model Spearman
+at n≈1094: luna~sol 0.582, luna~terra 0.667, sol~terra 0.713.
+
+Remaining rounds (standing procedure, judge stage resumable): EmergentLane harvest
+(`/tmp/tgr-emergent-h2/cells`, tonight), FreeformLane freedom/baseline arms (pilot
+surfaced harness defects, roots announced when they land), VistaLane main continues
+progressive growth. Each announced root: `roots` + `judge --agree-every 1` + re-`analyze`.
+
 
 ## Cost ledger (updated per stage)
 
@@ -247,3 +278,8 @@ re-`analyze`, appended here.
 | pilot v2 | 72 judge | 325,454 total (spread8 5073/cell, burst6 3968/cell) | 117 s |
 | calibration grid | 432 judge + 3 probes | 2,312,777 total (per-arm tok/cell in table) | 835 s |
 | scaled round 1 | 424 judge + 3 probes | 2,037,969 total (4806/cell mean) | 468 s |
+| scaled 1b (all-model) | 524 judge | (cumulative below) | 577 s |
+| scaled vista growth | 414 judge | (cumulative below) | 482 s |
+| test-retest | 100 judge | ~493k | ~3 min |
+| scaled round 2 (emergent) | 1488 judge | (cumulative below) | 2230 s |
+| **scaled cumulative** | **2850 judge** | **14,033,190 total (4924/verdict)** | — |
