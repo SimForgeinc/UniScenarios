@@ -522,3 +522,87 @@ and yale-street. This is a concrete, quantified entry for the map-authoring hand
 `scenario-model` 303/303 · `scenario-materializer` 81/81 · `sim-engine` 332 passed / 8 skipped ·
 `openscenario` 64/64 · `cli test:portable` 35/35 · full `cli` suite **62 failed / 260 passed**,
 identical to the pre-existing baseline. Tripwire PASS, gate unit tests 8/8.
+
+---
+
+## M4 / W4 — collapse the rubric ceremony: **EXIT CRITERION MET**
+
+| exit criterion | required | measured | verdict |
+|---|---|---|---|
+| rubric files | <= 20 | **15** | **MET** |
+| pre-registered by sha256 before solving | yes | **15/15, drift 0** | **MET** |
+| rejects >= 1 archetype the old rubrics accepted | >= 1 | **28** | **MET** |
+
+```
+$ .venv/bin/python tools/gates/replay_rubrics.py --workers 8
+{
+ "gate": "rubric replay (W4)",
+ "rubricFiles": 15, "rubricLimit": 20, "preRegistrationDrift": [],
+ "archetypesReplayed": 98, "tracesEvaluated": 303,
+ "acceptedByBoth": 64, "rejectedByOldToo": 6, "newlyRejected": 28,
+ "pass": true
+}
+RUBRIC GATE: PASS
+```
+
+**28 of the 92 archetypes the old rubrics accepted are rejected by the mechanism rubrics** — 30% of
+a corpus that was previously admitted in full. By category: C1 6, C6 5, C7 4, C8 3, C9 3, and one
+each in C2, C3, C4, C5, C10, C11, C14. By failing criterion: **R-ego-drives 23**, **R-criticality 20**.
+
+### What replaced what
+
+The 259 `tools/*.rubric.json` files were verified to be exactly as the brief describes: **one
+distinct structural shape across all 259**, always `[clearance, collision]`, `originalIntent` always
+"Assembled from the agent require() calls". Both criteria are already enforced more strictly by gate
+C3 (true OBB clearance <= 5.0 m vs `centre_distance >= 0.5 m`) and C5 (zero collisions). They cannot
+reject anything the gate would not already reject.
+
+The replacement is **15 rubrics, one per taxonomy category**, in
+`research/edge-case-corpus/rubrics/mechanism/`, shaped like the four hand-written ones: bands taken
+from published protocols and written down with the protocol named —
+
+| category | mechanism band | cited from |
+|---|---|---|
+| C1.car-following | ttc 0.2–2.5 s | Euro NCAP AEB CCRs / CCRb |
+| C2.cut-in-merge | ttc 0.2–2.5 s | Euro NCAP cut-in family, UN R157 ALKS |
+| C3.intersection | path_ttc 0.2–3.0 s | NHTSA pre-crash types 27–31 |
+| C4.roundabout | path_ttc 0.2–3.0 s | NHTSA type 28, TRL entry studies |
+| C5.pedestrian | ttc 0.2–2.5 s | Euro NCAP CPFA / CPNA / CPNC |
+| C6.cyclist-ptw | ttc 0.2–2.5 s | Euro NCAP CBNA / CBFA / CBLA |
+| C7.occlusion | ttc 0.2–2.5 s **+ occlusion blocked_then_revealed** | Euro NCAP CPNCO |
+| C8.workzone | ttc 0.2–3.0 s | MUTCD Part 6 |
+| C9.hazard | ttc 0.2–3.0 s | NHTSA types 10–12 |
+| C10.oncoming | ttc **0.2–2.0 s** (closing speed is the sum) | NHTSA types 13–15 |
+| C11.parking | ttc 0.2–4.0 s, ego >= 0.8 m/s | NHTSA types 1–3 |
+| C12.school | ttc 0.2–2.5 s | Euro NCAP CPNC child, MUTCD Part 7 |
+| C13.control | path_ttc 0.2–3.0 s **+ a required second actor** | census: C13 has no conflict mechanism |
+| C14.loss-of-control | ttc 0.2–3.0 s | UN R13-H, ISO 3888-2 |
+| C15.adversarial | ttc 0.2–2.5 s | NHTSA types 22–24 |
+
+They are **executable, not prose**: every criterion is in the engine's own vocabulary
+(`packages/sim-engine/src/trace/intent-rubric.ts`) and both rubric sets are evaluated by
+`uniscenarios evaluate --rubric`, so the replay compares two rubrics rather than one rubric and a
+reimplementation of it.
+
+What the vocabulary cannot express is written down as an explicit `unsupported` criterion rather
+than dropped — e.g. "the conflict must be *caused by* the control change rather than coincide with
+it" for C13, which is what the blind mechanism-provenance judge exists for.
+
+### A defect in my own rubric, found and recorded rather than quietly fixed
+
+The **first** replay reported 37 newly-rejected archetypes. Five of them (`c5-adult-midblock`,
+`c5-crossing-far-side`, `c5b-crossing-late`, `c5b-runner`, `c5b-umbrella`) rejected with
+`pass: 3, fail: 0` — no criterion had failed. Cause: v1 of the C5 rubric carried a clearance
+criterion with `pair: ["ego", "*"]`. There is no such actor, so the criterion evaluated as
+**unchecked**, and an unchecked *required* criterion rejects.
+
+That is a defect in the rubric, not a finding about the corpus. `PREREGISTRATION.json` is now
+`mechanism-rubrics-v2` and carries a `supersedes` block naming v1, the defect and the five affected
+archetypes. The 28 rejections reported above are the v2 numbers, and **every one of them names a
+failing criterion**.
+
+### The 259 old files are superseded, not deleted
+
+`research/edge-case-corpus/tools/RUBRICS-SUPERSEDED.json` records the supersession. They are
+pre-registrations from earlier rounds and part of this project's evidence trail — superseding them
+is honest, deleting them would destroy the record of what they said. The **operative** set is 15.
