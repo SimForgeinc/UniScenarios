@@ -132,13 +132,23 @@ def trace_facts(trace):
         d = meta.get(aid, {}).get('dims', {})
         al, aw = d.get('l', 0.6), d.get('w', 0.6)
         ar = math.hypot(al, aw) / 2.0
-        cut = er + ar + C3_CLEARANCE + 1.0
+        # Broad-phase cull. OBB clearance is bounded below by centreDist - (er + ar), so a tick
+        # can be skipped only when that LOWER BOUND already exceeds the best clearance found so
+        # far -- then it provably cannot improve on it.
+        #
+        # The earlier form (`if centreDist > er+ar+C3+1 and best < inf: continue`) is UNSOUND: once
+        # any clearance is recorded, every subsequent distant tick is skipped, so a trajectory that
+        # starts far apart and closes later keeps the t=0 value forever. Measured on a probe cell:
+        # it reported clearance 39.80 m at t=0 where the true closest approach was 8.03 m at
+        # t=18.0 s -- wrong on BOTH C2 (closest-approach time) and C3 (clearance). The same cull
+        # appears in tools/vista/gate.py; see FINDINGS defect TG-G1.
         loc = {'clearanceM': float('inf'), 't': None}
+        pad = er + ar
         for i in range(len(ts)):
             if not (ego['present'][i] and a['present'][i]):
                 continue
-            if math.hypot(ego['x'][i] - a['x'][i], ego['y'][i] - a['y'][i]) > cut \
-                    and loc['clearanceM'] < float('inf'):
+            centre = math.hypot(ego['x'][i] - a['x'][i], ego['y'][i] - a['y'][i])
+            if centre - pad >= loc['clearanceM']:
                 continue
             cl = obb_clearance(_corners(ego['x'][i], ego['y'][i], ego['headingRad'][i], el, ew),
                                _corners(a['x'][i], a['y'][i], a['headingRad'][i], al, aw))
@@ -215,6 +225,28 @@ def first_failure(g):
     """The single criterion a failing cell fails FIRST, in gate order. Used for loss census."""
     for k in ('C1', 'C2', 'C3', 'C4', 'C5', 'C6'):
         if not g.get(k, True):
+            return k
+    return None
+
+
+def first_failure_published(g):
+    """Loss census under the PUBLISHED baseline reading of C2.
+
+    The v2 manifest text requires "the closest-approach and minTTC events" to occur after
+    warmup + 0.5. The brief's own section 3.1, `LANE-CONTRACT.md`, and the `tools/vista/gate.py`
+    implementation that produced the 29.3% C2 census and the 0.466 DEV baseline all test the
+    CLOSEST-APPROACH event only.
+
+    Admission (`gate_cell.pass`) uses the stricter manifest reading -- tightening is allowed. This
+    function exists purely so the loss census can be compared like-for-like against the published
+    29.3%, which was measured the other way. Reporting both is the honest option; silently picking
+    whichever is flattering is not.
+    """
+    order = (('C1', g.get('C1', True)), ('C2', g.get('C2_closestOK', True)),
+             ('C3', g.get('C3', True)), ('C4', g.get('C4', True)),
+             ('C5', g.get('C5', True)), ('C6', g.get('C6', True)))
+    for k, ok in order:
+        if not ok:
             return k
     return None
 

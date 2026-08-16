@@ -93,6 +93,8 @@ def gate_summary(summary, brief=None, version=2, want_gap_for=None):
         g['params'] = r.get('params', {})
         g['siteScore'] = r.get('siteScore')
         g['firstFailure'] = G.first_failure(g)
+        g['firstFailurePublished'] = G.first_failure_published(g)
+        g['passPublished'] = g['firstFailurePublished'] is None
         if want_gap_for:
             tr = G.load_trace(tf)
             g['realisedGapT0M'] = forward_gap_at(tr, want_gap_for, 0)
@@ -100,12 +102,12 @@ def gate_summary(summary, brief=None, version=2, want_gap_for=None):
     return recs
 
 
-def loss_census(recs):
+def loss_census(recs, key='firstFailure', passkey='pass'):
     """Share of FAILING cells by the criterion each fails first -- the shape the brief reports."""
-    fails = [r for r in recs if not r.get('pass')]
+    fails = [r for r in recs if not r.get(passkey)]
     counts = {}
     for r in fails:
-        k = r.get('firstFailure') or '?'
+        k = r.get(key) or '?'
         counts[k] = counts.get(k, 0) + 1
     n = len(fails)
     return {'cells': len(recs), 'passed': len(recs) - n, 'failed': n,
