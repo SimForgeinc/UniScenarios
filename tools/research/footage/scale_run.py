@@ -244,10 +244,14 @@ def stage_analyze(run, calib_run):
                 v = futil.load_json(p)
                 rows.append({'cell': c, 'meta': meta, 'v': v, 'model': m})
     primary = [r for r in rows if r['model'] == model]
-    by_gate = {'pass': [r for r in primary if r['meta']['gate']['pass']],
-               'fail': [r for r in primary if not r['meta']['gate']['pass']]}
+    def gate_state(r):
+        g = r['meta'].get('gate') or {}
+        return g.get('pass')       # True / False / None (not yet gated)
+    by_gate = {'pass': [r for r in primary if gate_state(r) is True],
+               'fail': [r for r in primary if gate_state(r) is False]}
+    ungated = [r for r in primary if gate_state(r) is None]
     out = {'frozenJudge': f'{model}/{effort}/{strategy}', 'nCells': len(cells),
-           'nVerdicts': len(rows)}
+           'nVerdicts': len(rows), 'nUngated': len(ungated)}
     for k, sel in by_gate.items():
         out[f'realism_{k}'] = futil.summarize_scores([r['v']['realism'] for r in sel])
         out[f'dynamism_{k}'] = futil.summarize_scores([r['v']['dynamism'] for r in sel])
