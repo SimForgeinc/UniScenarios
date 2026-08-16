@@ -325,6 +325,19 @@ round.** Gate-vs-judge AUC all-corpus 0.623 (W7-only unchanged at chance). Inter
 ρ: luna~sol 0.600, luna~terra 0.637, sol~terra 0.709. Still pending: FreeformLane
 freedom arm, EmergentLane h2 completion, vista tail — standing resumable procedure.
 
+### Round 6 — h2 completion + tag-strip promotions (mined-vs-authored, PREREG-F3 input)
+
+h2 parent cells complete (711 judged; raw worlds: realism μ 5.19, dyn μ 5.65/med 6,
+plaus 0.46, gate-pass 0 by design). All 120 `promoted-*/` de-ambiented counterparts
+judged after EmergentLane added metas (nested-cell discovery fix committed).
+**Promotions: dynamism μ 6.6 (highest measured anywhere) but realism μ 4.55 / plaus
+0.27** — de-ambienting strips crowd context and the judge calls the leftover maneuvers
+implausible. The 11 gate-PASS harvest admits are bimodal: **3/11 are joint-axis wins
+beating every authored gate-passer on realism+dynamism together** (8/7, 7/8, 7/6 vs the
+authored anchor 6.04/3.27); the other 8 read alive-but-weird. Mined scenarios CAN
+out-footage authored ones — as a minority worth filtering for, which is exactly what
+this instrument is for.
+
 
 ## Cost ledger (updated per stage)
 
@@ -342,4 +355,5 @@ freedom arm, EmergentLane h2 completion, vista tail — standing resumable proce
 | scaled round 3 (freeform base) | 1572 judge | (cumulative below) | 1884 s |
 | scaled round 4 (pair1 full + vista) | 1884 judge | (cumulative below) | 2913 s |
 | scaled round 5 (h2 + vista) | 2199 judge | (cumulative below) | 3223 s |
-| **scaled cumulative** | **8505 judge** | **41,970,384 total** | — |
+| scaled round 6 (h2 complete + promotions) | 1839 judge | (cumulative below) | ~48 min |
+| **scaled cumulative** | **10344 judge** | **51,096,386 total** | — |
