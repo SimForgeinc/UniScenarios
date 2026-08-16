@@ -162,6 +162,85 @@ unchanged for the main run — verified equal before launch).
   C5 passing but never generated C4 demand (ego braked too gently) before the budget
   ran out; its single emit at action 40 passed nowhere.
 
-### 5.2 Main run (sol/high, 50 shared-sample briefs)
+### 5.2 Main run (run `main1`, sol/high, ALL 50 shared-sample briefs)
 
-(running — hub process `vista2-main`, output `/tmp/tgr-vista-main1/`)
+Command: `run_vista2.py --run-id main1 --briefs sample --model gpt-5.6-sol --effort
+high --budget 40 --wall-cap 2400`. Harness sha256 `c8ac279cdd26f45b…` (= frozen pilot
+sha, printed by preflight). Fresh GUIDE.md at run start. Sequential episodes (GUIDE
+persistence IS the measured cross-brief learning). 6h07m, zero episode errors, zero
+protocol failures. Full per-brief table: `metrics-main1.jsonl` (committed beside this
+report); numbers below from `analyze.py /tmp/tgr-vista-main1 --census`.
+
+**Headline: 27/50 admitted (0.54) under the frozen gate including portability —
+DEV 18/30 (0.60), owner-list 9/20 (0.45; but see the defect below: 11 of the 20
+were unwinnable by harness bug, and the agent won ALL 9 unaffected owner briefs.)**
+
+| aggregate | value |
+|---|---|
+| briefs / admitted | 50 / 27 (0.54) |
+| tokens in / out / reasoning | 55.48M / 736k / 420k |
+| wall | 6h07m total; mean 440 s/brief; admitted-brief mean 351 s |
+| actions | mean 30.2/brief; admitted-brief mean 22.7 (median 20); total-actions-per-admitted 55.9 |
+| engine passes | 234 simulates, 154 emit batches |
+| cells produced (final emits) | 1,086 (contract §2 layout, `/tmp/tgr-vista-main1/cells/`) |
+
+Per-category (admitted/briefs): C1 2/2, C2 1/2, C3 1/3, C4 1/1, C5 2/2, C6 2/2,
+C7 0/2, C8 2/2, C9 2/2, C10 0/2, C11 0/2, C12 0/2, C13 2/2, C14 2/2, C15 1/2;
+owner: adversarial 1/3, control-anomalies 1/3, erratic 2/3, map-divergence 2/3,
+negotiation 0/2, occlusion-visibility 1/2, sudden-hazards 1/2, weather 1/2.
+
+**The learning curve is real and visible.** First briefs: 40 actions, 600-750 s,
+repeated experiments. After GUIDE.md matured: `c6b-cargo-bike` admitted in 8 actions
+/ 95 s, `c1b-multi-brake` 10/136 s, `c3b-late-yield` 11/160 s,
+`owner-…-snowbanks` 10/100 s, `owner-…-fog` 10/141 s. The mechanism is exactly
+VISTA's: durable notes + immediate visual verification of a first-try plan.
+
+**Genuine category unlock — constructed features.** `c8-taper-merge` and
+`c8-construction-junction` (compiler: 0 sites map-wide, category written off as map
+inventory) were admitted portably by BUILDING the work zone: four
+`construction.channelizer_drum` props placed visually as a taper (dsM/tFrac
+80/-0.95 → 104/-0.7 in the anchor frame) plus a pickup cut-in that moves traffic
+inward ahead of the ego. Rows of the owner list that were "unhostable by map
+inventory" are partially constructible after all — by an agent that can see.
+
+**Provenance honesty (correcting my own mid-run note).** The two C13.control
+admissions are NOT signal-mechanism scenarios. The agent systematically probed
+signal-phase keys (GUIDE.md records ten rejected owner-scope spellings), concluded
+they were unusable from its action surface, and won with a braking-lead mechanism
+instead. Census over all 1,086 emitted cells: `signalPhaseChanges = 0`. The frozen
+gate certifies criticality+portability, not mechanism provenance — the visual arm
+has the same provenance gap the compiler corpus has (34.8% in W7). FootageLane's
+judge on my cells is the instrument that will quantify mine.
+
+**Post-freeze harness defect, disclosed and quantified.** Anchor ids were derived
+from brief ids; 11 owner-list briefs have ids long enough that the anchor id
+exceeded the schema's 64-char bound — `template validate` rejected EVERY emit, so
+those 11 episodes were mathematically unwinnable (they also tripped a
+simulate-without-site crash path, wasting further actions). The 9 owner briefs with
+short ids went **9/9 admitted**. All 30 DEV briefs were unaffected. Fixed as
+harness v2 (`b08de7d453e6a944…`), agent surface unchanged (bounded anchor id +
+crash→game-message); main1 results above stand AS MEASURED under v1; a labeled
+supplementary run of exactly the 11 sabotaged briefs (v2, sol/high, seeded with
+main1's final GUIDE) is reported in §5.3.
+
+**Dynamism census** (frozen shared implementation sha256 `e22b25d73930804f…`,
+n=1,086 cells): actorCount mean 2.25 (max 4); interactingPairs 1.24; hardBrakeEvents
+in 86.4% of cells; swerveEvents in 16.8%; laneChangesExecuted in 5.0%;
+signalPhaseChanges 0; ambientCount 0 (ambient traffic is not in the action set —
+a deliberate scope cut, and an honest limitation vs EmergentLane's arm).
+Per-cell rows: `census-per-cell.json` in the run dir.
+
+**Visual confabulation (falsifier-side evidence).** GUIDE.md also contains a wrong
+"discovery": the agent interpreted renderer texture as brief-specific weather
+("Snow-covered lane markings … rollout views showed irregular accumulation covering
+nearly all painted lines"). The renderer draws no lane paint and no weather. The
+perception channel that finds real spatial defects also invites over-reading;
+judged-realism claims from this arm must be externally validated (FootageLane).
+
+### 5.3 Supplementary run: the 11 defect-affected owner briefs (harness v2)
+
+(running — `vista2-ownerfix`, `/tmp/tgr-vista-main2ownerfix/`)
+
+### 5.4 Effort cell: sol/low, same 50 briefs
+
+(pending — relaunch under harness v2 after §5.3)
