@@ -110,6 +110,9 @@ def judge_image(png_path, model=None, effort=None, retries=4, timeout=300):
             parsed['effort'] = effort
             parsed['latency_s'] = round(time.time() - t0, 2)
             parsed['judge_version'] = JUDGE_VERSION
+            usage = d.get('usage') or {}
+            if usage:
+                parsed['tokens'] = {'in': usage.get('input_tokens'), 'out': usage.get('output_tokens')}
             return parsed
         except Exception as e:  # noqa: BLE001
             last = e

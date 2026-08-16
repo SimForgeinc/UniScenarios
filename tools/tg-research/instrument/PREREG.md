@@ -8,7 +8,8 @@ every measured run and recorded in results.json.
 Pinned implementations (sha256):
 
     metrics.py    0f089bc386af2abfabb683ec080ec336ac84c67d2b86dbea30a77aae6901440a
-    judge.py      84e64dcafea17630f3e1a06f5a31b3a5ba90b44359496bf72d35bdd7c58a2563  (rubric prompt inside)
+    judge.py      9697959b6b5ca37aade99f1bf6778b7e1e866ce001a504d54c1f0d5c45a19210  (rubric prompt inside;
+                  re-pinned pre-measurement: token-usage telemetry added, rubric/scores untouched)
     score.py      af8f1e4782027bae23b775920ea4388b0cee9c805c9abf82e36ba492c621b613
     filmstrip.py  c7b9eb8c5708c3b0dbd2551f4968f7ddf6bad3a0b9b443b8ffe7526b630d927b
     b1-frozen-ego.template.json  04e0d5425c1c0ed7ee29b57322301bdf19a86c24502ee0e0cf0f460db4bdc4e7
