@@ -1180,3 +1180,25 @@ map-authoring dependency. This corpus does not change that, and saying so is the
 
 Gate battery at this checkpoint: tripwire **PASS**, gate tests **PASS**, `cli` typecheck exit 0,
 determinism 210/210, surface hash unchanged after HELDOUT.
+
+---
+
+## M12 — concurrent commits landed mid-run (W8/W9); W7 verified unaffected
+
+While W7 was running, two commits from a parallel owner-directed thread landed on this branch:
+`53559ccb` (W8: pre-registered model x effort sweep) and `5bcfb36d` (W8 amendment + W9: owner
+relaxes the single-model restriction; `vlm.py` gains `VISTA_MODEL`/`VISTA_EFFORT` overrides;
+`assert_vision.py` gate added).
+
+**The `vlm.py` change raced my W7 runs**: DEV (authored 20:12–20:24) used the pre-amendment file,
+HELDOUT (20:33–20:51) the amended one. Verified inert for W7, three ways:
+1. the diff only wraps `MODEL`/`EFFORT` in `os.environ.get(...)` with defaults
+   `gpt-5.6-luna`/`medium`; nothing else in the request path changed;
+2. `VISTA_MODEL`/`VISTA_EFFORT` were unset in the run environment (`printenv` empty);
+3. both run reports self-record `model gpt-5.6-luna, effort medium` read from `vlm.MODEL` at
+   runtime, and `W7-LLM-SURFACE-FROZEN.json`'s `modelHarness.sha256` matches the amended file the
+   HELDOUT run actually imported.
+
+W8/W9 are follow-on experiments pre-registered by that thread; the W8 document itself states
+**"W7 is deliberately NOT part of it and does not change."** They are outside this lane's frozen
+contract and its handover work list, and are not claimed by this scorecard.

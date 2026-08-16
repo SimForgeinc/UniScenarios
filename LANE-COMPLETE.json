@@ -213,5 +213,13 @@
   "judgeReport": "research/edge-case-corpus/reports/training-grade/JUDGE-W7.json",
   "determinismRederivation": "research/edge-case-corpus/reports/training-grade/W7-determinism-rederived.json",
   "mapInventoryHandoff": "research/edge-case-corpus/reports/training-grade/W6-precheck.json"
+ },
+ "concurrentWork": {
+  "commits": [
+   "53559ccb W8 sweep pre-registration",
+   "5bcfb36d W8 amendment + W9 + vlm.py env overrides + assert_vision.py"
+  ],
+  "w7Impact": "NONE, verified (FINDINGS M12): vlm.py amendment defaults to gpt-5.6-luna/medium with VISTA_MODEL/VISTA_EFFORT unset; both W7 run reports self-record luna/medium at runtime; frozen manifest sha matches the file HELDOUT imported",
+  "scope": "W8/W9 are owner-initiated follow-on experiments pre-registered by a parallel thread; the W8 document states W7 is deliberately not part of it. Not claimed by this scorecard."
  }
 }
