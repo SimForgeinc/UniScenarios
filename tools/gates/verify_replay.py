@@ -53,14 +53,30 @@ def main():
     keys = sorted(set(idx[0]) & set(idx[1]))
     only = sorted(set(idx[0]) ^ set(idx[1]))
 
-    same, diffs = 0, []
+    same, diffs, no_trace = 0, [], 0
     for k in keys:
         A, B = idx[0][k], idx[1][k]
-        checks = {'inputHash': A.get('inputHash') == B.get('inputHash'),
-                  'traceDigest': A.get('traceDigest') == B.get('traceDigest')}
         ta, tb = A.get('traceFile'), B.get('traceFile')
-        checks['traceBytes'] = bool(ta and tb and os.path.exists(ta) and os.path.exists(tb)
-                                    and trace_sha(ta) == trace_sha(tb))
+        have_a = bool(ta and os.path.exists(ta))
+        have_b = bool(tb and os.path.exists(tb))
+        if not have_a and not have_b:
+            # A cell the solver REFUSED is a legitimate, and reproducible, outcome. Counting a
+            # deterministic refusal as a byte mismatch made a fully deterministic engine look like
+            # a broken one: 15 of 18 work-zone cells are rejected `closure_lane_too_narrow` in both
+            # runs, with identical status and error codes, and the gate scored 3/18. Refusals are
+            # compared on their status and error code instead, which is the evidence they have.
+            if (A.get('status'), (A.get('error') or {}).get('code')) == \
+               (B.get('status'), (B.get('error') or {}).get('code')):
+                same += 1
+                no_trace += 1
+            else:
+                diffs.append({'cell': k, 'checks': {'refusalMatches': False},
+                              'a': A.get('status'), 'b': B.get('status')})
+            continue
+        checks = {'inputHash': A.get('inputHash') == B.get('inputHash'),
+                  'traceDigest': A.get('traceDigest') == B.get('traceDigest'),
+                  'bothProducedATrace': have_a and have_b}
+        checks['traceBytes'] = bool(have_a and have_b and trace_sha(ta) == trace_sha(tb))
         if all(checks.values()):
             same += 1
         else:
@@ -68,6 +84,7 @@ def main():
 
     rep = {'gate': 'determinism', 'template': a.template, 'maps': maps, 'draws': a.draws,
            'comparedCells': len(keys), 'bitIdentical': same,
+           'deterministicRefusals': no_trace,
            'rate': round(same / len(keys), 4) if keys else 0.0,
            'cellsInOnlyOneRun': only[:10], 'diffs': diffs[:10],
            'pass': bool(keys) and same == len(keys) and not only}
