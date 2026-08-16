@@ -1289,6 +1289,8 @@ export function assertRequiredRoleBindings(
 const CLOSURE_SIDE_CLEARANCE_M = 0.6;
 /** Below this, a closure takes so little of the lane that it is not worth calling one. */
 const CLOSURE_MIN_USEFUL_M = 0.4;
+/** An actor needs at least this much road before the taper to shift onto the open corridor. */
+const CLOSURE_MIN_APPROACH_M = 20;
 
 /** Catalog id per channelizing device kind. The author names a kind, never an asset. */
 const CLOSURE_DEVICE_CATALOG: Record<'cone' | 'drum' | 'barricade' | 'barrier', string> = {
@@ -3561,6 +3563,35 @@ class Materializer {
     return Number.isFinite(narrowest) ? narrowest : fallback;
   }
 
+/**
+   * Reject a closure whose works do not fit inside the drivable reference route.
+   *
+   * Checked in the route's own station space, because that is where `poseAt` clamps.
+   */
+  private assertClosureFitsRoute(id: string, path: string, firstFrameS: number, lastFrameS: number): void {
+    const route = this.refRoute;
+    if (!route) return;
+    const origin = this.site.frame.sRange[0];
+    const first = firstFrameS - origin;
+    const last = lastFrameS - origin;
+    if (first >= 0 && last <= route.lengthM) return;
+    throw new CliError(
+      'closure_exceeds_route',
+      `closure ${id} spans ${firstFrameS.toFixed(0)}..${lastFrameS.toFixed(0)} m of the frame, which ` +
+      `falls outside the ${route.lengthM.toFixed(0)} m drivable reference route at this site`,
+      {
+        path,
+        detail: {
+          siteId: this.site.siteId,
+          routeLengthM: Number(route.lengthM.toFixed(2)),
+          requiredRouteSpan: [Number(first.toFixed(2)), Number(last.toFixed(2))],
+          hint: 'require a longer corridor.runwayDownstreamM, or author the works closer to the frame origin',
+        },
+        exitCode: 2,
+      },
+    );
+  }
+
   private buildClosures(): void {
     const closures = this.template.closures ?? [];
     if (closures.length === 0) return;
@@ -3633,6 +3664,17 @@ class Materializer {
       const taperStartS = fromS - taperLenM;
       const laneEdge = sign * (laneWidth / 2);
 
+      // The whole works -- advance sign, taper, activity area and the run-out beyond it -- has to
+      // FIT on the reference route. `Route.poseAt` clamps beyond the route end, so a closure
+      // authored past it does not fail: every station downstream collapses onto the same point, the
+      // shifted path degenerates, and the ego is left with a route it cannot follow. Measured
+      // signature: a 25-50 m closure mapping to 6.7 m of storage station, and 57/144 cells with the
+      // ego showing a spawn speed but travelling 0.0 m -- a frozen ego, which then trivially avoids
+      // every cone. This is the same clamp defect as TG-A2 and it gets the same treatment: refuse
+      // loudly instead of emitting a scenario that silently measures nothing.
+      const exitRunM = Math.max(25, toS - fromS);
+      this.assertClosureFitsRoute(closure.id, path, taperStartS - advanceM, toS + exitRunM);
+
       const generated: PropPlacementInput[] = [];
       for (let i = 0; i < deviceCount; i += 1) {
         const f = deviceCount === 1 ? 1 : i / (deviceCount - 1);
@@ -3702,30 +3744,15 @@ class Materializer {
       // pass gate criterion C1 exists to catch.
       const spawnS = evalNum(rolePose(role)?.s ?? 0, this.baseScope(), `roles.${role.id}.pose.s`, 0);
       for (const plan of plans) {
-        if (plan.taperStartS <= spawnS) continue;   // the works are already behind this actor
-        const approachS = Math.max(spawnS + 1, plan.taperStartS - plan.advanceM);
+        if (plan.taperStartS <= spawnS + CLOSURE_MIN_APPROACH_M) continue;  // no room to shift
+        const points = this.shiftProfilePoints(plan, spawnS);
+        if (points.length < 4) continue;
         const built = this.buildInteraction({
           id: `${plan.id}-shift-${role.id}`,
           actor: role.id,
           verb: 'route',
           trigger: { kind: 'at', t: 0 },
-          target: {
-            mode: 'polyline',
-            points: [
-              { laneOffset: plan.laneOffset, s: spawnS,
-                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-              { laneOffset: plan.laneOffset, s: approachS,
-                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-              { laneOffset: plan.laneOffset, s: plan.taperStartS,
-                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-              { laneOffset: plan.laneOffset, s: plan.fromS,
-                lateralM: plan.openCentre, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-              { laneOffset: plan.laneOffset, s: plan.toS,
-                lateralM: plan.openCentre, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-              { laneOffset: plan.laneOffset, s: plan.toS + Math.max(25, plan.toS - plan.fromS),
-                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
-            ],
-          },
+          target: { mode: 'polyline', points },
         } as never);
         if (built) this.interactions.push(built);
       }
@@ -3739,6 +3766,57 @@ class Materializer {
    * inside the simulation input, so it is hashed, it replays, and a consumer can see that part of
    * the carriageway is not drivable without inferring it from cone positions.
    */
+/**
+   * The shifted path through a closure, sampled UNIFORMLY along the corridor.
+   *
+   * Emitting one vertex per landmark (spawn, approach, taper head, works start, works end, run-out)
+   * looks tidy and is unfollowable: when the works sit close to the spawn, the first two landmarks
+   * collapse to within a few metres of each other and the polyline acquires a ~25 degree kink 3 m in
+   * front of a 4.7 m vehicle doing 10 m/s. Measured: with that polyline 86 of 143 cells had the ego
+   * driving; with no polyline at all, 647 of 654. The path, not the closure, was stopping the ego.
+   *
+   * Sampling the lateral profile at a fixed spacing instead gives a well-conditioned polyline with
+   * no coincident vertices and no kinks, and it makes the taper a taper rather than a corner. The
+   * ramp is a smoothstep over the MUTCD taper length: the taper length still sets how long the shift
+   * takes, the smoothstep only removes the two curvature discontinuities at its ends.
+   */
+  private shiftProfilePoints(
+    plan: ClosurePlan,
+    spawnS: number,
+  ): Array<{ laneOffset: number; s: number; lateralM: number; lateralRef: 'lane_centre'; headingOffsetRad: number }> {
+    const exitRunM = Math.max(25, plan.toS - plan.fromS);
+    const endS = plan.toS + exitRunM;
+    const taperLenM = Math.max(1, plan.fromS - plan.taperStartS);
+    const step = Math.max(4, Math.min(10, taperLenM / 4));
+
+    const lateralAt = (s: number): number => {
+      if (s <= plan.taperStartS) return 0;
+      if (s >= plan.toS) {
+        const back = (s - plan.toS) / exitRunM;
+        const u = Math.min(1, Math.max(0, back));
+        return plan.openCentre * (1 - (u * u * (3 - 2 * u)));
+      }
+      if (s >= plan.fromS) return plan.openCentre;
+      const u = (s - plan.taperStartS) / taperLenM;
+      return plan.openCentre * (u * u * (3 - 2 * u));
+    };
+
+    const out: Array<{ laneOffset: number; s: number; lateralM: number; lateralRef: 'lane_centre'; headingOffsetRad: number }> = [];
+    let last = -Infinity;
+    for (let s = spawnS; s <= endS + 1e-6; s += step) {
+      if (s - last < step - 1e-6 && out.length > 0) continue;
+      out.push({ laneOffset: plan.laneOffset, s, lateralM: lateralAt(s),
+                 lateralRef: 'lane_centre', headingOffsetRad: 0 });
+      last = s;
+      if (out.length >= 32) break;                   // FramePose polylines cap at 32 vertices
+    }
+    if (out.length > 0 && out[out.length - 1]!.s < endS - step / 2 && out.length < 32) {
+      out.push({ laneOffset: plan.laneOffset, s: endS, lateralM: lateralAt(endS),
+                 lateralRef: 'lane_centre', headingOffsetRad: 0 });
+    }
+    return out;
+  }
+
   private buildLaneClosures(): SimLaneClosure[] {
     const out: SimLaneClosure[] = [];
     for (const plan of this.closurePlans) {

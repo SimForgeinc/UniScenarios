@@ -800,3 +800,87 @@ is the question TG-G1 raises.
 * blind per-scenario judge, corpus-layout judge — need a key;
 * replay determinism at corpus scale — the gate exists (`verify_replay.py`, 24/24 bit-identical on
   both the W1 and W2 probes) and would simply be re-run over the frozen output.
+
+---
+
+## M7 / W3 REVISITED — both exit criteria now **MET**
+
+I previously recorded W3's second criterion as unreachable without W5. That was **wrong**, and the
+correction is the most useful thing in this section.
+
+| exit criterion | required | measured | verdict |
+|---|---|---|---|
+| ego-into-device contacts | 0 on a 40-cell probe | **0** on **100** cells, **100/100** with the ego driving | **MET** |
+| work-zone archetype admitted | >= 2 maps, >= 3 sites | **23 admitted**, **2 maps / 3 sites**, 0 admitted cells with device contact | **MET** |
+
+```
+$ .venv/bin/python tools/gates/probe_workzone.py --draws 20 --max-sites 10
+contactProbe    feasibleCells 100  cellsWhereEgoDrove 100  egoIntoDeviceContactCells 0  maps 3  sites 5
+archetypeProbe  feasibleCells 179  admitted 23  cellsWhereEgoDrove 179
+                admittedCellsWithDeviceContact 0  maps 2  sites 3
+                perCriterion {"C1": 179, "C2": 179, "C3": 168, "C4": 91, "C5": 33, "C6": 179}
+WORK-ZONE GATE: contact probe PASS | archetype probe PASS
+```
+
+### Why I was wrong: two of my own defects, not a solver problem
+
+**DEFECT TG-P1 — I disabled the very metric C4 measures.**
+To make the ego "hold course" I set `rules.collisionAvoidance = false`. `controllers.ts` documents
+that this flag **bypasses the leader and conflict terms entirely** — and those terms are what produce
+`requiredDecel`. So `requiredDecelMax` was **0 by construction**, and C4
+(`requiredDecelMax >= 1.5 OR minTTC <= 3.0`) could only ever be satisfied through `minTTC`.
+
+| ego safety governor | requiredDecelMax(ego) median | max | C4 passing |
+|---|---:|---:|---:|
+| OFF (`collisionAvoidance: false`) | 0.00 | **0.00** | 16/144 |
+| ON (default) | 0.29 | **24.58** | 91/179 |
+
+I had concluded "C4 is the binding constraint, and reaching band=critical is W5". In fact I had
+switched off the demand computation and then reported that there was no demand. C4 asks *"did the
+authored scenario demand braking"*; measuring that with the governor disabled measures nothing.
+
+**DEFECT TG-P2 — my generated detour path was unfollowable, and it froze the ego.**
+The shifted path was emitted as one vertex per landmark (spawn, approach, taper head, works start,
+works end, run-out). When the works sit close to the spawn, the first two landmarks collapse to a
+few metres apart and the polyline acquires a ~25 degree kink 3 m in front of a 4.7 m vehicle at
+10 m/s. The decisive experiment:
+
+| configuration | feasible cells | ego drove >= 10 m |
+|---|---:|---:|
+| `shiftTraffic: true` (landmark polyline) | 143 | **86** |
+| `shiftTraffic: false` (no detour at all) | 654 | **647** |
+
+The closure was not stopping the ego — **my path was**. Fixed by sampling the lateral profile
+**uniformly** along the corridor (`shiftProfilePoints`), with a smoothstep ramp over the MUTCD taper
+length so the taper is a taper rather than a corner. The taper length still sets how long the shift
+takes; the smoothstep only removes the two curvature discontinuities at its ends.
+
+Effect, holding everything else fixed:
+
+| | landmark polyline | uniform profile |
+|---|---:|---:|
+| C1 ego really drives | 86 / 143 | **143 / 143** |
+| C2 not a spawn artifact | 130 / 143 | **143 / 143** |
+| C3 clearance <= 5 m | 70 / 143 | **136 / 143** |
+| C4 deceleration demand | 16 / 143 | **74 / 143** |
+| C5 accept + critical | 6 / 143 | **28 / 143** |
+| **admitted** | **1**, 1 map / 1 site | **21**, 2 maps / 3 sites |
+
+A third guard was added while chasing this: `closure_exceeds_route` refuses a closure whose works do
+not fit inside the drivable reference route, because `Route.poseAt` clamps beyond the route end. It
+fired on only 1 cell, so it was not the cause here — but it is the same clamp class as TG-A2 and it
+closes the hole rather than leaving it.
+
+### The general lesson
+Both defects produced the same false signal: **a scenario that measures nothing looks like a
+scenario that measures zero.** A frozen ego avoids every cone; a disabled governor demands no
+braking. `probe_workzone.py` now reports `cellsWhereEgoDrove` and
+`admittedCellsWithDeviceContact` alongside the headline, and will not pass without them.
+
+### Regressions after the materializer change
+`scenario-model` 303/303 · `scenario-materializer` 81/81 · `sim-engine` 332 passed / 8 skipped ·
+`openscenario` 64/64 · `cli test:portable` 35/35 · full `cli` suite 62 failed / 260 passed
+(unchanged baseline) · `pnpm -r typecheck` exit 0 · tripwire PASS · gate tests 8/8.
+
+All earlier gates re-run and still green: **W1** C2 share 0.0245, r 0.9853 · **W2** 5/5 archetypes
+proven and portable · **W4** 28 newly rejected.

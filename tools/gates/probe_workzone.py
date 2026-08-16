@@ -64,6 +64,11 @@ def main():
           if r.get('firstFailure') != 'NOTRACE']
     census = P.loss_census(r2)
     port = G.portability(r2)
+    # An ADMITTED work-zone cell that clips a cone is not an admitted work-zone cell. The gate's own
+    # C5 counts prop contacts, but assert it here too: this is the specific failure W3 exists to
+    # remove, so it gets its own named check rather than being trusted to fall out of C5.
+    admitted_with_contact = [r for r in r2 if r.get('pass') and device_contacts(r)]
+    arch_driving = [r for r in r2 if r.get('distanceTravelledM', 0) >= G.C1_DIST]
 
     rep = {
       'gate': 'work-zone probe (W3)',
@@ -76,10 +81,12 @@ def main():
         'pass': bool(len(contacts) == 0 and len(driving) >= MIN_DRIVING_CELLS)},
       'archetypeProbe': {
         'feasibleCells': census['cells'], 'admitted': census['passed'],
+        'cellsWhereEgoDrove': len(arch_driving),
+        'admittedCellsWithDeviceContact': len(admitted_with_contact),
         'firstFailure': census['counts'],
         'perCriterion': {k: sum(1 for r in r2 if r.get(k)) for k in ('C1', 'C2', 'C3', 'C4', 'C5', 'C6')},
         'maps': port['nMaps'], 'sites': port['nSites'],
-        'pass': bool(census['passed'] > 0 and port['ok'])},
+        'pass': bool(census['passed'] > 0 and port['ok'] and not admitted_with_contact)},
     }
     rep['pass'] = bool(rep['contactProbe']['pass'] and rep['archetypeProbe']['pass'])
     print(json.dumps(rep, indent=1))

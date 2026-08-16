@@ -2,7 +2,7 @@
  "gate": "work-zone probe (W3)",
  "contactProbe": {
   "feasibleCells": 100,
-  "cellsWhereEgoDrove": 62,
+  "cellsWhereEgoDrove": 100,
   "egoIntoDeviceContactCells": 0,
   "maps": 3,
   "sites": 5,
@@ -13,25 +13,26 @@
   "pass": true
  },
  "archetypeProbe": {
-  "feasibleCells": 180,
-  "admitted": 0,
+  "feasibleCells": 179,
+  "admitted": 23,
+  "cellsWhereEgoDrove": 179,
+  "admittedCellsWithDeviceContact": 0,
   "firstFailure": {
-   "C1": 70,
-   "C3": 19,
-   "C4": 74,
-   "C5": 17
+   "C3": 11,
+   "C4": 77,
+   "C5": 68
   },
   "perCriterion": {
-   "C1": 110,
-   "C2": 162,
-   "C3": 91,
-   "C4": 19,
-   "C5": 25,
-   "C6": 180
+   "C1": 179,
+   "C2": 179,
+   "C3": 168,
+   "C4": 91,
+   "C5": 33,
+   "C6": 179
   },
-  "maps": 0,
-  "sites": 0,
-  "pass": false
+  "maps": 2,
+  "sites": 3,
+  "pass": true
  },
- "pass": false
+ "pass": true
 }

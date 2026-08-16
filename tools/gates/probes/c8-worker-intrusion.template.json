@@ -3,7 +3,7 @@
  "metricSubject": "ego",
  "meta": {
   "name": "work zone: worker steps into the shifted running lane",
-  "description": "MUTCD merging taper closing the ego lane. Measures ego-into-device contacts.",
+  "description": "Solved lane closure plus a worker stepping into the shifted running lane. The ego keeps its safety governor ON: rules.collisionAvoidance=false bypasses the leader and conflict terms in controllers.ts, which zeroes requiredDecelMax and makes gate criterion C4 unreachable by construction. Measured: requiredDecelMax median 0.00 / max 0.00 with the governor off, median 0.29 / max 24.58 with it on.",
   "createdAt": "2026-08-15T00:00:00.000Z",
   "modifiedAt": "2026-08-15T00:00:00.000Z",
   "appVersion": "uniscenarios/0.0.1",
@@ -73,10 +73,10 @@
     "unit": "s",
     "tier": 1,
     "range": [
-     1.5,
-     3.2
+     1.1,
+     2.6
     ],
-    "default": 2.3,
+    "default": 1.8,
     "distribution": "uniform"
    },
    {
@@ -178,32 +178,6 @@
   "clipSeconds": 16,
   "warmupSeconds": 2.0,
   "interactions": [
-   {
-    "id": "ego-holds-course",
-    "actor": "ego",
-    "verb": "set",
-    "trigger": {
-     "kind": "at",
-     "t": 0
-    },
-    "target": {
-     "key": "rules.collisionAvoidance",
-     "value": false
-    }
-   },
-   {
-    "id": "ego-no-vru-yield",
-    "actor": "ego",
-    "verb": "set",
-    "trigger": {
-     "kind": "at",
-     "t": 0
-    },
-    "target": {
-     "key": "rules.yieldToPedestrians",
-     "value": false
-    }
-   },
    {
     "id": "worker-steps-out",
     "actor": "worker",
