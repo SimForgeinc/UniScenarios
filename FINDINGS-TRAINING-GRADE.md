@@ -1,5 +1,23 @@
 # FINDINGS — training-grade lane
 
+> **Scorecard.** W1 **PASS** · W2 **PASS** · W3 **SPLIT** (contact criterion met, archetype admission not) ·
+> W4 **PASS** · W5 **not attempted, forbidden** · W6 **PASS** · W7 **BLOCKED on credentials**, deterministic half run.
+>
+> **The headline negative:** the published DEV baseline of 0.466 does not survive a correct gate.
+> Re-gating the published corpus with the TG-G1 correction rejects **15 of 98 archetypes**, 15 of the
+> 16 first failures being C2 — the criterion the old cull mis-measured. The honest baseline is
+> **DEV ~0.401 / HELDOUT ~0.341**, so the 0.60 target is further away than the brief assumed. This is
+> a tightening, which the frozen contract requires; the gate itself was never relaxed and the
+> no-relaxation tripwire passed on every continuation and was proven to fire when attacked.
+>
+> **Four representation defects found and fixed, none of them new checks:**
+> `TG-B0` the built CLI could not run `batch` at all · `TG-A1` an actor authored at 0 kph is driven to
+> 20 kph by warm-up, which silently breaks every parked/stopped/disabled actor · `TG-A2` a
+> site-dependent `dsM` expression clamps the placement (11.05 m median error vs 0.003 m) ·
+> `TG-G1` an unsound cull in the gate's own closest-approach search, **still present in
+> `tools/vista/gate.py:206`**, which produced the published baseline.
+
+
 Incremental log. Every number below is command output, not prose. Negatives are recorded as
 findings, not hidden.
 
