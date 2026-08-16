@@ -81,7 +81,16 @@ ambient-on: 14.2 s wall (≈2.8×; the 20 s settle is ambient-only integration).
    world-junction × yale-street site `02331c12992a78c2` × `--ambient city`; repair
    `{controlId: signal:1432, 76:0:-1 → 320:0:-1, 1.0 m}`; hash of control-resolved input equals the
    trace header hash exactly. Until EngineLane lands the fix, such cells are tallied as death cause
-   `harness:evidence-mismatch`, never as physics. EngineLane confirmed materializer-side fix queued.
+   `harness:evidence-mismatch`, never as physics. **RESOLVED**: EngineLane landed the
+   materializer-side fix (b511f7c, regression test `evidence-join-control-repair.test.ts`);
+   repro cell now `evidenceOk=true`. Every measured arm below runs on the fixed build; the only
+   old-build artifacts (12 harvest pilot cells) were deleted and re-run.
+5. **Programmatic ≡ CLI equivalence (measured).** `runCell` with
+   `ambient:{preset:'heavy',maxActors:48,seed:'h1'}, ambientSettleSeconds:20` reproduces the CLI
+   cell (`--ambient heavy --ambient-max-actors 48 --ambient-seed h1`) **bit-for-bit**: identical
+   `inputHash` `16a5d138…` and `traceDigest` `6156d010…` (emergent-junction-straight ×
+   yale-street/0123925723ddef80). Commands in `/tmp/tgr-emergent-equiv`, recorded here because the
+   whole harvest rests on it. This double-run is also a first determinism datapoint.
 
 ## 2. Arm (i) — paired ambient on/off on gate-passing templates
 
@@ -92,7 +101,30 @@ light(3)/city(8)/heavy(16) veh/km vs off. Measures: frozen-gate survival + first
 re-run traces), dynamism census delta (shared `dynamism_census.py`, pending FreeformLane),
 cell artifacts per contract §2 for FootageLane.
 
+**Template screen (done).** Screen = batch `--maps belmont-research-center,el-camino-road[,yale-street]
+--max-sites 2 --draws 2`, frozen gate per cell, template passes with ≥1 passing cell.
+Commands: `tools/research/emergent/screen_templates.py --out /tmp/tgr-emergent-screen1` (core pool)
+and `--out /tmp/tgr-emergent-screen2 --pool extend --maps …,yale-street` (vista-corpus pool).
+- core pool (examples/ + examples/mechanisms/): **4/38** templates pass — these curated mechanism
+  templates are site-tuned and mostly die C2/C5 on generic screen sites.
+- vista-corpus pool: **44/60** pass (screen2/screen.json).
+Selected 18 for the paired arm, spanning C1/C2/C3/C5/C6/C7/C8/C11/C12/C14:
+c1-stop-and-go, c1-lead-hard-brake, c11-aisle-conflict, c11-backing-out, c12-school-dropoff,
+c14-third-party-spin, c2-exit-across, c2-merge-gap-collapse, c2-ramp-merge, c2-weave,
+c3-left-hook-ptw, c3-red-light-late, c5-reversing-ped, c5-adult-midblock, c6-cbna,
+c7-crest-occludes, c7-bus-occludes-cyclist, c8-night-zone.
+Note: the shared briefs sample (CONTRACTS §5) governs brief-authoring arms; arm (i) is a
+template re-run design per RETHINK-PLAN §3C ("N admitted W7 templates re-run with ambient
+on/off"), so it draws from the W7 template family, not the briefs sample.
+
+Main run (in flight, `emergent-pair` under hub): 18 templates × {off, light, city, heavy} ×
+3 maps × ≤3 sites × 3 draws, `--ambient-seed pairseed1`, settle 20 s (CLI default), plus a
+determinism re-run subset (first-ranked site per map, same coordinates ⇒ same cellSeed) per arm.
+Dynamism census: shared `tools/research/shared/dynamism_census.py` frozen at sha256
+`e22b25d73930804f08145db344a7f8751e2d2fbf3c8f25dba5de8975682f43c5`.
+
 *(results pending)*
+
 
 ## 3. Arm (ii) — emergent harvest (no scripted challenger)
 
