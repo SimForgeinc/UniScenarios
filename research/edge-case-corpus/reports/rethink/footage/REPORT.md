@@ -60,19 +60,45 @@ Chosen judge := cheapest adequate arm by mean total tokens/cell
 (ties: latency, then lower effort, then sol<luna<terra). No adequate arm → calibration
 FAILED, scaling does not run, finding reported plainly.
 
-## 4. Calibration (pending)
+## 4. Calibration set (built; judging pending renderer glyph fix)
 
-Run dir `/tmp/tgr-footage-calib1`. Set build command:
-`.venv/bin/python tools/research/footage/build_calibration.py --run /tmp/tgr-footage-calib1 --run-id calib1`
-(good: 8 gold/example templates gated by frozen tg_gate; absurd: 5 c7-*-baseline
-VRU-in-occluder + b1-frozen-ego + b2-zero-kph, marker-verified; ambient off; 5 maps;
-seed 20260816). Results will be inserted here with distributions per arm.
+Run dir `/tmp/tgr-footage-calib1`. Commands (exact):
 
-## 5. Scaled run (blocked on calibration PASS)
+```
+.venv/bin/python tools/research/footage/build_calibration.py --run /tmp/tgr-footage-calib1 --run-id calib1
+# wave 2 (see PREREG-v2 amendment): 12 more mechanism templates, resample with same seed
+rm -rf /tmp/tgr-footage-calib1/cells /tmp/tgr-footage-calib1/labels.json
+.venv/bin/python tools/research/footage/build_calibration.py --run /tmp/tgr-footage-calib1 --run-id calib1 --skip-batch
+.venv/bin/python tools/research/footage/render_cells.py /tmp/tgr-footage-calib1/cells --redact --dev-assets dev-assets --workers 4
+```
 
-W7 admitted-subset regeneration (≥40 cells) + all cell roots announced by
-FreeformLane/EmergentLane over hub; frozen judge + strategy; inter-model agreement,
-cost/cell, admitted-vs-rejected score distributions.
+Result: **24 good** (28 candidates; 7 templates: oncoming-overtake 8, c7-bus-shelter-fixed 7,
+c7-hedge-corner-fixed 3, right-turn-crosswalk 2, cut-in-brake 2, lead-hard-brake 1,
+delivery-double-park 1) / **24 absurd** (140 candidates; c7-*-baseline 16, b2-zero-kph 5,
+b1-frozen-ego 3), marker-verified per PREREG-v2. Exclusion census (good candidates):
+C5 44, C4 34, C2 28, C1 16, C3 9 (from set-manifest.json). Renders: 48/48 in 22 s
+(4 workers), redacted, underlay on.
+
+**Blocking observation (filed to EngineLane):** `render-trace.mjs` keys glyphs off the
+literal actor id (`ped` → red disc); real cells use ids like `vru`, so pedestrians drew
+as ~4 px green boxes — invisible to any judge. Fix requested (glyph from
+`trace.header.actorMetadata[id].kind`); calibration pilot deliberately NOT started on
+illegible frames.
+
+## 5. Scaled run (judging blocked on calibration PASS; cells regenerated)
+
+```
+.venv/bin/python tools/research/footage/scale_run.py w7 --run /tmp/tgr-footage-scale1 --calib /tmp/tgr-footage-calib1 --rows 24
+```
+
+W7-luna DEV decision-replay regeneration (no LLM: committed final decision dicts through
+the frozen `author_llm.COMPILERS`): 24 rows sampled stratified by (admitted, category)
+seed 20260816 → **170 cells** (12 admitted rows → 103 cells incl. 28 gate-PASS; 12
+rejected rows; per-cell first-failure census C5 46 / C4 31 / C3 29 / C2 21 / C1 15).
+Two rows produced 0 ok cells (c7b-truck-hides-oncoming, c8-construction-junction —
+site-infeasible on regen). Sibling roots from FreeformLane/EmergentLane will be added
+via `scale_run.py roots --roots <dir>` as announced over hub; frozen judge + strategy;
+inter-model agreement measured on every 3rd cell with all three models.
 
 ## Cost ledger (updated per stage)
 

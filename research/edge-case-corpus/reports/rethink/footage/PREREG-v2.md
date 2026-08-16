@@ -58,6 +58,15 @@ only 4 distinct gate-passing mechanisms (C5/C4 losses); 12 further `examples/mec
 templates were added to the good pool for mechanism diversity (final good class: 24 cells /
 7 templates; absurd: 24 cells / 7 templates). No judge had seen any pixel at amendment time.
 
+**Amendment 2 (2026-08-16, still before any measured verdict):** the renderer keyed VRU
+glyphs off the literal actor id `ped`; real cells use other ids, so pedestrians rendered
+as ~4 px unclassed boxes. Fixed in `scripts/render-trace.mjs` (glyph/colour from
+`trace.header.actorMetadata[id].kind`, id fallback preserved), and the rubric's legend
+sentence was extended to name the cyclist/motorcycle glyphs that fix introduces. Scores,
+defect classes, thresholds, strategies, and the selection rule are untouched. The only
+measured verdict at amendment time was the pipeline smoke (recorded in REPORT §2), which
+enters no statistic.
+
 ## Judge input and strategies
 
 Renders via `scripts/render-trace.mjs` with `--redact` (no ids, no minTTC/reveal HUD —

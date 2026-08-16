@@ -205,9 +205,32 @@ function actorStatic(instanceDoc) {
   return out;
 }
 
+// Actor kind from the trace header (authoritative); legacy id 'ped' kept as fallback
+// so pre-metadata traces render unchanged. Pedestrians/cyclists must be visually
+// distinct classes for a vision judge — glyphs keyed off literal ids miss every
+// real cell that names its VRU something else (e.g. 'vru').
+function actorKinds(trace) {
+  const out = new Map();
+  for (const [id, m] of Object.entries(trace.header?.actorMetadata ?? {})) {
+    if (m && typeof m.kind === 'string') out.set(id, m.kind);
+  }
+  return out;
+}
+
+function actorColor(id, kind, staticIds) {
+  if (id === 'ego') return '#45a3ff';
+  if (kind === 'pedestrian') return '#ff5a5f';
+  if (kind === 'cyclist' || kind === 'bicycle') return '#e67e22';
+  if (staticIds.has(id)) return '#ffc166';
+  if (kind === 'motorcycle') return '#b8d65a';
+  return '#84d65a';
+}
+
 function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, width, height, scale, underlay, redact }) {
   const dims = actorDims(instanceDoc);
   const staticIds = actorStatic(instanceDoc);
+  const kinds = actorKinds(trace);
+  const kindOf = (id) => kinds.get(id) ?? (id === 'ped' ? 'pedestrian' : 'car');
   const actorIds = sortedActorIdsFromTrace(trace);
   const layers = [];
   layers.push(`<rect width="100%" height="100%" fill="#101820"/>`);
@@ -238,7 +261,14 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
       if (ch.present[i] === 0) continue;
       pts.push(pointToScreen({ x: ch.x[i], y: ch.y[i] }, camera, scale, width, height));
     }
-    if (pts.length > 1) layers.push(`<polyline points="${polygon(pts)}" fill="none" stroke="${id === 'ego' ? '#45a3ff' : id === 'ped' ? '#ff5a5f' : '#e8b65a'}" stroke-width="2" opacity="0.65"/>`);
+    if (pts.length > 1) {
+      const kind = kindOf(id);
+      const trail = id === 'ego' ? '#45a3ff'
+        : kind === 'pedestrian' ? '#ff5a5f'
+        : (kind === 'cyclist' || kind === 'bicycle') ? '#e67e22'
+        : '#e8b65a';
+      layers.push(`<polyline points="${polygon(pts)}" fill="none" stroke="${trail}" stroke-width="2" opacity="0.65"/>`);
+    }
   }
 
   // Static OBB occluders authored as props, if any.
@@ -256,10 +286,11 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     const p = poseAt(trace, id, index);
     if (!p.present) continue;
     const d = dims.get(id) ?? { l: 1, w: 1, h: 1 };
-    const color = id === 'ego' ? '#45a3ff' : id === 'ped' ? '#ff5a5f' : staticIds.has(id) ? '#ffc166' : '#84d65a';
-    if (id === 'ped') {
+    const kind = kindOf(id);
+    const color = actorColor(id, kind, staticIds);
+    if (kind === 'pedestrian') {
       const c = pointToScreen(p, camera, scale, width, height);
-      layers.push(`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${Math.max(4, d.w * scale / 2).toFixed(1)}" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>`);
+      layers.push(`<circle cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="${Math.max(5, d.w * scale / 2).toFixed(1)}" fill="${color}" stroke="#ffffff" stroke-width="1.5"/>`);
       layers.push(`<line x1="${c.x.toFixed(1)}" y1="${c.y.toFixed(1)}" x2="${(c.x + Math.cos(p.headingRad) * 10).toFixed(1)}" y2="${(c.y - Math.sin(p.headingRad) * 10).toFixed(1)}" stroke="#fff"/>`);
       if (!redact) layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}</text>`);
     } else {
