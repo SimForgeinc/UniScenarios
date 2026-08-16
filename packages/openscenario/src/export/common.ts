@@ -70,6 +70,15 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
     roadControls: replay
       ? decision('derived', 'approximate', 'stop/yield responses are baked into sampled actor motion; portable lane-control declarations are flattened')
       : decision('omitted', 'none', 'road-control declarations are not emitted by the current actions profiles'),
+    // A lane closure is a statement about the drivable surface. OpenSCENARIO has no portable way
+    // to say "this much of this lane is unavailable between these stations": the closest constructs
+    // are stationary objects (which is what the channelizing devices already export as) and a road
+    // network edit, which would change the referenced map rather than the scenario. Replaying a
+    // trace bakes the shifted path into the trajectory; the fact that the surface was closed does
+    // not survive, so it is retained as provenance rather than claimed as executable geometry.
+    laneClosures: replay
+      ? decision('derived', 'approximate', 'the shifted path through the works is baked into the sampled trajectory; the lane-availability override itself is retained only as UniScenarios provenance')
+      : decision('extension', 'metadata-only', 'ASAM has no portable lane-availability override; the closed span, side and remaining width are retained in UniScenarios Properties, and the channelizing devices export as stationary objects'),
     props: decision('omitted', 'none', 'render-catalog props are not emitted by the current profiles'),
     occluders: decision('preserved', 'approximate', 'exported as stationary bounding-box objects without catalog appearance'),
     occlusionPairs: decision('omitted', 'none', 'line-of-sight evaluation pairs are not an ASAM execution concept'),

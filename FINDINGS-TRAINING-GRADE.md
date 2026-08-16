@@ -409,3 +409,116 @@ unaffected. At the earlier bands the strict clause was missed (0/5 archetypes at
 result is reported above rather than deleted. The resulting reveal-to-conflict of ~3.2 s is
 *generous* compared with a Euro NCAP CPNCO obstructed-pedestrian test (~1–1.5 s), so these scenarios
 are easier than the standard, not harder — a limitation, recorded as such.
+
+---
+
+## M3 / W3 — a lane closure that actually closes the lane: **SPLIT RESULT**
+
+| exit criterion | required | measured | verdict |
+|---|---|---|---|
+| ego-into-device contacts | **0** on a 40-cell probe | **0** on **100 feasible cells**, of which **62** have the ego genuinely driving >= 10 m | **MET** |
+| work-zone archetype admitted | >= 2 maps, >= 3 sites | **0 admitted**, 0 maps / 0 sites | **NOT MET** |
+
+Baseline for the first row, measured before any change, on the same maps:
+**45 of 60 cells (0.75) with ego-into-device contact** — consistent with `tools/STATE.json`
+("collision 91-107 cells" of 126-148). After: **0 of 100**.
+
+```
+$ .venv/bin/python tools/gates/probe_workzone.py --draws 20 --max-sites 10
+contactProbe   feasibleCells 100  cellsWhereEgoDrove 62  egoIntoDeviceContactCells 0
+               maps 3  sites 5  rejectedBySolver {"closure_lane_too_narrow": 300, "unknown_site": 440}
+archetypeProbe feasibleCells 180  admitted 0
+               perCriterion {"C1": 110, "C2": 162, "C3": 91, "C4": 19, "C5": 25, "C6": 180}
+WORK-ZONE GATE: contact probe PASS | archetype probe FAIL
+```
+
+### What was built: a closure is now a fact about the road, not a pile of props
+
+Blocker B1 was exact — `roadControlSchema.kind` is `z.literal('stop')` and nothing else, so there
+was no way to state that part of a lane is unavailable. Added:
+
+* **`SimScenarioInput.laneClosures`** (`sim-engine`) — the lane-availability override, carrying the
+  closed span, side, closed width, remaining width and the open corridor's centreline. It is inside
+  the simulation input, so it is hashed, it replays, and a consumer can see the surface is closed
+  without inferring it from cone positions.
+* **`ScenarioTemplateV2.closures`** (`scenario-model`) — the author states *what is closed*
+  (`fromS`, `toS`, `closedWidthM`, `side`, `device`) and never where a cone goes.
+* **the solver** (`scenario-materializer`) — from that one description it computes the MUTCD taper
+  length (`L = W·S²/60` below 40 mph, `L = W·S` above), device spacing, every device pose, the
+  engine override, **and the shifted travel path**. `reroute_ego` is emitted as an ordinary `route`
+  polyline, so it uses the same already-proven mechanism as every other authored trajectory.
+* **the OpenSCENARIO exporter** required an explicit capability decision for the new field — its
+  `satisfies Record<keyof SimScenarioInput, …>` makes that a compile error until it is written down.
+  Recorded as `extension / metadata-only`: ASAM has no portable lane-availability override.
+
+**Why one source of truth mattered, measured.** Three arms on the same maps:
+
+| arm | ego-into-device contact cells |
+|---|---|
+| devices only (what `close_lane` did) | 45 / 60 (0.75) |
+| devices + a **hand-authored** detour | 15 / 60 (0.25) |
+| devices + detour **both solved from the closure** | **0 / 100** |
+
+Authoring the layout and the path separately lets them drift apart. Solving both from one
+description makes contact-free passage a property of the representation.
+
+Two further corrections were needed, each found by measurement:
+
+* **a passable corridor is not optional.** Closing 1.54 m of a 3.23 m lane leaves 1.69 m for a
+  1.82 m car — contact is then geometrically forced (24/60 cells). The solver now sizes the closure
+  so the running lane keeps MUTCD shy distance (0.6 m each side, giving ~3.0 m, the standard minimum
+  work-zone lane), reduces the closed width with a note when it can, and **fails loudly**
+  (`closure_lane_too_narrow`) when it cannot. 300 cells were rejected that way rather than silently
+  producing garbage.
+* **design against the narrowest section.** The last 8 contacts were all `wz-taper-0`/`-1`, the
+  devices nearest the edge, at three sites where the local lane is narrower than the lane's
+  representative width. The solver now samples the reference route across the whole closure span and
+  designs against its minimum.
+
+### The false pass I caught, and why C1 exists
+
+An earlier version of this fix reported **0 contacts** — because the generated detour polyline began
+at the taper, *downstream of the ego*, and a `route` polyline is the actor's whole path. The ego
+could not reach its own route and never moved: **36 of 456 cells with the ego travelling >= 10 m,
+median distance 0.0 m**. A frozen ego trivially hits nothing.
+
+This is precisely the failure gate criterion C1 is for, and it is why `probe_workzone.py` reports
+`cellsWhereEgoDrove` beside `egoIntoDeviceContactCells` and refuses to pass without it. The fix is
+to start the detour at the actor's own station. The number reported above — 0 contacts with
+62 cells of genuine driving — is post-fix.
+
+### The half that failed, stated plainly
+
+**No work-zone archetype was admitted.** `c8-worker-intrusion` (closure + a worker stepping into the
+shifted running lane) over 180 feasible cells on all five maps:
+
+| criterion | cells passing |
+|---|---|
+| C1 ego really drives | 110 / 180 |
+| C2 not a spawn artifact | 162 / 180 |
+| C3 clearance <= 5 m | 91 / 180 |
+| **C4 deceleration demand** | **19 / 180** |
+| C5 evaluate accept + critical | 25 / 180 |
+| C6 occlusion (inert here) | 180 / 180 |
+
+C4 is the binding constraint at 19/180: the encounter is
+geometrically close but not *demanding*. Reaching band=critical reliably is a search over the
+scenario's parameters against the gate — which is precisely **W5, and W5 is forbidden pending human
+review**. I did not tune the archetype per-cell to force an admission, because per-scenario tuning
+is the explicit anti-goal of this lane.
+
+**Recorded as a negative result.** The mechanism defect (a closure that was scenery) is fixed and
+measured; turning the fixed mechanism into admitted archetypes needs the solver work that is out of
+scope.
+
+### Map-inventory consequence for W6
+
+`closure_lane_too_narrow` rejected **300 of the 400 cells that had a matched site**. A lane closure
+with a shift needs a running lane of ~3.0 m plus a useful closed width, i.e. a lane wider than about
+**3.4 m**. Only **5 sites across 3 maps** qualified — belmont-research-center, richmond-field-station
+and yale-street. This is a concrete, quantified entry for the map-authoring hand-off.
+
+### Regressions
+`scenario-model` 303/303 · `scenario-materializer` 81/81 · `sim-engine` 332 passed / 8 skipped ·
+`openscenario` 64/64 · `cli test:portable` 35/35 · full `cli` suite **62 failed / 260 passed**,
+identical to the pre-existing baseline. Tripwire PASS, gate unit tests 8/8.

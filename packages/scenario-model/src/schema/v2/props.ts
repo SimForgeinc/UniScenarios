@@ -84,6 +84,59 @@ export const PropPlacementSchema = z.strictObject({
   extensions: V2ExtensionsSchema.optional(),
 });
 
+/**
+ * A lane closure — the drivable surface itself, not scenery.
+ *
+ * `close_lane` used to mean "place cones". The drivable surface was untouched, every actor's route
+ * still ran straight through the devices, and the ego drove into the barriers: 91 of 126 cells with
+ * contact on the first honest attempt (`tools/STATE.json` blocker B1), 45 of 60 on the probe here.
+ * A closure that does not change where vehicles may drive is a decoration.
+ *
+ * The author states *what is closed*, never where a cone goes:
+ *
+ *     { id: 'wz', fromS: 60, toS: 110, closedWidthM: 1.8, side: 'right', device: 'cone' }
+ *
+ * and the materializer solves the rest from that one description — MUTCD taper length and device
+ * spacing, every device pose, the lane-availability override handed to the engine, and the shifted
+ * travel path through the works. Devices and detour therefore come from a SINGLE source of truth
+ * and cannot drift apart. Authoring them separately is what leaves residual contacts: measured
+ * 15/60 with a hand-authored detour against 0/60 when both are solved from the closure.
+ */
+export const LaneClosureSchema = z.strictObject({
+  id: PropIdSchema,
+  label: z.string().max(200).optional(),
+  /** Signed same-direction lane index; 0 is the reference lane. */
+  laneOffset: z.number().int().min(-8).max(8).default(0),
+  /** Start of the closed span (the downstream end of the taper), frame metres. */
+  fromS: NumberOrExprSchema,
+  /** End of the closed span, frame metres. */
+  toS: NumberOrExprSchema,
+  /** How much of the lane width is taken, measured in from `side`. */
+  closedWidthM: NumberOrExprSchema,
+  /** Which edge the works are against. */
+  side: z.enum(['left', 'right']).default('right'),
+  /** Channelizing device. Height and spacing come from the catalog and MUTCD, not the author. */
+  device: z.enum(['cone', 'drum', 'barricade', 'barrier']).default('cone'),
+  /** Design speed for the MUTCD taper. Defaults to the site's posted limit when omitted. */
+  assumedSpeedKph: NumberOrExprSchema.optional(),
+  /**
+   * Shift traffic around the works rather than leaving routes running through them.
+   *
+   * `true` is the MUTCD Fig. 6H-9 lane shift and is the whole point of the operation. `false`
+   * exists only to author a genuinely impassable closure — a road actually shut — and then the
+   * ego is expected to stop, not to thread the devices.
+   */
+  shiftTraffic: z.boolean().default(true),
+  /** Advance warning sign distance upstream of the taper, metres. */
+  advanceWarningM: NumberOrExprSchema.optional(),
+  essentiality: z.enum(['required', 'preferred', 'cosmetic']).default('required'),
+});
+
+/** A lane closure. */
+export type LaneClosure = z.infer<typeof LaneClosureSchema>;
+/** A lane closure as authored. */
+export type LaneClosureInput = z.input<typeof LaneClosureSchema>;
+
 /** A placed prop. */
 export type PropPlacement = z.infer<typeof PropPlacementSchema>;
 /** A placed prop as authored. */

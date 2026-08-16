@@ -40,7 +40,7 @@ import { EnvironmentSchema } from './environment.js';
 import { ChoreographySchema } from './interactions.js';
 import { InvariantSchema } from './invariants.js';
 import { ParamsBlockSchema } from './params.js';
-import { PropPlacementSchema } from './props.js';
+import { LaneClosureSchema, PropPlacementSchema } from './props.js';
 import { RoleBindingSchema } from './roles.js';
 import { TemplatePerceptionSchema } from './sensors.js';
 import { TrafficControlSchema } from './traffic-controls.js';
@@ -86,6 +86,14 @@ export const ScenarioTemplateV2ObjectSchema = z.strictObject({
   anchor: LogicalAnchorSchema,
   roles: z.array(RoleBindingSchema).max(64).default([]),
   props: z.array(PropPlacementSchema).max(256).default([]),
+  /**
+   * Lane closures: temporary edits to the DRIVABLE SURFACE, not scenery.
+   *
+   * Separate from `props` because a closure is a statement about where vehicles may drive. The
+   * devices that mark it are solved from it, so the barrier layout and the path around the barriers
+   * cannot disagree.
+   */
+  closures: z.array(LaneClosureSchema).max(32).default([]),
   /** Portable executable traffic controls, independent of map-owned signals. */
   trafficControls: z.array(TrafficControlSchema).max(64).default([]),
   /** Map-bound phase edits for physical signal controllers selected in Studio. */

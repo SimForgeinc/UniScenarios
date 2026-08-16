@@ -372,6 +372,36 @@ export const surfacePatchSchema = z.object({
 });
 export type SurfacePatch = z.infer<typeof surfacePatchSchema>;
 
+/**
+ * A lane-availability override: part of a lane is not drivable for part of its length.
+ *
+ * `roadControls` can only say `kind: 'stop'`, so before this there was no way to state that a lane
+ * is closed. A work zone was therefore only ever props, the drivable surface was unchanged, and
+ * routes ran straight through the barriers (blocker B1; measured 45/60 cells with ego-into-device
+ * contact). This is the missing representation, and it is part of the input — so it is hashed, it
+ * replays, and it cannot be mistaken for decoration.
+ *
+ * `[fromS, toS)` is a half-open span in the lane's own storage stations. `closedWidthM` is measured
+ * inward from `side`; the remaining width is the open corridor traffic is shifted into.
+ */
+export const laneClosureSchema = z.object({
+  id: idSchema,
+  rsl: z.string().min(1),
+  fromS: nonNeg,
+  toS: nonNeg,
+  closedWidthM: positive,
+  side: z.enum(['left', 'right']),
+  /** Lateral centre of the OPEN corridor, metres from the lane centreline, positive left. */
+  openCentreOffsetM: finite,
+  /** Remaining drivable width, metres. Zero means genuinely impassable. */
+  openWidthM: nonNeg,
+  label: z.string().max(200).optional(),
+}).refine((value) => value.fromS <= value.toS, {
+  message: 'lane closure fromS must be <= toS',
+});
+export type LaneClosure = z.infer<typeof laneClosureSchema>;
+
+
 const cmp = z.enum(['lte', 'gte']);
 
 /**
@@ -844,6 +874,7 @@ export const simScenarioInputSchema = z
     roadControls: z.array(roadControlSchema).default([]),
     /** Localised grip: ice on the bend, a flooded dip, wet leaves under the trees. */
     surfacePatches: z.array(surfacePatchSchema).default([]),
+    laneClosures: z.array(laneClosureSchema).default([]),
     /** Fixed renderable catalog props, expanded to one record per concrete member. */
     props: z.array(staticPropSchema).default([]),
     occluders: z.array(occluderSchema).default([]),

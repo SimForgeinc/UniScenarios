@@ -45,6 +45,7 @@ import {
   evaluateExpr,
   isExpr,
   rolePose,
+  PropPlacementSchema,
   type Expr,
   type ExprScope,
   type Interaction as V2Interaction,
@@ -55,6 +56,7 @@ import {
   type Condition as V2Condition,
   type PointRef,
   type PropPlacement,
+  type PropPlacementInput,
   type FramePose,
   type Environment,
   type RoleBinding as V2Role,
@@ -106,6 +108,7 @@ import {
   type StaticProp,
   type PerceptionConfig as SimPerceptionConfig,
   type SurfacePatch as SimSurfacePatch,
+  type LaneClosure as SimLaneClosure,
   type Trigger as SimTrigger,
   pruneDanglingAfterInteractions,
 } from '@uniscenarios/sim-engine';
@@ -1275,6 +1278,54 @@ export function assertRequiredRoleBindings(
   }
 }
 
+/**
+ * Lateral clearance kept each side of the widest vehicle passing a closure, metres.
+ *
+ * MUTCD shy distance is 2 ft (0.6 m) from channelizing devices, which with a 1.82 m car gives a
+ * 3.02 m running lane -- the same order as the 10 ft (3.0 m) minimum work-zone lane width. This is
+ * the standard, not a number tuned until the probe passed: at 0.35 m the corridor was 2.52 m and
+ * 7/56 cells still made contact.
+ */
+const CLOSURE_SIDE_CLEARANCE_M = 0.6;
+/** Below this, a closure takes so little of the lane that it is not worth calling one. */
+const CLOSURE_MIN_USEFUL_M = 0.4;
+
+/** Catalog id per channelizing device kind. The author names a kind, never an asset. */
+const CLOSURE_DEVICE_CATALOG: Record<'cone' | 'drum' | 'barricade' | 'barrier', string> = {
+  cone: 'construction.traffic_cone',
+  drum: 'construction.channelizer_drum',
+  barricade: 'construction.barricade_type3',
+  barrier: 'construction.jersey_barrier_run',
+};
+
+/**
+ * MUTCD merging-taper length, metres. `L = W·S²/60` below 40 mph, `L = W·S` at or above, with W in
+ * feet and S in mph. Solver-owned geometry: a work zone's taper is a consequence of the design
+ * speed and the width taken, not an authoring choice.
+ */
+function mutcdTaperLengthM(speedKph: number, offsetM: number): number {
+  const mph = speedKph / 1.609;
+  const widthFt = offsetM * 3.281;
+  const lengthFt = mph < 40 ? (widthFt * mph * mph) / 60 : widthFt * mph;
+  return Math.max(15, lengthFt / 3.281);
+}
+
+/** Solved geometry for one closure, shared by its devices, its detour and the engine override. */
+interface ClosurePlan {
+  readonly id: string;
+  readonly laneOffset: number;
+  readonly fromS: number;
+  readonly toS: number;
+  readonly taperStartS: number;
+  readonly advanceM: number;
+  /** Lateral centre of the remaining drivable corridor, metres from the lane centreline. */
+  readonly openCentre: number;
+  readonly openWidth: number;
+  readonly closedWidth: number;
+  readonly side: 'left' | 'right';
+  readonly shiftTraffic: boolean;
+}
+
 /* ------------------------------------------------------------- the builder */
 
 class Materializer {
@@ -1282,6 +1333,10 @@ class Materializer {
   private readonly actors: SimActor[] = [];
   private readonly interactions: SimInteraction[] = [];
   private readonly props: StaticProp[] = [];
+  /** Devices solved from `template.closures`; expanded alongside authored props. */
+  private readonly generatedClosureProps: PropPlacementInput[] = [];
+  /** Solved geometry per closure: shared by the device layout, the detour and the engine override. */
+  private readonly closurePlans: ClosurePlan[] = [];
   private readonly occluders: Occluder[] = [];
   private readonly occlusionPairs: OcclusionPair[] = [];
   private readonly nearMissCriteria: NearMissCriterion[] = [];
@@ -3464,8 +3519,262 @@ class Materializer {
 
   /* ------------------------------------------------------------------ props */
 
+/**
+   * Solve every authored lane closure into devices, an availability override, and a shifted path.
+   *
+   * One description in, three consistent products out:
+   *
+   *   1. an engine `laneClosures` entry — the drivable-surface override, hashed with the input;
+   *   2. an MUTCD device layout — taper length from the design speed and the closed width
+   *      (L = W·S²/60 below 40 mph, L = W·S above), device spacing S/2 ft, an arrow board at the
+   *      taper head and an advance warning sign upstream;
+   *   3. the open corridor's centreline offset, which traffic is shifted onto.
+   *
+   * The author supplies no geometry. Device poses and the detour offset are computed from the SAME
+   * numbers, so contact-free passage is a property of the representation rather than of a lucky
+   * choice of offsets. Authoring the two separately is what leaves residual contacts: measured
+   * 15/60 cells with a hand-authored detour against the solved layout below.
+   */
+/**
+   * Narrowest lane width over the span a closure occupies, including its taper and advance area.
+   *
+   * Sampled from the reference route rather than taken from the lane's representative width, so the
+   * device layout and the running corridor are both sized for the worst section they cross.
+   */
+  private narrowestWidthOver(fromS: number, toS: number, closure: { readonly laneOffset: number }): number {
+    const fallback = this.referenceLaneWidth();
+    const route = this.refRoute;
+    if (!route || closure.laneOffset !== 0) return fallback;
+    const origin = this.site.frame.sRange[0];
+    // Widen the sampled span generously: the taper starts upstream of `fromS` and the advance
+    // warning further upstream still, and none of those may sit inside the running lane either.
+    const lo = fromS - 200;
+    const hi = toS + 40;
+    let narrowest = Infinity;
+    const steps = 40;
+    for (let i = 0; i <= steps; i += 1) {
+      const s = lo + ((hi - lo) * i) / steps - origin;
+      if (s < 0 || s > route.lengthM) continue;
+      const w = route.widthAt(s);
+      if (typeof w === 'number' && Number.isFinite(w) && w > 0) narrowest = Math.min(narrowest, w);
+    }
+    return Number.isFinite(narrowest) ? narrowest : fallback;
+  }
+
+  private buildClosures(): void {
+    const closures = this.template.closures ?? [];
+    if (closures.length === 0) return;
+    const scope = this.baseScope();
+    for (const closure of closures) {
+      const path = `closures.${closure.id}`;
+      const fromS = evalNum(closure.fromS, scope, `${path}.fromS`, 0);
+      const toS = evalNum(closure.toS, scope, `${path}.toS`, 0);
+      if (toS < fromS) {
+        throw new CliError('closure_span_inverted', `closure ${closure.id} ends before it starts`, {
+          path, detail: { fromS, toS }, exitCode: 2,
+        });
+      }
+      // Design against the NARROWEST section the closure spans, not a representative width for the
+      // lane as a whole. `referenceLaneWidth()` is one number for the whole entry lane; where the
+      // carriageway pinches, a device placed at "the lane edge" lands inside the running lane and
+      // the ego clips it. Measured: all 8 residual contacts were `wz-taper-0` / `wz-taper-1`, the
+      // devices nearest the edge, at three sites where the local width is below the representative.
+      const laneWidth = this.narrowestWidthOver(fromS, toS, closure);
+      const requested = Math.min(
+        Math.max(0, evalNum(closure.closedWidthM, scope, `${path}.closedWidthM`, 0)),
+        laneWidth,
+      );
+      // A closure that leaves less road than the widest vehicle that must pass is not a lane
+      // closure with a shift -- it is a road closure, and every cell then ends in contact by
+      // construction. Measured: closing 1.54 m of a 3.23 m lane leaves 1.69 m for a 1.82 m car and
+      // produced contact in 24/60 cells. So the corridor width is solved, not assumed: take as much
+      // as can be taken while a passable lane remains, and say so in the notes.
+      const widestActorW = this.actors.reduce((w, a) => Math.max(w, a.dims?.w ?? 0), 0)
+        || DEFAULT_ACTOR_DIMS.car.width;
+      const minPassableM = widestActorW + 2 * CLOSURE_SIDE_CLEARANCE_M;
+      let closedWidth = requested;
+      if (closure.shiftTraffic && laneWidth - requested < minPassableM) {
+        const allowed = laneWidth - minPassableM;
+        if (allowed < CLOSURE_MIN_USEFUL_M) {
+          throw new CliError(
+            'closure_lane_too_narrow',
+            `lane is ${laneWidth.toFixed(2)} m wide; a shifted closure needs ${minPassableM.toFixed(2)} m ` +
+            'of running lane plus a useful closed width, so this site cannot host this closure',
+            { path, detail: { laneWidthM: laneWidth, minPassableM, requestedClosedWidthM: requested,
+                              hint: 'require a wider corridor, or set shiftTraffic:false to author a road that is genuinely shut' },
+              exitCode: 2 },
+          );
+        }
+        this.notes.push({
+          path,
+          reason: `closed width reduced ${requested.toFixed(2)} m -> ${allowed.toFixed(2)} m so a ` +
+            `${minPassableM.toFixed(2)} m running lane remains for the widest actor (${widestActorW.toFixed(2)} m)`,
+        });
+        closedWidth = allowed;
+      }
+      // Lateral convention: + is left, so a closure on the right has sign −1.
+      const sign = closure.side === 'right' ? -1 : 1;
+      const openWidth = laneWidth - closedWidth;
+      // Inner boundary of the works, from the lane centreline.
+      const worksEdge = sign * (laneWidth / 2 - closedWidth);
+      // Centre of what is left, on the far side of the works edge.
+      const openCentre = openWidth <= 0 ? worksEdge : worksEdge - sign * (openWidth / 2);
+      const speedKph = closure.assumedSpeedKph === undefined
+        ? (this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.speedLimitKph ?? 40)
+        : evalNum(closure.assumedSpeedKph, scope, `${path}.assumedSpeedKph`, 40);
+      const taperLenM = mutcdTaperLengthM(speedKph, Math.max(closedWidth, 0.5));
+      const spacingM = Math.max(6, speedKph / 3.281 / 2);
+      const deviceCount = Math.max(4, Math.round(taperLenM / spacingM));
+      const advanceM = closure.advanceWarningM === undefined
+        ? Math.max(45, taperLenM * 1.5)
+        : evalNum(closure.advanceWarningM, scope, `${path}.advanceWarningM`, 45);
+      const catalogId = CLOSURE_DEVICE_CATALOG[closure.device];
+      const essentiality = closure.essentiality;
+      const taperStartS = fromS - taperLenM;
+      const laneEdge = sign * (laneWidth / 2);
+
+      const generated: PropPlacementInput[] = [];
+      for (let i = 0; i < deviceCount; i += 1) {
+        const f = deviceCount === 1 ? 1 : i / (deviceCount - 1);
+        generated.push({
+          id: `${closure.id}-taper-${i}`, catalogId, essentiality,
+          label: `${closure.id} MUTCD taper ${taperLenM.toFixed(0)} m`,
+          pose: { laneOffset: closure.laneOffset, s: taperStartS + f * taperLenM,
+                  lateralM: laneEdge + (worksEdge - laneEdge) * f,
+                  lateralRef: 'lane_centre', headingOffsetRad: 0 },
+          headingOffsetRad: 0, scale: 1,
+        });
+      }
+      const activityCount = Math.max(2, Math.round((toS - fromS) / spacingM) + 1);
+      for (let i = 0; i < activityCount; i += 1) {
+        const f = activityCount === 1 ? 0 : i / (activityCount - 1);
+        generated.push({
+          id: `${closure.id}-works-${i}`, catalogId, essentiality,
+          label: `${closure.id} activity area`,
+          pose: { laneOffset: closure.laneOffset, s: fromS + f * (toS - fromS),
+                  lateralM: worksEdge, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+          headingOffsetRad: 0, scale: 1,
+        });
+      }
+      generated.push({
+        id: `${closure.id}-board`, catalogId: 'construction.arrow_board', essentiality,
+        label: `${closure.id} arrow board`,
+        pose: { laneOffset: closure.laneOffset, s: taperStartS - 4,
+                lateralM: laneEdge, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+        headingOffsetRad: 0, scale: 1,
+      });
+      generated.push({
+        id: `${closure.id}-advance`, catalogId: 'construction.sign_road_work', essentiality,
+        label: `${closure.id} advance warning`,
+        pose: { laneOffset: closure.laneOffset, s: taperStartS - advanceM,
+                lateralM: sign * 1.2, lateralRef: 'verge', headingOffsetRad: 0 },
+        headingOffsetRad: 0, scale: 1,
+      });
+
+      this.generatedClosureProps.push(...generated);
+      this.closurePlans.push({
+        id: closure.id, laneOffset: closure.laneOffset, fromS, toS, taperStartS, advanceM,
+        openCentre, openWidth, closedWidth, side: closure.side,
+        shiftTraffic: closure.shiftTraffic,
+      });
+    }
+  }
+
+  /**
+   * Shift traffic onto the open corridor for the length of every closure.
+   *
+   * Emitted as an ordinary `route` polyline so it goes through the same, already-proven path the
+   * engine uses for every other authored trajectory — this is `reroute_ego`, expressed in the
+   * representation rather than bolted beside it. The vertices come from the closure plan, so the
+   * path and the devices are two views of one description.
+   */
+  private buildClosureDetours(): void {
+    const plans = this.closurePlans.filter((plan) => plan.shiftTraffic && plan.openWidth > 0);
+    if (plans.length === 0) return;
+    const subject = this.template.metricSubject;
+    for (const role of this.template.roles) {
+      if (role.kind !== 'on_reference') continue;
+      if (subject !== undefined && role.id !== subject) continue;
+      // A `route` polyline is the actor's WHOLE path, so it has to begin where the actor already
+      // is. Starting it at the taper (which is downstream) left the ego unable to reach its own
+      // route and it never moved at all: measured 36/456 cells with the ego travelling >= 10 m,
+      // median distance 0.0 m. A frozen ego trivially hits no cones, which is exactly the false
+      // pass gate criterion C1 exists to catch.
+      const spawnS = evalNum(rolePose(role)?.s ?? 0, this.baseScope(), `roles.${role.id}.pose.s`, 0);
+      for (const plan of plans) {
+        if (plan.taperStartS <= spawnS) continue;   // the works are already behind this actor
+        const approachS = Math.max(spawnS + 1, plan.taperStartS - plan.advanceM);
+        const built = this.buildInteraction({
+          id: `${plan.id}-shift-${role.id}`,
+          actor: role.id,
+          verb: 'route',
+          trigger: { kind: 'at', t: 0 },
+          target: {
+            mode: 'polyline',
+            points: [
+              { laneOffset: plan.laneOffset, s: spawnS,
+                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+              { laneOffset: plan.laneOffset, s: approachS,
+                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+              { laneOffset: plan.laneOffset, s: plan.taperStartS,
+                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+              { laneOffset: plan.laneOffset, s: plan.fromS,
+                lateralM: plan.openCentre, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+              { laneOffset: plan.laneOffset, s: plan.toS,
+                lateralM: plan.openCentre, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+              { laneOffset: plan.laneOffset, s: plan.toS + Math.max(25, plan.toS - plan.fromS),
+                lateralM: 0, lateralRef: 'lane_centre', headingOffsetRad: 0 },
+            ],
+          },
+        } as never);
+        if (built) this.interactions.push(built);
+      }
+    }
+  }
+
+/**
+   * The engine-side availability override, in the closed lane's own storage stations.
+   *
+   * This is the part that makes a closure a fact about the road rather than a pile of props: it is
+   * inside the simulation input, so it is hashed, it replays, and a consumer can see that part of
+   * the carriageway is not drivable without inferring it from cone positions.
+   */
+  private buildLaneClosures(): SimLaneClosure[] {
+    const out: SimLaneClosure[] = [];
+    for (const plan of this.closurePlans) {
+      const route = this.refRoute;
+      if (!route) continue;
+      const from = route.poseAt(Math.max(0, plan.fromS - this.site.frame.sRange[0]));
+      const to = route.poseAt(Math.max(0, plan.toS - this.site.frame.sRange[0]));
+      const rsl = from.rsl ?? to.rsl ?? this.site.frame.entryLaneRsl;
+      if (!rsl) continue;
+      const a = from.storageS ?? 0;
+      const b = to.storageS ?? a;
+      out.push({
+        id: plan.id,
+        rsl,
+        fromS: Math.min(a, b),
+        toS: Math.max(a, b),
+        closedWidthM: plan.closedWidth,
+        side: plan.side,
+        openCentreOffsetM: plan.openCentre,
+        openWidthM: Math.max(0, plan.openWidth),
+        label: `${plan.closedWidth.toFixed(2)} m of lane closed for ${(plan.toS - plan.fromS).toFixed(0)} m`,
+      });
+    }
+    return out;
+  }
+
   private buildPropsAndOccluders(): void {
-    for (const prop of this.template.props) {
+    // Devices solved from `closures` are expanded through exactly the same path as authored props,
+    // so a work-zone device is a normal prop for every downstream consumer -- collision, render,
+    // export -- and there is no second, parallel prop pipeline to drift out of step.
+    const authored = this.template.props as readonly PropPlacement[];
+    const generated = this.generatedClosureProps.length === 0
+      ? []
+      : this.generatedClosureProps.map((p, i) =>
+          PropPlacementSchema.parse(p) as PropPlacement & { readonly __i?: number });
+    for (const prop of [...authored, ...generated]) {
       const count = prop.repeat?.count ?? 1;
       const scope = this.baseScope();
       const spacing = prop.repeat
@@ -3724,7 +4033,11 @@ class Materializer {
     // Sensors first: an interaction may name one, and the loud "declares no
     // sensors" check must see the suite that the roles actually declared.
     this.applyRoleSensors();
+    // Closures are solved BEFORE interactions so the shifted path can be emitted as an ordinary
+    // authored route, and before props so the devices join the same expansion.
+    this.buildClosures();
     this.buildInteractions();
+    this.buildClosureDetours();
     this.buildRoleOcclusionPairs();
     this.buildPropsAndOccluders();
     const perception = this.buildPerception();
@@ -3748,6 +4061,7 @@ class Materializer {
       signalPrograms: [...(this.compiledMapSignalPrograms ?? this.signalPlan.programs), ...this.authoredControlPrograms],
       roadControls: this.roadControls,
       surfacePatches: this.buildSurfacePatches(),
+      laneClosures: this.buildLaneClosures(),
       props: this.props,
       occluders: this.occluders,
       occlusionPairs: this.occlusionPairs,
