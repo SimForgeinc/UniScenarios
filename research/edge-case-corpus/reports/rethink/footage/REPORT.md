@@ -284,6 +284,25 @@ Remaining rounds (standing procedure, judge stage resumable): EmergentLane harve
 VistaLane main continues. Each announced root: `roots` + `judge --agree-every 1` +
 re-`analyze`.
 
+### Round 4 — pair1 COMPLETE (964 cells) + vista growth; h2 registered
+
+Resumed `judge --agree-every 1` after EmergentLane's completion ping: 1884 verdicts,
+0 errors, 2913 s (all vision probes first-try; sol asserted on a red probe).
+`/tmp/tgr-emergent-h2/cells` registered (0 complete dirs at registration; picked up on
+the next resume). **Full-pair1 ambient table (n=241/arm, sol/medium):**
+
+| arm | realism μ/med | dyn μ | plausible | gate-pass | Δrealism paired (p) | Δdyn |
+|---|---|---|---|---|---|---|
+| off | 5.17 / 5 | 3.29 | 0.64 | 96/241 | — | — |
+| light | 5.34 / 5 | 5.03 | 0.54 | 89/241 | **+0.17 (p=0.012)** | +1.74 |
+| city | 5.06 / 5 | 5.19 | 0.47 | 80/241 | −0.11 (p=0.49) | +1.90 |
+| heavy | 4.97 / 4 | 5.44 | 0.46 | 79/241 | −0.20 (p=0.19) | +2.15 |
+
+The half-sample conclusion holds at full n: light ambient lifts BOTH axes (realism
+p=0.012 paired), heavier densities trade plausibility for aliveness.
+**Cumulative: 2452 cells / 6306 verdicts / 31.13 M tokens**, gate-vs-judge AUC 0.615
+all-corpus (W7-only unchanged at chance), inter-model ρ 0.59-0.69.
+
 
 ## Cost ledger (updated per stage)
 
@@ -299,4 +318,5 @@ re-`analyze`.
 | test-retest | 100 judge | ~493k | ~3 min |
 | scaled round 2 (emergent) | 1488 judge | (cumulative below) | 2230 s |
 | scaled round 3 (freeform base) | 1572 judge | (cumulative below) | 1884 s |
-| **scaled cumulative** | **4422 judge** | **21,653,285 total (4897/verdict)** | — |
+| scaled round 4 (pair1 full + vista) | 1884 judge | (cumulative below) | 2913 s |
+| **scaled cumulative** | **6306 judge** | **31,132,107 total** | — |
