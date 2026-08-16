@@ -383,7 +383,13 @@ def _link_or_copy(src, dst):
 
 
 def select_keep(recs, keep):
-    """Up to `keep` cells: passing first (round-robin across maps), then failing."""
+    """Up to `keep` cells: half passing, half gate-failed (map-diverse round-robin).
+
+    Lead directive 2026-08-16 (after the authoring-surface freeze; this touches cell
+    ARTIFACT SELECTION only, never the authoring protocol): the footage judge must see
+    gate-failed freedom cells too, to separate alive-but-inadmissible from
+    dead-and-inadmissible. Shortfall on either side is filled from the other.
+    """
     def rrobin(pool):
         by_map = {}
         for r in pool:
@@ -399,7 +405,9 @@ def select_keep(recs, keep):
     passing = rrobin([r for r in recs if r.get('pass')])
     failing = rrobin([r for r in recs if not r.get('pass')
                       and r.get('firstFailure') != 'NOTRACE'])
-    return (passing + failing)[:keep]
+    half = (keep + 1) // 2
+    take_pass = min(len(passing), max(half, keep - len(failing)))
+    return (passing[:take_pass] + failing[:keep - take_pass])[:keep]
 
 
 def export_cells(cells_root, runid, arm, brief, template_path, template_sha, recs, keep):
