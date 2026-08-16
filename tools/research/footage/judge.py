@@ -30,10 +30,11 @@ STRATEGIES = ('spread8', 'burst6')
 RUBRIC = """You are reviewing a short clip from a top-down schematic traffic simulator, \
 shown as {n} keyframes in time order. The timestamp stamped on each frame is simulation \
 seconds. Legend: the EGO vehicle is the BLUE box; pedestrians are small RED discs; \
-cyclists are ORANGE boxes; motorcycles are small yellow-green boxes; other moving \
-vehicles are GREEN boxes; deliberately parked/stopped vehicles are AMBER boxes; fixed \
-roadside objects (shelters, hedges, containers) are dashed brown outlines; thin trails show \
-each mover's recent path. Roads, where drawn, are grey surfaces with lane lines.
+cyclists and scooters are ORANGE discs; animals are TAN discs; small delivery robots are \
+VIOLET discs; motorcycles are narrow VIOLET boxes; other moving vehicles are GREEN boxes \
+(sized to their real footprint); deliberately parked/stopped vehicles are AMBER boxes; \
+fixed roadside objects (shelters, hedges, containers) are dashed brown outlines; thin \
+trails show each mover's recent path. Roads, where drawn, are grey surfaces with lane lines.
 
 Judge whether this clip reads like footage of real traffic.
 
