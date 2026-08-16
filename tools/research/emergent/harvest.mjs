@@ -58,13 +58,41 @@ const has = (name) => process.argv.includes(`--${name}`);
 async function plan() {
   const out = arg('out');
   const seeds = Number(arg('seeds', 50));
+  const seedFrom = Number(arg('seed-from', 1));
   const sitesPerMap = Number(arg('sites', 4));
   const pilot = has('pilot');
+  const tplFilter = arg('templates', null)?.split(',');
+  const configsFile = arg('configs', null); // stage 2: explicit config list
+  const planName = arg('plan-name', 'plan.json');
   mkdirSync(path.join(out, 'cells'), { recursive: true });
   const runid = path.basename(out).replace(/^tgr-emergent-/, '');
   const entries = [];
   const siteTable = {};
+  if (configsFile) {
+    // Stage-2 depth: [{tplShort, mapId, siteId, profileId}] x seed range.
+    const configs = JSON.parse(readFileSync(configsFile, 'utf8'));
+    for (const c of configs) {
+      const tplFile = TEMPLATES[c.tplShort];
+      const templateSha256 = createHash('sha256')
+        .update(readFileSync(tplFile)).digest('hex');
+      for (let seed = seedFrom; seed <= seeds; seed += 1) {
+        const harvestId = `${c.tplShort}.${c.profileId}.s${seed}`;
+        entries.push({
+          cellId: `emergent-${runid}-${harvestId}-${c.mapId}-${c.siteId.slice(0, 8)}-0`,
+          tplShort: c.tplShort, tplFile, templateSha256, mapId: c.mapId,
+          siteId: c.siteId, profileId: c.profileId, ambientSeed: `h${seed}`, seed,
+        });
+      }
+    }
+    writeFileSync(path.join(out, planName), JSON.stringify({
+      runid, seeds, seedFrom, settleS: SETTLE_S, profiles: PROFILES,
+      configs, nCells: entries.length, entries,
+    }));
+    console.log(JSON.stringify({ nCells: entries.length, configs: configs.length }));
+    return;
+  }
   for (const [tplShort, tplFile] of Object.entries(TEMPLATES)) {
+    if (tplFilter && !tplFilter.includes(tplShort)) continue;
     const template = await CLI.readTemplate(tplFile);
     const templateSha256 = createHash('sha256')
       .update(readFileSync(tplFile)).digest('hex');
@@ -80,7 +108,7 @@ async function plan() {
       siteTable[`${tplShort}|${mapId}`] = { sites };
       for (const siteId of sites) {
         for (const [profileId, profile] of Object.entries(PROFILES)) {
-          for (let seed = 1; seed <= seeds; seed += 1) {
+          for (let seed = seedFrom; seed <= seeds; seed += 1) {
             const harvestId = `${tplShort}.${profileId}.s${seed}`;
             entries.push({
               cellId: `emergent-${runid}-${harvestId}-${mapId}-${siteId.slice(0, 8)}-0`,
@@ -93,8 +121,8 @@ async function plan() {
     }
   }
   const sliced = pilot ? entries.filter((e) => e.seed <= 2) : entries;
-  writeFileSync(path.join(out, 'plan.json'), JSON.stringify({
-    runid, seeds, sitesPerMap, settleS: SETTLE_S, profiles: PROFILES,
+  writeFileSync(path.join(out, planName), JSON.stringify({
+    runid, seeds, seedFrom, sitesPerMap, settleS: SETTLE_S, profiles: PROFILES,
     maps: MAPS, siteTable, nCells: sliced.length, entries: sliced,
   }));
   console.log(JSON.stringify({ nCells: sliced.length, siteTable }, null, 1));
@@ -105,7 +133,7 @@ async function run() {
   const shard = Number(arg('shard', 0));
   const shards = Number(arg('shards', 1));
   const limit = Number(arg('limit', Infinity));
-  const planData = JSON.parse(readFileSync(path.join(out, 'plan.json'), 'utf8'));
+  const planData = JSON.parse(readFileSync(path.join(out, arg('plan-name', 'plan.json')), 'utf8'));
   const mine = planData.entries.filter((_, i) => i % shards === shard).slice(0, limit);
   const templates = new Map();
   let done = 0;
