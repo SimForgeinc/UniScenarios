@@ -1298,3 +1298,48 @@ reading would name claude-fable-5/low (0.65) on a **1.3% cost margin** — but w
 ran) displaces the top arm only for a candidate cheaper by more than 2×. None is.
 **Selected for W9: `gpt-5.6-sol` at effort `low`.** Full trail in
 `reports/training-grade/W8-model-effort-sweep.json` → `w9Selection`.
+
+---
+
+## M14 / W9 — production arm (gpt-5.6-sol / low): nominally better than W7 on BOTH splits, not statistically distinguishable on either
+
+Configuration from the W8 selection rule as applied (M13): **`gpt-5.6-sol` at reasoning effort
+`low`**, through the SAME frozen surface (`author_llm.py` sha `538200ab…`, verified byte-identical
+before and after both runs) and the SAME unmodified frozen gate v2. DEV authored, then HELDOUT
+once, zero per-brief tuning. **0 author failures across all 208 briefs** — sol's 0/100 sweep
+reliability held at production scale.
+
+| | W7 (luna/medium, calibration) | **W9 (sol/low, production)** | delta | p |
+|---|---:|---:|---:|---:|
+| DEV | 51/73 = 0.6986 | **54/73 = 0.7397** | +0.0411 | 0.581 |
+| HELDOUT | 84/135 = 0.6222 | **92/135 = 0.6815** | +0.0593 | 0.307 |
+| generalization gap | +0.0764 (p=0.271) | **+0.0582 (p=0.381)** | | |
+
+**The honest headline:** W9 is nominally ahead of W7 on both splits, and the improvement is
+*larger on HELDOUT than on DEV* — the opposite of an overfitting signature — but **neither delta
+is statistically significant** (p=0.58 / p=0.31). The supportable statement is: sol/low is at
+least as good as luna/medium, strictly more reliable (0 vs 4+ author failures per 100 in the
+sweep), and roughly 40% cheaper in wall time per authored brief at low effort. The W8 conclusion
+stands at scale: the authoring model is not the binding constraint — the map inventory is.
+
+### Per-category (both splits): 15/15 covered, 12/15 reach 6
+
+| category | W9 admitted | | category | W9 admitted |
+|---|---|---|---|---|
+| C1.car-following | 14/14 | | C9.hazard | 12/14 |
+| C2.cut-in-merge | 13/15 | | C10.oncoming | 6/13 |
+| **C3.intersection** | **3/21** | | C11.parking | 11/13 |
+| C4.roundabout | 8/10 | | C12.school | 12/12 |
+| C5.pedestrian | 16/16 | | **C13.control** | **2/14** |
+| C6.cyclist-ptw | 13/15 | | C14.loss-of-control | 9/10 |
+| C7.occlusion | 14/14 | | C15.adversarial | 11/13 |
+| **C8.workzone** | **2/14** | | | |
+
+Below-4: C13 (2), C3 (3), C8 (2). C8/C13 are the same map-inventory walls as W7 (0-site
+`work_zone_suitable`, no rail crossings). **C3.intersection at 3/21 is WORSE than W7's 7/21** —
+sol/low's junction decisions lose more cells to the junction family's known weaknesses (clearance
+and the TG-H1 evidence-mismatch class); meanwhile it beat W7 substantially on C11 (11 vs 7),
+C4 (8 vs 5), C10 (6 vs 3) and C6 (13 vs 10). The category mix shifted; the aggregate gain is
+real but small.
+
+Reports: `W9-sol-low-DEV.json`, `W9-sol-low-HELDOUT.json`, `W9-sol-low-combined-stats.json`.
