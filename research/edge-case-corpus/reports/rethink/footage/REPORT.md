@@ -255,18 +255,34 @@ realism and slide plausibility (the "identical sedans" effect is a plateau, not 
 penalty). Judge-side answer to Stream C hypothesis (i): **ambient ON, light, is strictly
 better footage** — and it costs some gate admissions (54→48/117 paired).
 
+### Round 3 — FreeformLane baseline arm (300) + VistaLane growth
+
+`roots --roots /tmp/tgr-freeform-base1/cells` + `judge --agree-every 1`: 1572 verdicts,
+0 errors, 1884 s (all three vision probes passed first-try this session).
+
+**Freeform BASELINE arm (frozen compiler pipeline, luna/medium, 50-brief sample):**
+n=300, realism μ 5.91 / med 6 (p25 4, p75 7) — the best-scoring stream so far — but
+dynamism μ 3.12 / med 3 / **max 5**, plausible 0.87. Gate-pass 250/300; gate-passers
+realism μ 6.04, dynamism μ 3.27. The compiler produces tidy, plausible, DEAD scenes —
+the "static-duet" census signature FreeformLane measured (2 actors, no signals, no lane
+changes) is exactly what the judge sees. This is the anchor the freedom arm must beat
+on dynamism without losing realism.
+
 ### Cumulative scaled-run state (at report time)
 
-**1094 cells / 2850 verdicts / 14.03 M tokens** (mean 4924 tok, 13.5 s per verdict);
-streams: w7-regen 170 (realism μ 5.38), vista 324 (μ 4.94), emergent 456 (μ 5.22).
-Gate-pass-vs-fail realism AUC over everything: 0.586 (weak — the emergent arms add a
-mild correlation; the W7-only figure stays chance at 0.465-0.499). Inter-model Spearman
-at n≈1094: luna~sol 0.582, luna~terra 0.667, sol~terra 0.713.
+**1594 cells / 4422 verdicts / 21.65 M tokens** (mean 4897 tok/verdict); streams:
+w7-regen 170 (realism μ 5.38/med 6), vista 548 (μ 4.96/med 5), emergent 456 (μ 5.22/med 5),
+freeform-baseline 300 (μ 5.91/med 6). Gate-pass-vs-fail realism AUC over everything:
+0.631 (W7-only stays chance at 0.465-0.499; the cross-stream figure is confounded by
+stream mix — freeform-baseline is both highest-realism and highest-pass-rate).
+Inter-model Spearman at n≈1594: luna~sol 0.585, luna~terra 0.652, sol~terra 0.698.
+Dynamism stays dead in every stream: median ≤ 5 everywhere; only ambient-ON emergent
+arms reach μ ≈ 5.
 
 Remaining rounds (standing procedure, judge stage resumable): EmergentLane harvest
-(`/tmp/tgr-emergent-h2/cells`, tonight), FreeformLane freedom/baseline arms (pilot
-surfaced harness defects, roots announced when they land), VistaLane main continues
-progressive growth. Each announced root: `roots` + `judge --agree-every 1` + re-`analyze`.
+(`/tmp/tgr-emergent-h2/cells`, tonight), FreeformLane freedom arm (after their grid),
+VistaLane main continues. Each announced root: `roots` + `judge --agree-every 1` +
+re-`analyze`.
 
 
 ## Cost ledger (updated per stage)
@@ -282,4 +298,5 @@ progressive growth. Each announced root: `roots` + `judge --agree-every 1` + re-
 | scaled vista growth | 414 judge | (cumulative below) | 482 s |
 | test-retest | 100 judge | ~493k | ~3 min |
 | scaled round 2 (emergent) | 1488 judge | (cumulative below) | 2230 s |
-| **scaled cumulative** | **2850 judge** | **14,033,190 total (4924/verdict)** | — |
+| scaled round 3 (freeform base) | 1572 judge | (cumulative below) | 1884 s |
+| **scaled cumulative** | **4422 judge** | **21,653,285 total (4897/verdict)** | — |
