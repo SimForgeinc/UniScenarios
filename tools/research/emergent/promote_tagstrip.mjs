@@ -27,6 +27,7 @@ const ROOT = path.resolve(HERE, '..', '..', '..');
 const CLI = await import(path.join(ROOT, 'packages/cli/dist/index.js'));
 const SE = await import(path.join(ROOT, 'packages/sim-engine/dist/index.js'));
 
+const has = (name) => process.argv.includes(`--${name}`);
 function arg(name, dflt) {
   const i = process.argv.indexOf(`--${name}`);
   return i >= 0 ? process.argv[i + 1] : dflt;

@@ -29,6 +29,7 @@ const TEMPLATES = {
   jS: path.join(HERE, 'templates/emergent-junction-straight.template.json'),
   jL: path.join(HERE, 'templates/emergent-junction-left.template.json'),
   ml: path.join(HERE, 'templates/emergent-multilane.template.json'),
+  bo: path.join(HERE, 'templates/emergent-blackout.template.json'),
 };
 const MAPS = ['yale-street', 'belmont-research-center', 'el-camino-road'];
 
