@@ -1202,3 +1202,99 @@ HELDOUT (20:33–20:51) the amended one. Verified inert for W7, three ways:
 W8/W9 are follow-on experiments pre-registered by that thread; the W8 document itself states
 **"W7 is deliberately NOT part of it and does not change."** They are outside this lane's frozen
 contract and its handover work list, and are not claimed by this scorecard.
+
+---
+
+## M13 / W8 — the model × effort sweep: effort does NOT raise admission, and reliability, not quality, separates the models
+
+**Owner override, recorded as an owner decision:** the single-model restriction
+(`VISTA-LANE-BRIEF.md:17` and `vlm.py`'s former "only permitted model" line) is **overridden by
+the human owner's explicit instruction** ("Relax this model restriction. We want the absolute
+best model to be used for this process"). Recorded per AMENDMENT 1; this was not a lane choice.
+W7's luna/medium run is kept unchanged as the calibration point. Every W8 arm reaches its model
+over the omp auth-gateway backed by Codex OAuth — the same labelled deviation as M10.
+
+**Design, as pre-registered** (`W8-MODEL-EFFORT-EXPERIMENT.md` + AMENDMENT 1 + the arm-count
+ratification `687a54ef`): 6 models × 5 efforts = 30 arms; fixed stratified sample of n=20 briefs
+(seed 8, ids in `W8-arms/sample.json`); the SAME unmodified `author_llm.py` pipeline (sha
+`538200ab…` recorded per arm) and the SAME frozen gate v2 for every arm; only `model` and
+`reasoning.effort` vary. Tripwire PASS before the first arm and after the last. 29 arms ran
+before the host was rate-limited (committed by the supervising thread, `cca2d0ba`);
+`claude-sonnet-5/max` completed separately and is included — **30/30 arms present.**
+Total measured cost: 1.93M input + 3.53M output tokens, 1,102 LLM calls, 7.6 h of arm wall time.
+
+### Read the error column before the admission column
+
+**100/580 brief-attempts (17.2%) produced no artifact at all** (`W8-ARM-INTEGRITY-NOTE.md`) —
+model-call failures and unhandled authoring exceptions, NOT gate rejections. Two tables are
+therefore reported side by side, and they answer different questions.
+
+**Metric A — raw admission /20 (the pre-registered primary; counts an author failure as a
+non-admission; the production question):**
+
+| model | low | medium | high | xhigh | max | author errors (of 20 each) |
+|---|---|---|---|---|---|---|
+| gpt-5.6-luna | 0.65 | 0.70 | 0.65 | 0.60 | 0.45 | 0 0 0 0 4 |
+| **gpt-5.6-sol** | **0.75** | 0.70 | **0.75** | 0.65 | 0.65 | **0 0 0 0 0** |
+| gpt-5.6-terra | 0.70 | 0.65 | 0.70 | 0.60 | 0.00 | 0 0 0 0 **20** |
+| claude-opus-5 | 0.05 | 0.10 | 0.45 | 0.50 | 0.00 | **17 17 9 6 17** |
+| claude-fable-5 | 0.65 | 0.65 | 0.60 | 0.60 | 0.70 | 3 0 2 3 2 |
+| claude-sonnet-5 | 0.55 | 0.65 | 0.65 | 0.65 | 0.05 | 0 0 0 0 **19** |
+
+**Metric B — admission among briefs that produced an artifact (the quality question;
+`*` = denominator < 10, not evidence):**
+
+| model | low | medium | high | xhigh | max |
+|---|---|---|---|---|---|
+| gpt-5.6-luna | 0.65 | 0.70 | 0.65 | 0.60 | 0.56 |
+| gpt-5.6-sol | 0.75 | 0.70 | 0.75 | 0.65 | 0.65 |
+| gpt-5.6-terra | 0.70 | 0.65 | 0.70 | 0.60 | —* |
+| claude-opus-5 | 0.33* | 0.67* | 0.82 | 0.71 | 0.00* |
+| claude-fable-5 | 0.76 | 0.65 | 0.67 | 0.71 | 0.78 |
+| claude-sonnet-5 | 0.55 | 0.65 | 0.65 | 0.65 | 1.00* |
+
+Without the split, two false readings would survive: "terra/max scores 0.00 on quality" (all 20
+calls failed — there is no quality signal in that cell) and "opus-5 improves sharply with effort"
+(its error count falling 17→17→9→6 IS the curve; usable-n of 3–14 supports nothing).
+
+### Hypothesis verdicts (n=20/arm; Wilson 95% CIs span roughly ±0.20 and are stated, not glossed)
+
+**H1 — higher effort raises admission, monotonically: FALSIFIED.** Every model with a clean error
+record trends flat-to-down on both metrics: luna 0.65→0.56, sol 0.75→0.65, terra 0.70→0.60
+(metric B, low→max) while reasoning tokens rise ~17–30× (luna 11k→292k, sol 8.7k→301k). No model
+is monotone increasing on either metric. The failure is not marginal, and the CIs have no upward
+trend to fail to support.
+
+**H2 — model rank stable across effort: PARTIAL, weakly.** sol ≥ {terra, luna} at low/medium/high
+on both metrics, and sol is never ranked worse than second; but every pairwise CI overlaps, and
+at xhigh/max the ordering is scrambled by reliability failures. The supportable claim is "sol is
+never worse", not a stable total order.
+
+**H3 — effort preferentially fixes the multi-step spatial criteria (C2, C4): NOT SUPPORTED.**
+C2+C4 share of first failures by effort: low 0.45, medium 0.46, high 0.43, xhigh 0.42, max 0.37 —
+roughly flat; the small drift at max coincides with the reliability collapse, not with better
+spatial reasoning.
+
+### Unplanned finding — reliability is the largest measured difference between models
+
+Author-failure rate over 100 attempts per model: **sol 0/100** · luna 4/100 · fable-5 10/100 ·
+sonnet-5 19/100 (all 19 in the rate-limited max arm) · terra 20/100 (all at max) ·
+**claude-opus-5 66/100**. This dwarfs every admission-rate gap in the table and was not a
+pre-registered hypothesis; it is reported as an unplanned finding, per the integrity note.
+
+### Secondary finding — LLM authoring is not deterministic at fixed effort
+
+Across 150 re-authored briefs (5 per arm): **1/150 produced an identical template; 20/150 flipped
+admission** between attempts. Measured, not assumed — and it bounds how much any single n=20 cell
+can say. (Engine replay of a FIXED template remains bit-identical — M9/M11; the nondeterminism is
+in authoring, not simulation.)
+
+### W9 selection, rule as applied
+
+Top arm by the pre-registered primary metric: **gpt-5.6-sol / low, 0.75 [0.53, 0.89]** (also the
+cheaper of the two 0.75 arms — sol/high costs 1.4×). The literal "cheapest CI-overlapping arm"
+reading would name claude-fable-5/low (0.65) on a **1.3% cost margin** — but wall seconds carry
+>40% co-tenancy noise across the sweep's launch phases, so the applied rule (stated before W9
+ran) displaces the top arm only for a candidate cheaper by more than 2×. None is.
+**Selected for W9: `gpt-5.6-sol` at effort `low`.** Full trail in
+`reports/training-grade/W8-model-effort-sweep.json` → `w9Selection`.
