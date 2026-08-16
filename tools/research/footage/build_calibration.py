@@ -52,6 +52,20 @@ GOOD_TEMPLATES = [
     os.path.join(EX, 'mechanisms', 'junction-vru', 'cyclist-crossing-path.template.json'),
     os.path.join(PROBES, 'c7-bus-shelter-fixed.template.json'),
     os.path.join(PROBES, 'c7-hedge-corner-fixed.template.json'),
+    # wave 2 (added 2026-08-16 BEFORE any judge verdict; PREREG-v2 amendment note):
+    # the first 8 yielded only 4 gate-passing templates — widen mechanism diversity
+    os.path.join(EX, 'mechanisms', 'corridor', 'cut-in-brake.template.json'),
+    os.path.join(EX, 'mechanisms', 'corridor', 'cutout-reveals-stopped.template.json'),
+    os.path.join(EX, 'mechanisms', 'corridor', 'queue-tail.template.json'),
+    os.path.join(EX, 'mechanisms', 'corridor', 'merge-gap-collapse.template.json'),
+    os.path.join(EX, 'mechanisms', 'junction-vru', 'adult-midblock-crossing.template.json'),
+    os.path.join(EX, 'mechanisms', 'junction-vru', 'left-turn-crosswalk.template.json'),
+    os.path.join(EX, 'mechanisms', 'junction-vru', 'right-turn-crosswalk.template.json'),
+    os.path.join(EX, 'mechanisms', 'parking-transit', 'backing-out-vehicle.template.json'),
+    os.path.join(EX, 'mechanisms', 'parking-transit', 'vehicle-pulls-out.template.json'),
+    os.path.join(EX, 'mechanisms', 'parking-transit', 'delivery-double-park.template.json'),
+    os.path.join(EX, 'mechanisms', 'remaining', 'slow-vulnerable-lead.template.json'),
+    os.path.join(EX, 'mechanisms', 'remaining', 'cross-traffic-stop-violation.template.json'),
 ]
 ABSURD_TEMPLATES = [
     os.path.join(INSTR, 'broken-templates', 'b1-frozen-ego.template.json'),

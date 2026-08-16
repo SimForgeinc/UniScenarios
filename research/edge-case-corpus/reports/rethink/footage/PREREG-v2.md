@@ -53,6 +53,11 @@ project its first validated realism instrument.
   stratified round-robin sampling across (template, map). Exclusions counted in
   set-manifest.json. No cell dropped after a judge score exists.
 
+**Amendment 2026-08-16 (before any judge verdict):** the first 8 good templates yielded
+only 4 distinct gate-passing mechanisms (C5/C4 losses); 12 further `examples/mechanisms/*`
+templates were added to the good pool for mechanism diversity (final good class: 24 cells /
+7 templates; absurd: 24 cells / 7 templates). No judge had seen any pixel at amendment time.
+
 ## Judge input and strategies
 
 Renders via `scripts/render-trace.mjs` with `--redact` (no ids, no minTTC/reveal HUD —
