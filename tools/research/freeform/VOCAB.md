@@ -22,12 +22,15 @@ Emit exactly ONE JSON object, no prose outside it:
 ```
 
 - `ambient` — background traffic around your scene: seeded reactive drivers that yield,
-  obey signals, queue, and change lanes on their own. They are free realism: they never
-  count against the gate's conflict metrics (the gate ignores ambient actors when
-  measuring clearance), but they populate the world. `off` = empty road. Choose what the
-  scene wants; a residential dart-out plausibly has light traffic, a merge collapse wants
-  moderate/city. If you rely on ambient vehicles queuing at a signal, set
-  `ambientSettleS` 10–30 (seconds of ambient-only warm-up before the clip).
+  obey signals, queue, and change lanes on their own. The gate ignores ambient actors
+  when measuring clearance/TTC, but they are PHYSICALLY REAL: they occupy lanes, queue
+  in front of the ego, and your ego (collisionAvoidance on) will crawl behind them —
+  measured pilot failure mode: ego authored at 60 kph averaged 1.1 m/s in `moderate`
+  traffic and failed C1. Use `off` or `light` unless the mechanism NEEDS a populated
+  road; if it does, start the ego upstream of the pack or on a clear lane, and check
+  egoVmax/egoDist in the probe feedback. If you rely on ambient vehicles queuing at a
+  signal, set `ambientSettleS` 10–30 (seconds of ambient-only warm-up before the clip).
+  `off` = empty road; a residential dart-out plausibly has light traffic.
 - `structureNote` — null normally. If the brief names road structure the available maps
   do NOT have (see MAP FACTS), say so here in one sentence and author the nearest
   honest approximation anyway. Never silently pretend the structure exists.
@@ -108,7 +111,9 @@ Five maps: `yale-street`, `belmont-research-center`, `el-camino-road`,
 A batch instantiates your template on matched sites and simulates ~10 draws. Per draw:
 - **C1** ego really drives: max speed ≥ 2 m/s AND distance ≥ 10 m.
 - **C2** the conflict develops on camera: TRUE closest approach AND minTTC both occur at
-  t > warmupSeconds + 0.5 s. (Do not front-load the conflict; let it build.)
+  t > warmupSeconds + 0.5 s. Do not front-load the conflict: a challenger that SPAWNS
+  within ~5 m of the ego puts the closest approach at t=0 and fails C2 forever. Start
+  every scripted actor >15–20 m from the ego and bring it in with the timeline.
 - **C3** genuine proximity: closest oriented-bounding-box clearance ≤ 5.0 m between ego
   and a scripted (non-ambient) actor.
 - **C4** genuine demand: ego required deceleration ≥ 1.5 m/s² OR minTTC ≤ 3.0 s.

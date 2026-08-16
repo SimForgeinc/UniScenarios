@@ -240,7 +240,7 @@ def run_batch(path, outdir, maps, draws, max_sites, concurrency, ambient, settle
                  '--ambient-radius-m', AMBIENT_RADIUS_M]
         if settle:
             args += ['--ambient-settle', settle]
-    rc, out, so, se = P.cli(*args, timeout=3400)
+    rc, out, so, se = P.cli(*args, timeout=7200)
     summ = os.path.join(outdir, 'batch-summary.json')
     if not os.path.exists(summ):
         raise RuntimeError('batch produced no summary (rc=%s) %s' % (rc, se[-500:]))
@@ -276,12 +276,14 @@ def run_and_gate(brief, path, outdir, maps, draws, max_sites, concurrency, ambie
 
 def cell_fact_line(r):
     tnf = r.get('triggerNeverFired') or []
-    return ('map=%s site=%s draw=%s firstFailure=%s | clearance=%.2fm@t=%s minTTC=%s@t=%s '
-            'reqDecel=%.2f collisions=%s verdict=%s band=%s%s' % (
+    return ('map=%s site=%s draw=%s firstFailure=%s | egoVmax=%.1fm/s egoDist=%.0fm | '
+            'clearance=%.2fm@t=%s with=%s | minTTC=%s@t=%s reqDecel=%.2f collisions=%s '
+            'verdict=%s band=%s%s' % (
                 r.get('mapId'), str(r.get('site'))[:8], r.get('draw'),
                 r.get('firstFailure') or 'PASS',
+                r.get('maxSpeedMps') or 0.0, r.get('distanceTravelledM') or 0.0,
                 r.get('clearanceM') if r.get('clearanceM') is not None else float('nan'),
-                r.get('closestT'), r.get('minTTC'), r.get('minTTCt'),
+                r.get('closestT'), r.get('closestWith'), r.get('minTTC'), r.get('minTTCt'),
                 r.get('requiredDecelMaxEgo') or 0.0, r.get('collisions'),
                 r.get('verdict'), r.get('band'),
                 (' triggerNeverFired=%s' % ','.join(map(str, tnf))) if tnf else ''))
@@ -323,9 +325,15 @@ def feedback_text(probe):
                 if k in str(code):
                     lines.append(h)
     advice = {
-        'C1': 'C1 fails: the ego never really drives — raise its initialSpeedKph / runway.',
+        'C1': 'C1 fails: the ego never really drives (needs max speed >=2 m/s AND >=10 m '
+              'travelled — see egoVmax/egoDist below). Common causes: ambient traffic '
+              'queued ahead of the ego (ambient is PHYSICALLY real; use off/light or start '
+              'the ego upstream of it), the ego sitting at a red signal it obeys (give its '
+              'approach green until the conflict), or a low initialSpeedKph.',
         'C2': 'C2 fails: closest approach or minTTC lands before warmup+0.5s — the conflict '
-              'is front-loaded; widen the initial separation or delay the threat.',
+              'is front-loaded (check clearance@t and with= below: if t=0, that actor '
+              'SPAWNS too close — start challengers >15-20 m away and bring them in with '
+              'the timeline/arrival solver).',
         'C3': 'C3 fails: clearance never gets within 5 m — the encounter misses; tighten the '
               'geometry or the arrival relation.',
         'C4': 'C4 fails: no braking demand (reqDecel < 1.5 and minTTC > 3) — the ego is never '
