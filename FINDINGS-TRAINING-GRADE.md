@@ -699,3 +699,86 @@ It also **quantifies the multi-lane claim differently from the brief**: the brie
 `throughLanesSameDir >= 2` fails at 157/210 sites. Measured here, `multilane_same_dir` binds **51
 sites across 4 maps** and `multilane_junction` **54 sites across 4 maps** — thin, but comfortably
 above the portability clause, so multi-lane work is *not* blocked outright.
+
+---
+
+## M6 / W7 — one frozen run: **BLOCKED on credentials; the deterministic half was run**
+
+### BLOCKED: no `gpt-5.6-luna` credential in this environment
+
+Re-verified at the start of the session and again before W7:
+
+```
+$ op whoami
+[ERROR] no account found for filter
+$ op item get be2othhp7cx3frton4ehddtthq --format json
+No accounts configured for use with 1Password CLI.
+$ env | grep -icE 'openai|api_key|luna'
+0
+```
+
+`tools/vista/vlm.py` reads `os.environ['OPENAI_API_KEY']`. Without it, **authoring DEV and HELDOUT,
+the blind per-scenario judge and the corpus-layout judge cannot run**. Per the brief's
+credential-hygiene rule I did not search for or reuse any key found on disk. A freshly issued key is
+required.
+
+The authoring model must stay `gpt-5.6-luna` at effort `medium`; substituting a different model
+would silently invalidate every baseline comparison, so no substitute was used.
+
+**A second, independent obstacle** would remain even with a key: the round-6 authoring surface is not
+on disk (M0.5). `scenario_tools.py` contains 12 of the 16 frozen ops and its `CATALOG`, `cli()` and
+`load_trace()` are undefined, so every op raises `NameError`; `CHECKPOINT.json` states the runner was
+"pure Python in the notebook". Any authoring run would therefore go through a **rebuilt** surface and
+would not be like-for-like against the 0.466 baseline. That has to be said out loud before anyone
+reads a new number as a comparison.
+
+### RUN: a frozen re-gate of the published corpus, and it moves the baseline DOWN
+
+The part of W7 that needs no model is the one that matters most for integrity. The published
+99-archetype / DEV 0.466 result was produced by a gate carrying defect **TG-G1** — the unsound
+broad-phase cull in the closest-approach search, still present at `tools/vista/gate.py:206`. Every
+retained trace of `gold-corpus-v3` was re-gated with the corrected implementation:
+
+```
+$ .venv/bin/python tools/gates/regate_corpus.py --workers 8
+archetypes 98   tracesEvaluated 303   categoriesCovered 15
+corrected gate (v2 manifest reading of C2):
+  admitted 83/98   DEV 31/36 = 0.8611   HELDOUT 52/62 = 0.8387   gap +0.0224  p = 0.7665
+corrected gate (published closest-approach-only C2):
+  admitted 87/98   DEV 32/36 = 0.8889   HELDOUT 55/62 = 0.8871   gap +0.0018  p = 0.9784
+firstFailureAmongRejected: {"C2": 15, "C6": 1}
+```
+
+**15 of the 98 published archetypes do not survive a correct closest-approach search**, and
+**15 of the 16 first failures are C2** — exactly the criterion the cull got wrong. Rejected:
+`c1-crest-queue`, `c1-lead-stopped`, `c1-queue-tail`, `c1-stop-and-go`, `c1-tailgated-brake`,
+`c1b-lead-stalls`, `c12b-child-between-cars`, `c2-cut-in-brake`, `c3-ltap-ld`,
+`c5-crossing-far-side`, `c6-dooring`, `c6b-cargo-bike`, `c7-queue-occludes`, `c9-accident-scene`,
+`c9-disabled-vehicle`. Six of the fifteen are C1.car-following, which is what you would expect: a
+following conflict starts far apart and closes late, and that is precisely the trajectory shape the
+cull mis-measured.
+
+**Consequence for the target.** Scaling the published rates by the measured survival rates:
+
+| | published | after the TG-G1 correction |
+|---|---:|---:|
+| DEV admission | 0.466 | **0.401** |
+| HELDOUT admission | 0.407 | **0.341** |
+| generalization gap | +0.058 | **+0.022 (p = 0.77)** |
+| categories covered | 14/15 | **15/15** |
+
+This is a **tightening**, which the frozen contract permits and this lane exists to prefer. It also
+means the 0.60 target is further away than the brief assumed: the honest starting point is ~0.40,
+not 0.466. The gap remains ~0 across both readings, confirming the brief's statement that
+overfitting is not the problem.
+
+*Caveat, stated:* only three traces per archetype were retained, so an archetype counts as admitted
+when a **retained** trace passes, and portability is read from the corpus manifest rather than
+recomputed. The re-gate therefore answers "do the traces that were called passing still pass", which
+is the question TG-G1 raises.
+
+### What W7 still owes, and what it needs
+* author DEV then HELDOUT once through a hash-frozen surface — needs a key **and** a rebuilt surface;
+* blind per-scenario judge, corpus-layout judge — need a key;
+* replay determinism at corpus scale — the gate exists (`verify_replay.py`, 24/24 bit-identical on
+  both the W1 and W2 probes) and would simply be re-run over the frozen output.
