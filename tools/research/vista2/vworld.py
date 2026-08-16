@@ -13,7 +13,7 @@ centerline in world coordinates; projecting the ego's realized spawn onto it and
 comparing with the ego's authored pose.s gives the arc<->anchor-s shift. From then on
 any world point projects to an exact anchor pose.
 """
-import copy, json, math, os, re, subprocess, sys, time
+import copy, hashlib, json, math, os, re, subprocess, sys, time
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(_HERE, '..', '..', '..'))
@@ -163,6 +163,17 @@ class Scene:
                 'atM': {'value': [40, 200], 'essentiality': 'required'}}
         return [base]
 
+    def _anchor_id(self):
+        """Schema-bounded anchor id (^[A-Za-z][A-Za-z0-9_-]{0,63}$). Long brief ids
+        (the owner list) overflowed the 64-char limit and made emit() unwinnable —
+        harness defect found in run main1, fixed in harness v2."""
+        slug = re.sub(r'[^a-z0-9-]', '-', self.brief['id'].lower()).strip('-')
+        base = 'vista2-%s' % slug
+        if len(base) <= 64:
+            return base
+        h = hashlib.sha256(self.brief['id'].encode()).hexdigest()[:8]
+        return ('vista2-%s-%s' % (slug[:47], h)).replace('--', '-')
+
     def template(self):
         now = '2026-08-16T00:00:00.000Z'
         return {
@@ -175,7 +186,7 @@ class Scene:
                      'negativeControl': False},
             'params': {'declarations': [], 'constraints': []},
             'environment': {'weather': 'clear', 'timeOfDay': 'afternoon'},
-            'anchor': {'id': 'vista2-%s' % re.sub(r'[^a-z0-9-]', '-', self.brief['id'].lower()),
+            'anchor': {'id': self._anchor_id(),
                        'corridor': self.corridor(),
                        'features': self.features(),
                        'policy': {'allowMirror': False, 'maxSitesPerMap': 6,
@@ -568,6 +579,8 @@ class Scene:
 
     # ------------------------------------------------------------- engine
     def instantiate_t0(self):
+        if self.site is None:
+            return None, ['no working site selected — use view_site with "site":N first']
         path = self.write_template('t0')
         out_path = os.path.join(self.workdir, 't0.instance.json')
         rc, out, so, se = cli('instantiate', path, '--map', self.site['mapId'],
