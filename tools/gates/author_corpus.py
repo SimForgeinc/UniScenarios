@@ -316,58 +316,122 @@ def f_junction_conflict(brief):
 
 
 def f_lateral_incursion(brief):
-    """C2 / C15 — a vehicle in the adjacent lane moves into the ego lane."""
-    closing = EGO_MPS - 30 / 3.6
+    """C2 / C15 — a vehicle in the adjacent lane moves into the ego lane.
+
+    Same two mechanism pieces as the junction family, for the same measured reason: with its
+    governor live from t=0 the ego simply opens the gap and the cut-in becomes a lane change
+    happening nearby. The ego is released at a pre-registered time-to-collision instead.
+    """
+    v_chal_kph = 34.0
+    closing = max(EGO_MPS - v_chal_kph / 3.6, 1.0)
     dsM = 'param.initialGapM + %.4f' % (WARMUP * closing)
-    cut = 'clamp(param.initialGapM / %.4f - param.cutLeadS, 0.2, 12)' % max(closing, 1.0)
+    cut = 'clamp(param.initialGapM / %.4f - param.cutLeadS, 0.2, 12)' % closing
+    react = 'clamp(param.initialGapM / %.4f - param.reactAtTtcS, 0.2, 12)' % closing
     return _base(
       brief['id'], brief['brief'][:120], 'auth.lateral.%s' % brief['id'],
-      _corridor(lanes=(2, 8), runway=260),
-      [_p('initialGapM', 18, 45, 'm'), _p('cutLeadS', 0.6, 2.2, 's')],
+      _corridor(lanes=(2, 8), speed=(40, 90), runway=260),
+      [_p('initialGapM', 14, 34, 'm'), _p('cutLeadS', 0.8, 2.4, 's'),
+       _p('reactAtTtcS', 1.0, 2.4, 's')],
       [_ego(), {'id': 'chal', 'kind': 'relative_to', 'label': 'cutting-in vehicle',
                 'actor': {'class': 'car', 'catalogId': 'vehicle.sedan'},
                 'requiredSameSegmentAs': 'ego',
                 'ref': 'ego', 'dLane': 1, 'dsM': dsM, 'tFrac': 0, 'headingOffsetRad': 0,
-                'initialSpeedKph': 30}],
-      [], [{'id': 'chal-cuts-in', 'actor': 'chal', 'verb': 'changeLane',
-            'trigger': {'kind': 'at', 't': cut},
-            'target': {'mode': 'toRole', 'role': 'ego'},
-            'dynamics': {'shape': 'sinusoidal', 'constraint': 'rate', 'value': 1.4}}])
+                'initialSpeedKph': v_chal_kph}],
+      [],
+      [{'id': 'ego-inattentive', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': 0},
+        'target': {'key': 'rules.collisionAvoidance', 'value': False}},
+       {'id': 'ego-reacts', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': react},
+        'target': {'key': 'rules.collisionAvoidance', 'value': True}},
+       {'id': 'chal-cuts-in', 'actor': 'chal', 'verb': 'changeLane',
+        'trigger': {'kind': 'at', 't': cut},
+        'target': {'mode': 'toRole', 'role': 'ego'},
+        'dynamics': {'shape': 'sinusoidal', 'constraint': 'rate', 'value': 1.6}}])
 
 
 def f_oncoming(brief):
-    """C10 — an oncoming vehicle encroaches into the ego lane. Closing speed is the sum."""
+    """C10 — an oncoming vehicle encroaches into the ego lane. Closing speed is the sum, so the
+    mechanism-level rubric bands this tighter than any other category."""
+    react = 'clamp(param.oncomingStartM / %.4f - param.reactAtTtcS, 0.2, 12)' % (EGO_MPS + 35 / 3.6)
+    drift = 'clamp(param.oncomingStartM / %.4f - param.driftLeadS, 0.2, 12)' % (EGO_MPS + 35 / 3.6)
     return _base(
       brief['id'], brief['brief'][:120], 'auth.oncoming.%s' % brief['id'],
       _corridor(lanes=(1, 1), speed=(30, 70), runway=260),
-      [_p('oncomingStartM', 70, 140, 'm'), _p('driftLeadS', 1.2, 3.0, 's')],
+      [_p('oncomingStartM', 60, 130, 'm'), _p('driftLeadS', 1.4, 3.0, 's'),
+       _p('reactAtTtcS', 1.0, 2.4, 's')],
       [_ego(), {'id': 'chal', 'kind': 'opposing', 'label': 'oncoming vehicle',
                 'actor': {'class': 'car', 'catalogId': 'vehicle.sedan'},
                 'pose': {'laneOffset': 0, 's': 'param.oncomingStartM', 'tFrac': 0,
                          'headingOffsetRad': 0},
                 'initialSpeedKph': 35}],
-      [], [])
+      [],
+      [{'id': 'ego-inattentive', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': 0},
+        'target': {'key': 'rules.collisionAvoidance', 'value': False}},
+       {'id': 'ego-reacts', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': react},
+        'target': {'key': 'rules.collisionAvoidance', 'value': True}},
+       {'id': 'chal-holds', 'actor': 'chal', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': drift},
+        'target': {'key': 'rules.collisionAvoidance', 'value': False}}])
 
 
 def f_parking_pullout(brief):
-    """C11 — a parked vehicle pulls out of its bay into the ego path."""
-    closing = EGO_MPS
-    dsM = 'param.initialGapM + %.4f' % (WARMUP * closing)
-    pull = 'clamp(param.initialGapM / %.4f - param.pullLeadS, 0.2, 12)' % closing
+    """C11 — a parked vehicle pulls out of its kerbside bay into the ego path.
+
+    The speed clause is [55, 90], not the [25, 60] a parking scenario deserves, because **the five
+    maps publish no corridor posted at or below 60 kph at all**: a `speedLimitKph <= 60` clause
+    matches ZERO sites on every map, while [0, 70] matches 29. Authoring this family at a residential
+    speed produces no cells whatsoever, which is what a 0/5 category looks like.
+
+    The ego is therefore slowed to 45 kph relative to a corridor posted for 60+, which is a
+    defensible "driver going slower than the limit near parked cars" but is recorded as a
+    plausibility compromise forced by the map inventory, not as a free choice.
+    """
+    v_ego_kph = 45.0
+    v_ego = v_ego_kph / 3.6
+    dsM = 'param.initialGapM + %.4f' % (WARMUP * v_ego)
+    pull = 'clamp(param.initialGapM / %.4f - param.pullLeadS, 0.2, 12)' % v_ego
+    react = 'clamp(param.initialGapM / %.4f - param.reactAtTtcS, 0.2, 12)' % v_ego
     return _base(
       brief['id'], brief['brief'][:120], 'auth.parking.%s' % brief['id'],
-      _corridor(lanes=(1, 2), speed=(25, 60), runway=200),
-      [_p('initialGapM', 20, 45, 'm'), _p('pullLeadS', 1.0, 2.6, 's')],
-      [_ego(), {'id': 'chal', 'kind': 'relative_to', 'label': 'vehicle leaving a kerbside bay',
-                'actor': {'class': 'car', 'catalogId': 'vehicle.sedan', 'static': False},
-                'requiredSameSegmentAs': 'ego',
-                'ref': 'ego', 'dLane': 0, 'dsM': dsM,
-                'lateralM': -1.1, 'lateralRef': 'lane_edge', 'headingOffsetRad': 0,
-                'initialSpeedKph': 0}],
-      [], [{'id': 'chal-pulls-out', 'actor': 'chal', 'verb': 'speed',
-            'trigger': {'kind': 'at', 't': pull},
-            'target': {'mode': 'absolute', 'valueKph': 22},
-            'dynamics': {'shape': 'linear', 'constraint': 'rate', 'value': 2.5}}])
+      _corridor(lanes=(1, 8), speed=(55, 90), runway=200),
+      [_p('initialGapM', 22, 48, 'm'), _p('pullLeadS', 1.0, 2.6, 's'),
+       _p('reactAtTtcS', 1.0, 2.4, 's')],
+      [{**_ego(), 'initialSpeedKph': v_ego_kph},
+       {'id': 'chal', 'kind': 'relative_to', 'label': 'vehicle leaving a kerbside bay',
+        'actor': {'class': 'car', 'catalogId': 'vehicle.sedan'},
+        'requiredSameSegmentAs': 'ego',
+        'ref': 'ego', 'dLane': 0, 'dsM': dsM,
+        'lateralM': -1.1, 'lateralRef': 'lane_edge', 'headingOffsetRad': 0,
+        'initialSpeedKph': 0}],
+      [],
+      [{'id': 'ego-inattentive', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': 0},
+        'target': {'key': 'rules.collisionAvoidance', 'value': False}},
+       {'id': 'ego-reacts', 'actor': 'ego', 'verb': 'set',
+        'trigger': {'kind': 'at', 't': react},
+        'target': {'key': 'rules.collisionAvoidance', 'value': True}},
+       # A `speed` action accelerates the parked car along its own lateral offset and it never
+       # enters the ego lane at all: 260/290 cells came back `no-interaction` with a 0.9 m median
+       # clearance -- the two simply passed each other. Pulling out is a LATERAL manoeuvre, so it
+       # is authored as one.
+       {'id': 'chal-pulls-out', 'actor': 'chal', 'verb': 'route',
+        'trigger': {'kind': 'at', 't': pull},
+        'target': {'mode': 'polyline', 'points': [
+            {'laneOffset': 0, 's': 'param.initialGapM + %.4f' % (WARMUP * v_ego),
+             'lateralM': -1.1, 'lateralRef': 'lane_edge', 'headingOffsetRad': 0},
+            {'laneOffset': 0, 's': 'param.initialGapM + %.4f' % (WARMUP * v_ego + 6.0),
+             'lateralM': -0.2, 'lateralRef': 'lane_edge', 'headingOffsetRad': 0},
+            {'laneOffset': 0, 's': 'param.initialGapM + %.4f' % (WARMUP * v_ego + 14.0),
+             'tFrac': 0, 'headingOffsetRad': 0},
+            {'laneOffset': 0, 's': 'param.initialGapM + %.4f' % (WARMUP * v_ego + 30.0),
+             'tFrac': 0, 'headingOffsetRad': 0}]}},
+       {'id': 'chal-accelerates', 'actor': 'chal', 'verb': 'speed',
+        'trigger': {'kind': 'at', 't': pull},
+        'target': {'mode': 'absolute', 'valueKph': 24},
+        'dynamics': {'shape': 'linear', 'constraint': 'rate', 'value': 2.5}}])
 
 
 def f_workzone(brief):
@@ -377,9 +441,9 @@ def f_workzone(brief):
     mid = 'param.worksStartM + 0.5 * param.worksLengthM'
     return _base(
       brief['id'], brief['brief'][:120], 'auth.workzone.%s' % brief['id'],
-      _corridor(lanes=(1, 2), runway=300),
+      _corridor(lanes=(1, 8), speed=(50, 90), runway=340),
       [_p('worksStartM', 60, 95, 'm'), _p('worksLengthM', 25, 50, 'm'),
-       _p('closedWidthM', 1.2, 1.8, 'm'), _p('crossLeadS', 1.1, 2.6, 's'),
+       _p('closedWidthM', 1.2, 1.8, 'm'), _p('crossLeadS', 1.6, 3.4, 's'),
        _p('workerSpeedKph', 3.5, 7.0, 'kph')],
       [_ego(), {'id': 'worker', 'kind': 'on_reference', 'label': 'road worker',
                 'actor': {'class': 'pedestrian', 'catalogId': 'construction.flagger'},

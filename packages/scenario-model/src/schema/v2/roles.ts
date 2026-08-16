@@ -367,7 +367,29 @@ export const RelativeToRoleSchema = z.strictObject({
   dsM: NumberOrExprSchema,
   /** Lateral offset within the resulting lane, fraction of width. */
   tFrac: z.number().min(-1).max(1).default(0),
+  /**
+   * Lateral offset in METRES from `lateralRef`, positive to the left. Same contract as
+   * `FramePose.lateralM`, and here for the same reason: `tFrac` is bounded to the lane, so a car
+   * parked at the kerb, a delivery van protruding from a bay, or anything else beside the
+   * carriageway cannot be expressed relative to another role without it.
+   */
+  lateralM: NumberOrExprSchema.optional(),
+  /** What `lateralM` is measured from. Required whenever `lateralM` is given. */
+  lateralRef: LateralReferenceSchema.optional(),
   headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
+}).superRefine((role, ctx) => {
+  if (role.lateralM !== undefined && role.tFrac !== 0) {
+    ctx.addIssue({ code: 'custom', path: ['lateralM'],
+      message: 'lateralM and a non-zero tFrac both set: a role has one lateral offset, not two.' });
+  }
+  if (role.lateralM !== undefined && role.lateralRef === undefined) {
+    ctx.addIssue({ code: 'custom', path: ['lateralRef'],
+      message: `lateralM needs an explicit lateralRef (${LATERAL_REFERENCES.join(' | ')}).` });
+  }
+  if (role.lateralM === undefined && role.lateralRef !== undefined) {
+    ctx.addIssue({ code: 'custom', path: ['lateralRef'],
+      message: 'lateralRef set without lateralM: nothing is being measured.' });
+  }
 });
 
 /**

@@ -1992,6 +1992,21 @@ class Materializer {
         lateralOverrideM = pose?.lateralM === undefined
           ? null
           : this.resolveLateral(pose, scope, `${path}.pose`, route.widthAt(spawnS) ?? this.referenceLaneWidth());
+        // A `relative_to` role carries its own lateral fields rather than a FramePose, so it needs
+        // the same treatment explicitly. This is the role that most needs the kerb -- a parked car,
+        // a van protruding from a bay, a vehicle pulling out -- and with `tFrac` alone none of them
+        // can be placed off the carriageway.
+        if (role.kind === 'relative_to') {
+          tFrac = role.tFrac;
+          if (role.lateralM !== undefined) {
+            lateralOverrideM = this.resolveLateral(
+              { laneOffset: 0, s: 0, tFrac: 0, headingOffsetRad: 0,
+                lateralM: role.lateralM, lateralRef: role.lateralRef } as FramePose,
+              scope, `${path}.lateralM`,
+              route.widthAt(spawnS) ?? this.referenceLaneWidth());
+          }
+          headingOffset = role.headingOffsetRad;
+        }
         headingOffset = pose?.headingOffsetRad ?? binding.pose?.headingOffsetRad ?? 0;
       }
     }
