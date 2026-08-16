@@ -606,3 +606,96 @@ failing criterion**.
 `research/edge-case-corpus/tools/RUBRICS-SUPERSEDED.json` records the supersession. They are
 pre-registrations from earlier rounds and part of this project's evidence trail — superseding them
 is honest, deleting them would destroy the record of what they said. The **operative** set is 15.
+
+---
+
+## M5 / W6 — brief-to-map feasibility pre-check: **EXIT CRITERION MET**
+
+| exit criterion | required | measured | verdict |
+|---|---|---|---|
+| agreement with the blind plausibility measurement | >= 0.85 | **0.8571 (6/7)** | **MET** |
+| ranked list of categories the maps cannot host, with site counts | yes | `research/edge-case-corpus/MAP-INVENTORY-GAPS.md` | **MET** |
+
+```
+$ .venv/bin/python tools/gates/precheck_briefs.py
+  OK   blind-crest-queue            blind=8/8  precheck=FEASIBLE   absent=-  thin=crest
+  MISS c4g-circulating-sudden-stop  blind=8/8  precheck=INFEASIBLE absent=roundabout
+  OK   low-friction-stop-slide      blind=8/8  precheck=FEASIBLE   absent=-
+  OK   c1g-illegal-u-turn           blind=7/8  precheck=FEASIBLE   absent=-
+  OK   c11g-hidden-child            blind=1/8  precheck=INFEASIBLE absent=kerbside_parking_residential,school_zone
+  OK   c11g-indicator-mislead       blind=1/8  precheck=INFEASIBLE absent=parking_aisle
+  OK   parked-vans-narrow-road      blind=1/8  precheck=INFEASIBLE absent=kerbside_parking_residential
+  agreement, "can the maps host it at all"      : 0.8571 (6/7)
+  agreement, stricter "portably" reading        : 0.7143 (5/7)
+PRE-CHECK GATE: PASS
+```
+
+It is a structural query, not another validator on the output: 22 probe anchors, one per road
+structure a brief can require, run once through `sites match --all-maps`; a brief's text maps to the
+structures it needs, and the maps either contain them or they do not. It takes about a second per
+brief against a cached inventory.
+
+**Both readings are reported.** "Can the maps host it at all" (zero sites, or unbindable) gives
+0.8571. The stricter "can they host it *portably*" reading — the frozen >= 2 maps / >= 3 sites clause
+— gives 0.7143. The distinction is decided by the rule, not by the answer: `crest` has one site on
+one map, so a crest brief is authorable but not portable, whereas `roundabout` and `parking_aisle`
+have none at all.
+
+### The one disagreement, stated rather than smoothed over
+
+`c4g-circulating-sudden-stop` scored **8/8** blind, and the pre-check refuses it because **there is
+no roundabout on any of the five maps**. Both are correct about different things. The VISTA lane
+recorded the same collision of facts from the other side: *"s34's `c4g` case: 24/24 exact for a
+roundabout scenario with no roundabout on any map"*. The matcher bound it, and the resulting scene —
+a vehicle stopping suddenly ahead of the ego — reads as plausible to a blind judge, because the
+roundabout was scenery rather than the mechanism.
+
+So the blind measure answers "does this scene look like somewhere this could happen", and the
+pre-check answers "does the map contain the place the brief named". They differ exactly where a
+brief names a structure that is absent but incidental. I have not tuned the pre-check to close that
+gap, because closing it would mean accepting briefs on the strength of a bind the VISTA lane already
+flagged as false.
+
+### An instrument fault in my own pre-check, found and fixed
+
+The first version reported `bike_lane`, `parking_aisle` and `kerbside_parking_residential` at
+**0 sites** — and `C6.cyclist-ptw` as **15/15 infeasible**. All of that was wrong. Two probes were
+**invalid templates**: `corridor.adjacentLanes` is not a corridor key (it is `requiresAdjacent`), and
+`kind: 'roundabout'` is not a feature kind (a roundabout is a junction *control class*). The matcher
+never ran, and a template that does not parse returned zero.
+
+A malformed instrument reading zero is not a map-inventory fact. `measure_inventory()` now validates
+every probe before trusting it and refuses to continue on a probe that does not parse. After the
+fix, `bike_lane` measures **52 sites across 4 maps** and C6 is **0/15 infeasible**.
+
+The validator also surfaced a third, different case: `rail_crossing` is a legal feature kind that the
+**anchor matcher cannot bind** (`clause_unmatchable`). That is a tooling gap, not a map gap, and it
+is recorded as such rather than blurred into "the maps do not have one".
+
+### The deliverable
+
+`research/edge-case-corpus/MAP-INVENTORY-GAPS.md` — measured site counts for 22 structures across all
+five maps, split into *absent*, *present but below the portability clause*, and *well supplied*, plus
+the ranked category table and a priority order for map authoring.
+
+**48 of 208 briefs (23.1%) name a structure the five maps do not contain.**
+
+| rank | category | briefs | infeasible | blocking structure |
+|---:|---|---:|---:|---|
+| 1 | **C8.workzone** | 14 | **14 (1.00)** | `work_zone_suitable` — 0 sites |
+| 2 | **C12.school** | 12 | **12 (1.00)** | `school_zone` — 0 sites |
+| 3 | **C4.roundabout** | 10 | **10 (1.00)** | `roundabout` — 0 sites |
+| 4 | C11.parking | 13 | 5 (0.38) | `parking_aisle`, `kerbside_parking_residential`, `driveway` — 0 sites |
+| 5 | C13.control | 14 | 3 (0.21) | `rail_crossing` (unbindable), `work_zone_suitable` |
+| 6 | C7.occlusion | 14 | 2 (0.14) | `school_zone`, `driveway` |
+| 7 | C10.oncoming | 13 | 1 (0.08) | `kerbside_parking_residential` |
+| 8 | C5.pedestrian | 16 | 1 (0.06) | `school_zone` |
+
+This independently confirms the brief's own map-inventory claim (no drivable parking aisle, no narrow
+residential street with kerbside parking) and **adds three larger gaps it did not name**:
+`work_zone_suitable`, `school_zone` and `roundabout` each block an entire category outright.
+
+It also **quantifies the multi-lane claim differently from the brief**: the brief states
+`throughLanesSameDir >= 2` fails at 157/210 sites. Measured here, `multilane_same_dir` binds **51
+sites across 4 maps** and `multilane_junction` **54 sites across 4 maps** — thin, but comfortably
+above the portability clause, so multi-lane work is *not* blocked outright.
