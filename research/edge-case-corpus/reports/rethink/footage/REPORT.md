@@ -160,7 +160,7 @@ Realism AUC (good vs absurd, Mann-Whitney; CI = 1000-draw bootstrap, seed 202608
    options: outline flash on OBB intersection (deterministic, label-blind), higher fps
    burst at spawn, or 3D tier. Filed for EngineLane consideration; NOT added mid-run.
 
-## 5. Scaled run (judging blocked on calibration PASS; cells regenerated)
+## 5. Scaled run — first round DONE (W7 regen + VistaLane pilot)
 
 ```
 .venv/bin/python tools/research/footage/scale_run.py w7 --run /tmp/tgr-footage-scale1 --calib /tmp/tgr-footage-calib1 --rows 24
@@ -175,8 +175,55 @@ site-infeasible on regen). Sibling roots from FreeformLane/EmergentLane will be 
 via `scale_run.py roots --roots <dir>` as announced over hub; frozen judge + strategy;
 inter-model agreement measured on every 3rd cell with all three models.
 
+### Round-1 results (254 cells: 170 W7 + 84 VistaLane pilot; frozen judge sol/medium/spread8)
+
+```
+.venv/bin/python tools/research/footage/scale_run.py roots --run /tmp/tgr-footage-scale1 --calib /tmp/tgr-footage-calib1 --roots /tmp/tgr-vista-pilot1/cells
+.venv/bin/python tools/research/footage/scale_run.py judge --run /tmp/tgr-footage-scale1 --calib /tmp/tgr-footage-calib1 --workers 12 --render-workers 4
+.venv/bin/python tools/research/footage/scale_run.py analyze --run /tmp/tgr-footage-scale1 --calib /tmp/tgr-footage-calib1
+```
+
+424 verdicts (every 3rd cell judged by all 3 models), 0 errors, 468 s wall.
+
+**Headline: the gate and the judge are ORTHOGONAL.** Realism AUC of gate-PASS vs
+gate-FAIL cells = **0.499** (chance); W7 row-level admitted-vs-rejected AUC = **0.514**.
+Judged realism/plausibility carry no admission information and vice versa — the frozen
+gate certifies criticality/portability, not looks. This replicates, with an independent
+instrument, the lead's plausibility≈equal-for-admitted-and-rejected observation
+(plausible-rate here: 0.850 pass vs 0.851 fail).
+
+| bucket | n | realism μ/med | dynamism μ/med | plausible |
+|---|---|---|---|---|
+| gate-pass cells | 60 | 5.15 / 5 | 3.03 / 3 | 0.85 |
+| gate-fail cells | 194 | 5.06 / 6 | 2.52 / 3 | 0.85 |
+| W7 admitted rows | 103 | 5.42 / 6 | 2.90 / 3 | 0.78 |
+| W7 rejected rows | 67 | 5.33 / 6 | 2.72 / 3 | 0.90 |
+| stream: footage (W7 regen) | 170 | 5.38 / 6 | — | — |
+| stream: vista | 84 | 4.48 / 5 | — | — |
+
+**The corpus is dead, quantified:** dynamism median 3/10 (max 5) across every bucket —
+gate-passing cells included. The owner's "scenes aren't alive" complaint is now a number,
+measured by an instrument that provably separates alive-vs-broken classes at 0.85 AUC.
+
+**Inter-model agreement at scale** (85 common cells, all-3-models subsample): Spearman
+luna~sol 0.693, luna~terra 0.745, sol~terra 0.766 — better than calibration (more score
+spread), comfortably above chance.
+
+**Cost/cell:** mean 4806 tokens, 11.3 s latency per verdict; round-1 total 2.04 M tokens
+/ 424 verdicts. At this rate ~2400 verdicts/hour/12-workers; quota is not a constraint.
+
+Remaining rounds: EmergentLane paired-ambient cells (`/tmp/tgr-emergent-pair1/cells`,
+in flight, ~2-4 h) and harvest cells; FreeformLane freedom/baseline arms (announced as
+they land); VistaLane main run (progressive, ~6-10 h). Judge stage is resumable
+(existing `review-*.json` skipped); each announced root gets `roots` + `judge` + a
+re-`analyze`, appended here.
+
 ## Cost ledger (updated per stage)
 
 | stage | calls | tokens in/out | wall |
 |---|---|---|---|
 | smoke | 1 judge + 1 probe | 4256/602 (+probe) | 15.7 s |
+| pilot v1 (VOID) | 72 judge + 3 probes | 317,030 total | ~2 min |
+| pilot v2 | 72 judge | 325,454 total (spread8 5073/cell, burst6 3968/cell) | 117 s |
+| calibration grid | 432 judge + 3 probes | 2,312,777 total (per-arm tok/cell in table) | 835 s |
+| scaled round 1 | 424 judge + 3 probes | 2,037,969 total (4806/cell mean) | 468 s |
