@@ -23,9 +23,11 @@ Evidence, all verified first-hand or from raw on-disk reports (see REVIEW.md):
 - **"Admission rate is the headline" (lane briefs) — reject going forward.** The gate stays, frozen, as a *floor* and integrity instrument. The primary metrics for this rethink are (i) a pre-registered dynamism census read from raw traces and (ii) a validated footage-review verdict. New instruments are added *beside* the gate, never by touching it — consistent with the "tighten only" rule.
 - **The C8/C13/C4 category failures are not authoring failures and should stop being reported as such.** They are map facts. I will keep them quantified for the map handoff, and the unstructured-space items on the owner's list (gas stations, parking lots, campgrounds) land in the same bucket. Flagged plainly: without new maps or map synthesis, whole rows of the owner's list are unhostable; agent effort spent "authoring around" them produces provenance-No scenarios (that's precisely the 34.8%).
 
+> **Owner amendment (2026-08-16, after plan v1):** the owner explicitly directed a VISTA-based approach be built as well, citing the ARC-AGI-3 result. My partial rejection above is therefore overruled for execution — and honestly, the game formulation answers my own objection: authoring *does* have a win condition (the frozen gate), so the ARC-AGI loop maps more faithfully than I first argued. Stream E (VistaLane) runs the faithful re-attempt: visual observation as primary channel, predict/verify per action, lossless frame memory with inspect/read_pixels-as-semantic-query, GUIDE.md/WORKING.md, minimal prompt, gate-as-win-condition, gpt-5.6-sol (the paper's own Codex backend). Head-to-head on the same brief sample against the compiler baseline and the text-schema freedom arm, same instruments. Owner also directed sweeping gpt-5.6 models × efforts in authoring and judging arms.
+
 ## 3. Work streams
 
-Four parallel streams, each owned by one omp Fable agent, reporting to me. Shared contracts in `CONTRACTS.md` (briefs sample, artifact layout, verdict schema, metric definitions, model policy, gate discipline).
+Five parallel streams, each owned by one omp Fable agent, reporting to me. Shared contracts in `CONTRACTS.md` (briefs sample, artifact layout, verdict schema, metric definitions, model policy, gate discipline). Stream E was added by owner amendment (see §2).
 
 ### Stream A — FreeformLane: full-schema agentic authoring
 **Hypothesis:** an agent authoring raw ScenarioTemplateV2 (schema-validated, engine-feedback loop, 2–3 repair rounds) produces scenarios that (i) pass the frozen gate at a usable floor (≥0.35 of briefs) and (ii) beat the compiler pipeline on the dynamism census and on footage-judged realism, because it can use the 97% of the vocabulary the compilers ignore (multi-actor triggers, signal programs, swerves, ambient traffic, weather).
@@ -50,6 +52,11 @@ Not hypothesis-driven; demand-driven from A–C plus the owner's list. Ordered b
 3. **Actor/prop vocabulary for the owner's list**: animal, debris (tire/mattress/ladder), shopping cart, delivery robot, emergency vehicle with light state; reversing behaviour; each added generally (schema + materializer + engine + test).
 4. Per-actor policy hook design note (if C shows emergent promise): the seam is `controllers.ts` slot ownership — proposal only, no speculative implementation.
 Every change: failing test first, general (never per-scenario), `pnpm -r typecheck` + affected package tests green, tripwire green. Nothing lands that A–C don't need or the owner didn't name.
+
+### Stream E — VistaLane: VISTA-faithful visual authoring (owner amendment)
+**Hypothesis:** the paper's loop (visual observation → free-form predict/verify reasoning → act, with lossless frame memory, GUIDE/WORKING notes, minimal prompt, gate-as-win-condition) authors admissible scenarios and *discovers the engine's physics by interaction* — the C2 warm-up trap, clearance geometry, TTC demand — without being pre-taught, the way VISTA discovers game rules. Its GUIDE.md after N briefs is itself a deliverable.
+**Design:** minimal harness in `tools/research/vista2/` (≤8 actions: view_site, place_actor-by-pixel→logical-anchor projection, set_motion, simulate→rollout keyframes+per-criterion verdict, inspect, read_pixels-as-semantic-ground-truth, emit). `gpt-5.6-sol` (the paper's Codex backend), vision-asserted. Same brief sample, gate, census, judge as A — a clean three-way: compiler vs text-schema freedom vs visual closed-loop.
+**Falsifiers:** cannot beat the text-schema arm on admission or judged realism/dynamism at <5× cost; GUIDE.md never converges on true physics (confabulated rules that don't predict); pixel→anchor projection cannot keep templates portable.
 
 ## 4. What would tell me the whole framing is wrong
 

@@ -1,6 +1,6 @@
 # CONTRACTS — shared interfaces for the rethink work streams (v1, frozen 2026-08-16)
 
-Owned by the lead (`Main`). Streams: FreeformLane (A), FootageLane (B), EmergentLane (C), EngineLane (D).
+Owned by the lead (`Main`). Streams: FreeformLane (A), FootageLane (B), EmergentLane (C), EngineLane (D), VistaLane (E — owner-mandated VISTA-faithful visual authoring harness, added 2026-08-16).
 Changes to this file are lead-only; streams propose via hub message.
 
 ## 0. Ground rules (inherited, non-negotiable)
@@ -18,6 +18,7 @@ Changes to this file are lead-only; streams propose via hub message.
 | B FootageLane | `tools/research/footage/` | `research/edge-case-corpus/reports/rethink/footage/` |
 | C EmergentLane | `tools/research/emergent/` | `research/edge-case-corpus/reports/rethink/emergent/` |
 | D EngineLane | `packages/*`, `scripts/*` (general fixes with tests) | `research/edge-case-corpus/reports/rethink/engine/` |
+| E VistaLane | `tools/research/vista2/` | `research/edge-case-corpus/reports/rethink/vista2/` |
 | shared (lead-owned, D implements changes on request) | `tools/research/shared/` | — |
 
 Run outputs: `/tmp/tgr-<stream>-<runid>/` — unique per run, never reused. Disk is tight (69 GB free at start): delete trace dirs after metrics/renders are extracted; keep only what a report cites.
