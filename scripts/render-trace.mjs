@@ -26,7 +26,7 @@ try {
 }
 
 function parseArgs(argv) {
-  const out = { times: null, width: 960, height: 600, scale: 8, fps: 2, devAssets: null, redact: false };
+  const out = { times: null, width: 960, height: 600, scale: 8, fps: 2, devAssets: null, redact: false, camera: 'pair' };
   for (let i = 0; i < argv.length; i += 1) {
     const a = argv[i];
     const next = () => {
@@ -46,6 +46,10 @@ function parseArgs(argv) {
     else if (a === '--fps') out.fps = Number(next());
     else if (a === '--dev-assets') out.devAssets = next();
     else if (a === '--redact') out.redact = true;
+    else if (a === '--camera') {
+      out.camera = next();
+      if (out.camera !== 'pair' && out.camera !== 'follow-ego') throw new Error('--camera must be pair or follow-ego');
+    }
     else if (a === '--help') usage(0);
     else throw new Error(`unknown argument ${a}`);
   }
@@ -58,7 +62,7 @@ function parseArgs(argv) {
 
 function usage(code) {
   process.stderr.write(
-    'usage: node scripts/render-trace.mjs --instance <instance.json> --trace <trace.json.gz> --out <dir> [--times t0,t1,t2,t3] [--size 960x600] [--scale pxPerM] [--fps 2] [--dev-assets <root>] [--redact]\n',
+    'usage: node scripts/render-trace.mjs --instance <instance.json> --trace <trace.json.gz> --out <dir> [--times t0,t1,t2,t3] [--size 960x600] [--scale pxPerM] [--fps 2] [--dev-assets <root>] [--redact] [--camera pair|follow-ego]\n',
   );
   process.exit(code);
 }
@@ -160,7 +164,18 @@ function poseAt(trace, actorId, index) {
   };
 }
 
-function cameraFor(trace, index) {
+function cameraFor(trace, index, mode = 'pair') {
+  if (mode === 'follow-ego') {
+    // Judge-facing framing: the scene is wherever the ego is. The minTTC-pair
+    // midpoint drifts off EVERY actor when the pair separates (verified on
+    // frozen-ego cells: mid-clip frames were empty road), and is undefined when
+    // minTTC is absent.
+    const ego = trace.ticks.actors.ego;
+    if (ego && ego.present[index] !== 0) {
+      return { x: ego.x[index], y: ego.y[index], basis: 'follow-ego', pair: ['ego'] };
+    }
+    // ego absent this tick: fall through to the pair heuristic
+  }
   const pair = trace.metrics?.minTTC?.pair ?? Object.keys(trace.ticks.actors).slice(0, 2);
   const poses = pair.map((id) => poseAt(trace, id, index));
   if (poses.length >= 2) return { x: (poses[0].x + poses[1].x) / 2, y: (poses[0].y + poses[1].y) / 2, basis: 'minTTC-pair-midpoint', pair };
@@ -373,7 +388,7 @@ async function main() {
   for (let i = 0; i < selectedTimes.length; i += 1) {
     const frameTime = selectedTimes[i];
     const index = nearestIndex(trace.ticks.t, frameTime);
-    const camera = cameraFor(trace, index);
+    const camera = cameraFor(trace, index, args.camera);
     const svg = renderSvg({ instanceDoc, trace, index, frameNo: i, frameTime, camera, width: args.width, height: args.height, scale: args.scale, underlay: underlayAssets?.underlay ?? null, redact: args.redact });
     const svgPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.svg`);
     const pngPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.png`);

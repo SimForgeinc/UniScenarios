@@ -185,7 +185,8 @@ def stage_judge(run, calib_run, workers, render_workers):
     if need:
         print(f'rendering {len(need)} cells first')
         args = argparse.Namespace(width=800, height=500, scale=8.0, fps=4,
-                                  redact=True, dev_assets=os.path.join(futil.REPO, 'dev-assets'),
+                                  redact=True, camera='follow-ego',
+                                  dev_assets=os.path.join(futil.REPO, 'dev-assets'),
                                   force=False)
         with ThreadPoolExecutor(max_workers=render_workers) as pool:
             list(pool.map(lambda c: render_cells.render_cell(c, args), need))

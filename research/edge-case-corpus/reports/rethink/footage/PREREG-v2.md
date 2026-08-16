@@ -67,6 +67,17 @@ defect classes, thresholds, strategies, and the selection rule are untouched. Th
 measured verdict at amendment time was the pipeline smoke (recorded in REPORT §2), which
 enters no statistic.
 
+**Amendment 3 (2026-08-16, before any GRID verdict):** the first pilot (72 verdicts,
+`pilot-verdicts.jsonl`, kept on disk) is **VOID** — it exposed two instrument bugs, not
+judge behaviour: (a) the renderer's minTTC-pair-midpoint camera drifts off every actor
+as the pair separates (verified: frozen-ego cells rendered as empty road by mid-clip;
+judge correctly reported "no visible ego"), and (b) the frame plan sampled only the
+conflict window, while the VRU-in-occluder overlap exists only at VRU spawn. Fixes:
+`--camera follow-ego` render mode (ego-centred every frame) and label-blind
+spawn-window frames (first-present +0.6/+1.2 s of every non-ego actor, all cells).
+The pilot is re-run from scratch post-fix; strategy selection uses only post-fix
+verdicts. Rubric, scores, thresholds, strategies, and the selection rule unchanged.
+
 ## Judge input and strategies
 
 Renders via `scripts/render-trace.mjs` with `--redact` (no ids, no minTTC/reveal HUD —
