@@ -38,14 +38,36 @@ const tierWant = arg('tier', 'any');
 
 const events = readFileSync(path.join(out, 'mining/events.jsonl'), 'utf8')
   .split('\n').filter(Boolean).map((l) => JSON.parse(l));
+// Collision blacklist: (cellDir, actorId) pairs seen colliding in the RAW world.
+// A promoted counterpart's collisions with ANYONE count against frozen C5 (the
+// pair is no longer ambient-ambient once one side is promoted), so events whose
+// counterpart already crashes in the raw world are structurally dead. Measured:
+// early batch died C5 exactly this way (promoted-gate.json round 1).
+const collBlack = new Set();
+try {
+  for (const line of readFileSync(path.join(out, 'mining/collisions.jsonl'), 'utf8')
+    .split('\n').filter(Boolean)) {
+    const c = JSON.parse(line);
+    for (const id of c.pair) collBlack.add(`${c.cell.out}|${id}`);
+  }
+} catch { /* no collisions file */ }
 
-// Selection: ego-involved, non-collision, tier filter; most severe first
-// (T1 first, then lowest TTC, then lowest clearance); one promotion per cell.
+// Gate-aware selection (round-2 refinement, reasons measured in round 1):
+// - ego-involved, non-collision, tier filter, counterpart not in collision blacklist;
+// - t* comfortably inside the clip (>= 4 s: round-1 C2 deaths clustered at 2.44-2.58 s
+//   from standing-queue neighbours adjacent at clip start);
+// - initial separation check happens lazily below (raw trace read) — >= 15 m at the
+//   pair's first common tick, again to dodge C2 queue-adjacency;
+// - severity order: T1 first, then max pair decel desc (C4 wants real demand), then
+//   TTC asc, then clearance asc; one promotion per cell.
 const candidates = events
   .filter((e) => e.egoInvolved && !e.collision)
   .filter((e) => tierWant === 'any' || e.tier === tierWant)
+  .filter((e) => e.tStar >= 4.0)
+  .filter((e) => !collBlack.has(`${e.cell.out}|${e.pair.find((id) => id !== 'ego')}`))
   .sort((a, b) =>
     (a.tier === 'T1' ? 0 : 1) - (b.tier === 'T1' ? 0 : 1)
+    || Math.max(...b.maxDecel) - Math.max(...a.maxDecel)
     || (a.ttcRrS ?? 99) - (b.ttcRrS ?? 99)
     || a.minClearanceM - b.minClearanceM);
 const perCell = new Map();
@@ -53,11 +75,40 @@ for (const e of candidates) {
   const key = e.cell.out;
   if (!perCell.has(key)) perCell.set(key, e);
 }
-const selected = [...perCell.values()].slice(0, maxN);
-console.log(JSON.stringify({ events: events.length, egoInvolved: candidates.length, selected: selected.length }));
+const preselected = [...perCell.values()];
+
+// Lazy initial-separation filter over the raw trace, first common present tick.
+import { gunzipSync } from 'node:zlib';
+function initialSeparationM(cellDir, counterpart) {
+  const tr = JSON.parse(gunzipSync(readFileSync(path.join(cellDir, 'trace.json.gz'))));
+  const a = tr.ticks.actors.ego, b = tr.ticks.actors[counterpart];
+  if (!a || !b) return 0;
+  for (let i = 0; i < tr.ticks.t.length; i += 1) {
+    if (a.present[i] && b.present[i]) {
+      return Math.hypot(a.x[i] - b.x[i], a.y[i] - b.y[i]);
+    }
+  }
+  return 0;
+}
+const MIN_SEP_M = 15;
+const selected = [];
+const sepRejected = [];
+for (const e of preselected) {
+  if (selected.length >= maxN) break;
+  const counterpart = e.pair.find((id) => id !== 'ego');
+  const dir = e.cell.out;
+  if (existsSync(path.join(dir, `promoted-${counterpart.replace(/[^a-zA-Z0-9_.-]/g, '_')}`))) continue;
+  const sep = initialSeparationM(dir, counterpart);
+  if (sep < MIN_SEP_M) { sepRejected.push({ cellId: path.basename(dir), sep: Math.round(sep * 10) / 10 }); continue; }
+  selected.push(e);
+}
+console.log(JSON.stringify({
+  events: events.length, egoInvolvedEligible: candidates.length,
+  cells: preselected.length, sepRejected: sepRejected.length, selected: selected.length,
+}));
 
 const promoLog = path.join(out, 'mining/promotions.jsonl');
-writeFileSync(promoLog, '');
+if (!existsSync(promoLog) || has('fresh')) writeFileSync(promoLog, '');
 const bundles = new Map();
 
 for (const e of selected) {
