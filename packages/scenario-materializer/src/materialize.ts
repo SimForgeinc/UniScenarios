@@ -1385,6 +1385,63 @@ class Materializer {
     return { ...pose.point, headingRad: pose.headingRad };
   }
 
+  /**
+   * Signed lateral offset in metres from the lane centreline, positive to the left.
+   *
+   * Two authored forms, one result:
+   *
+   * - `tFrac`    — a fraction of local lane width. Portable, but bounded to [-1, 1], so every
+   *                position it can express is ON the carriageway.
+   * - `lateralM` — metres from a NAMED reference, which is what makes the roadside addressable
+   *                without baking in a coordinate:
+   *      `lane_centre`  from this lane's centreline;
+   *      `lane_edge`    outward from this lane's nearer edge;
+   *      `verge`        outward from the far edge of the outermost same-direction lane on that
+   *                     side, i.e. from the edge of the carriageway itself.
+   *
+   * The side is carried by the sign of `lateralM`, so a single number says both how far and which
+   * way. `verge` is the form a roadside occluder needs: with `tFrac` alone a hedge lands at the
+   * same lateral position as the VRU it is supposed to hide (`OCCLUSION-FINDING.md`).
+   */
+  private resolveLateral(pose: FramePose, scope: ExprScope, path: string, laneWidth: number): number {
+    if (pose.lateralM === undefined) {
+      return evalTFrac(pose.tFrac, scope, `${path}.tFrac`, 0) * laneWidth;
+    }
+    const metres = evalNum(pose.lateralM, scope, `${path}.lateralM`, 0);
+    const side = metres === 0 ? 1 : Math.sign(metres);
+    switch (pose.lateralRef) {
+      case 'lane_edge':
+        return side * (laneWidth / 2) + metres;
+      case 'verge':
+        return side * this.carriagewayHalfWidth(side, laneWidth) + metres;
+      default:
+        return metres;
+    }
+  }
+
+  /**
+   * Distance from the reference lane's centreline to the outer edge of the carriageway on one
+   * side, metres. Half the reference lane, plus the full width of every same-direction lane
+   * between it and the outside. A site with no lane on that side is simply half a lane wide, which
+   * is the correct answer for a single-lane corridor.
+   */
+  private carriagewayHalfWidth(side: number, laneWidth: number): number {
+    let width = laneWidth / 2;
+    const lanes = this.site.frame.lateralLanes;
+    for (const key of Object.keys(lanes)) {
+      const k = Number(key);
+      if (k === 0 || Math.sign(k) !== side) continue;
+      const rsl = lanes[k];
+      width += (rsl ? this.bundle.index.lanes[rsl]?.representativeWidthM : undefined) ?? laneWidth;
+    }
+    return width;
+  }
+
+  /** Representative width of the reference lane, metres. Used to convert fractional drift. */
+  private referenceLaneWidth(): number {
+    return this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
+  }
+
   /** Resolve a full frame pose, including laneOffset and tFrac, into xodr-local metres. */
   private framePosePoint(
     pose: FramePose,
@@ -1453,8 +1510,7 @@ class Materializer {
     }
     const laneWidth = route.widthAt(routeS) ?? this.bundle.index.lanes[this.site.frame.entryLaneRsl]?.representativeWidthM ?? 3.5;
     const at = route.poseAt(routeS);
-    const tFrac = evalTFrac(pose.tFrac, scope, `${path}.tFrac`, 0);
-    const lateral = tFrac * laneWidth;
+    const lateral = this.resolveLateral(pose, scope, path, laneWidth);
     return {
       x: at.point.x - Math.sin(at.headingRad) * lateral,
       y: at.point.y + Math.cos(at.headingRad) * lateral,
@@ -3433,11 +3489,22 @@ class Materializer {
           const tFracStep = prop.repeat
             ? evalTFrac(prop.repeat.tFracStep, scope, `props.${prop.id}.repeat.tFracStep`, 0)
             : 0;
-          at = this.framePosePoint(
-            { ...prop.pose, s, tFrac: baseTFrac + i * tFracStep },
-            scope,
-            `props.${prop.id}.pose`,
-          );
+          // A repeat drifts laterally in whichever unit the pose was authored in. Writing the
+          // fractional drift into `tFrac` while `lateralM` is set would silently produce a pose
+          // with two lateral offsets, which the schema forbids and `resolveLateral` would ignore —
+          // a cone taper on the verge would come out perfectly straight. Convert the drift to
+          // metres instead, against this lane's own width, so a taper stays a taper off-carriageway.
+          const drift = i * tFracStep;
+          const stepped = prop.pose.lateralM === undefined
+            ? { ...prop.pose, s, tFrac: baseTFrac + drift }
+            : {
+                ...prop.pose,
+                s,
+                lateralM:
+                  evalNum(prop.pose.lateralM, scope, `props.${prop.id}.pose.lateralM`, 0) +
+                  drift * this.referenceLaneWidth(),
+              };
+          at = this.framePosePoint(stepped, scope, `props.${prop.id}.pose`);
         } catch (error) {
           // A repeat that runs off the end of the frame is a normal, expected
           // outcome and is skipped. An unsatisfiable `laneOffset` is not: the

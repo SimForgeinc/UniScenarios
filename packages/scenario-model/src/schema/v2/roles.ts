@@ -136,16 +136,69 @@ export const ActorSpecSchema = z.strictObject({
 /** A pose in the AnchorFrame. See the module docs for the convention. */
 const TFracOrExprSchema = z.union([z.number().min(-1).max(1), ExprSchema]);
 
-export const FramePoseSchema = z.strictObject({
-  /** Signed same-direction lane index; 0 is the reference lane. */
-  laneOffset: z.number().int().min(-8).max(8).default(0),
-  /** Arc length from the frame origin, metres. Negative is upstream. */
-  s: NumberOrExprSchema,
-  /** Lateral offset as a fraction of local lane width, −1..1 (0 = centre). May be parameterised. */
-  tFrac: TFracOrExprSchema.default(0),
-  /** Yaw relative to the lane tangent, radians. */
-  headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
-});
+/**
+ * What a metric lateral offset is measured FROM.
+ *
+ * `tFrac` is a fraction of lane width and is bounded to [-1, 1], so every position it can express
+ * lies on the carriageway. That makes the roadside unaddressable: a hedge, fence, skip or parked
+ * row authored to hide a VRU cannot be placed *off* the road, and ends up at the same lateral
+ * position as the thing it is supposed to hide. Occlusion was proven in 0/30 and then 0/80 cells
+ * for exactly this reason (`OCCLUSION-FINDING.md`).
+ *
+ * `lateralM` is the metric form. It stays portable because the reference is a named road feature,
+ * not a coordinate: "2 m beyond the verge" means the same thing on a 2.7 m lane and a 3.9 m one.
+ */
+export const LATERAL_REFERENCES = ['lane_centre', 'lane_edge', 'verge'] as const;
+export const LateralReferenceSchema = z.enum(LATERAL_REFERENCES);
+/** Where a metric lateral offset is measured from. */
+export type LateralReference = z.infer<typeof LateralReferenceSchema>;
+
+export const FramePoseSchema = z
+  .strictObject({
+    /** Signed same-direction lane index; 0 is the reference lane. */
+    laneOffset: z.number().int().min(-8).max(8).default(0),
+    /** Arc length from the frame origin, metres. Negative is upstream. */
+    s: NumberOrExprSchema,
+    /** Lateral offset as a fraction of local lane width, −1..1 (0 = centre). May be parameterised. */
+    tFrac: TFracOrExprSchema.default(0),
+    /**
+     * Lateral offset in METRES, signed, positive to the left of the direction of travel, measured
+     * from `lateralRef`. Mutually exclusive with `tFrac`. Use this to reach the verge, which
+     * `tFrac` cannot express at any value.
+     */
+    lateralM: NumberOrExprSchema.optional(),
+    /** What `lateralM` is measured from. Required whenever `lateralM` is given. */
+    lateralRef: LateralReferenceSchema.optional(),
+    /** Yaw relative to the lane tangent, radians. */
+    headingOffsetRad: z.number().min(-Math.PI).max(Math.PI).default(0),
+  })
+  .superRefine((pose, ctx) => {
+    const hasMetric = pose.lateralM !== undefined;
+    if (hasMetric && pose.tFrac !== 0) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['lateralM'],
+        message:
+          'lateralM and a non-zero tFrac both set: a pose has one lateral offset, not two. ' +
+          'Use tFrac for a fraction of lane width or lateralM for metres from lateralRef.',
+      });
+    }
+    if (hasMetric && pose.lateralRef === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['lateralRef'],
+        message: `lateralM needs an explicit lateralRef (${LATERAL_REFERENCES.join(' | ')}); ` +
+          'a bare metre offset is not portable across cross-sections.',
+      });
+    }
+    if (!hasMetric && pose.lateralRef !== undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['lateralRef'],
+        message: 'lateralRef set without lateralM: nothing is being measured.',
+      });
+    }
+  });
 
 /**
  * The concrete lane chain a map-bound actor follows from its authored pose.
