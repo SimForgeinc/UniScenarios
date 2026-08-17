@@ -256,6 +256,129 @@ geometry — admitted portably. Combined sample admission, honestly labeled
 (39 briefs under v1 + 11 under v2): **36/50 = 0.72**.
 
 
-### 5.4 Effort cell: sol/low, same 50 briefs
+### 5.4 Effort cell: sol/low, same 50 briefs (run `low2`, harness v2, clean single run)
 
-(pending — relaunch under harness v2 after §5.3)
+Command: `run_vista2.py --run-id low2 --briefs sample --model gpt-5.6-sol --effort
+low --budget 40 --wall-cap 2400`. Fresh GUIDE.md. 3h39m, zero episode errors.
+
+**36/50 admitted (0.72) — DEV 19/30, owner 17/20.** 38.7M in / 339k out tokens
+(74.8k reasoning vs sol/high's 420k), 258 simulates, 56 emits, mean 263 s/brief,
+19.2 actions per admitted brief.
+
+**Effort finding, extending W8 to the visual surface: sol/low equals sol/high on
+admission (0.72 = 0.72) at 60% of the wall and 70% of the tokens.** W8 showed
+effort buys nothing on the compiler surface; the open question was whether that
+held once the model has real freedom. On this surface, with a 50-brief single run
+per cell: it holds. (Point estimates without CIs; n=50 paired briefs, 33/36 and
+27/36 admitted-brief overlap with high — same categories fail: C7, C10, C12 losses
+are shared.) Low-effort census is statistically indistinguishable on the
+pre-registered dynamism metrics (hardBrake 88.5% vs 86.4%, actors 2.23 vs 2.25,
+pairs 1.30 vs 1.24; swerve 8.0% vs 16.8% is the one visible drop).
+
+## 6. Three-way comparison (same 50-brief sample, same frozen gate, same census)
+
+Sources: compiler baseline & text-freedom arm = FreeformLane
+(`reports/rethink/freeform/data/{base1,main1}-report.json`, confirmed final by the
+stream owner: baseline = frozen `author_llm` compilers luna/medium; freedom arm =
+gpt-5.6-terra/low picked by their pre-registered grid rule; their grid CEILING
+across all 9 model×effort cells was 0.27 on the selection subset). Visual arm =
+this stream. FootageLane judged realism/dynamism: freedom 4.90/2.76, baseline
+5.91/3.12 (their calibrated judge; vista2 verdicts pending at time of writing).
+
+| arm | admission | wall s/brief | LLM tokens/brief | tokens per admitted brief |
+|---|---|---|---|---|
+| compiler baseline (deterministic families, luna fills scalars) | **0.80** (40/50) | 47 | 2.8k | 3.5k |
+| text-schema freedom (terra/low, best-of-grid ≤0.27) | 0.18 (9/50) | 80 | 94k | 522k |
+| **visual closed-loop, sol/high** (39 v1 + 11 v2, defect §5.2) | 0.72 (36/50) | 440 | 1.32M | 1.83M |
+| **visual closed-loop, sol/low** (clean v2 run) | 0.72 (36/50) | 263 | 775k | 1.08M |
+
+Per-brief complementarity (compiler vs visual sol/high+fix): both admit 29;
+compiler-only 11 (C7 occlusion ×2, C11 parking ×2, C12 school ×2, C2, C10, C15,
+2 owner); vision-only 7 (BOTH C8 workzone briefs — constructed from props — both
+control-anomaly owner briefs, c13b-yellow-late, c15b-road-rage, c4b-ped-at-exit);
+neither 3. **Union 47/50 = 0.94.**
+
+## 7. Falsifier verdicts (pre-registered in §4) and conclusions
+
+1. **"Visual cannot beat the text-schema arm on admission" — decisively not the
+   case.** 0.72 vs 0.18 (and vs their 0.27 grid ceiling), same sample, same gate,
+   same schema underneath. Given the SAME full vocabulary, the model with eyes,
+   an engine loop, and a win condition beats the model with a schema and repair
+   rounds by ~4x. The prior lead's bet that authoring-by-pixels was the weak form
+   of VISTA is answered: it was the repair-loop design that was weak, not the
+   pixels.
+2. **"…or beat it on realism/dynamism" — pending FootageLane's verdicts on my
+   cells;** census-level dynamism is compiler-like (2.2 actors, high hard-brake
+   share, no ambient, no signal events) — the visual arm did NOT use the deep
+   vocabulary (signals failed its probes; ambient not in the action set). Noted
+   as a real limitation, not spin.
+3. **">5x cost for parity" — fires against the COMPILER.** The visual arm does not
+   reach compiler admission (0.72 < 0.80) and costs ~300x tokens and ~6-9x wall
+   per brief. For raw gate admission on briefs the compilers already host, the
+   deterministic pipeline remains unbeatable per dollar. The visual arm's value is
+   where the compiler cannot go at any price: constructed features (both C8
+   workzone briefs on maps with ZERO workzone sites), owner-list control anomalies
+   (police directing traffic, flashing-yellow logic), and 7 vision-only admissions
+   that raise the two-arm union to 0.94.
+4. **Effort under real freedom: buys nothing on admission** (0.72 = 0.72, sol/low
+   at 60% wall). W8's compiler-surface finding generalizes to this surface.
+5. **Cross-brief learning (the paper's cross-level claim) is real and measured:**
+   admitted-brief action cost fell from 40 (early) to 8-13 (late familiar
+   mechanisms); the supplementary run, seeded with the mature GUIDE, admitted 9/11
+   previously-lost briefs at 19 actions/brief mean. The agent discovered the C2
+   warm-up trap, the collision-avoidance release pattern, prop/evaluation
+   semantics, and site pathologies on its own, and its notes transferred.
+6. **Honesty items:** gate admission ≠ mechanism provenance (C13 wins are braking
+   leads, not signal scenarios — signalPhaseChanges=0 across 2,168 cells of both
+   runs); one GUIDE.md entry is a visual confabulation (weather read into renderer
+   texture); 11 owner briefs in main1 were unwinnable by a post-freeze harness
+   defect, disclosed and re-run labeled under v2.
+
+**Bottom line for the owner's question:** vision is not a cheaper or stronger path
+to gate admission than the hand-built compilers — it is ~300x the token cost for
+0.9x the admission. It IS, on this evidence, (a) the strongest authoring surface
+measured for the open-vocabulary owner rows (18/20 vs the text arm's collapse),
+(b) the only arm that constructs missing map features instead of being blocked by
+inventory, and (c) a genuine engine-discovery machine whose GUIDE.md reads like an
+onboarding doc nobody wrote. The right production shape suggested by the union
+number (0.94): compilers for the categories they own, the visual game for the rows
+they cannot host, and the footage judge over both.
+
+## 8. Artifacts
+
+- Runs: `/tmp/tgr-vista-{pilot1,main1,main2ownerfix,low2}/` — metrics.jsonl,
+  transcripts, llm logs, frames, GUIDE snapshots; cells in contract §2 layout under
+  `<run>/cells/` (announced to FootageLane; deleted only after their extraction).
+- Committed beside this report: `metrics-{main1,main2ownerfix,low2}.jsonl`,
+  `GUIDE-main1-final.md`, `GUIDE-ownerfix-final.md`, `GUIDE-low2-final.md`,
+  `guide-snapshots/`, `run-config-main1.json`.
+- Gate tripwire re-verified after all runs: PASS (v1 `1a08698e95fca4bc` / v2
+  `3823182614e5a5ba` unchanged).
+
+## 9. The GUIDE.md the agent wrote (main1 final, verbatim excerpts)
+
+> "Site matching does not support feature:'curve' or reliably support
+> feature:'merge'/'lane_drop' … query unconstrained sites and construct unsupported
+> features with portable props."
+>
+> "Parking-zone query results can advertise a long runway while binding ego to a
+> short parking-access stub; simulate early and reject sites where ego stops near
+> 10 m or route-relative actors disappear."
+>
+> "Signal phase keys and environmental rules are world-scoped and cannot be
+> attached to ordinary actors. Attempts to target env.weather through `world`,
+> `environment`, `env`, `__world__`, `scene`, or an omitted actor all fail … do not
+> repeat these guesses."
+>
+> "A vehicle merely placed at 0 km/h may move during the 2 s warmup; an at:0 speed
+> interaction stops it at rollout start." *(the C2 warm-up trap, discovered on
+> brief 1 of the pilot)*
+>
+> "For a constructed lane-closure taper, add static channelizer drums on the
+> closing-side edge at dsM/tFrac 80/-0.95, 88/-0.9, 96/-0.8, and 104/-0.7; pair
+> them with the pickup cut-in pattern so traffic moves inward ahead of ego."
+>
+> "A three-vehicle braking wave uses same-route leads at dsM 55/75/95, all
+> 40 km/h, stopping at t=3.0/2.5/2.0 respectively…"
+
+Full files committed beside this report; all 50 per-brief snapshots in the run dir.
