@@ -22,8 +22,8 @@ vite v6.4.3 building for production...
 ✓ 9 modules transformed.
 dist/index.html                  0.45 kB │ gzip:  0.29 kB
 dist/assets/index-DK7YcmS9.css   8.54 kB │ gzip:  2.84 kB
-dist/assets/index-CE8mEKO4.js   30.23 kB │ gzip: 11.43 kB
-✓ built in 315ms
+dist/assets/index-CotKFEUW.js   30.35 kB │ gzip: 11.45 kB
+✓ built in 325ms
 
 $ pnpm build
 $ pnpm -r build

@@ -87,9 +87,11 @@ export function normalizeJob(raw: RawJobIndex | JobIndex): JobIndex {
   const stages = STAGES.map(([number, label]) => {
     const stageFiles = files.filter((file) => stageNumber(file.path) === number);
     const rawJson = Object.fromEntries(stageFiles.filter((file) => file.json !== undefined).map((file) => [file.path, file.json]));
+    const explicitStatus = stageFiles.map((file) => file.json && typeof file.json === 'object' && !Array.isArray(file.json) ? (file.json as { status?: unknown }).status : undefined)
+      .find((status): status is string => typeof status === 'string');
     return {
       stage: `${number}-${label.toLowerCase().replace(/\s+/g, '')}`,
-      status: stageFiles.length ? 'complete' : 'pending',
+      status: explicitStatus ?? (stageFiles.length ? 'complete' : 'pending'),
       artifacts: stageFiles.map((file) => jobArtifact(jobId, file.path)),
       raw: Object.keys(rawJson).length === 1 ? Object.values(rawJson)[0] : rawJson,
     } satisfies StageEvent;
