@@ -282,8 +282,9 @@ Sources: compiler baseline & text-freedom arm = FreeformLane
 stream owner: baseline = frozen `author_llm` compilers luna/medium; freedom arm =
 gpt-5.6-terra/low picked by their pre-registered grid rule; their grid CEILING
 across all 9 model×effort cells was 0.27 on the selection subset). Visual arm =
-this stream. FootageLane judged realism/dynamism: freedom 4.90/2.76, baseline
-5.91/3.12 (their calibrated judge; vista2 verdicts pending at time of writing).
+this stream. FootageLane judged realism/dynamism (same calibrated judge, all-cell
+means; gate-PASS-subset means in §7.2): freedom 4.90/2.76, baseline 5.91/3.12,
+vista2 sol/high 5.11/2.79 (n=1086), sol/low 5.34/3.02 (partial n=375).
 
 | arm | admission | wall s/brief | LLM tokens/brief | tokens per admitted brief |
 |---|---|---|---|---|
@@ -307,11 +308,19 @@ neither 3. **Union 47/50 = 0.94.**
    rounds by ~4x. The prior lead's bet that authoring-by-pixels was the weak form
    of VISTA is answered: it was the repair-loop design that was weak, not the
    pixels.
-2. **"…or beat it on realism/dynamism" — pending FootageLane's verdicts on my
-   cells;** census-level dynamism is compiler-like (2.2 actors, high hard-brake
-   share, no ambient, no signal events) — the visual arm did NOT use the deep
-   vocabulary (signals failed its probes; ambient not in the action set). Noted
-   as a real limitation, not spin.
+2. **"…or beat it on realism/dynamism" — measured, and the visual arm does NOT
+   beat the compiler there.** FootageLane's calibrated judge (sol/medium, same
+   instrument as the other arms): vista2 sol/high all cells n=1086 realism 5.11 /
+   dynamism 2.79 / plausible 0.85 (gate-PASS subset n=336: 6.05/3.22); sol/low
+   partial n=375: 5.34/3.02 (PASS n=158: 5.99/3.25); ownerfix partial n=117:
+   4.90/2.95 (PASS n=49: 5.98/3.49). Compiler baseline: 5.91/3.12 (its passers
+   6.04/3.27); text-freedom arm 4.90/2.76. **Gate-passing scenes from EVERY arm
+   converge to the same ~6.0 realism / ~3.2 dynamism band** — the "tidy-but-dead"
+   signature. Census agrees: 2.2 actors, high hard-brake share, no ambient, no
+   signal events — the visual arm did not wield the deep vocabulary (signal probes
+   failed; ambient not in the action set). Realism is currently bounded by the
+   gate's shape and the dead-world vocabulary, not by the authoring surface — the
+   lead's original diagnosis, now measured across three surfaces.
 3. **">5x cost for parity" — fires against the COMPILER.** The visual arm does not
    reach compiler admission (0.72 < 0.80) and costs ~300x tokens and ~6-9x wall
    per brief. For raw gate admission on briefs the compilers already host, the
