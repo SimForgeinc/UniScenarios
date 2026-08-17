@@ -323,6 +323,8 @@ export const ConflictingGateRoleSchema = z.strictObject({
     .optional(),
   /** Minimum connected approach distance required before the conflict gate. */
   requiredUpstreamRunwayM: NumberOrExprSchema.optional(),
+  /** Lateral fraction within the conflicting approach lane; ±1 reaches an edge. */
+  tFrac: NumberOrExprSchema.default(0),
   /** Used when `arriveAtConflict` is absent, or as the solver's starting guess. */
   fallbackPose: FramePoseSchema.optional(),
 });

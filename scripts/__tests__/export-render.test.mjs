@@ -111,6 +111,18 @@ test('strictly validates the corrected concrete Yale instance and trace', async 
     ],
   );
   assert.equal(instance.manifest.archetype, 'C5.bus-stop-emergence');
+
+  const declaredOnly = clone(trace);
+  declaredOnly.metrics.declaredOcclusion = [{
+    ...declaredOnly.metrics.revealToConflict,
+    pair: ['ego', 'ped'],
+  }];
+  declaredOnly.metrics.revealToConflict = null;
+  declaredOnly.metrics.minTTC = null;
+  assert.deepEqual(
+    validateScenarioPair(instance, declaredOnly, traceBytes).metricPair,
+    ['ego', 'ped'],
+  );
   assert.match(instance.manifest.site.matchedReasons.join('\n'), /bus_stop/);
   assert.match(instance.manifest.site.matchedReasons.join('\n'), /right side of travel/);
   assert.equal(instance.manifest.actors.find((actor) => actor.id === 'bus').laneRsl, '87:0:-4');

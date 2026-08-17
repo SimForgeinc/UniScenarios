@@ -505,3 +505,42 @@ of the renderers' four-frame/incident-window defaults. A concrete 20-second trac
 `20.000000` seconds in the 2D renderer and `20.083333` seconds in the real RTX 5080 Studio renderer
 at 12 FPS. The accepted-video UI is hidden while a job is running and says explicitly when no
 candidate passed 3D product review.
+
+## Semantic repair loop and final acceptance boundary
+
+The authoring path now freezes a request-derived executable contract before generation. For the
+motorcycle/SUV request this requires a signalized junction, ego left turn, oncoming motorcycle,
+two opposing lanes, SUV-to-motorcycle occlusion, delayed ego stop response, collision freedom, and
+a 20-second clip. Description text is not evidence: a template that omits any executable field is
+rejected before simulation. Vista2 receives the contract on every attempt, and each failed
+contract or frozen-gate result is fed into the next attempt. Post-render 3D defects are converted
+into a repair brief and run through the same pipeline once; failed original and repair artifacts
+remain inspectable.
+
+A deterministic specialization of the proven signalized-LTAP recipe handles this exact contract
+without spending three visual-author attempts first. It uses two independently solved conflicting
+gate roles (SUV and motorcycle), because the earlier relative-role experiment projected a
+post-solved conflicting actor onto the wrong route. The clean implementation added lateral
+`tFrac` to `conflicting_gate` itself. The final recipe keeps the motorcycle at `tFrac=0.45`
+(the measured safe lane-boundary limit), uses a separate SUV arrival, starts the ego response at
+4.8 seconds, and holds a real frozen-gate pass under the production light-ambient configuration.
+
+The product boundary found two additional systematic defects:
+
+1. The 3D exporter required `revealToConflict.pair`, but a valid trace may carry the proved pair
+   only in `declaredOcclusion`. It now accepts that evidence source and still fails closed unless
+   the pair names exactly two input actors.
+2. The product reviewer previously sent the conflict frame first, followed by pre-event, reveal,
+   and aftermath. It now sends the four named frames chronologically and includes trace-grounded
+   actor identities, frame times, trigger events, collisions, and ego line-of-sight results. The
+   metadata clarifies that the incident camera is not the driver's eye point; it does not override
+   visible grounding or plausibility failures. This is review contract
+   `showcase-3d-product-review-v2`.
+
+The corrected motorcycle run is an honest negative at the final boundary. One production cell
+passes all six frozen rules (`C1` through `C6`), renders successfully in the real Studio renderer,
+and visibly grounds the ego, SUV, and moving motorcycle. Product review still rejects it because
+the requested dense two-lane oncoming stream and surrounding-driver reactions are not visually
+established. Therefore the gallery publishes **zero accepted videos** for that request. This is
+the intended outcome: the old UI's apparent success was a frozen-gate result, not an end-to-end
+product acceptance.

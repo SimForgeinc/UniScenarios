@@ -273,7 +273,8 @@ export function validateScenarioPair(instanceDoc, trace, _traceCanonicalBytes, o
     }
   }
 
-  const metricPair = trace.metrics?.revealToConflict?.pair ?? trace.metrics?.minTTC?.pair ?? [];
+  const declaredPair = trace.metrics?.declaredOcclusion?.find((item) => Array.isArray(item?.pair))?.pair;
+  const metricPair = trace.metrics?.revealToConflict?.pair ?? declaredPair ?? trace.metrics?.minTTC?.pair ?? [];
   if (!Array.isArray(metricPair) || metricPair.length !== 2 || metricPair.some((id) => !inputActorIds.includes(id))) {
     issues.push(`metric pair must name exactly two input actors; got ${metricPair.join?.(',') ?? 'invalid'}`);
   }

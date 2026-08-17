@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { createShowcaseServer } from './index.mjs';
-import { atomicJson } from './pipeline.mjs';
+import { atomicJson, rankCandidates } from './pipeline.mjs';
 
 const TOKEN = 'test-showcase-token';
 
@@ -42,6 +42,20 @@ class StubEngine {
     });
   }
 }
+
+test('candidate ranking prefers judged quality while preserving site diversity', () => {
+  const cells = [
+    { cellId: 'a-0', mapId: 'map-a', siteId: 'site-a' },
+    { cellId: 'a-1', mapId: 'map-a', siteId: 'site-a' },
+    { cellId: 'b-0', mapId: 'map-b', siteId: 'site-b' },
+  ];
+  const quality = [
+    { cellId: 'a-0', plausible: true, realism: 8, dynamism: 7, defects: [] },
+    { cellId: 'a-1', plausible: true, realism: 7, dynamism: 7, defects: [] },
+    { cellId: 'b-0', plausible: true, realism: 6, dynamism: 5, defects: [] },
+  ];
+  assert.deepEqual(rankCandidates(cells, quality).map((cell) => cell.cellId), ['a-0', 'b-0', 'a-1']);
+});
 
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'showcase-server-test-'));

@@ -124,7 +124,7 @@ describe('scene-absolute to portable variation lift', () => {
     ]);
     const lifted = liftMapBoundTemplate(authored, source, { origin: 'junction', allowMirror: true });
     expect(lifted.ok, JSON.stringify(lifted.issues)).toBe(true);
-    expect(lifted.template!.roles.find((role) => role.id === 'challenger')).toMatchObject({ kind: 'conflicting_gate', from: 'from_right', turn: 'straight' });
+    expect(lifted.template!.roles.find((role) => role.id === 'challenger')).toMatchObject({ kind: 'conflicting_gate', from: 'from_right', turn: 'straight', tFrac: 0 });
     const adapted = adaptTemplate(lifted.template!);
     const sites = matchAnchor(adapted.anchor, target, { roles: adapted.roles });
     expect(sites.length).toBeGreaterThan(0);

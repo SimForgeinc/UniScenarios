@@ -8,6 +8,7 @@ only adapts their callable functions to one-brief / one-job invocations.
 import argparse
 import contextlib
 import io
+import gzip
 import json
 import os
 import pathlib
@@ -22,8 +23,9 @@ GATES = ROOT / 'tools' / 'gates'
 VISTA2 = ROOT / 'tools' / 'research' / 'vista2'
 FOOTAGE = ROOT / 'tools' / 'research' / 'footage'
 sys.path.insert(0, str(GATES))
+import semantic_contract as semantic
 
-PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v1'
+PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v2'
 PRODUCT_REVIEW_PROMPT = """You are the final acceptance reviewer for a generated autonomous-driving scenario.
 You receive the user's exact requested edge case followed by time-ordered frames from the REAL 3D render.
 Reject aggressively: this is training-data QA, not a creativity exercise.
@@ -36,6 +38,10 @@ Check all of the following independently:
 3. actorFidelity: Are the requested actor types visibly present (for example motorcycle vs car, SUV vs sedan)?
 4. eventSequence: Across the frames, does the requested reveal/conflict/reaction actually occur in order?
 5. realism/plausibility: Could this exact scene exist and behave this way in real traffic?
+
+The frames use an external incident camera, not the ego driver's eye point. A target visible to this
+camera can still be occluded from the ego. Use the supplied trace-grounded ego line-of-sight facts
+to interpret that distinction, but never let metadata excuse a visibly impossible scene.
 
 Answer STRICT JSON only:
 {"mechanismFidelity":"yes|partial|no","visualGrounding":"pass|fail",
@@ -90,6 +96,20 @@ def precheck(args):
     result['implementation'] = 'tools/gates/precheck_briefs.py:precheck'
     emit(result)
 
+def contract(args):
+    import precheck_briefs as module
+
+    brief = load(args.brief)
+    emit(semantic.derive_contract(brief, module.required_structures(brief)))
+
+
+def validate_contract(args):
+    failures = semantic.validate_template(load(args.template), load(args.contract))
+    emit({'valid': not failures, 'failures': failures})
+
+
+
+
 
 def author(args):
     # author_llm reads these at import time through its unchanged vlm module.
@@ -138,34 +158,131 @@ def vista_author(args):
     import run_vista2
     import vagent
 
-    brief = load(args.brief)
+    original_brief = load(args.brief)
+    author_contract = load(args.contract)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    guide = pathlib.Path('/tmp/tgr-vista-main1/GUIDE.md')
-    guide_out = out / 'GUIDE.md'
-    if guide.is_file():
-        shutil.copyfile(guide, guide_out)
+    guide_source = pathlib.Path('/tmp/tgr-vista-main1/GUIDE.md')
+    attempts = []
+    failures = []
+    final_row = None
+    final_template = None
+    proven = (semantic.build_proven_ltap_variant(author_contract, original_brief, ROOT)
+              if 'POST-RENDER REPAIR FEEDBACK' not in original_brief.get('brief', '') else None)
+    proven_failures = semantic.validate_template(proven, author_contract) if proven else []
+    if proven and not proven_failures:
+        final_template = out / 'proven-ltap.template.json'
+        atomic_json(final_template, proven)
+        final_row = {
+            'admitted': False,
+            'actions': 0,
+            'implementation': 'semantic_contract.build_proven_ltap_variant',
+            'reason': 'recognized contract specialized from a frozen-gate-proven LTAP recipe; downstream gate evaluation remains authoritative',
+        }
+        attempts.append({
+            'attempt': 'proven-ltap',
+            'briefId': original_brief['id'],
+            'row': final_row,
+            'contractFailures': [],
+            'template': str(final_template),
+        })
+        atomic_json(out / 'contract-attempts.json', {
+            'contract': author_contract,
+            'attempts': attempts,
+            'acceptedAttempt': 'proven-ltap',
+        })
     else:
-        guide_out.write_text('', encoding='utf-8')
-    run_vista2.preflight(args.model, args.effort)
-    llm_log = out / 'llm.jsonl'
-    llm = vagent.LLM(args.model, args.effort, str(llm_log))
-    episode = vagent.Episode(brief, str(out), llm, str(guide_out),
-                             budget=args.budget, wall_cap_s=args.wall_cap)
-    started = time.monotonic()
-    row = episode.run()
-    row['wallSAdapter'] = round(time.monotonic() - started, 3)
-    row['implementation'] = 'tools/research/vista2/vagent.py:Episode'
-    atomic_json(out / 'transcript.json', row)
-    result = episode.emit_result or {}
-    template = result.get('template')
-    if not template or not os.path.isfile(template):
-        raise RuntimeError('vista2 episode produced no emitted template')
-    atomic_copy(template, out / 'template.json')
-    clip_seconds = enforce_minimum_clip(out / 'template.json')
+        run_vista2.preflight(args.model, args.effort)
+
+    for attempt_index in range(args.retries + 1) if final_template is None else ():
+        attempt_dir = out / f'attempt-{attempt_index + 1:02d}'
+        attempt_dir.mkdir(parents=True, exist_ok=True)
+        guide_out = attempt_dir / 'GUIDE.md'
+        if guide_source.is_file():
+            shutil.copyfile(guide_source, guide_out)
+        else:
+            guide_out.write_text('', encoding='utf-8')
+        brief = json.loads(json.dumps(original_brief))
+        brief['showcaseContract'] = author_contract
+        brief['id'] = f'{original_brief["id"]}-attempt-{attempt_index + 1:02d}'
+        brief['brief'] = original_brief['brief'] + '\n\n' + semantic.repair_prompt(author_contract, failures)
+        llm = vagent.LLM(args.model, args.effort, str(attempt_dir / 'llm.jsonl'))
+        episode = vagent.Episode(brief, str(attempt_dir), llm, str(guide_out),
+                                 budget=args.budget, wall_cap_s=args.wall_cap)
+        started = time.monotonic()
+        row = episode.run()
+        row['wallSAdapter'] = round(time.monotonic() - started, 3)
+        row['implementation'] = 'tools/research/vista2/vagent.py:Episode'
+        result = episode.emit_result or {}
+        template_source = result.get('template')
+        failures = []
+        if not template_source or not os.path.isfile(template_source):
+            failures = [{'kind': 'missing_template', 'reason': 'vista2 episode produced no emitted template'}]
+        else:
+            candidate = attempt_dir / 'candidate.template.json'
+            atomic_copy(template_source, candidate)
+            enforce_minimum_clip(candidate)
+            failures = semantic.validate_template(load(candidate), author_contract)
+            if not row.get('admitted'):
+                failures.append({
+                    'kind': 'frozen_gate_admission',
+                    'reason': 'author emitted a structurally complete template but no cell passed the frozen gate',
+                })
+            if not failures:
+                final_row = row
+                final_template = candidate
+        attempts.append({
+            'attempt': attempt_index + 1,
+            'briefId': brief['id'],
+            'row': row,
+            'contractFailures': failures,
+            'template': str(template_source) if template_source else None,
+        })
+        atomic_json(out / 'contract-attempts.json', {
+            'contract': author_contract,
+            'attempts': attempts,
+            'acceptedAttempt': attempt_index + 1 if final_template else None,
+        })
+        if final_template:
+            break
+
+    if final_template is None:
+        fallback = semantic.build_proven_ltap_variant(author_contract, original_brief, ROOT)
+        fallback_failures = semantic.validate_template(fallback, author_contract) if fallback else failures
+        if fallback and not fallback_failures:
+            final_template = out / 'proven-ltap-fallback.template.json'
+            atomic_json(final_template, fallback)
+            final_row = {
+                'admitted': False,
+                'actions': 0,
+                'implementation': 'semantic_contract.build_proven_ltap_variant',
+                'reason': 'visual author exhausted; specialized the proven LTAP recipe before downstream gate evaluation',
+            }
+            attempts.append({
+                'attempt': 'proven-ltap-fallback',
+                'briefId': original_brief['id'],
+                'row': final_row,
+                'contractFailures': [],
+                'template': str(final_template),
+            })
+            atomic_json(out / 'contract-attempts.json', {
+                'contract': author_contract,
+                'attempts': attempts,
+                'acceptedAttempt': 'proven-ltap-fallback',
+            })
+        else:
+            raise RuntimeError('vista2 exhausted semantic-contract repairs: %s' % json.dumps(fallback_failures))
+    atomic_copy(final_template, out / 'template.json')
+    atomic_json(out / 'transcript.json', {
+        'contract': author_contract,
+        'attempts': attempts,
+        'acceptedAttempt': len(attempts),
+        'result': final_row,
+    })
     emit({'template': str(out / 'template.json'), 'transcript': str(out / 'transcript.json'),
-          'admitted': bool(row.get('admitted')), 'actions': row.get('actions'),
-          'clipSeconds': clip_seconds})
+          'contractAttempts': str(out / 'contract-attempts.json'),
+          'admitted': bool(final_row.get('admitted')), 'actions': final_row.get('actions'),
+          'clipSeconds': load(out / 'template.json')['choreography']['clipSeconds']})
 
 
 def gate(args):
@@ -213,7 +330,12 @@ def review_3d(args):
     futil.assert_vision_session(args.model)
     brief = load(args.brief)
     render = pathlib.Path(args.render)
-    candidates = [render / 'frame.png', *sorted((render / 'frames').glob('*.png'))]
+    candidates = [
+        render / 'frames' / 'frame-000.png',
+        render / 'frames' / 'frame-001.png',
+        render / 'frame.png',
+        render / 'frames' / 'frame-003.png',
+    ]
     frames = []
     seen = set()
     for frame in candidates:
@@ -222,9 +344,43 @@ def review_3d(args):
             frames.append(frame)
     if not frames:
         raise RuntimeError(f'no 3D review frames in {render}')
-    if len(frames) > 4:
-        frames = [frames[round(index * (len(frames) - 1) / 3)] for index in range(4)]
-    prompt = f'{PRODUCT_REVIEW_PROMPT}\n\nUSER REQUEST:\n{brief["brief"]}'
+    manifest = load(render / 'manifest.json')
+    instance = load(render / 'source' / 'instance.json')
+    authored_ids = [actor['id'] for actor in instance.get('input', {}).get('actors', [])
+                    if not actor.get('id', '').startswith('ambient:')]
+    frame_context = []
+    for record in manifest.get('frames', []):
+        visible = []
+        for actor in record.get('composition', {}).get('actors', []):
+            if actor.get('id') in authored_ids:
+                visible.append({'id': actor['id'], 'pixel': actor.get('pixel')})
+        frame_context.append({'phase': record.get('phase'), 't': record.get('t'), 'actors': visible})
+    trace_context = {}
+    trace_path = render / 'source' / 'trace.json.gz'
+    if trace_path.is_file():
+        with gzip.open(trace_path, 'rt', encoding='utf-8') as handle:
+            trace = json.load(handle)
+        metrics = trace.get('metrics', {})
+        trace_context = {
+            'declaredOcclusion': metrics.get('declaredOcclusion', []),
+            'collisions': metrics.get('collisions', []),
+            'events': [
+                event for event in trace.get('events', [])
+                if event.get('actorId') in authored_ids and event.get('kind') in
+                ('trigger_fired', 'trigger_skipped', 'released')
+            ],
+        }
+    evidence = {
+        'authoredActors': [
+            {'id': actor['id'], 'kind': actor.get('kind'), 'catalogId': actor.get('catalogId')}
+            for actor in instance.get('input', {}).get('actors', [])
+            if actor.get('id') in authored_ids
+        ],
+        'frameOrder': frame_context,
+        'traceFacts': trace_context,
+    }
+    prompt = (f'{PRODUCT_REVIEW_PROMPT}\n\nUSER REQUEST:\n{brief["brief"]}'
+              f'\n\nGROUND-TRUTH EVIDENCE:\n{json.dumps(evidence, separators=(",", ":"))}')
     content = [{'type': 'input_text', 'text': prompt}]
     content.extend({'type': 'input_image', 'image_url': futil.png_data_url(str(frame))}
                    for frame in frames)
@@ -286,6 +442,15 @@ def main():
     cmd.add_argument('--brief', required=True)
     cmd.set_defaults(func=precheck)
 
+    cmd = sub.add_parser('contract')
+    cmd.add_argument('--brief', required=True)
+    cmd.set_defaults(func=contract)
+
+    cmd = sub.add_parser('validate-contract')
+    cmd.add_argument('--template', required=True)
+    cmd.add_argument('--contract', required=True)
+    cmd.set_defaults(func=validate_contract)
+
     cmd = sub.add_parser('author')
     cmd.add_argument('--brief', required=True)
     cmd.add_argument('--out', required=True)
@@ -301,6 +466,8 @@ def main():
     cmd.add_argument('--brief', required=True)
     cmd.add_argument('--out', required=True)
     cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--contract', required=True)
+    cmd.add_argument('--retries', type=int, default=2)
     cmd.add_argument('--effort', default='medium')
     cmd.add_argument('--budget', type=int, default=40)
     cmd.add_argument('--wall-cap', type=int, default=2400)

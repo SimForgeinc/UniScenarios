@@ -1903,6 +1903,7 @@ class Materializer {
         // at the head of its run-up so the bisection has the whole route to work
         // with.
         spawnS = 0;
+        tFrac = evalTFrac(role.tFrac, scope, `${path}.tFrac`, 0);
       } else {
         const pose = rolePose(role);
         const frameS = this.sampledFrameS(role, binding);

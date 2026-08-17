@@ -2158,6 +2158,9 @@
             "requiredUpstreamRunwayM": {
               "$ref": "#/$defs/NumberOrExpr"
             },
+            "tFrac": {
+              "$ref": "#/$defs/NumberOrExpr"
+            },
             "fallbackPose": {
               "$ref": "#/$defs/FramePose"
             }

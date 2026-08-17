@@ -96,6 +96,7 @@ function randomTemplateInput(rnd: () => number): ScenarioTemplateV2Input {
           feature: pick(rnd, ['jx', 'ghost']),
           from: pick(rnd, ['opposing', 'from_left', 'from_right'] as const),
           turn: pick(rnd, ['left', 'right', 'straight'] as const),
+          ...(rnd() < 0.5 ? { tFrac: round(rnd() * 1.6 - 0.8) } : {}),
           ...(rnd() < 0.7
             ? {
                 arriveAtConflict: {

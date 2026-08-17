@@ -19,6 +19,7 @@ def load(name):
 
 author = load("author_one")
 gallery = load("preseed_gallery")
+semantic = load("semantic_contract")
 
 
 def candidate(root, cell, story, gate, realism, dynamism):
@@ -47,6 +48,71 @@ class AuthorHelpersTest(unittest.TestCase):
             self.assertEqual(json.loads(template.read_text())["choreography"]["clipSeconds"], 20.0)
             template.write_text(json.dumps({"choreography": {"clipSeconds": 24}}))
             self.assertEqual(author._enforce_minimum_clip(template), 24.0)
+
+
+class SemanticContractTest(unittest.TestCase):
+    BRIEF = {
+        "id": "motorcycle-reveal",
+        "brief": "At a signalized intersection the ego turns left. An oncoming SUV blocks the ego's view of a motorcycle lane-splitting between lanes. The motorcycle emerges late and the ego brakes and stops partially across the intersection without collision.",
+    }
+
+    def test_rejects_description_only_mechanism(self):
+        contract = semantic.derive_contract(
+            self.BRIEF, ["junction_any", "junction_signalized", "oncoming_lane"])
+        template = {
+            "anchor": {"corridor": {"throughLanesOpposing": {"value": [2, 4], "essentiality": "required"}}, "features": []},
+            "roles": [
+                {"id": "ego", "actor": {"class": "car", "catalogId": "vehicle.sedan"}},
+                {"id": "motorcycle", "actor": {"class": "motorcycle", "catalogId": "vehicle.motorcycle"}, "tFrac": 0},
+                {"id": "suv", "actor": {"class": "car", "catalogId": "vehicle.suv"}, "headingOffsetRad": 3.14159},
+            ],
+            "choreography": {"clipSeconds": 16, "interactions": []},
+            "invariants": [],
+        }
+        failures = {item["kind"] for item in semantic.validate_template(template, contract)}
+        self.assertTrue({"signalized_junction", "ego_left_turn", "declared_occlusion",
+                         "lane_splitting_actor", "ego_braking_response",
+                         "minimum_clip", "required_invariants"}.issubset(failures))
+
+    def test_accepts_executable_contract(self):
+        contract = semantic.derive_contract(
+            self.BRIEF, ["junction_any", "junction_signalized", "oncoming_lane"])
+        template = {
+            "anchor": {
+                "corridor": {"throughLanesOpposing": {"value": [2, 4], "essentiality": "required"}},
+                "features": [{"id": "jx", "kind": "junction", "essentiality": "required",
+                              "control": {"value": ["signalized"], "essentiality": "required"},
+                              "egoTurn": {"value": ["left"], "essentiality": "required"}}],
+            },
+            "roles": [
+                {"id": "ego", "actor": {"class": "car", "catalogId": "vehicle.sedan"}},
+                {"id": "motorcycle", "actor": {"class": "motorcycle", "catalogId": "vehicle.motorcycle"},
+                 "tFrac": 0.9, "headingOffsetRad": 3.14159},
+                {"id": "suv", "actor": {"class": "car", "catalogId": "vehicle.suv"},
+                 "headingOffsetRad": 3.14159,
+                 "extensions": {"occludes": {"observer": "ego", "target": "motorcycle"}}},
+            ],
+            "choreography": {"clipSeconds": 20, "interactions": [
+                {"actor": "ego", "verb": "speed", "trigger": {"kind": "at", "t": 5},
+                 "target": {"mode": "stop"}},
+            ]},
+            "invariants": [{"id": "criticality", "kind": "ttc", "essentiality": "required"}],
+        }
+        self.assertEqual(semantic.validate_template(template, contract), [])
+
+    def test_proven_motorcycle_fallback_executes_contract(self):
+        contract = semantic.derive_contract(
+            self.BRIEF, ["junction_any", "junction_signalized", "oncoming_lane"])
+        root = HERE.parents[2]
+        template = semantic.build_proven_ltap_variant(contract, self.BRIEF, root)
+        self.assertIsNotNone(template)
+        roles = {role["id"]: role for role in template["roles"]}
+        self.assertEqual(roles["motorcycle"]["kind"], "conflicting_gate")
+        self.assertEqual(roles["occluding_suv"]["kind"], "conflicting_gate")
+        self.assertEqual(roles["motorcycle"]["tFrac"], 0.45)
+        self.assertEqual(roles["occluding_suv"]["tFrac"], 0.3)
+        self.assertEqual(semantic.validate_template(template, contract), [])
+
 
 
 class GallerySelectionTest(unittest.TestCase):

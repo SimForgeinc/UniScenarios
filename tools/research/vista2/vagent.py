@@ -28,7 +28,7 @@ SYSTEM_PROMPT = """# Scenario authoring game
 
 Author a driving scenario where: {brief}
 
-You act by emitting one JSON action per turn; every action returns top-down PNG views of the world. You win when the frozen admission gate admits the scenario: simulate() shows the gate's per-rule verdict at your working site, and emit() then requires the SAME template to pass untuned at >=2 maps and >=3 sites.
+You act by emitting one JSON action per turn; every action returns top-down PNG views of the world. You win when the frozen admission gate admits the scenario: simulate() shows the gate's per-rule verdict at your working site. Research-corpus briefs additionally require portability at >=2 maps and >=3 sites; briefs carrying a HARD EXECUTABLE CONTRACT require one truthful host because their exact structure may exist on only one map.
 
 Before each action, briefly state what you expect to see. Afterward, briefly state all visible changes, expected or not.
 
@@ -45,7 +45,7 @@ State what you observe/conclude, then exactly one fenced json block:
 
 ## Actions
 Counted (budget shown each turn):
-1. {{"action":"view_site"}} — list candidate sites; add "site":N to select+render one; add "need":{{"feature":"junction"|"crossing"|"parking_zone"|"occlusion_zone"|"merge"|"lane_drop"|"driveway"|"bus_stop"|"crest"|"curve"|null,"minLanes":N,"adjacentSidewalk":true}} to re-query with different road structure (resets placements).
+1. {{"action":"view_site"}} — list candidate sites; add "site":N to select+render one; add "need":{{"feature":"junction"|"crossing"|"parking_zone"|"occlusion_zone"|"merge"|"lane_drop"|"driveway"|"bus_stop"|"crest"|"curve"|null,"control":"signalized"|"all_way_stop"|null,"egoTurn":"left"|"right"|"straight"|null,"minLanes":N,"minOpposingLanes":N,"adjacentSidewalk":true}} to re-query with different road structure (resets placements). Hard contract requirements are always merged back and cannot be removed.
 2. {{"action":"place_actor","id":"name","catalog":"<id>","at":{{"frame":"fN","px":[x,y]}} OR {{"dsM":m,"dLane":k,"tFrac":f}} OR {{"dsM":m,"lateralM":m_left_positive}},"speedKph":n,"headingDeg":deg_vs_lane,"static":true_for_scenery,"occludes":{{"observer":"ego","target":"id"}}}} — id "ego" moves/retunes the ego. Pixels are projected to portable lane-relative anchors; the emitted template never contains coordinates.
 3. {{"action":"set_motion","actor":"id","motion":M}} where M is one of:
    {{"kind":"speed","speedKph":n|"stop","trigger":T,"rateMps2":r}}
@@ -70,7 +70,7 @@ C3 true closest OBB clearance <=5 m.
 C4 genuine demand on the ego: required decel >=1.5 m/s^2 OR minTTC <=3 s.
 C5 evaluator verdict=accept, band=critical, zero collisions, zero never-fired triggers.
 C6 (only for briefs that name occlusion) a declared occlusion provably blocks, then reveals.
-Portability: passing cells on >=2 maps and >=3 distinct sites.
+Portability: research-corpus briefs require passing cells on >=2 maps and >=3 distinct sites. HARD EXECUTABLE CONTRACT briefs require >=1 passing site without relaxing any gate rule.
 
 ## Catalog (use FULL ids, e.g. "vehicle.sedan"; static:true makes scenery/occluders)
 vehicle.<sedan|suv|hatchback|pickup|minivan|van|delivery_van|box_truck|semi_truck|dump_truck|flatbed_truck|garbage_truck|tanker_truck|cement_mixer|tow_truck|bus|school_bus|shuttle_bus|taxi|police_cruiser|police_suv|ambulance|fire_engine|motorcycle|bicycle|mobility_scooter>
@@ -368,7 +368,8 @@ class Episode:
 
     def a_view_site(self, do):
         if do.get('need') is not None:
-            self.scene.need = {k: v for k, v in (do['need'] or {}).items() if v}
+            requested = {k: v for k, v in (do['need'] or {}).items() if v}
+            self.scene.need = {**requested, **self.scene.fixed_need}
             self.scene.sites = []; self.scene.site = None
         if not self.scene.sites:
             sites, fail = self.scene.match_sites()
@@ -578,8 +579,9 @@ class Episode:
             lines.append('  %-28s %d/%d pass  firstFailures=%s'
                          % (m, v['pass'], v['cells'], json.dumps(v['ff'])))
         p = res['portability']
-        lines.append('portability: %d maps / %d sites passing (need >=2 maps, >=3 sites)'
-                     % (p['nMaps'], p['nSites']))
+        need = '>=1 truthful site' if self.scene.contract.get('obligations') else '>=2 maps, >=3 sites'
+        lines.append('portability: %d maps / %d sites passing (need %s)'
+                     % (p['nMaps'], p['nSites'], need))
         if res['admitted']:
             self.admitted = True
             lines.append('*** WIN — the frozen gate admits this scenario, portably. ***')

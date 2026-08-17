@@ -5,6 +5,7 @@ import { constants as fsConstants } from 'node:fs';
 import {
   access,
   copyFile,
+  cp,
   mkdir,
   readFile,
   readdir,
@@ -161,6 +162,34 @@ async function copyCells(summary, cellsDir, job) {
   return cells;
 }
 
+export function rankCandidates(cells, qualityRows) {
+  const quality = new Map(qualityRows.map((row) => [row.cellId, row]));
+  const score = (cell) => {
+    const row = quality.get(cell.cellId) ?? {};
+    return (row.plausible === true ? 100 : 0)
+      + Number(row.realism ?? 0) * 10
+      + Number(row.dynamism ?? 0) * 2
+      - (row.defects ?? []).length * 25;
+  };
+  const sorted = [...cells].sort((a, b) => score(b) - score(a)
+    || String(a.cellId).localeCompare(String(b.cellId)));
+  const diverse = [];
+  const deferred = [];
+  const sites = new Set();
+  const maps = new Set();
+  for (const cell of sorted) {
+    const site = `${cell.mapId}:${cell.siteId}`;
+    if (!sites.has(site) || !maps.has(cell.mapId)) {
+      diverse.push(cell);
+      sites.add(site);
+      maps.add(cell.mapId);
+    } else {
+      deferred.push(cell);
+    }
+  }
+  return [...diverse, ...deferred];
+}
+
 async function loadCells(cellsDir) {
   const index = await readJson(join(cellsDir, 'index.json'));
   return index.cells.map((cell) => ({
@@ -263,6 +292,7 @@ export class ShowcasePipeline {
     const briefPath = join(context.jobDir, '00-brief.json');
     const routePath = join(context.jobDir, '10-route.json');
     const precheckPath = join(context.jobDir, '15-precheck.json');
+    const contractPath = join(context.jobDir, '15-contract.json');
     const authorDir = join(context.jobDir, '20-author');
     const templatePath = join(authorDir, 'template.json');
     const transcriptPath = join(authorDir, 'transcript.json');
@@ -271,6 +301,7 @@ export class ShowcasePipeline {
     const cellsIndex = join(cellsDir, 'index.json');
     const gatePath = join(context.jobDir, '50-gate.json');
     const render2dDir = join(context.jobDir, '60-render2d');
+    const render2dQualityPath = join(render2dDir, 'quality.json');
     const render2dIndex = join(render2dDir, 'index.json');
     const render3dDir = join(context.jobDir, '65-render3d');
     const render3dIndex = join(render3dDir, 'index.json');
@@ -287,6 +318,14 @@ export class ShowcasePipeline {
       precheckResult = lastJsonLine(result.stdout);
       if (!precheckResult) throw new Error(`precheck returned no JSON: ${result.stdout.slice(-1000)}`);
     }
+    let semanticContract;
+    if (await exists(contractPath)) {
+      semanticContract = await readJson(contractPath);
+    } else {
+      const result = await command(this.python, [this.bridge, 'contract', '--brief', briefPath], { cwd: this.root });
+      semanticContract = lastJsonLine(result.stdout);
+      if (!semanticContract) throw new Error(`semantic contract returned no JSON: ${result.stdout.slice(-1000)}`);
+    }
     const requested = job.engine ?? 'auto';
     const autoEngine = precheckResult.feasible && COMPILER_TERMS.test(job.brief) ? 'compiler' : 'vista2';
     const engine = requested === 'auto' ? autoEngine : requested;
@@ -298,19 +337,22 @@ export class ShowcasePipeline {
           ? `${precheckResult.feasible ? 'feasible' : 'infeasible'} structural precheck; ${autoEngine === 'compiler' ? 'brief matches a compiler family' : 'visual authoring required'}`
           : `explicit engine override: ${requested}`,
         precheck: { feasible: precheckResult.feasible, requires: precheckResult.requires, missing: precheckResult.missing },
+        semanticContract,
       };
       await atomicJson(routePath, value);
       return value;
     });
-    await stage(context, '15-precheck', [precheckPath], async () => {
+    await stage(context, '15-precheck', [precheckPath, contractPath], async () => {
       await atomicJson(precheckPath, precheckResult);
-      return precheckResult;
+      await atomicJson(contractPath, semanticContract);
+      return { precheck: precheckResult, contract: semanticContract };
     });
 
     await stage(context, '20-author', [templatePath, transcriptPath], async () => {
       await mkdir(authorDir, { recursive: true });
       const subcommand = route.engine === 'vista2' ? 'vista-author' : 'author';
       const args = [this.bridge, subcommand, '--brief', briefPath, '--out', authorDir, '--model', 'gpt-5.6-sol', '--effort', 'medium'];
+      if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
       if (subcommand === 'author') {
         args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', '2');
       }
@@ -319,6 +361,13 @@ export class ShowcasePipeline {
         timeout: route.engine === 'vista2' ? 2_700_000 : 900_000,
         env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
       });
+      const contractResult = await command(this.python, [
+        this.bridge, 'validate-contract', '--template', templatePath, '--contract', contractPath,
+      ], { cwd: this.root });
+      const contractVerdict = lastJsonLine(contractResult.stdout);
+      if (!contractVerdict?.valid) {
+        throw new Error(`authored template violated semantic contract: ${JSON.stringify(contractVerdict?.failures ?? [])}`);
+      }
       // `batch` intentionally derives each draw seed from the template identity,
       // site and draw index. Give its existing seeding path a stable identity
       // derived from the user knob instead of the per-request UUID emitted by
@@ -404,6 +453,31 @@ export class ShowcasePipeline {
     if (!Array.isArray(render2d)) render2d = render2d.cells ?? [];
 
     const passing = new Set((gate.cells ?? []).filter((cell) => cell.pass).map((cell) => cell.cellId));
+    let qualityRows = [];
+    if (job.judge && await gatewayAvailable()) {
+      if (await exists(render2dQualityPath)) {
+        qualityRows = (await readJson(render2dQualityPath)).cells ?? [];
+      } else {
+        for (const item of render2d.filter((row) => row.status === 'complete' && row.redacted)) {
+          const cell = cells.find((candidate) => candidate.cellId === item.cellId);
+          const result = await command(this.python, [
+            this.bridge, 'judge', '--cell', cell.cellDir,
+            '--render', join(render2dDir, item.redacted),
+            '--model', 'gpt-5.6-sol', '--effort', 'medium', '--strategy', 'spread8',
+          ], {
+            cwd: this.root,
+            timeout: 600_000,
+            env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+            allowFailure: true,
+          });
+          const verdict = lastJsonLine(result.stdout);
+          qualityRows.push(verdict
+            ? { status: 'complete', ...verdict }
+            : { cellId: item.cellId, status: 'error', error: result.stderr.slice(-1000) });
+        }
+        await atomicJson(render2dQualityPath, { status: 'complete', cells: qualityRows });
+      }
+    }
     let render3d = await stage(context, '65-render3d', [render3dIndex], async () => {
       await mkdir(render3dDir, { recursive: true });
       if (!job.render3d) {
@@ -412,13 +486,27 @@ export class ShowcasePipeline {
         return { value, status: 'skipped' };
       }
       const rows = [];
-      for (const cell of cells.filter((candidate) => passing.has(candidate.cellId))) {
+      for (const cell of rankCandidates(
+        cells.filter((candidate) => passing.has(candidate.cellId)),
+        qualityRows,
+      )) {
         if (rows.length >= Math.max(job.topK, job.topK * 3)) break;
-        try {
-          await renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' });
-          rows.push({ cellId: cell.cellId, status: 'complete' });
-        } catch (error) {
-          rows.push({ cellId: cell.cellId, status: 'error', error: String(error.message ?? error).slice(-1000) });
+        let rendered = false;
+        let lastError;
+        for (let attempt = 1; attempt <= 2 && !rendered; attempt += 1) {
+          try {
+            await renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' });
+            rows.push({ cellId: cell.cellId, status: 'complete', attempts: attempt });
+            rendered = true;
+          } catch (error) {
+            lastError = error;
+            const message = String(error?.message ?? error);
+            const transient = /Execution context was destroyed|navigation|Target closed|ECONNRESET|fetch failed/i.test(message);
+            if (!transient || attempt === 2) break;
+          }
+        }
+        if (!rendered) {
+          rows.push({ cellId: cell.cellId, status: 'error', error: String(lastError?.message ?? lastError).slice(-1000) });
         }
       }
       const value = { status: rows.some((row) => row.status === 'complete') ? 'complete' : 'unavailable', cells: rows };
@@ -438,18 +526,7 @@ export class ShowcasePipeline {
         await atomicJson(judgePath, value);
         return { value, status: 'skipped' };
       }
-      const rows = [];
-      for (const item of render2d.filter((row) => row.status === 'complete' && row.redacted)) {
-        const cell = cells.find((candidate) => candidate.cellId === item.cellId);
-        const result = await command(this.python, [this.bridge, 'judge', '--cell', cell.cellDir, '--render', join(render2dDir, item.redacted), '--model', 'gpt-5.6-sol', '--effort', 'medium', '--strategy', 'spread8'], {
-          cwd: this.root,
-          timeout: 600_000,
-          env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
-          allowFailure: true,
-        });
-        const verdict = lastJsonLine(result.stdout);
-        rows.push(verdict ? { status: 'complete', ...verdict } : { cellId: item.cellId, status: 'error', error: result.stderr.slice(-1000) });
-      }
+      const rows = qualityRows.map((row) => ({ ...row }));
       for (const item of (render3d?.cells ?? []).filter((row) => row.status === 'complete')) {
         const result = await command(this.python, [
           this.bridge, 'review3d', '--brief', briefPath,
@@ -484,13 +561,95 @@ export class ShowcasePipeline {
         model: 'gpt-5.6-sol',
         effort: 'medium',
         strategy: 'spread8',
-        productReviewVersion: 'showcase-3d-product-review-v1',
+        productReviewVersion: 'showcase-3d-product-review-v2',
         acceptedCells: rows.filter((row) => row.productAccepted).length,
         cells: rows,
       };
       await atomicJson(judgePath, value);
       return value;
     });
+
+    const needsRepair = route.engine === 'vista2'
+      && job.render3d
+      && job.judge
+      && (judge.acceptedCells ?? 0) === 0
+      && Number(job._repairDepth ?? 0) < 1;
+    if (needsRepair) {
+      const repairDir = join(context.jobDir, '80-repair-01');
+      const defects = (judge.cells ?? []).flatMap((row) => [
+        ...(row.threeDReview?.defects ?? []),
+        ...(row.threeDReview?.explanation ? [row.threeDReview.explanation] : []),
+      ]).slice(0, 24);
+      const renderErrors = (render3d?.cells ?? [])
+        .filter((row) => row.status === 'error')
+        .map((row) => row.error);
+      const repairFeedback = [...defects, ...renderErrors].filter(Boolean);
+      const repairJob = {
+        ...job,
+        briefId: `${job.briefId}-repair-01`,
+        brief: `${job.brief}\n\nPOST-RENDER REPAIR FEEDBACK FROM REJECTED ATTEMPT:\n${repairFeedback.map((item) => `- ${item}`).join('\n')}\nReauthor the executable scenario; do not merely explain these defects.`,
+        _repairDepth: 1,
+      };
+      await mkdir(repairDir, { recursive: true });
+      await atomicJson(join(repairDir, '00-brief.json'), repairJob);
+      await atomicJson(join(repairDir, 'repair-request.json'), {
+        sourceJobId: job.jobId,
+        feedback: repairFeedback,
+        semanticContract,
+      });
+      context.emit({ stage: '80-repair', status: 'running', artifacts: ['80-repair-01/repair-request.json'] });
+      try {
+        await this.run(repairJob, {
+          ...externalContext,
+          jobDir: repairDir,
+          emit: () => {},
+        });
+        const repairedGallery = await readJson(join(repairDir, '90-gallery.json'));
+        await atomicJson(join(repairDir, 'repair-result.json'), {
+          accepted: repairedGallery.accepted === true,
+          gallery: repairedGallery,
+        });
+        context.emit({
+          stage: '80-repair',
+          status: 'complete',
+          artifacts: ['80-repair-01/repair-request.json', '80-repair-01/repair-result.json'],
+        });
+        if (repairedGallery.accepted === true) {
+          for (const directory of ['40-cells', '60-render2d', '65-render3d']) {
+            await cp(join(repairDir, directory), join(context.jobDir, directory), {
+              recursive: true,
+              force: true,
+            });
+          }
+          for (const file of ['50-gate.json', '70-judge.json']) {
+            await copyFile(join(repairDir, file), join(context.jobDir, file));
+          }
+          await cp(join(repairDir, '20-author'), join(authorDir, 'repair-01'), {
+            recursive: true,
+            force: true,
+          });
+          await copyFile(join(repairDir, '20-author', 'template.json'), templatePath);
+          await atomicJson(galleryPath, {
+            ...repairedGallery,
+            brief: job.brief,
+            repairedFromRejectedAttempt: true,
+            repairEvidence: '80-repair-01/repair-result.json',
+          });
+          context.emit({ stage: '90-gallery', status: 'complete', artifacts: ['90-gallery.json'] });
+          return;
+        }
+      } catch (error) {
+        await atomicJson(join(repairDir, 'repair-result.json'), {
+          accepted: false,
+          error: String(error.message ?? error),
+        });
+        context.emit({
+          stage: '80-repair',
+          status: 'failed',
+          artifacts: ['80-repair-01/repair-request.json', '80-repair-01/repair-result.json'],
+        });
+      }
+    }
 
     await stage(context, '90-gallery', [galleryPath], async () => {
       const judgeRows = judge.cells?.filter((row) => row.status === 'complete') ?? [];

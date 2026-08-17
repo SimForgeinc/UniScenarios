@@ -122,9 +122,11 @@ class Scene:
         self.brief = brief
         self.workdir = workdir
         os.makedirs(workdir, exist_ok=True)
-        self.clip_s = clip_s
+        self.contract = brief.get('showcaseContract') or {'obligations': [], 'structures': []}
+        self.clip_s = max(20.0, clip_s) if brief.get('showcaseContract') else clip_s
         self.warmup_s = warmup_s
-        self.need = {}           # agent's road-structure request
+        self.fixed_need = self._contract_need()
+        self.need = dict(self.fixed_need)  # agent may add requirements, never remove contract requirements
         self.sites = []          # flattened match results
         self.site = None         # selected site record
         self.route_pl = None     # [(x,y)...] route centerline at working site
@@ -135,6 +137,35 @@ class Scene:
         self.interactions = []   # template form, ids i1..iN
         self._iseq = 0
         self._ego_default()
+
+    def _contract_need(self):
+        kinds = {item['kind'] for item in self.contract.get('obligations', [])}
+        need = {}
+        if 'signalized_junction' in kinds:
+            need.update(feature='junction', control='signalized')
+        elif 'junction' in kinds or 'ego_left_turn' in kinds:
+            need['feature'] = 'junction'
+        if 'ego_left_turn' in kinds:
+            need['egoTurn'] = 'left'
+        if 'lane_splitting_actor' in kinds:
+            need['minOpposingLanes'] = 2
+        elif 'oncoming_actor' in kinds:
+            need['minOpposingLanes'] = 1
+        return need
+
+    def contract_invariants(self):
+        kinds = {item['kind'] for item in self.contract.get('obligations', [])}
+        invariants = []
+        motorcycle = next((role['id'] for role in self.roles.values()
+                           if role.get('actor', {}).get('class') == 'motorcycle'), None)
+        if motorcycle:
+            invariants.append({'id': 'requested-criticality', 'kind': 'ttc',
+                               'essentiality': 'required', 'of': 'ego',
+                               'to': motorcycle, 'range': [0.5, 3]})
+        if 'ego_braking_response' in kinds:
+            invariants.append({'id': 'ego-decel-budget', 'kind': 'decel_budget',
+                               'essentiality': 'required', 'of': 'ego', 'maxMps2': 8})
+        return invariants
 
     # ------------------------------------------------------------- template
     def _ego_default(self):
@@ -150,6 +181,9 @@ class Scene:
         c = {'throughLanesSameDir': {'value': [int(self.need.get('minLanes', 1)), 8],
                                      'essentiality': 'required'},
              'runwayDownstreamM': {'value': [120, None], 'essentiality': 'required'}}
+        if self.need.get('minOpposingLanes'):
+            c['throughLanesOpposing'] = {
+                'value': [int(self.need['minOpposingLanes']), 8], 'essentiality': 'required'}
         if self.need.get('adjacentSidewalk'):
             c['requiresAdjacent'] = {'value': ['sidewalk'], 'essentiality': 'preferred',
                                      'weight': 3}
@@ -159,8 +193,13 @@ class Scene:
         f = self.need.get('feature')
         if not f:
             return []
+        at_m = [0, 0] if f == 'junction' else [40, 200]
         base = {'id': 'f-%s' % f, 'kind': f, 'essentiality': 'required',
-                'atM': {'value': [40, 200], 'essentiality': 'required'}}
+                'atM': {'value': at_m, 'essentiality': 'required'}}
+        if self.need.get('control'):
+            base['control'] = {'value': [self.need['control']], 'essentiality': 'required'}
+        if self.need.get('egoTurn'):
+            base['egoTurn'] = {'value': [self.need['egoTurn']], 'essentiality': 'required'}
         return [base]
 
     def _anchor_id(self):
@@ -195,7 +234,7 @@ class Scene:
             'props': list(self.props.values()),
             'choreography': {'clipSeconds': self.clip_s, 'warmupSeconds': self.warmup_s,
                              'interactions': copy.deepcopy(self.interactions)},
-            'invariants': [],
+            'invariants': self.contract_invariants(),
             'variants': [],
             'metricSubject': 'ego',
         }
@@ -640,7 +679,11 @@ class Scene:
             g['firstFailure'] = G.first_failure(g)
             recs.append(g)
         port = G.portability(recs)
-        admitted = bool(port['ok'] and any(r.get('pass') for r in recs))
+        passing = [record for record in recs if record.get('pass')]
+        if self.contract.get('obligations'):
+            port = {**port, 'productPolicy': 'one truthful host is sufficient',
+                    'ok': bool(passing)}
+        admitted = bool(port['ok'] and passing)
         return {'template': path, 'summary': summary, 'cells': recs,
                 'portability': port, 'admitted': admitted}, []
 

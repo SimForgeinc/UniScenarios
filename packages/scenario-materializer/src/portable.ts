@@ -553,7 +553,7 @@ export function liftMapBoundTemplate(
       lifted = { ...base, kind: 'on_reference', pose: semanticPose };
       matcherKind = 'on_reference';
     } else if (conflict) {
-      lifted = { ...base, kind: 'conflicting_gate', feature: conflict.feature, from: conflict.from, turn: conflict.turn, fallbackPose: semanticPose };
+      lifted = { ...base, kind: 'conflicting_gate', feature: conflict.feature, from: conflict.from, turn: conflict.turn, tFrac: 0, fallbackPose: semanticPose };
       matcherKind = 'conflicting_gate';
     } else {
       const lateralEntry = roleRsl ? Object.entries(frame.lateralLanes).find(([, lane]) => lane === roleRsl) : undefined;
