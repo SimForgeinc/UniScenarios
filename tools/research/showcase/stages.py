@@ -43,6 +43,14 @@ def atomic_json(path, value):
     os.replace(temp, path)
 
 
+def atomic_copy(source, target):
+    target = pathlib.Path(target)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    temp = target.with_name('.%s.%d.tmp' % (target.name, os.getpid()))
+    shutil.copyfile(source, temp)
+    os.replace(temp, target)
+
+
 def precheck(args):
     import precheck_briefs as module
 
@@ -87,7 +95,7 @@ def author(args):
     template = row.get('template')
     if not template or not os.path.isfile(template):
         raise RuntimeError('compiler produced no reusable template: %s' % row.get('error', 'unknown error'))
-    shutil.copyfile(template, out / 'template.json')
+    atomic_copy(template, out / 'template.json')
     emit({'template': str(out / 'template.json'), 'transcript': str(out / 'transcript.json'),
           'admitted': bool(row.get('admitted')), 'family': row.get('family')})
 
@@ -122,7 +130,7 @@ def vista_author(args):
     template = result.get('template')
     if not template or not os.path.isfile(template):
         raise RuntimeError('vista2 episode produced no emitted template')
-    shutil.copyfile(template, out / 'template.json')
+    atomic_copy(template, out / 'template.json')
     emit({'template': str(out / 'template.json'), 'transcript': str(out / 'transcript.json'),
           'admitted': bool(row.get('admitted')), 'actions': row.get('actions')})
 

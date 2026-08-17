@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { createConnection } from 'node:net';
 import { constants as fsConstants } from 'node:fs';
 import {
@@ -317,6 +318,14 @@ export class ShowcasePipeline {
         timeout: route.engine === 'vista2' ? 2_700_000 : 900_000,
         env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
       });
+      // `batch` intentionally derives each draw seed from the template identity,
+      // site and draw index. Give its existing seeding path a stable identity
+      // derived from the user knob instead of the per-request UUID emitted by
+      // the author adapter.
+      const template = await readJson(templatePath);
+      const seedIdentity = createHash('sha256').update(`${job.brief}\0${String(job.seed)}`).digest('hex').slice(0, 16);
+      template.anchor.id = `showcase-${seedIdentity}`;
+      await atomicJson(templatePath, template);
     });
 
     const sites = await stage(context, '30-sites', [sitesPath], async () => {

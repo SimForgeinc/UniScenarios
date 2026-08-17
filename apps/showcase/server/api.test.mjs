@@ -45,7 +45,10 @@ class StubEngine {
 
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'showcase-server-test-'));
-  const app = await createShowcaseServer({ token: TOKEN, dataDir, engine: new StubEngine() });
+  const webDir = join(dataDir, 'web');
+  await mkdir(webDir, { recursive: true });
+  await writeFile(join(webDir, 'index.html'), '<!doctype html><title>showcase test</title>');
+  const app = await createShowcaseServer({ token: TOKEN, dataDir, webDir, engine: new StubEngine() });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const address = app.server.address();
   const base = `http://127.0.0.1:${address.port}`;
@@ -129,6 +132,10 @@ test('all endpoints reject missing/wrong auth and accept query or bearer auth', 
   assert.equal((await fetch(`${base}/api/gallery?token=wrong`)).status, 401);
   assert.equal((await fetch(`${base}/api/gallery?token=${TOKEN}`)).status, 200);
   assert.equal((await fetch(`${base}/api/gallery`, { headers: { authorization: `Bearer ${TOKEN}` } })).status, 200);
+  const page = await fetch(`${base}/?token=${TOKEN}`);
+  assert.equal(page.status, 200);
+  assert.match(await page.text(), /showcase test/);
+  assert.match(page.headers.get('set-cookie'), /^showcase_token=/);
   assert.equal((await fetch(`${base}/api/jobs`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },

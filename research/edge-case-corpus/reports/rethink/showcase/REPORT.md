@@ -262,3 +262,108 @@ tests 3; pass 3; fail 0
 $ pnpm --filter @uniscenarios/showcase build
 node --check server/index.mjs && node --check server/pipeline.mjs  # exit 0
 ```
+
+### P3 — showcase server + job runner
+
+Implemented `@uniscenarios/showcase` as one Node process with the frozen REST/SSE surface, token
+authentication, byte-range artifact serving, the built P4 frontend, and a filesystem-backed queue
+capped at two concurrent jobs. A successful `?token=` page request establishes a same-site,
+HTTP-only cookie for the frontend's hashed assets; API and artifact calls continue to accept the
+contracted query token or Authorization header. The runner reconstructs completed SSE events on
+restart and resumes incomplete jobs from their atomically committed stage artifacts.
+
+The default engine writes the exact `00` through `90` layout. Its Python adapter imports
+`precheck_briefs.precheck`, `author_llm.author_brief`, `tg_gate.gate_cell`, the Vista2 `Episode`, and
+`footage/judge.py` rather than copying protected implementations. Compiler and judge calls use
+`gpt-5.6-sol`/`medium` and the local gateway environment. `uniscenarios batch` receives maps,
+draws, site cap, ambient preset, and ambient seed; the user seed also determines a stable template
+identity so it flows through batch's existing per-cell seed derivation. Rendering tries the
+built-in `uniscenarios render` command first and retains the required legacy-script fallback.
+Judge-disabled and gateway-down jobs commit an explicit skipped `70-judge.json`; unavailable 3D
+commits an explicit skipped `65-render3d/index.json`.
+
+Frozen-gate verification at session start passed:
+
+```text
+$ .venv/bin/python tools/gates/verify_gate_hash.py
+GATE-HASH TRIPWIRE: PASS -- frozen gate v1 1a08698e95fca4bc / v2 3823182614e5a5ba unchanged
+```
+
+Focused verification:
+
+```text
+$ pnpm --filter @uniscenarios/showcase test
+tests 3; pass 3; fail 0
+
+$ pnpm --filter @uniscenarios/showcase build
+node --check server/index.mjs && node --check server/pipeline.mjs  # exit 0
+
+$ pnpm -r build
+Scope: 20 of 21 workspace projects
+# exit 0; showcase frontend and all workspace packages built
+
+$ .venv/bin/python -m py_compile \
+    tools/research/showcase/stages.py tools/research/showcase/preseed.py
+# exit 0
+```
+
+The P3 pre-seed script was exercised against all three requested available roots:
+
+```text
+$ .venv/bin/python tools/research/showcase/preseed.py --limit 24
+{"gallery": "/home/path/UniScenarios-training-grade/showcase-data/jobs/preseed/90-gallery.json", "cards": 24, "failures": 0}
+```
+
+It selected and rendered 24 vision-asserted judged cells in 17.79 s with zero failures. P5's
+committed, source-balanced 24-card seed is what supplies a fresh clone on first load; the P3 run
+verified the required live-job gallery scan path without committing generated job data.
+
+Real HTTP compiler acceptance was run with the package start command:
+
+```text
+$ SHOWCASE_TOKEN=showcase-p3-acceptance SHOWCASE_PORT=4174 \
+    pnpm --filter @uniscenarios/showcase start
+showcase server listening on http://0.0.0.0:4174
+```
+
+These are the exact successful curl commands used to submit and verify the job:
+
+```text
+$ curl -sS -X POST \
+    'http://127.0.0.1:4174/api/jobs?token=showcase-p3-acceptance' \
+    -H 'Content-Type: application/json' \
+    --data '{"brief":"A stopped lead car blocks the ego lane. The ego approaches at speed and brakes late to avoid it.","engine":"compiler","nScenarios":1,"maps":["yale-street"],"maxSitesPerMap":1,"ambient":"light","seed":17,"render3d":false,"topK":1,"judge":false}'
+{"jobId":"3bda5e51-dbd7-4981-961d-2c9111bd9c74"}
+
+$ curl -sS -N \
+    'http://127.0.0.1:4174/api/jobs/3bda5e51-dbd7-4981-961d-2c9111bd9c74?token=showcase-p3-acceptance'
+# emitted every stage through:
+data: {"stage":"90-gallery","status":"complete","artifacts":["90-gallery.json"]}
+
+$ curl -sS \
+    'http://127.0.0.1:4174/api/jobs/3bda5e51-dbd7-4981-961d-2c9111bd9c74/full?token=showcase-p3-acceptance' \
+    | jq '{jobId, stages: [.files[].path]}'
+# listed 00-brief.json through 90-gallery.json, concrete instance/trace/meta, frames, manifests, and MP4
+
+$ curl -sS \
+    'http://127.0.0.1:4174/api/gallery?token=showcase-p3-acceptance' \
+    | jq '.[] | select(.jobId == "3bda5e51-dbd7-4981-961d-2c9111bd9c74")'
+# returned the compiler gallery card and headline artifact URL
+
+$ curl -sS -o /tmp/showcase-p3-acceptance.mp4 \
+    'http://127.0.0.1:4174/artifacts/jobs/3bda5e51-dbd7-4981-961d-2c9111bd9c74/60-render2d/yale-street-23686233753633fd-0/rollout.mp4?token=showcase-p3-acceptance'
+$ ffprobe -v error -show_entries format=duration,size -of json \
+    /tmp/showcase-p3-acceptance.mp4
+{"format":{"duration":"0.333333","size":"29095"}}
+```
+
+Measured stage times were author 43.764 s, site match 3.448 s, batch/cell copy 26.161 s, frozen gate
+0.065 s, and 2D render 0.725 s. The one sampled cell was honestly rejected by the frozen gate
+(`passed=0/1`), so the gallery card says `admitted:false`; the job itself nevertheless completed
+the required brief-to-gallery pipeline and serves a valid MP4. Judge and 3D were explicitly
+disabled in this acceptance request and their stages were recorded as skipped, not claimed as run.
+
+The first real submission exposed that the frozen compiler expects `brief.id`; it terminated at
+`20-author` with a recorded `job-error.json`. P3 added the missing ID to normalized submissions and
+backward-compatible restart hydration, then reran the complete successful job above. No result from
+the failed attempt is represented as successful evidence.

@@ -1,7 +1,7 @@
 import { createServer } from 'node:http';
 import { randomUUID, timingSafeEqual } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { mkdir, readFile, readdir, stat } from 'node:fs/promises';
+import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -9,6 +9,10 @@ import { atomicJson, exists, MAPS, ShowcasePipeline } from './pipeline.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.map': 'application/json; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.mp4': 'video/mp4',
   '.png': 'image/png',
@@ -38,7 +42,12 @@ function authorized(request, url, token) {
   const query = url.searchParams.get('token');
   const header = request.headers.authorization;
   const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null;
-  return (query !== null && safeEqual(query, token)) || (bearer !== null && safeEqual(bearer, token));
+  const cookie = request.headers.cookie?.split(';').map((part) => part.trim()).find((part) => part.startsWith('showcase_token='));
+  const cookieToken = cookie ? decodeURIComponent(cookie.slice('showcase_token='.length)) : null;
+  return (query !== null && safeEqual(query, token))
+    || (bearer !== null && safeEqual(bearer, token))
+    || (header !== undefined && safeEqual(header, token))
+    || (cookieToken !== null && safeEqual(cookieToken, token));
 }
 
 async function requestJson(request, limit = 1_000_000) {
@@ -136,7 +145,32 @@ export class JobRunner {
       const briefPath = join(jobDir, '00-brief.json');
       if (!(await exists(briefPath))) continue;
       const job = JSON.parse(await readFile(briefPath, 'utf8'));
+      job.id ??= job.briefId ?? `showcase-${entry.name}`;
+      job.briefId ??= job.id;
       const state = this.ensureState(entry.name);
+      const savedStages = [
+        ['00-brief', ['00-brief.json']],
+        ['10-route', ['10-route.json']],
+        ['15-precheck', ['15-precheck.json']],
+        ['20-author', ['20-author/template.json', '20-author/transcript.json']],
+        ['30-sites', ['30-sites.json']],
+        ['40-cells', ['40-cells/index.json']],
+        ['50-gate', ['50-gate.json']],
+        ['60-render2d', ['60-render2d/index.json']],
+        ['65-render3d', ['65-render3d/index.json']],
+        ['70-judge', ['70-judge.json']],
+        ['90-gallery', ['90-gallery.json']],
+      ];
+      for (const [stage, artifacts] of savedStages) {
+        if ((await Promise.all(artifacts.map((artifact) => exists(join(jobDir, artifact))))).every(Boolean)) {
+          let status = 'complete';
+          if (stage === '65-render3d' || stage === '70-judge') {
+            const saved = JSON.parse(await readFile(join(jobDir, artifacts[0]), 'utf8'));
+            if (saved.status === 'skipped') status = 'skipped';
+          }
+          this.emit(entry.name, { stage, status, artifacts });
+        }
+      }
       if (await exists(join(jobDir, '90-gallery.json'))) {
         state.done = true;
       } else {
@@ -188,6 +222,7 @@ export class JobRunner {
   }
 
   async execute({ job, jobDir }) {
+    await rm(join(jobDir, 'job-error.json'), { force: true });
     this.emit(job.jobId, { stage: 'job', status: 'running', artifacts: [] });
     try {
       await this.engine.run(job, { jobDir, emit: (event) => this.emit(job.jobId, event) });
@@ -299,9 +334,36 @@ async function serveArtifact(request, response, dataDir, encodedPath) {
   createReadStream(path).pipe(response);
 }
 
+async function serveWeb(response, webDir, pathname) {
+  const root = resolve(webDir);
+  let requested;
+  try {
+    requested = decodeURIComponent(pathname);
+  } catch {
+    return sendJson(response, 400, { error: 'invalid path encoding' });
+  }
+  const candidate = resolve(root, `.${requested}`);
+  let path = candidate === root || candidate.startsWith(`${root}${sep}`) ? candidate : join(root, 'index.html');
+  try {
+    const info = await stat(path);
+    if (!info.isFile()) path = join(root, 'index.html');
+  } catch {
+    path = join(root, 'index.html');
+  }
+  if (!(await exists(path))) return sendJson(response, 404, { error: 'showcase web build not found; run pnpm -r build' });
+  const info = await stat(path);
+  response.writeHead(200, {
+    'content-type': MIME[extname(path).toLowerCase()] ?? 'application/octet-stream',
+    'content-length': info.size,
+    'cache-control': path.endsWith('index.html') ? 'no-store' : 'public, max-age=31536000, immutable',
+  });
+  createReadStream(path).pipe(response);
+}
+
 export async function createShowcaseServer({
   token,
   dataDir = join(REPO_ROOT, 'showcase-data'),
+  webDir = join(REPO_ROOT, 'apps', 'showcase', 'web', 'dist'),
   engine = new ShowcasePipeline({ root: REPO_ROOT }),
   concurrency = 2,
 } = {}) {
@@ -311,6 +373,9 @@ export async function createShowcaseServer({
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', 'http://showcase.local');
+    if (url.searchParams.has('token') && safeEqual(url.searchParams.get('token'), token)) {
+      response.setHeader('set-cookie', `showcase_token=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Strict`);
+    }
     if (!authorized(request, url, token)) return sendJson(response, 401, { error: 'unauthorized' });
     try {
       if (request.method === 'POST' && url.pathname === '/api/jobs') {
@@ -353,6 +418,9 @@ export async function createShowcaseServer({
       }
       if (request.method === 'GET' && url.pathname.startsWith('/artifacts/')) {
         return serveArtifact(request, response, runner.dataDir, url.pathname.slice('/artifacts/'.length));
+      }
+      if (request.method === 'GET' && !url.pathname.startsWith('/api/')) {
+        return serveWeb(response, webDir, url.pathname);
       }
       return sendJson(response, 404, { error: 'not found' });
     } catch (error) {
