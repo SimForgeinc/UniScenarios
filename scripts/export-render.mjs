@@ -106,9 +106,10 @@ if (Boolean(instancePath) !== Boolean(tracePath)) {
   throw new Error('--instance and --trace must be provided together');
 }
 const scenarioMode = Boolean(instancePath && tracePath);
-if (scenarioMode && !resultPath) {
-  throw new Error('--result is required for bound scenario evidence');
-}
+const extraChromeArgs = (args.get('chrome-flags') ?? '')
+  .split(',')
+  .map((flag) => flag.trim())
+  .filter(Boolean);
 const evidenceClassArg = args.get('evidence-class') ?? 'catalog';
 if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
   throw new Error(`--evidence-class must be catalog or corpus, got ${evidenceClassArg}`);
@@ -988,7 +989,12 @@ await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({
   channel: 'chrome',
   headless,
-  args: ['--ignore-gpu-blocklist', `--window-size=${width + 80},${height + 120}`],
+  args: [
+    '--ignore-gpu-blocklist',
+    '--enable-gpu-rasterization',
+    `--window-size=${width + 80},${height + 120}`,
+    ...extraChromeArgs,
+  ],
 });
 const context = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: 1 });
 // A fresh browser profile has no stored render-quality preference, so Studio
