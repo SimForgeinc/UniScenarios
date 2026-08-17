@@ -66,6 +66,9 @@ import { VehicleRouteOverlayRenderer } from './routeOverlay';
  */
 const ROUTE_WAIT_SNAP_PX = 5;
 
+/** Rounded actor seeds and their initiating ground click are the same point. */
+const ROUTE_POINT_COINCIDENCE_EPSILON_M = 1e-3;
+
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';
 export type CustomRouteTool = 'add' | 'move';
@@ -657,6 +660,16 @@ export abstract class EditorControllerCommands {
     const next = waiting
       ? { ...latest! }
       : { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
+    if (
+      !draft.timed
+      && latest
+      && Math.hypot(next.x - latest.x, next.z - latest.z) <= ROUTE_POINT_COINCIDENCE_EPSILON_M
+    ) {
+      draft.cursor = null;
+      this.syncCustomRouteDraft();
+      this.notify();
+      return;
+    }
     draft.points.push(next);
     this.syncCustomRouteDraft();
     this.notify();
@@ -665,7 +678,12 @@ export abstract class EditorControllerCommands {
   protected updateCustomRouteCursor(point: Vector3 | null): void {
     const draft = this.customRouteDraft;
     if (!draft) return;
-    draft.cursor = point ? { x: point.x, z: point.z } : null;
+    const cursor = point ? { x: point.x, z: point.z } : null;
+    const latest = draft.points.at(-1);
+    draft.cursor = cursor && latest
+      && Math.hypot(cursor.x - latest.x, cursor.z - latest.z) <= ROUTE_POINT_COINCIDENCE_EPSILON_M
+      ? null
+      : cursor;
     this.syncCustomRouteDraft();
   }
 
