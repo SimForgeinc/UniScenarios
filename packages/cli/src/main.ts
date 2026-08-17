@@ -35,6 +35,7 @@ import { exportScenario } from './commands/export.js';
 import { instantiate } from './commands/instantiate.js';
 import { locationsFind, locationsGet, locationsResolve } from './commands/locations.js';
 import { mapsList } from './commands/maps.js';
+import { parseRenderArgs, render } from './commands/render/index.js';
 import { schemas } from './commands/schemas.js';
 import { simulate } from './commands/simulate.js';
 import { debugScenario } from './commands/debug.js';
@@ -60,6 +61,7 @@ const COMMANDS = [
   { name: 'catalog verify', summary: 'reject catalog identity, cardinality, provenance, or evidence gaps' },
   { name: 'catalog batch', summary: 'resumable catalog materialization + simulation with an attempt ledger' },
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
+  { name: 'render', summary: 'instance + trace → deterministic 2D artifacts (with a 3D dispatch seam)' },
   { name: 'schemas', summary: 'the published JSON Schemas — the LLM emission contract' },
 ] as const;
 
@@ -336,6 +338,10 @@ async function dispatch(argv: readonly string[]): Promise<number> {
         trace: optionalString(args, 'trace'),
         pretty: boolFlag(args, 'pretty'),
       });
+    }
+
+    case 'render': {
+      return render(parseRenderArgs(argv.slice(1)));
     }
 
     case 'debug': {

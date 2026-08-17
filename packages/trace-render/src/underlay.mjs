@@ -1,5 +1,5 @@
 /**
- * Map underlay for the deterministic trace renderer.
+ * Map underlay for the deterministic trace renderer package.
  *
  * Pure functions from a parsed `topology-index.json.gz` (and optionally
  * `derived/locations.json.gz`) to SVG layer strings, so a vision judge sees

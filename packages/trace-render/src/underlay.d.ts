@@ -1,0 +1,14 @@
+export const LANE_STYLES: Readonly<Record<string, { readonly fill: string }>>;
+export const LANE_STYLE_FALLBACK: { readonly fill: string };
+export const JUNCTION_SURFACE_FILL: string;
+export const JUNCTION_SURFACE_WIDTH_FACTOR: number;
+export const BOUNDARY_STROKE: string;
+export const CROSSWALK_STRIPE_FILL: string;
+export function underlayFromTopology(topology: any, locationsDoc?: any): any;
+export function crosswalksFromLocations(locationsDoc: any): any[];
+export function viewportBounds(view: any, marginM?: number): any;
+export function offsetPolyline(points: any[], offsetM: number): any[];
+export function underlaySvgLayers(underlay: any, view: any, project: (point: any) => any): string[];
+export function actorGlyph(id: string, kind: string | null, isStatic: boolean): { shape: 'box' | 'disc'; color: string };
+export function emergencyLightStateAt(events: any[] | undefined, actorId: string, t: number): string;
+export function emergencyFlashPhase(t: number): 0 | 1;

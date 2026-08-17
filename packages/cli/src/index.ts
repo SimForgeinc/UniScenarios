@@ -156,3 +156,4 @@ export { evaluate, combinedEvaluationVerdict, criticalityBand, filtersFor, type 
 export { metricsSummary } from './commands/simulate.js';
 export { debugScenario, type DebugOptions, type DebugPathSample } from './commands/debug.js';
 export { SCHEMAS, type SchemaEntry } from './commands/schemas.js';
+export { parseRenderArgs, render, type RenderOptions, type RenderTier, type RenderFormat, type RenderCamera } from './commands/render/index.js';

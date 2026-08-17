@@ -45,8 +45,7 @@ describe.skipIf(!haveArtifacts || !existsSync(TEMPLATE_FILE))('batch cells run t
         drawIndex: 0,
         outDir: `/tmp/tgr-engine-test-planned-site/${site.siteId}`,
         writeTrace: false,
-        filter: 'default',
-        force: true,
+        filter: 'critical',
         site,
       });
       // The defect signature: status 'error' with error.code 'unknown_site'.
