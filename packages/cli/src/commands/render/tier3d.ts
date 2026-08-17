@@ -226,10 +226,13 @@ export function buildTier3dExporterArgs(options: Tier3dRenderOptions, studioUrl:
     '--fps', String(fps),
     '--width', String(width),
     '--height', String(height),
-    '--evidence-class', 'corpus',
+    '--all-authored',
     '--camera-search',
     '--pin-page',
-    '--chrome-flags', chromeFlags.join(','),
+    // export-render's intentionally small parser treats a following `--...`
+    // token as another boolean flag. Send names without the prefix and let the
+    // exporter normalize them back to Chrome arguments.
+    '--chrome-flags', chromeFlags.map((flag) => flag.replace(/^--/, '')).join(','),
     ...(format === 'stills' ? ['--no-video'] : []),
   ];
 }

@@ -13,12 +13,11 @@ describe('tier3d exporter orchestration', () => {
       fps: 12,
     }, 'http://127.0.0.1:54321/');
 
-    expect(args).toContain('--evidence-class');
-    expect(args[args.indexOf('--evidence-class') + 1]).toBe('corpus');
+    expect(args).toContain('--all-authored');
     expect(args).toContain('--camera-search');
     expect(args).toContain('--pin-page');
     expect(args[args.indexOf('--chrome-flags') + 1]).toBe(
-      '--use-gl=angle,--use-angle=vulkan,--enable-features=Vulkan',
+      'use-gl=angle,use-angle=vulkan,enable-features=Vulkan',
     );
     expect(args).not.toContain('--headless');
     expect(args).not.toContain('--no-video');

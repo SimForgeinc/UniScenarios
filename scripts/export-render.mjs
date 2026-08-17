@@ -110,11 +110,15 @@ const extraChromeArgs = (args.get('chrome-flags') ?? '')
   .split(',')
   .map((flag) => flag.trim())
   .filter(Boolean);
+for (let i = 0; i < extraChromeArgs.length; i += 1) {
+  if (!extraChromeArgs[i].startsWith('--')) extraChromeArgs[i] = `--${extraChromeArgs[i]}`;
+}
 const evidenceClassArg = args.get('evidence-class') ?? 'catalog';
 if (!['catalog', 'corpus'].includes(evidenceClassArg)) {
   throw new Error(`--evidence-class must be catalog or corpus, got ${evidenceClassArg}`);
 }
 const corpusMode = evidenceClassArg === 'corpus';
+const allAuthored = corpusMode || args.has('all-authored');
 const showProgress = args.has('progress');
 const cameraSearch = args.has('camera-search');
 // Orbit offsets tried, in order, when `--camera-search` is on. 0/1 is the
@@ -543,11 +547,12 @@ async function exportScenario(page) {
   // actor, and on traces written before ambient traffic existed `ambientActorIds` is absent, so this
   // filter is a no-op.
   const ambientActorIdSet = new Set(trace?.header?.ambientActorIds ?? []);
-  const framingActorIds = corpusMode
+  const framingActorIds = allAuthored
     ? [...evidence.actorIds].filter((id) => !ambientActorIdSet.has(id))
     : [...new Set([...evidence.metricPair, ...occluderActorIds])].filter((id) => !ambientActorIdSet.has(id));
   const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
   const framingPropIds = new Set(evidence.props.filter((prop) => {
+    if (allAuthored) return true;
     const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
     const relation = prop.occludes
       && evidence.metricPair.includes(prop.occludes.observer)
