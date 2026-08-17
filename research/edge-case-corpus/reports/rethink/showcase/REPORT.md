@@ -24,6 +24,16 @@ dist/index.html                  0.45 kB │ gzip:  0.29 kB
 dist/assets/index-DK7YcmS9.css   8.54 kB │ gzip:  2.84 kB
 dist/assets/index-C8ogr-F5.js   27.62 kB │ gzip: 10.55 kB
 ✓ built in 143ms
+
+$ pnpm build
+$ pnpm -r build
+Scope: 20 of 21 workspace projects
+...
+apps/showcase/web build: ✓ built in 246ms
+apps/showcase/web build: Done
+apps/studio build: ✓ built in 9.44s
+apps/studio build: Done
+# exit 0
 ```
 
 The production `dist/` bundle was served with `pnpm --filter showcase-web mock -- --static` and walked with `playwright-core` using `/usr/bin/google-chrome` at 1440×1000. The walkthrough also submitted the form and asserted navigation to the mock server's returned job ID. Captures are committed in `p4-screens/`: `gallery.png`, `job-detail.png`, and `submit.png`.
