@@ -363,6 +363,28 @@ static duets remain better-looking. (Stream A's falsifier, measured by Stream B'
 instrument; the ambient/harvest levers from Stream C remain the only measured footage
 wins.)
 
+### Round 8 (final) — VistaLane retained roots complete
+
+`roots --roots /tmp/tgr-vista-main2ownerfix/cells /tmp/tgr-vista-low2/cells` +
+`judge --agree-every 1` (timed out once at 3600 s mid-render; resumed cleanly —
+resumability doing its job; 0 errors total). Three-way vista column (sol/medium judge):
+
+| root | n | realism μ/med | dyn μ/med | plaus | gate-PASS bucket |
+|---|---|---|---|---|---|
+| vista-main1 (sol/high) | 1086 | 5.11 / 5 | 2.79 / 3 | 0.85 | n=336: 6.05 / 3.22 |
+| vista-main2ownerfix | 338 | 5.15 / 5 | 2.88 / 3 | 0.80 | n=144: 5.93 / 3.31 |
+| vista-low2 (sol/low) | 1082 | 5.42 / 6 | 3.05 / 3 | 0.75 | n=438: **6.18** / 3.27 |
+
+vista-low2's gate-passers are the highest-realism bucket measured in the rethink (6.18);
+dynamism stays in the dead ~3.2-3.3 band, like every non-ambient arm. The cross-stream
+picture is consistent: **admission-grade authored scenarios of every flavor converge to
+"tidy, plausible, static duet" (realism ~6, dynamism ~3); only ambient/emergent levers
+move aliveness.**
+
+**FINAL cumulative: 4360 cells / 13,080 verdicts / 80.43 M tokens / 0 judge errors.**
+Inter-model Spearman (full corpus): luna~sol 0.627, luna~terra 0.655, sol~terra 0.735.
+Standing judge service hands over to the showcase pipeline (P3/P5 wrap judge.py).
+
 ## Cost ledger (updated per stage)
 
 | stage | calls | tokens in/out | wall |
@@ -381,4 +403,5 @@ wins.)
 | scaled round 5 (h2 + vista) | 2199 judge | (cumulative below) | 3223 s |
 | scaled round 6 (h2 complete + promotions) | 1839 judge | (cumulative below) | ~48 min |
 | scaled round 7 (h2 stage-2 + freedom arm) | 1554 judge | (cumulative below) | ~37 min |
-| **scaled cumulative** | **11898 judge** | **58,783,641 total** | — |
+| scaled round 8 (vista ownerfix + low2) | 1182+1841 judge | (cumulative below) | 60+24 min |
+| **scaled cumulative (final)** | **13,080 judge** | **80,431,512 total** | — |
