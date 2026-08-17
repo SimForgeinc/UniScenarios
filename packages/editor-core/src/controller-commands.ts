@@ -66,8 +66,8 @@ import { VehicleRouteOverlayRenderer } from './routeOverlay';
  */
 const ROUTE_WAIT_SNAP_PX = 5;
 
-/** Rounded actor seeds and their initiating ground click are the same point. */
-const ROUTE_POINT_COINCIDENCE_EPSILON_M = 1e-3;
+/** Ground-ray projection across an actor body still represents the actor seed. */
+const ROUTE_POINT_COINCIDENCE_EPSILON_M = 0.3;
 
 
 export type EditorMode = 'idle' | 'placing' | 'grab' | 'rotate' | 'drawingRoute';

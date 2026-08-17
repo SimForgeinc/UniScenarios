@@ -261,7 +261,7 @@ describe('direct authored-actor manipulation', () => {
 });
 
 describe('custom route actor seed', () => {
-  it('keeps the actor seed as the only point when the initiating click lands on it', async () => {
+  it('keeps the actor seed as the only point when the initiating click lands visually on it', async () => {
     const { controller, document, internals, canvas } = await fixture([
       { id: 'ego', catalogId: 'vehicle.sedan', x: 10, z: 0, lane: true },
     ]);
@@ -276,7 +276,7 @@ describe('custom route actor seed', () => {
     internals.publish();
     expect(controller.state.customRoutePointCount).toBe(1);
 
-    internals.onPointerDown(pointer(canvas, 10));
+    internals.onPointerDown(pointer(canvas, 10.2));
     internals.publish();
 
     expect(controller.state.customRoutePointCount).toBe(1);
