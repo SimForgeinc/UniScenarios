@@ -544,3 +544,52 @@ the requested dense two-lane oncoming stream and surrounding-driver reactions ar
 established. Therefore the gallery publishes **zero accepted videos** for that request. This is
 the intended outcome: the old UI's apparent success was a frozen-gate result, not an end-to-end
 product acceptance.
+
+## Production methodology integration
+
+The website now has two explicit modes. `production` is server-owned: client attempts to weaken
+the configuration are ignored. It routes structurally hostable standard mechanisms to the
+compiler, routes structural gaps to Vista2, uses `gpt-5.6-sol/low` for authoring, samples all five
+maps with three sites and three deterministic draws under light ambient traffic, applies the
+unchanged C1–C6 gate, uses the `gpt-5.6-sol/medium` spread-8 footage judge, ranks candidates with
+site diversity, and requires brief-aware 3D product acceptance. `custom` retains the old controls
+for debugging and ablations. The three-by-three sampling envelope is an online operational budget,
+not a claim that the website reruns the frozen 50-brief research experiment on every submission.
+
+The compiler and visual lanes are now a real union rather than a one-shot router. A compiler
+template that violates the request-derived executable contract is preserved under
+`20-author/compiler-rejected` and immediately escalates to Vista2. If a compiler-authored product
+survives the semantic contract but fails final review, the same escalation occurs after review.
+A rejected Vista2 product receives one evidence-driven Vista2 repair. The repair route is forced to
+Vista2; an end-to-end run exposed and fixed a bug where the nested `auto` route had silently sent
+that repair back through the compiler.
+
+Rendering now begins only after the gate and only for admitted cells. This preserves the research
+ordering and avoids spending footage and 3D work on known gate failures. The route artifact records
+the production profile, model/effort choices, fallback policy, rejected compiler failures, and
+fallback artifacts. The browser displays the methodology on both submission and job pages and
+keeps every rejection available in the stage and cell drilldown.
+
+Production job `4a93f3f4-d78a-4bb3-bc73-df2b5df1257f` exercised the full path in the real service:
+compiler contract rejection, Vista2 fallback, 21 simulated cells, 3 frozen-gate admissions,
+footage judging, 3D attempts, defect feedback, forced Vista2 repair, 21 repaired cells, 13 repaired
+admissions, and final product rejection. The UI showed all 11 stages complete and zero accepted
+videos. This remains an honest negative: gate yield improved, but the footage did not establish
+the requested lead-braking sequence strongly enough.
+
+That run also found a production-only 3D mismatch. The CLI always passed `--all-authored`, which
+made the product camera frame irrelevant authored actors in addition to the incident pair; all
+three first-pass 3D candidates failed composition before review. The render command now exposes
+`--composition all-authored|incident`. Corpus exports keep the conservative all-authored default;
+the brief-driven product pipeline requests incident composition. Re-rendering the previously
+failing El Camino cell with the production command completed successfully: deterministic real-map
+Studio output, 241 H.264 frames at 12 FPS, and a machine-passed manifest. The independent product
+review still rejected the footage (`mechanismFidelity=no`, `visualGrounding=pass`,
+`eventSequence=fail`, realism `3.0`), which confirms that the fix restores reviewability without
+weakening acceptance.
+
+The no-brief emergent harvest remains a separate batch corpus-replenishment lane. It is not
+misrepresented as an interactive prompt feature: the measured full harvest costs about 24 core
+hours and its promoted scenarios are site-pinned rather than portable. Production request handling
+uses the compiler/visual union; scheduled corpus refresh should continue to use the existing
+pre-registered harvest commands and publish only frozen-gate and product-review survivors.

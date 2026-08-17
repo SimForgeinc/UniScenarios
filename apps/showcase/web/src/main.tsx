@@ -116,7 +116,7 @@ function JobDetail({ id }: { id: string }) {
   const stages = useMemo(() => stageList(job, live), [job, live]);
   const completed = stages.filter((stage) => stage.status === 'complete').length;
   return <main><button class="back" onClick={() => navigate('#/')}>← Gallery</button>
-    <section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh</button></section>
+    <section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip>{(job?.options?.methodology as string) ?? 'custom'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh</button></section>
     <ErrorBox error={error} />
     <section class="video-gallery-section"><div class="section-title"><div><p class="eyebrow">3D OUTPUT</p><h2>Your scenario videos</h2></div><p>{completed}/{STAGES.length} pipeline stages complete. Videos appear here automatically.</p></div><ThreeDGallery job={job} status={stages[9]?.status ?? 'pending'} /></section>
     <button class="details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? 'Hide pipeline details' : 'Show pipeline details'} <span>{showDetails ? '↑' : '↓'}</span></button>
@@ -127,23 +127,33 @@ function JobDetail({ id }: { id: string }) {
   </main>;
 }
 
-const initial: SubmitPayload = { brief: '', engine: 'auto', nScenarios: 3, maps: MAPS.map(([id]) => id), maxSitesPerMap: 3, ambient: 'light', seed: 42, render3d: true, topK: 3, judge: true };
+const initial: SubmitPayload = { brief: '', methodology: 'production', engine: 'auto', nScenarios: 3, maps: MAPS.map(([id]) => id), maxSitesPerMap: 3, ambient: 'light', seed: 42, render3d: true, topK: 3, judge: true };
 function Submit() {
   const [form, setForm] = useState(initial); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
   const update = <K extends keyof SubmitPayload>(key: K, value: SubmitPayload[K]) => setForm((old) => ({ ...old, [key]: value }));
   const send = async (e: Event) => { e.preventDefault(); setBusy(true); setError(undefined); try { navigate(`#/jobs/${encodeURIComponent(await submitJob(form))}`); } catch (reason) { setError(reason); setBusy(false); } };
-  return <main class="submit-page"><button class="back" onClick={() => navigate('#/')}>← Gallery</button><section class="submit-intro"><p class="eyebrow">NEW PIPELINE JOB</p><h1>Author an edge case.</h1><p>Compiler jobs usually produce first video in 2–3 minutes. Vista2 visual authoring may take 5–15 minutes; its action filmstrip streams into the job view.</p></section><ErrorBox error={error} /><form onSubmit={send}>
+  const production = form.methodology === 'production';
+  const cellCount = production ? 45 : form.maps.length * form.maxSitesPerMap * form.nScenarios;
+  return <main class="submit-page"><button class="back" onClick={() => navigate('#/')}>← Gallery</button><section class="submit-intro"><p class="eyebrow">NEW PIPELINE JOB</p><h1>Author an edge case.</h1><p>Production mode runs the measured development recipe—not a shortened demo path. Expect several minutes for compilation, simulation, judging, and 3D review; visual fallback can take longer.</p></section><ErrorBox error={error} /><form onSubmit={send}>
+    <fieldset class="wide"><legend>Run methodology</legend><div class="map-options">
+      <label class="check"><input type="radio" name="methodology" checked={production} onChange={() => update('methodology', 'production')} /><span><b>Production recipe</b><small>Research-proven routing, sampling, gate, footage judge, 3D acceptance, and defect-driven fallback.</small></span></label>
+      <label class="check"><input type="radio" name="methodology" checked={!production} onChange={() => update('methodology', 'custom')} /><span><b>Custom experiment</b><small>Expose individual controls for debugging and ablations.</small></span></label>
+    </div></fieldset>
     <label class="wide"><span>Scenario brief</span><textarea required minlength={12} value={form.brief} onInput={(e) => update('brief', e.currentTarget.value)} placeholder="A delivery van blocks the bike lane just before an intersection as a cyclist approaches…" /></label>
-    <div class="form-grid"><label><span>Engine</span><select value={form.engine} onChange={(e) => update('engine', e.currentTarget.value as SubmitPayload['engine'])}><option value="auto">Auto route</option><option value="compiler">Compiler</option><option value="vista2">Vista2 visual agent</option></select></label>
-      <label><span>Scenarios / site</span><input type="number" min="1" max="20" value={form.nScenarios} onInput={(e) => update('nScenarios', e.currentTarget.valueAsNumber)} /></label>
-      <label><span>Max sites / map</span><input type="number" min="1" max="20" value={form.maxSitesPerMap} onInput={(e) => update('maxSitesPerMap', e.currentTarget.valueAsNumber)} /></label>
+    {production ? <section class="wide methodology-card" aria-label="Production methodology">
+      <p class="eyebrow">FROZEN PRODUCTION PROFILE</p><h2>Compiler first. Visual author for structural gaps.</h2>
+      <p>The server—not this browser—enforces all five maps, three sites per map, three deterministic draws, light ambient traffic, Sol/low authoring, the unchanged C1–C6 gate, Sol/medium spread-8 footage review, and strict brief-aware 3D acceptance. A rejected compiler result escalates to the visual author; a rejected visual result receives one evidence-driven repair.</p>
+      <div class="chip-row"><Chip>5 maps</Chip><Chip>45 cells max</Chip><Chip>light ambient</Chip><Chip>3D top 3</Chip><Chip>visual fallback</Chip></div>
+    </section> : <div class="form-grid"><label><span>Engine</span><select value={form.engine} onChange={(e) => update('engine', e.currentTarget.value as SubmitPayload['engine'])}><option value="auto">Auto route</option><option value="compiler">Compiler</option><option value="vista2">Vista2 visual agent</option></select></label>
+      <label><span>Scenarios / site</span><input type="number" min="1" max="10" value={form.nScenarios} onInput={(e) => update('nScenarios', e.currentTarget.valueAsNumber)} /></label>
+      <label><span>Max sites / map</span><input type="number" min="1" max="10" value={form.maxSitesPerMap} onInput={(e) => update('maxSitesPerMap', e.currentTarget.valueAsNumber)} /></label>
       <label><span>Ambient traffic</span><select value={form.ambient} onChange={(e) => update('ambient', e.currentTarget.value as SubmitPayload['ambient'])}>{['off', 'light', 'moderate', 'city', 'heavy'].map((v) => <option value={v}>{v}</option>)}</select></label>
       <label><span>Seed</span><input type="number" value={form.seed} onInput={(e) => update('seed', e.currentTarget.valueAsNumber)} /></label>
       <fieldset class="wide"><legend>Maps</legend><div class="map-options">{MAPS.map(([id, label]) => <label class="check" key={id}><input type="checkbox" checked={form.maps.includes(id)} onChange={(e) => update('maps', e.currentTarget.checked ? [...form.maps, id] : form.maps.filter((value) => value !== id))} /><span>{label}</span></label>)}</div></fieldset>
       <label class="toggle"><input type="checkbox" checked={form.render3d} onChange={(e) => update('render3d', e.currentTarget.checked)} /><span><b>3D rendering</b><small>Render highest-ranked passing cells</small></span></label>
       <label><span>3D top K</span><input type="number" min="1" max="10" disabled={!form.render3d} value={form.topK} onInput={(e) => update('topK', e.currentTarget.valueAsNumber)} /></label>
       <label class="toggle"><input type="checkbox" checked={form.judge} onChange={(e) => update('judge', e.currentTarget.checked)} /><span><b>Footage judge</b><small>Score realism and dynamism</small></span></label>
-    </div><div class="submit-actions"><span>{form.maps.length} maps · up to {form.maps.length * form.maxSitesPerMap * form.nScenarios} cells</span><button class="primary" disabled={busy || !form.maps.length}>{busy ? 'Submitting…' : 'Start pipeline →'}</button></div>
+    </div>}<div class="submit-actions"><span>{production ? 'Frozen research recipe' : `${form.maps.length} maps`} · up to {cellCount} cells</span><button class="primary" disabled={busy || (!production && !form.maps.length)}>{busy ? 'Submitting…' : 'Start pipeline →'}</button></div>
   </form></main>;
 }
 

@@ -14,6 +14,7 @@ describe('uniscenarios render argument parsing', () => {
       camera: 'follow-ego',
       fps: 12,
       redact: false,
+      composition: 'all-authored',
       fullClip: false,
       devAssets: undefined,
       pretty: false,
@@ -24,7 +25,7 @@ describe('uniscenarios render argument parsing', () => {
     expect(parseRenderArgs([
       'trace.json.gz', '--instance=instance.json', '--out', 'artifacts', '--tier', 'both',
       '--format', 'video', '--camera', 'overview', '--fps', '24', '--redact', '--full-clip',
-      '--dev-assets', 'dev-assets', '--pretty',
+      '--composition', 'incident', '--dev-assets', 'dev-assets', '--pretty',
     ])).toEqual({
       trace: 'trace.json.gz',
       instance: 'instance.json',
@@ -34,6 +35,7 @@ describe('uniscenarios render argument parsing', () => {
       camera: 'overview',
       fps: 24,
       redact: true,
+      composition: 'incident',
       fullClip: true,
       devAssets: 'dev-assets',
       pretty: true,
@@ -45,6 +47,7 @@ describe('uniscenarios render argument parsing', () => {
     [['trace', '--instance', 'instance', '--format', 'gif'], '--format'],
     [['trace', '--instance', 'instance', '--camera', 'orbit'], '--camera'],
     [['trace', '--instance', 'instance', '--fps', '0'], '--fps'],
+    [['trace', '--instance', 'instance', '--composition', 'pair'], '--composition'],
   ] as const)('rejects invalid values at %s', (argv, expectedPath) => {
     expect(() => parseRenderArgs(argv)).toThrowError(CliError);
     try {

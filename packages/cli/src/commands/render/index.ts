@@ -21,6 +21,7 @@ export interface RenderOptions {
   readonly fps: number;
   readonly redact: boolean;
   readonly fullClip: boolean;
+  readonly composition: 'all-authored' | 'incident';
   readonly devAssets?: string | undefined;
   readonly studioUrl?: string | undefined;
   readonly pretty: boolean;
@@ -48,7 +49,7 @@ type MutableRenderTiers = {
 export function parseRenderArgs(argv: readonly string[]): RenderOptions {
   const args = parseArgs(argv, {
     booleans: ['pretty', 'help', 'redact', 'full-clip'],
-    values: ['instance', 'out', 'tier', 'format', 'camera', 'fps', 'dev-assets', '3d-url'],
+    values: ['instance', 'out', 'tier', 'format', 'camera', 'fps', 'composition', 'dev-assets', '3d-url'],
   });
   const trace = args.positionals[0];
   if (trace === undefined) {
@@ -70,6 +71,10 @@ export function parseRenderArgs(argv: readonly string[]): RenderOptions {
   if (!(fps > 0) || !Number.isFinite(fps)) {
     throw new CliError('bad_value', '--fps must be greater than zero', { path: '--fps' });
   }
+  const composition = optionalString(args, 'composition') ?? 'all-authored';
+  if (composition !== 'all-authored' && composition !== 'incident') {
+    throw new CliError('bad_value', '--composition must be all-authored | incident', { path: '--composition' });
+  }
   return {
     trace,
     instance: requireString(args, 'instance'),
@@ -79,6 +84,7 @@ export function parseRenderArgs(argv: readonly string[]): RenderOptions {
     camera,
     fps,
     redact: boolFlag(args, 'redact'),
+    composition,
     fullClip: boolFlag(args, 'full-clip'),
     devAssets: optionalString(args, 'dev-assets'),
     studioUrl: optionalString(args, '3d-url'),
@@ -122,6 +128,7 @@ export async function render(options: RenderOptions): Promise<number> {
       fps: options.fps,
       redact: options.redact,
       fullClip: options.fullClip,
+      composition: options.composition,
       ...(options.devAssets === undefined ? {} : { devAssets: options.devAssets }),
       ...(options.studioUrl === undefined ? {} : { studioUrl: options.studioUrl }),
     });

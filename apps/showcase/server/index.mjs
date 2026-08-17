@@ -80,24 +80,29 @@ function normalizeJob(input, jobId) {
   if (typeof input.brief !== 'string' || input.brief.trim().length < 3 || input.brief.length > 10_000) {
     throw Object.assign(new Error('brief must be a string from 3 to 10000 characters'), { status: 400 });
   }
-  const engine = input.engine ?? 'auto';
+  const methodology = input.methodology ?? 'production';
+  if (!['production', 'custom'].includes(methodology)) {
+    throw Object.assign(new Error('methodology must be production or custom'), { status: 400 });
+  }
+  const production = methodology === 'production';
+  const engine = production ? 'auto' : (input.engine ?? 'auto');
   if (!['auto', 'compiler', 'vista2'].includes(engine)) {
     throw Object.assign(new Error('engine must be auto, compiler, or vista2'), { status: 400 });
   }
-  const maps = input.maps === undefined ? [...MAPS] : input.maps;
+  const maps = production ? [...MAPS] : (input.maps === undefined ? [...MAPS] : input.maps);
   if (!Array.isArray(maps) || maps.length < 1 || maps.some((map) => !MAPS.includes(map)) || new Set(maps).size !== maps.length) {
     throw Object.assign(new Error(`maps must contain unique values from: ${MAPS.join(', ')}`), { status: 400 });
   }
-  const ambient = input.ambient ?? 'off';
+  const ambient = production ? 'light' : (input.ambient ?? 'off');
   if (!['off', 'light', 'moderate', 'city', 'heavy'].includes(ambient)) {
     throw Object.assign(new Error('ambient must be off, light, moderate, city, or heavy'), { status: 400 });
   }
-  const nScenarios = optionalInteger(input.nScenarios, 1, 'nScenarios', 1, 10);
-  const maxSitesPerMap = optionalInteger(input.maxSitesPerMap, 1, 'maxSitesPerMap', 1, 10);
+  const nScenarios = production ? 3 : optionalInteger(input.nScenarios, 1, 'nScenarios', 1, 10);
+  const maxSitesPerMap = production ? 3 : optionalInteger(input.maxSitesPerMap, 1, 'maxSitesPerMap', 1, 10);
   if (nScenarios * maxSitesPerMap * maps.length > 48) {
     throw Object.assign(new Error('job exceeds the 48-cell disk cap (nScenarios × maxSitesPerMap × maps)'), { status: 400 });
   }
-  const topK = optionalInteger(input.topK, 3, 'topK', 1, 10);
+  const topK = production ? 3 : optionalInteger(input.topK, 3, 'topK', 1, 10);
   if (input.render3d !== undefined && typeof input.render3d !== 'boolean') {
     throw Object.assign(new Error('render3d must be boolean'), { status: 400 });
   }
@@ -113,15 +118,22 @@ function normalizeJob(input, jobId) {
     briefId: `showcase-${jobId}`,
     category: 'showcase.custom',
     brief: input.brief.trim(),
+    methodology,
     engine,
     nScenarios,
     maps,
     maxSitesPerMap,
     ambient,
     seed: input.seed ?? jobId,
-    render3d: input.render3d ?? false,
+    render3d: production ? true : (input.render3d ?? false),
     topK,
-    judge: input.judge ?? true,
+    judge: production ? true : (input.judge ?? true),
+    authorModel: 'gpt-5.6-sol',
+    authorEffort: production ? 'low' : 'medium',
+    judgeModel: 'gpt-5.6-sol',
+    judgeEffort: 'medium',
+    judgeStrategy: 'spread8',
+    fallbackToVisual: production,
     createdAt: new Date().toISOString(),
   };
 }

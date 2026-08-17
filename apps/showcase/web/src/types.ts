@@ -24,7 +24,8 @@ export interface GalleryCard {
   artifacts?: Artifact[]; [key: string]: unknown;
 }
 export interface SubmitPayload {
-  brief: string; engine: Engine; nScenarios: number; maps: string[]; maxSitesPerMap: number;
+  brief: string; methodology: 'production' | 'custom'; engine: Engine; nScenarios: number;
+  maps: string[]; maxSitesPerMap: number;
   ambient: 'off' | 'light' | 'moderate' | 'city' | 'heavy'; seed: number;
   render3d: boolean; topK: number; judge: boolean;
 }

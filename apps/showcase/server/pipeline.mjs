@@ -190,6 +190,15 @@ export function rankCandidates(cells, qualityRows) {
   return [...diverse, ...deferred];
 }
 
+export function retryKind(route, job, judge) {
+  if (!job.render3d || !job.judge || (judge.acceptedCells ?? 0) > 0) return null;
+  if (route.engine === 'compiler' && job.fallbackToVisual === true && Number(job._fallbackDepth ?? 0) < 1) {
+    return 'visual-fallback';
+  }
+  if (route.engine === 'vista2' && Number(job._repairDepth ?? 0) < 1) return 'visual-repair';
+  return null;
+}
+
 async function loadCells(cellsDir) {
   const index = await readJson(join(cellsDir, 'index.json'));
   return index.cells.map((cell) => ({
@@ -241,6 +250,8 @@ async function renderCell(context, cell, outDir, { redact = false, tier = '2d' }
     '--fps',
     '12',
     '--full-clip',
+    '--composition',
+    'incident',
   ];
   if (redact) cliArgs.push('--redact');
   const builtIn = await command('node', cliArgs, { cwd: context.root, allowFailure: true, timeout: tier === '3d' ? 900_000 : 180_000 });
@@ -306,6 +317,7 @@ export class ShowcasePipeline {
     const render3dDir = join(context.jobDir, '65-render3d');
     const render3dIndex = join(render3dDir, 'index.json');
     const judgePath = join(context.jobDir, '70-judge.json');
+    const authorContractPath = join(authorDir, 'contract-verdict.json');
     const galleryPath = join(context.jobDir, '90-gallery.json');
 
     context.emit({ stage: '00-brief', status: 'complete', artifacts: ['00-brief.json'] });
@@ -337,6 +349,12 @@ export class ShowcasePipeline {
           ? `${precheckResult.feasible ? 'feasible' : 'infeasible'} structural precheck; ${autoEngine === 'compiler' ? 'brief matches a compiler family' : 'visual authoring required'}`
           : `explicit engine override: ${requested}`,
         precheck: { feasible: precheckResult.feasible, requires: precheckResult.requires, missing: precheckResult.missing },
+        methodology: {
+          profile: job.methodology ?? 'custom',
+          author: { model: job.authorModel, effort: job.authorEffort },
+          judge: { model: job.judgeModel, effort: job.judgeEffort, strategy: job.judgeStrategy },
+          fallbackToVisual: job.fallbackToVisual === true,
+        },
         semanticContract,
       };
       await atomicJson(routePath, value);
@@ -348,30 +366,52 @@ export class ShowcasePipeline {
       return { precheck: precheckResult, contract: semanticContract };
     });
 
-    await stage(context, '20-author', [templatePath, transcriptPath], async () => {
+    await stage(context, '20-author', [templatePath, transcriptPath, authorContractPath], async () => {
       await mkdir(authorDir, { recursive: true });
-      const subcommand = route.engine === 'vista2' ? 'vista-author' : 'author';
-      const args = [this.bridge, subcommand, '--brief', briefPath, '--out', authorDir, '--model', 'gpt-5.6-sol', '--effort', 'medium'];
-      if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
-      if (subcommand === 'author') {
-        args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', '2');
+      const authorOnce = async (subcommand) => {
+        const args = [
+          this.bridge, subcommand, '--brief', briefPath, '--out', authorDir,
+          '--model', job.authorModel ?? 'gpt-5.6-sol',
+          '--effort', job.authorEffort ?? 'medium',
+        ];
+        if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
+        if (subcommand === 'author') {
+          args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', '2');
+        }
+        await command(this.python, args, {
+          cwd: this.root,
+          timeout: subcommand === 'vista-author' ? 2_700_000 : 900_000,
+          env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+        });
+        const result = await command(this.python, [
+          this.bridge, 'validate-contract', '--template', templatePath, '--contract', contractPath,
+        ], { cwd: this.root });
+        return lastJsonLine(result.stdout);
+      };
+      const initialEngine = route.engine;
+      let contractVerdict = await authorOnce(initialEngine === 'vista2' ? 'vista-author' : 'author');
+      const compilerContractVerdict = contractVerdict;
+      if (!contractVerdict?.valid && initialEngine === 'compiler' && job.fallbackToVisual === true) {
+        const rejectedDir = join(authorDir, 'compiler-rejected');
+        await mkdir(rejectedDir, { recursive: true });
+        await rename(templatePath, join(rejectedDir, 'template.json'));
+        await rename(transcriptPath, join(rejectedDir, 'transcript.json'));
+        contractVerdict = await authorOnce('vista-author');
+        route.initialEngine = 'compiler';
+        route.engine = 'vista2';
+        route.authorFallback = {
+          reason: 'compiler output violated the executable semantic contract',
+          failures: compilerContractVerdict?.failures ?? [],
+          artifacts: ['20-author/compiler-rejected/template.json', '20-author/compiler-rejected/transcript.json'],
+        };
+        await atomicJson(routePath, route);
       }
-      await command(this.python, args, {
-        cwd: this.root,
-        timeout: route.engine === 'vista2' ? 2_700_000 : 900_000,
-        env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
-      });
-      const contractResult = await command(this.python, [
-        this.bridge, 'validate-contract', '--template', templatePath, '--contract', contractPath,
-      ], { cwd: this.root });
-      const contractVerdict = lastJsonLine(contractResult.stdout);
       if (!contractVerdict?.valid) {
         throw new Error(`authored template violated semantic contract: ${JSON.stringify(contractVerdict?.failures ?? [])}`);
       }
-      // `batch` intentionally derives each draw seed from the template identity,
-      // site and draw index. Give its existing seeding path a stable identity
-      // derived from the user knob instead of the per-request UUID emitted by
-      // the author adapter.
+      await atomicJson(authorContractPath, contractVerdict);
+      // `batch` derives draw seeds from template identity, site, and draw index.
+      // Give that path a stable identity derived from the user-controlled seed.
       const template = await readJson(templatePath);
       const seedIdentity = createHash('sha256').update(`${job.brief}\0${String(job.seed)}`).digest('hex').slice(0, 16);
       template.anchor.id = `showcase-${seedIdentity}`;
@@ -429,11 +469,13 @@ export class ShowcasePipeline {
       await atomicJson(gatePath, value);
       return value;
     });
+    const passing = new Set((gate.cells ?? []).filter((cell) => cell.pass).map((cell) => cell.cellId));
 
     let render2d = await stage(context, '60-render2d', [render2dIndex], async () => {
       await mkdir(render2dDir, { recursive: true });
       const rendered = [];
-      for (const cell of cells.filter((candidate) => candidate.traceFile && candidate.instanceFile)) {
+      for (const cell of cells.filter((candidate) =>
+        passing.has(candidate.cellId) && candidate.traceFile && candidate.instanceFile)) {
         const out = join(render2dDir, cell.cellId);
         try {
           await renderCell(context, cell, out, { tier: '2d' });
@@ -452,7 +494,6 @@ export class ShowcasePipeline {
     });
     if (!Array.isArray(render2d)) render2d = render2d.cells ?? [];
 
-    const passing = new Set((gate.cells ?? []).filter((cell) => cell.pass).map((cell) => cell.cellId));
     let qualityRows = [];
     if (job.judge && await gatewayAvailable()) {
       if (await exists(render2dQualityPath)) {
@@ -463,7 +504,9 @@ export class ShowcasePipeline {
           const result = await command(this.python, [
             this.bridge, 'judge', '--cell', cell.cellDir,
             '--render', join(render2dDir, item.redacted),
-            '--model', 'gpt-5.6-sol', '--effort', 'medium', '--strategy', 'spread8',
+            '--model', job.judgeModel ?? 'gpt-5.6-sol',
+            '--effort', job.judgeEffort ?? 'medium',
+            '--strategy', job.judgeStrategy ?? 'spread8',
           ], {
             cwd: this.root,
             timeout: 600_000,
@@ -531,7 +574,8 @@ export class ShowcasePipeline {
         const result = await command(this.python, [
           this.bridge, 'review3d', '--brief', briefPath,
           '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
-          '--model', 'gpt-5.6-sol', '--effort', 'medium',
+          '--model', job.judgeModel ?? 'gpt-5.6-sol',
+          '--effort', job.judgeEffort ?? 'medium',
         ], {
           cwd: this.root,
           timeout: 600_000,
@@ -558,9 +602,9 @@ export class ShowcasePipeline {
       }
       const value = {
         status: 'complete',
-        model: 'gpt-5.6-sol',
-        effort: 'medium',
-        strategy: 'spread8',
+        model: job.judgeModel ?? 'gpt-5.6-sol',
+        effort: job.judgeEffort ?? 'medium',
+        strategy: job.judgeStrategy ?? 'spread8',
         productReviewVersion: 'showcase-3d-product-review-v2',
         acceptedCells: rows.filter((row) => row.productAccepted).length,
         cells: rows,
@@ -569,14 +613,15 @@ export class ShowcasePipeline {
       return value;
     });
 
-    const needsRepair = route.engine === 'vista2'
-      && job.render3d
-      && job.judge
-      && (judge.acceptedCells ?? 0) === 0
-      && Number(job._repairDepth ?? 0) < 1;
-    if (needsRepair) {
-      const repairDir = join(context.jobDir, '80-repair-01');
+    const retry = retryKind(route, job, judge);
+    const visualFallback = retry === 'visual-fallback';
+    const visualRepair = retry === 'visual-repair';
+    if (retry) {
+      const attemptName = visualFallback ? '80-visual-fallback' : '80-repair-01';
+      const repairDir = join(context.jobDir, attemptName);
       const defects = (judge.cells ?? []).flatMap((row) => [
+        ...(row.defects ?? []),
+        ...(row.explanation ? [row.explanation] : []),
         ...(row.threeDReview?.defects ?? []),
         ...(row.threeDReview?.explanation ? [row.threeDReview.explanation] : []),
       ]).slice(0, 24);
@@ -586,18 +631,22 @@ export class ShowcasePipeline {
       const repairFeedback = [...defects, ...renderErrors].filter(Boolean);
       const repairJob = {
         ...job,
-        briefId: `${job.briefId}-repair-01`,
+        briefId: `${job.briefId}-${visualFallback ? 'visual-fallback' : 'repair-01'}`,
         brief: `${job.brief}\n\nPOST-RENDER REPAIR FEEDBACK FROM REJECTED ATTEMPT:\n${repairFeedback.map((item) => `- ${item}`).join('\n')}\nReauthor the executable scenario; do not merely explain these defects.`,
-        _repairDepth: 1,
+        engine: 'vista2',
+        fallbackToVisual: false,
+        _fallbackDepth: visualFallback ? 1 : Number(job._fallbackDepth ?? 0),
+        _repairDepth: visualRepair ? 1 : Number(job._repairDepth ?? 0),
       };
       await mkdir(repairDir, { recursive: true });
       await atomicJson(join(repairDir, '00-brief.json'), repairJob);
       await atomicJson(join(repairDir, 'repair-request.json'), {
+        kind: visualFallback ? 'compiler-to-visual-fallback' : 'visual-defect-repair',
         sourceJobId: job.jobId,
         feedback: repairFeedback,
         semanticContract,
       });
-      context.emit({ stage: '80-repair', status: 'running', artifacts: ['80-repair-01/repair-request.json'] });
+      context.emit({ stage: '80-repair', status: 'running', artifacts: [`${attemptName}/repair-request.json`] });
       try {
         await this.run(repairJob, {
           ...externalContext,
@@ -612,7 +661,7 @@ export class ShowcasePipeline {
         context.emit({
           stage: '80-repair',
           status: 'complete',
-          artifacts: ['80-repair-01/repair-request.json', '80-repair-01/repair-result.json'],
+          artifacts: [`${attemptName}/repair-request.json`, `${attemptName}/repair-result.json`],
         });
         if (repairedGallery.accepted === true) {
           for (const directory of ['40-cells', '60-render2d', '65-render3d']) {
@@ -624,7 +673,7 @@ export class ShowcasePipeline {
           for (const file of ['50-gate.json', '70-judge.json']) {
             await copyFile(join(repairDir, file), join(context.jobDir, file));
           }
-          await cp(join(repairDir, '20-author'), join(authorDir, 'repair-01'), {
+          await cp(join(repairDir, '20-author'), join(authorDir, visualFallback ? 'visual-fallback' : 'repair-01'), {
             recursive: true,
             force: true,
           });
@@ -632,8 +681,10 @@ export class ShowcasePipeline {
           await atomicJson(galleryPath, {
             ...repairedGallery,
             brief: job.brief,
+            methodology: job.methodology ?? 'custom',
             repairedFromRejectedAttempt: true,
-            repairEvidence: '80-repair-01/repair-result.json',
+            visualFallbackFromCompiler: visualFallback,
+            repairEvidence: `${attemptName}/repair-result.json`,
           });
           context.emit({ stage: '90-gallery', status: 'complete', artifacts: ['90-gallery.json'] });
           return;
@@ -646,7 +697,7 @@ export class ShowcasePipeline {
         context.emit({
           stage: '80-repair',
           status: 'failed',
-          artifacts: ['80-repair-01/repair-request.json', '80-repair-01/repair-result.json'],
+          artifacts: [`${attemptName}/repair-request.json`, `${attemptName}/repair-result.json`],
         });
       }
     }
@@ -674,6 +725,7 @@ export class ShowcasePipeline {
         jobId: job.jobId,
         brief: job.brief,
         engine: route.engine,
+        methodology: job.methodology ?? 'custom',
         maps: [...new Set(cells.map((cell) => cell.mapId))],
         ambient: job.ambient,
         admitted: passing.size > 0,

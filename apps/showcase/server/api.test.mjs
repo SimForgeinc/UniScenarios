@@ -5,12 +5,17 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { createShowcaseServer } from './index.mjs';
-import { atomicJson, rankCandidates } from './pipeline.mjs';
+import { atomicJson, rankCandidates, retryKind } from './pipeline.mjs';
 
 const TOKEN = 'test-showcase-token';
 
 class StubEngine {
+  constructor() {
+    this.jobs = [];
+  }
+
   async run(job, context) {
+    this.jobs.push(job);
     const write = async (stage, path, value) => {
       await atomicJson(join(context.jobDir, path), value);
       context.emit({ stage, status: 'complete', artifacts: [path] });
@@ -57,12 +62,21 @@ test('candidate ranking prefers judged quality while preserving site diversity',
   assert.deepEqual(rankCandidates(cells, quality).map((cell) => cell.cellId), ['a-0', 'b-0', 'a-1']);
 });
 
+
+test('production retry policy escalates compiler failures to the visual author', () => {
+  const production = { render3d: true, judge: true, fallbackToVisual: true };
+  assert.equal(retryKind({ engine: 'compiler' }, production, { acceptedCells: 0 }), 'visual-fallback');
+  assert.equal(retryKind({ engine: 'vista2' }, production, { acceptedCells: 0 }), 'visual-repair');
+  assert.equal(retryKind({ engine: 'compiler' }, { ...production, _fallbackDepth: 1 }, { acceptedCells: 0 }), null);
+  assert.equal(retryKind({ engine: 'compiler' }, production, { acceptedCells: 1 }), null);
+});
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'showcase-server-test-'));
   const webDir = join(dataDir, 'web');
   await mkdir(webDir, { recursive: true });
   await writeFile(join(webDir, 'index.html'), '<!doctype html><title>showcase test</title>');
-  const app = await createShowcaseServer({ token: TOKEN, dataDir, webDir, engine: new StubEngine() });
+  const engine = new StubEngine();
+  const app = await createShowcaseServer({ token: TOKEN, dataDir, webDir, engine });
   await new Promise((resolve) => app.server.listen(0, '127.0.0.1', resolve));
   const address = app.server.address();
   const base = `http://127.0.0.1:${address.port}`;
@@ -101,6 +115,7 @@ test('frozen REST + SSE contract exposes each stage and gallery artifacts', asyn
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
+      methodology: 'custom',
       brief: 'A lead vehicle brakes hard in front of the ego.',
       engine: 'compiler',
       nScenarios: 1,
@@ -138,6 +153,62 @@ test('frozen REST + SSE contract exposes each stage and gallery artifacts', asyn
   const artifact = await fetch(`${base}${cards[0].headline}`, { headers: { authorization: `Bearer ${TOKEN}` } });
   assert.equal(artifact.status, 200);
   assert.equal(await artifact.text(), 'fake mp4');
+});
+
+test('production methodology freezes the research-proven recipe', async (t) => {
+  const { base, runner } = await fixture(t);
+  const response = await fetch(`${base}/api/jobs?token=${TOKEN}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      methodology: 'production',
+      brief: 'A cyclist emerges late from behind a stopped bus.',
+      engine: 'compiler',
+      nScenarios: 1,
+      maps: ['yale-street'],
+      maxSitesPerMap: 1,
+      ambient: 'off',
+      render3d: false,
+      judge: false,
+    }),
+  });
+  assert.equal(response.status, 202);
+  const { jobId } = await response.json();
+  await collectEvents(await fetch(`${base}/api/jobs/${jobId}?token=${TOKEN}`));
+  const job = runner.engine.jobs.find((candidate) => candidate.jobId === jobId);
+  assert.deepEqual({
+    methodology: job.methodology,
+    engine: job.engine,
+    maps: job.maps,
+    nScenarios: job.nScenarios,
+    maxSitesPerMap: job.maxSitesPerMap,
+    ambient: job.ambient,
+    render3d: job.render3d,
+    topK: job.topK,
+    judge: job.judge,
+    author: `${job.authorModel}/${job.authorEffort}`,
+    judgeConfig: `${job.judgeModel}/${job.judgeEffort}/${job.judgeStrategy}`,
+    fallbackToVisual: job.fallbackToVisual,
+  }, {
+    methodology: 'production',
+    engine: 'auto',
+    maps: [
+      'yale-street',
+      'belmont-research-center',
+      'el-camino-road',
+      'easterbrook-discovery-school',
+      'richmond-field-station',
+    ],
+    nScenarios: 3,
+    maxSitesPerMap: 3,
+    ambient: 'light',
+    render3d: true,
+    topK: 3,
+    judge: true,
+    author: 'gpt-5.6-sol/low',
+    judgeConfig: 'gpt-5.6-sol/medium/spread8',
+    fallbackToVisual: true,
+  });
 });
 
 test('all endpoints reject missing/wrong auth and accept query or bearer auth', async (t) => {

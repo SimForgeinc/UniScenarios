@@ -25,6 +25,17 @@ describe('tier3d exporter orchestration', () => {
     expect(args).not.toContain('--no-video');
   });
 
+  it('allows product rendering to frame only the incident pair', () => {
+    const args = buildTier3dExporterArgs({
+      instancePath: 'instance.json',
+      tracePath: 'trace.json.gz',
+      outDir: 'render',
+      composition: 'incident',
+    }, 'http://studio.test/');
+    expect(args).not.toContain('--all-authored');
+    expect(args).toContain('--camera-search');
+  });
+
   it('turns video encoding off only for stills format', () => {
     const args = buildTier3dExporterArgs({
       instancePath: 'instance.json',

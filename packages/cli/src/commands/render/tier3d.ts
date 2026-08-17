@@ -18,6 +18,7 @@ export interface Tier3dRenderOptions {
   readonly format?: RenderFormat | undefined;
   readonly fps?: number | undefined;
   readonly fullClip?: boolean | undefined;
+  readonly composition?: 'all-authored' | 'incident' | undefined;
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly display?: string | undefined;
@@ -77,6 +78,7 @@ export interface Render3dOptions {
   readonly fps: number;
   readonly redact: boolean;
   readonly fullClip: boolean;
+  readonly composition: 'all-authored' | 'incident';
   readonly devAssets?: string | undefined;
   readonly studioUrl?: string | undefined;
 }
@@ -228,7 +230,7 @@ export function buildTier3dExporterArgs(options: Tier3dRenderOptions, studioUrl:
     '--fps', String(fps),
     '--width', String(width),
     '--height', String(height),
-    '--all-authored',
+    ...(options.composition === 'incident' ? [] : ['--all-authored']),
     '--camera-search',
     '--pin-page',
     // export-render's intentionally small parser treats a following `--...`
@@ -346,6 +348,7 @@ export async function render3d(options: Render3dOptions): Promise<Render3dResult
     format: options.format,
     fps: options.fps,
     fullClip: options.fullClip,
+    composition: options.composition,
   });
   return {
     ...result,
