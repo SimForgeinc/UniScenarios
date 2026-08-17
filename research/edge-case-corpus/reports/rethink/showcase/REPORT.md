@@ -77,3 +77,67 @@ fallback and the old verifier timed out. The other four map bundles have all man
 files. Belmont was selected because its bundle is complete. Baseline Chrome without ANGLE Vulkan
 reported `ANGLE (Mesa, llvmpipe (LLVM 20.1.2 256 bits), OpenGL 4.5)` and timed out at the old
 30-tile gate; it is not the qualified configuration.
+
+### P1 — trace-render package + `uniscenarios render` 2D tier
+
+Implemented `@uniscenarios/trace-render` as an importable ESM workspace package by promoting the
+deterministic renderer and underlay internals. `scripts/render-trace.mjs` is now a thin adapter to
+the package. The package exposes `renderTrace(options)` and keeps the legacy script defaults,
+stdout path, manifest shape, renderer identifier, SVG/PNG encoding, and H.264 encoding byte-identical.
+
+Added `uniscenarios render <trace.json.gz> --instance <instance.json>` with the complete P1 option
+surface: `--out`, `--tier 2d|3d|both` (default `2d`), `--format stills|video|both` (default `both`),
+`--camera follow-ego|overview`, `--fps`, `--redact`, and `--dev-assets`. The 2D path calls the new
+package. `packages/cli/src/commands/render/tier3d.ts` is only the requested typed P2 dispatch seam
+and returns a structured unavailable result; P1 did not implement 3D.
+
+The wrapper regression uses committed fixture `fixtures/evidence/golden-yale-bus-stop/` and hashes
+the legacy script before promotion, then pins all four SVGs, all four PNGs, the MP4, and the manifest.
+The post-promotion script produced the same hashes. Representative pinned hashes:
+
+- `frame-000.svg`: `257ce36d5c8686d97d31bcc61c41af6cde6220bc08f5261ee0b382d1dd490ea4`
+- `frame-000.png`: `a15e0f4678325b0577dfc75b123b4e132678f8412181cb83ff10f11b420267d0`
+- `trace-render.mp4`: `714c75e7f3602c38dbcf52ec48037f080bada214b709e16298bdcb958a40abc4`
+- `manifest.json`: `055c6f20dfbecd4f9cb60c920093deb337d86be83ff5114edf79191ab3b36c82`
+
+Verification on 2026-08-16:
+
+```text
+$ .venv/bin/python tools/gates/verify_gate_hash.py
+GATE-HASH TRIPWIRE: PASS -- frozen gate v1 1a08698e95fca4bc / v2 3823182614e5a5ba unchanged
+
+$ pnpm --filter @uniscenarios/trace-render test
+tests 3, pass 3, fail 0
+
+$ pnpm --filter @uniscenarios/cli exec vitest run src/__tests__/render-args.test.ts
+Test Files  1 passed (1)
+Tests       6 passed (6)
+
+$ pnpm --filter @uniscenarios/cli typecheck
+$ tsc --noEmit
+# exit 0
+
+$ pnpm -r build
+# exit 0; 20 of 21 workspace projects built
+```
+
+The built CLI acceptance smoke was:
+
+```text
+$ node packages/cli/bin/uniscenarios.js render \
+    fixtures/evidence/golden-yale-bus-stop/trace.json.gz \
+    --instance fixtures/evidence/golden-yale-bus-stop/instance.json \
+    --out /tmp/p1-cli-render.LElHv4 --tier 2d --format both --camera follow-ego --fps 12
+{"trace":"fixtures/evidence/golden-yale-bus-stop/trace.json.gz","instance":"fixtures/evidence/golden-yale-bus-stop/instance.json","out":"/tmp/p1-cli-render.LElHv4","tier":"2d","format":"both","camera":"follow-ego","fps":12,"tiers":{"2d":{"status":"rendered","manifest":"/tmp/p1-cli-render.LElHv4/manifest.json"}}}
+```
+
+It produced four SVG stills, four PNG stills, `manifest.json`, and a 21,320-byte H.264
+`trace-render.mp4`. A CLI smoke with a different instance exited 1, emitted no stdout, and returned
+structured `render_failed` evidence-integrity details (input hash and actor IDs differed).
+
+The full pre-existing CLI suite was also run (`pnpm --filter @uniscenarios/cli test`): the six new
+render argument tests passed, but the overall suite exited nonzero on numerous unrelated existing
+simulation/map regression assertions, including temporary-lane-drop, bus-pullout, and
+intersection-arrival cases. No P1 renderer assertion failed. This broader-suite limitation is
+reported rather than represented as green; the requested new tests, CLI typecheck, workspace build,
+and end-to-end 2D acceptance smoke are green.
