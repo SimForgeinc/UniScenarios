@@ -222,7 +222,7 @@ export abstract class EditorControllerCommands {
   protected messageTimer: ReturnType<typeof setTimeout> | null = null;
   protected customRouteDraft: {
     interactionId: string;
-    points: Array<{ x: number; z: number }>;
+    points: Array<{ x: number; z: number; timeS?: number }>;
     timed: boolean;
     cursor: { x: number; z: number } | null;
     removeOnCancel: boolean;
@@ -499,7 +499,7 @@ export abstract class EditorControllerCommands {
       timed: interaction.target.mode === 'customTimedRoute',
       points: startPose
         ? [{ x: Number(startPose.x.toFixed(3)), z: Number(startPose.z.toFixed(3)) }]
-        : options.reset ? [] : interaction.target.points.map((point) => ({ x: point.x, z: point.z })),
+        : options.reset ? [] : interaction.target.points.map((point) => ({ ...point })),
       cursor: null,
       removeOnCancel: options.removeOnCancel ?? false,
       seedLocked: Boolean(startPose),
@@ -583,17 +583,19 @@ export abstract class EditorControllerCommands {
     const triggerStartS = interaction.trigger.kind === 'at' && typeof interaction.trigger.t === 'number'
       ? interaction.trigger.t
       : 0;
+    let previousTimeS = triggerStartS - 1;
     this.doc.replaceInteraction(interaction.id, {
       ...interaction,
       target: draft.timed
         ? {
             mode: 'customTimedRoute',
-            points: draft.points.map((point, index) => ({
-              timeS: Number((triggerStartS + index).toFixed(3)),
-              ...point,
-            })),
+            points: draft.points.map((point) => {
+              const timeS = typeof point.timeS === 'number' ? point.timeS : previousTimeS + 1;
+              previousTimeS = timeS;
+              return { timeS: Number(timeS.toFixed(3)), x: point.x, z: point.z };
+            }),
           }
-        : { mode: 'customRoute', points: draft.points },
+        : { mode: 'customRoute', points: draft.points.map(({ x, z }) => ({ x, z })) },
     });
   }
 
@@ -658,7 +660,7 @@ export abstract class EditorControllerCommands {
       && Math.hypot(event.clientX - latestClientX, event.clientY - latestClientY) <= ROUTE_WAIT_SNAP_PX,
     );
     const next = waiting
-      ? { ...latest! }
+      ? { x: latest!.x, z: latest!.z }
       : { x: Number(point.x.toFixed(3)), z: Number(point.z.toFixed(3)) };
     if (
       !draft.timed
@@ -717,8 +719,8 @@ export abstract class EditorControllerCommands {
                 && Math.hypot(point.x - draft.points[runEnd + 1]!.x, point.z - draft.points[runEnd + 1]!.z) <= 1e-6
               ) runEnd++;
               if (index !== runEnd) return '';
-              const startTimeS = Number((triggerStartS + runStart).toFixed(3));
-              const endTimeS = Number((triggerStartS + runEnd).toFixed(3));
+              const startTimeS = Number((draft.points[runStart]!.timeS ?? triggerStartS + runStart).toFixed(3));
+              const endTimeS = Number((draft.points[runEnd]!.timeS ?? triggerStartS + runEnd).toFixed(3));
               return runStart === runEnd ? `${endTimeS}s` : `${startTimeS}–${endTimeS}s`;
             })
           : undefined,

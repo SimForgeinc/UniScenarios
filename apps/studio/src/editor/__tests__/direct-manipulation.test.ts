@@ -278,6 +278,7 @@ describe('custom route actor seed', () => {
 
     internals.onPointerDown(pointer(canvas, 10));
     internals.publish();
+
     expect(controller.state.customRoutePointCount).toBe(1);
 
     internals.onPointerDown(pointer(canvas, 20));
