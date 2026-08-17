@@ -92,6 +92,59 @@ files. Belmont was selected because its bundle is complete. Baseline Chrome with
 reported `ANGLE (Mesa, llvmpipe (LLVM 20.1.2 256 bits), OpenGL 4.5)` and timed out at the old
 30-tile gate; it is not the qualified configuration.
 
+#### Tier3d implementation and E2E acceptance
+
+`packages/cli/src/commands/render/tier3d.ts` now implements P1's dispatch seam. With no `--3d-url`
+it allocates a free localhost port and starts a minimal ephemeral Studio Vite server; with no
+`DISPLAY` it also allocates an Xvfb display. Both process groups are terminated on success or
+failure. Chrome uses the qualified ANGLE/Vulkan arguments and the NVIDIA Vulkan ICD when present.
+`--3d-url` is wired through the CLI for callers that already run Studio.
+
+The existing `scripts/export-render.mjs` remains runnable and now accepts Chrome flags, accepts a
+validated instance/trace pair without requiring a catalog result, and has a separate
+`--all-authored` mode. That mode constrains the camera composition to every non-ambient authored
+actor **and every authored prop**, while keeping the video to the incident window rather than the
+full corpus clip. The manifest is wall-clock-free (`generatedAt: null`, `deterministic: true`) and
+its machine assessment rejects missing phases, actors, props, failed composition, or video/hash
+mismatches. Two stale review-provenance paths were updated from the removed Studio-local playback
+files to `packages/playback/src/{controller,model}.ts`.
+
+E2E fixture:
+`/tmp/tgr-emergent-pair1/cells/emergent-pair1-c11-aisle-conflict.off-belmont-research-center-1fe43cbb-2`.
+Its committed run metadata says frozen-gate `pass: true`, clearance 0.491 m at t=6.58 s. The built
+CLI was run without a prestarted display or Studio:
+
+```text
+env -u DISPLAY /usr/bin/time -f 'WALL_SECONDS=%e' \
+  node packages/cli/bin/uniscenarios.js render \
+  /tmp/tgr-emergent-pair1/cells/emergent-pair1-c11-aisle-conflict.off-belmont-research-center-1fe43cbb-2/trace.json.gz \
+  --instance /tmp/tgr-emergent-pair1/cells/emergent-pair1-c11-aisle-conflict.off-belmont-research-center-1fe43cbb-2/instance.json \
+  --out /tmp/q3d-cli-e2e --tier 3d --format both --fps 12
+```
+
+Verdict: **PASS**, 130.27 wall seconds per 3D render (128.00 s inside tier3d). The requested browser
+viewport was 1600×960; the UI-hidden Studio canvas artifacts are 1040×918. Output is four distinct
+phase PNGs plus a 3.25 s H.264/yuv420p MP4 (39 frames, exactly 12 FPS). Manifest
+`52269e1bda7c9a3ed0a3ae77d01216fd2bc49e376538b2480bdb375c22edb2a8` passed every machine gate.
+Both actors (`ego`, `reversingVan`) and the authored `parked-occluding-vehicle` box-truck prop were
+in-frame and scenery-clear in every phase. The MP4 SHA-256 is
+`dca68b036bc9191fa3c8a4b23cac4b5adde455beab682a59398bff8b0b90d777`. The manifest, preflight,
+four phase images, and MP4 are committed in `p2-e2e/`.
+
+Focused verification:
+
+```text
+$ pnpm --filter @uniscenarios/cli exec vitest run src/commands/render/tier3d.test.ts
+Test Files  1 passed (1)
+Tests       4 passed (4)
+
+$ node --test scripts/__tests__/scenario-review-ledger.test.mjs
+tests 8; pass 8; fail 0
+
+$ pnpm -r build
+exit 0
+```
+
 ### P1 — trace-render package + `uniscenarios render` 2D tier
 
 Implemented `@uniscenarios/trace-render` as an importable ESM workspace package by promoting the
