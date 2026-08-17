@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { after, before, test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 
-import { renderTrace } from '../src/index.mjs';
+import { fullClipFrameTimes, renderTrace } from '../src/index.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 const INSTANCE = path.join(REPO_ROOT, 'fixtures/evidence/golden-yale-bus-stop/instance.json');
@@ -32,6 +32,13 @@ before(async () => {
 });
 after(async () => {
   if (tempRoot) await rm(tempRoot, { recursive: true, force: true });
+});
+
+test('full-clip frame plan preserves twenty seconds at requested fps', () => {
+  const times = fullClipFrameTimes({ ticks: { t: [0, 20] } }, 12);
+  assert.equal(times.length, 240);
+  assert.equal(times[0], 0);
+  assert.equal(times.at(-1), 239 / 12);
 });
 
 async function hash(file) {

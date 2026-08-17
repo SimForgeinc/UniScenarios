@@ -475,3 +475,33 @@ render manifest, and review JSON. Visual inspection confirmed the authored vehic
 traffic, multilane road geometry and city assets are visible in the 3D frame. This is a complete,
 browser-submitted prompt-to-gallery receipt; unlike the P3 acceptance, neither 3D nor judging was
 skipped.
+
+## Post-acceptance correction — product acceptance is not gate admission
+
+The owner correctly rejected a later 3D job that the first UI presented as output. The frozen
+physics gate had admitted the trace, but the requested motorcycle/SUV mechanism was not visibly
+realized and one vehicle was sunk into a stacked road surface. The old product path made two
+incorrect assumptions: a gate pass was sufficient to publish a 3D video, and the lowest sampled
+road mesh was always the actor's deck.
+
+The corrected path separates those contracts. Every 3D candidate now receives a brief-aware
+multiframe vision review after rendering. Publication requires gate admission plus explicit passes
+for requested-mechanism fidelity, actor fidelity, event sequence, visual grounding, plausibility,
+realism, confidence, and an empty defect list. Failed candidates remain available under Pipeline
+details but never appear in the accepted-video gallery. The pipeline renders and reviews up to
+`3 × topK` gate-passing candidates, preserving each defect report, and publishes at most `topK`
+review-passing alternatives. The known broken Belmont candidate was re-reviewed and rejected with
+`mechanismFidelity=no`, `visualGrounding=fail`, `eventSequence=fail`, and `accepted=false`.
+
+The 3D exporter now queries all road surfaces under every actor and prop. It accepts coincident
+triangles, uses the verified surface height, and fails closed when vertically separated decks make
+the planar simulation trace elevation-ambiguous. Re-running the broken Belmont input now terminates
+with `stacked road surfaces are elevation-ambiguous (1.077m separation)` rather than emitting a
+misgrounded vehicle. This is deliberately a rejection, not a guessed elevation.
+
+Showcase-authored templates are normalized to a minimum `clipSeconds: 20`; longer authored clips
+are preserved. Both the 2D and 3D showcase render paths now request full-clip frame plans instead
+of the renderers' four-frame/incident-window defaults. A concrete 20-second trace produced exactly
+`20.000000` seconds in the 2D renderer and `20.083333` seconds in the real RTX 5080 Studio renderer
+at 12 FPS. The accepted-video UI is hidden while a job is running and says explicitly when no
+candidate passed 3D product review.

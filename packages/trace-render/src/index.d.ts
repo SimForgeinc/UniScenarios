@@ -10,6 +10,7 @@ export interface TraceRenderOptions {
   readonly height?: number;
   readonly scale?: number;
   readonly fps?: number;
+  readonly fullClip?: boolean;
   readonly devAssets?: string | null;
   readonly redact?: boolean;
   readonly camera?: TraceRenderCamera;
@@ -23,4 +24,5 @@ export interface TraceRenderResult {
 }
 
 export function renderTrace(options: TraceRenderOptions): Promise<TraceRenderResult>;
+export function fullClipFrameTimes(trace: { ticks: { t: readonly number[] } }, fps: number): number[];
 export function runTraceRenderCli(argv?: readonly string[]): Promise<TraceRenderResult>;

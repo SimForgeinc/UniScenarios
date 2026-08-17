@@ -1236,3 +1236,21 @@ export function buildScenarioManifest({
     },
   };
 }
+
+/**
+ * Resolve a road-contact height without silently choosing the wrong deck.
+ * Simulation traces are planar and carry no elevation identity, so stacked
+ * 3D road surfaces are genuinely ambiguous rather than a camera problem.
+ */
+export function resolveRenderGroundHeight(surfaceHeights, fallbackHeight, maxDeckGapM = 0.5) {
+  const heights = surfaceHeights.filter(Number.isFinite).sort((a, b) => a - b);
+  if (heights.length === 0) {
+    if (!Number.isFinite(fallbackHeight)) throw new Error('no ground surface under actor');
+    return fallbackHeight;
+  }
+  const spread = heights[heights.length - 1] - heights[0];
+  if (spread > maxDeckGapM) {
+    throw new Error(`stacked road surfaces are elevation-ambiguous (${spread.toFixed(3)}m separation)`);
+  }
+  return heights[heights.length - 1];
+}

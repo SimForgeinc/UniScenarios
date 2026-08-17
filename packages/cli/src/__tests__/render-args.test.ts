@@ -14,6 +14,7 @@ describe('uniscenarios render argument parsing', () => {
       camera: 'follow-ego',
       fps: 12,
       redact: false,
+      fullClip: false,
       devAssets: undefined,
       pretty: false,
     });
@@ -22,7 +23,7 @@ describe('uniscenarios render argument parsing', () => {
   it('parses every P1 render option', () => {
     expect(parseRenderArgs([
       'trace.json.gz', '--instance=instance.json', '--out', 'artifacts', '--tier', 'both',
-      '--format', 'video', '--camera', 'overview', '--fps', '24', '--redact',
+      '--format', 'video', '--camera', 'overview', '--fps', '24', '--redact', '--full-clip',
       '--dev-assets', 'dev-assets', '--pretty',
     ])).toEqual({
       trace: 'trace.json.gz',
@@ -33,6 +34,7 @@ describe('uniscenarios render argument parsing', () => {
       camera: 'overview',
       fps: 24,
       redact: true,
+      fullClip: true,
       devAssets: 'dev-assets',
       pretty: true,
     });

@@ -11,6 +11,7 @@ import {
   cameraForIncident,
   selectIncidentFrames,
   selectIncidentVideoFrames,
+  resolveRenderGroundHeight,
   renderViewsAtTraceIndex,
   traceRenderState,
   sha256Json,
@@ -42,6 +43,15 @@ async function fixture() {
 function clone(value) {
   return structuredClone(value);
 }
+
+test('fails closed on vertically ambiguous stacked road decks', () => {
+  assert.equal(resolveRenderGroundHeight([1.0, 1.02], 0), 1.02);
+  assert.equal(resolveRenderGroundHeight([], 3.5), 3.5);
+  assert.throws(
+    () => resolveRenderGroundHeight([0.1, 4.8], 0.1),
+    /stacked road surfaces are elevation-ambiguous \(4\.700m separation\)/,
+  );
+});
 
 test('direct export requires hard eligibility and exact atomic source commit hashes', () => {
   const catalogSlot = {

@@ -55,6 +55,7 @@ import {
   selectClipVideoFrames,
   selectIncidentVideoFrames,
   renderViewsAtTraceIndex,
+  resolveRenderGroundHeight,
   sha256Bytes,
   validateCorpusScenarioResult,
   validateScenarioPair,
@@ -575,25 +576,35 @@ async function exportScenario(page) {
       lastStage = now;
     };
     const views = renderViewsAtTraceIndex(instanceDoc, trace, evidence, selected.index);
-    const grounded = await page.evaluate(({ actors, props }) => {
+    const sampledGround = await page.evaluate(({ actors, props }) => {
       const overlays = window.__overlays;
+      const viewer = window.__viewer;
+      if (!overlays || !viewer) throw new Error('Studio renderer is unavailable');
+      const sample = (value) => ({
+        ...value,
+        surfaceHeights: viewer.getGroundIndex()?.sampleAll(value.x, value.z) ?? [],
+        fallbackHeight: overlays.sampleHeight(value.x, value.z),
+      });
+      return { actors: actors.map(sample), props: props.map(sample) };
+    }, views);
+    const groundedActors = sampledGround.actors.map(({ surfaceHeights, fallbackHeight, ...actor }) => ({
+      ...actor,
+      y: resolveRenderGroundHeight(surfaceHeights, fallbackHeight),
+    }));
+    const groundedProps = sampledGround.props.map(({ surfaceHeights, fallbackHeight, heightM, ...prop }) => ({
+      ...prop,
+      y: resolveRenderGroundHeight(surfaceHeights, fallbackHeight) + heightM,
+    }));
+    await page.evaluate(({ actors, props }) => {
       const editor = window.__editor;
-      if (!overlays || !editor) throw new Error('Studio renderer is unavailable');
-      const groundedActors = actors.map((actor) => ({
-        ...actor,
-        y: overlays.sampleHeight(actor.x, actor.z),
-      }));
-      const groundedProps = props.map(({ heightM, ...prop }) => ({
-        ...prop,
-        y: overlays.sampleHeight(prop.x, prop.z) + heightM,
-      }));
+      if (!editor) throw new Error('Studio renderer is unavailable');
       editor.renderer.sync([
-        ...groundedActors.filter((actor) => actor.present),
-        ...groundedProps,
+        ...actors.filter((actor) => actor.present),
+        ...props,
       ]);
       editor.renderer.setSelection([]);
-      return { actors: groundedActors, props: groundedProps };
-    }, views);
+    }, { actors: groundedActors, props: groundedProps });
+    const grounded = { actors: groundedActors, props: groundedProps };
     stage('sync');
     const groundedPoses = grounded.actors;
     const pairGround = groundedPoses
@@ -746,7 +757,7 @@ async function exportScenario(page) {
   let videoSequence = null;
   if (!args.has('no-video')) {
     const videoFps = Math.max(8, fps);
-    const selection = corpusMode
+    const selection = corpusMode || args.get('full-clip') === 'true'
       ? selectClipVideoFrames(trace, videoFps)
       : selectIncidentVideoFrames(trace, videoFps);
     const videoFramesDir = path.join(outDir, 'video-frames');

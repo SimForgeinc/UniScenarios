@@ -11,11 +11,13 @@ describe('tier3d exporter orchestration', () => {
       outDir: 'fixture/render',
       format: 'both',
       fps: 12,
+      fullClip: true,
     }, 'http://127.0.0.1:54321/');
 
     expect(args).toContain('--all-authored');
     expect(args).toContain('--camera-search');
     expect(args).toContain('--pin-page');
+    expect(args).toContain('--full-clip');
     expect(args[args.indexOf('--chrome-flags') + 1]).toBe(
       'use-gl=angle,use-angle=vulkan,enable-features=Vulkan',
     );

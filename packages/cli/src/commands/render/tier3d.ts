@@ -17,6 +17,7 @@ export interface Tier3dRenderOptions {
   readonly resultPath?: string | undefined;
   readonly format?: RenderFormat | undefined;
   readonly fps?: number | undefined;
+  readonly fullClip?: boolean | undefined;
   readonly width?: number | undefined;
   readonly height?: number | undefined;
   readonly display?: string | undefined;
@@ -75,6 +76,7 @@ export interface Render3dOptions {
   readonly camera: 'follow-ego' | 'overview';
   readonly fps: number;
   readonly redact: boolean;
+  readonly fullClip: boolean;
   readonly devAssets?: string | undefined;
   readonly studioUrl?: string | undefined;
 }
@@ -233,6 +235,7 @@ export function buildTier3dExporterArgs(options: Tier3dRenderOptions, studioUrl:
     // token as another boolean flag. Send names without the prefix and let the
     // exporter normalize them back to Chrome arguments.
     '--chrome-flags', chromeFlags.map((flag) => flag.replace(/^--/, '')).join(','),
+    ...(options.fullClip ? ['--full-clip'] : []),
     ...(format === 'stills' ? ['--no-video'] : []),
   ];
 }
@@ -342,10 +345,11 @@ export async function render3d(options: Render3dOptions): Promise<Render3dResult
     studioUrl: options.studioUrl,
     format: options.format,
     fps: options.fps,
+    fullClip: options.fullClip,
   });
   return {
     ...result,
     status: 'rendered',
-    reason: `four phases${result.video ? ` + H.264 ${result.video.fps} fps video` : ''}`,
+    reason: `${options.fullClip ? 'full clip' : 'four phases'}${result.video ? ` + H.264 ${result.video.fps} fps video` : ''}`,
   };
 }

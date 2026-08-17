@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Focused unit tests for P5 glue; no gateway, simulator, or renderer calls."""
 import importlib.util
+import json
 from pathlib import Path
 import tempfile
 import unittest
@@ -37,6 +38,15 @@ class AuthorHelpersTest(unittest.TestCase):
         value = author._slug("A" * 200)
         self.assertEqual(value, author._slug("A" * 200))
         self.assertLessEqual(len(value), 64)
+
+    def test_authoring_enforces_twenty_second_minimum_clip(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            template = Path(tmp) / "template.json"
+            template.write_text(json.dumps({"choreography": {"clipSeconds": 16}}))
+            self.assertEqual(author._enforce_minimum_clip(template), 20.0)
+            self.assertEqual(json.loads(template.read_text())["choreography"]["clipSeconds"], 20.0)
+            template.write_text(json.dumps({"choreography": {"clipSeconds": 24}}))
+            self.assertEqual(author._enforce_minimum_clip(template), 24.0)
 
 
 class GallerySelectionTest(unittest.TestCase):

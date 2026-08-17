@@ -77,20 +77,19 @@ function ThreeDGallery({ job, status }: { job: JobIndex | null; status: string }
   const videos = threeDVideos(job);
   if (!videos.length) {
     const message = status === 'running'
-      ? 'Your 3D videos are rendering now. They will appear here automatically.'
+      ? 'Candidate renders stay hidden until simulation, rendering, and brief-aware 3D acceptance review all complete.'
       : status === 'complete'
-        ? 'This job did not produce a 3D video. Run another job with 3D rendering enabled.'
-        : '3D videos will appear here as soon as gate-passing scenarios finish rendering.';
-    return <div class="empty video-empty"><div class="render-pulse" /><h2>3D video gallery</h2><p>{message}</p></div>;
+        ? 'No 3D candidate passed the requested-mechanism and visual-grounding review. Inspect Pipeline details for the rejected evidence.'
+        : 'Accepted 3D videos will appear after gate-passing scenarios finish rendering and review.';
+    return <div class="empty video-empty"><div class="render-pulse" /><h2>Accepted 3D videos</h2><p>{message}</p></div>;
   }
   return <div class="job-video-gallery">{videos.map(({ cell, artifact }) => {
     const id = cell.cellId ?? cell.id ?? 'scenario';
-    const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted;
     const source = artifact.path ?? artifact.url ?? '';
     return <article class="job-video-card" key={id}>
-      <video src={artifactUrl(source)} aria-label={`3D rollout for ${id}`} muted autoPlay loop playsInline controls preload="metadata" />
+      <video src={artifactUrl(source)} aria-label={`Accepted 3D rollout for ${id}`} muted autoPlay loop playsInline controls preload="metadata" />
       <div class="job-video-meta"><div><small>{cell.map ? mapLabel(cell.map) : '3D scenario'}</small><h2>{id}</h2></div><div class="chip-row">
-        <Chip tone={gate ? 'pass' : ''}>{gate ? 'Gate passed' : '3D render'}</Chip>
+        <Chip tone="pass">3D review passed</Chip>
         <Score label="Realism" value={cell.judge?.realism} /><Score label="Dynamism" value={cell.judge?.dynamism} />
       </div></div>
     </article>;
@@ -103,7 +102,7 @@ function JobDetail({ id }: { id: string }) {
   const [connected, setConnected] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [error, setError] = useState<unknown>();
-  const refresh = () => getJob(id).then(setJob).catch(setError);
+  const refresh = () => getJob(id).then((value) => { setJob(value); setError(undefined); }).catch(setError);
   useEffect(() => {
     refresh();
     const stop = subscribe(id, (incoming) => {
@@ -119,7 +118,7 @@ function JobDetail({ id }: { id: string }) {
   return <main><button class="back" onClick={() => navigate('#/')}>← Gallery</button>
     <section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh</button></section>
     <ErrorBox error={error} />
-    <section class="video-gallery-section"><div class="section-title"><div><p class="eyebrow">3D OUTPUT</p><h2>Your scenario videos</h2></div><p>{completed}/{STAGES.length} pipeline stages complete. Videos appear here automatically.</p></div><ThreeDGallery job={job} status={stages[8]?.status ?? 'pending'} /></section>
+    <section class="video-gallery-section"><div class="section-title"><div><p class="eyebrow">3D OUTPUT</p><h2>Your scenario videos</h2></div><p>{completed}/{STAGES.length} pipeline stages complete. Videos appear here automatically.</p></div><ThreeDGallery job={job} status={stages[9]?.status ?? 'pending'} /></section>
     <button class="details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? 'Hide pipeline details' : 'Show pipeline details'} <span>{showDetails ? '↑' : '↓'}</span></button>
     {showDetails && <div class="pipeline-details">
       <section><div class="section-title"><div><p class="eyebrow">PIPELINE DETAILS</p><h2>Intermediate stages</h2></div><p>Optional diagnostics: inspect exact outputs and artifacts from every stage.</p></div><div class="timeline">{stages.map((event, i) => <StageCard event={event} index={i} key={STAGES[i][0]} />)}</div></section>

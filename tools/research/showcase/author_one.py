@@ -58,6 +58,16 @@ def _atomic_json(path: Path, value: object) -> None:
     tmp.replace(path)
 
 
+def _enforce_minimum_clip(path: Path, minimum_seconds: float = 20.0) -> float:
+    template = json.loads(path.read_text())
+    choreography = template.setdefault("choreography", {})
+    authored = float(choreography.get("clipSeconds", minimum_seconds))
+    choreography["clipSeconds"] = max(minimum_seconds, authored)
+    _atomic_json(path, template)
+    return choreography["clipSeconds"]
+
+
+
 def _load_module(name: str, path: Path):
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
@@ -167,6 +177,7 @@ def main() -> int:
         result = author_compiler(args.brief, stage)
     else:
         result = author_vista2(args.brief, stage, args.guide, args.budget, args.wall_cap)
+    result["clipSeconds"] = _enforce_minimum_clip(stage / "template.json")
     print(json.dumps({"engine": args.engine, "stage": str(stage),
                       "template": str(stage / "template.json"),
                       "valid": result["validation"]["valid"],

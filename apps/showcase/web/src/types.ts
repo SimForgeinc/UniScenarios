@@ -6,7 +6,7 @@ export interface StageEvent { stage: string; status: Status; artifacts?: Artifac
 export interface CellVerdict {
   cellId?: string; id?: string; map?: string;
   gate?: { pass?: boolean; admitted?: boolean; firstFailure?: string } | boolean;
-  judge?: { realism?: number; dynamism?: number; plausible?: boolean };
+  judge?: { realism?: number; dynamism?: number; plausible?: boolean; productAccepted?: boolean; threeDReview?: { accepted?: boolean; mechanismFidelity?: string; visualGrounding?: string; explanation?: string } };
   artifacts?: Artifact[]; [key: string]: unknown;
 }
 export interface JobIndex {

@@ -151,9 +151,17 @@ function defaultFrameTimes(trace) {
   const candidates = [conflict - 1.0, conflict - 0.5, conflict, conflict + 0.5];
   return candidates.map((v) => t[nearestIndex(t, Math.max(t[0], Math.min(t[t.length - 1], v)))]);
 }
+export function fullClipFrameTimes(trace, fps) {
+  const times = trace.ticks.t;
+  const start = times[0] ?? 0;
+  const end = times[times.length - 1] ?? start;
+  const frameCount = Math.max(1, Math.round((end - start) * fps));
+  return Array.from({ length: frameCount }, (_, index) => start + index / fps);
+}
 
 function poseAt(trace, actorId, index) {
   const ch = trace.ticks.actors[actorId];
+
   return {
     id: actorId,
     x: ch.x[index],
@@ -391,6 +399,7 @@ export async function renderTrace(options) {
     fps: 2,
     devAssets: null,
     redact: false,
+    fullClip: false,
     camera: 'pair',
     format: 'both',
     ...options,
@@ -401,7 +410,9 @@ export async function renderTrace(options) {
   const { trace, canonicalBytes } = readTrace(args.trace);
   const underlayAssets = args.devAssets ? loadUnderlayAssets(args.devAssets, trace.header.mapId) : null;
   const evidence = assertEvidence(instanceDoc, trace, canonicalBytes);
-  const selectedTimes = (args.times ?? defaultFrameTimes(trace)).map((t) => trace.ticks.t[nearestIndex(trace.ticks.t, t)]);
+  const selectedTimes = (
+    args.times ?? (args.fullClip ? fullClipFrameTimes(trace, args.fps) : defaultFrameTimes(trace))
+  ).map((t) => trace.ticks.t[nearestIndex(trace.ticks.t, t)]);
   const framesDir = join(outDir, 'frames');
   mkdirSync(framesDir, { recursive: true });
 

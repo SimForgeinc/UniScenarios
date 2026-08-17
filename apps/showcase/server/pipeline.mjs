@@ -211,6 +211,7 @@ async function renderCell(context, cell, outDir, { redact = false, tier = '2d' }
     'follow-ego',
     '--fps',
     '12',
+    '--full-clip',
   ];
   if (redact) cliArgs.push('--redact');
   const builtIn = await command('node', cliArgs, { cwd: context.root, allowFailure: true, timeout: tier === '3d' ? 900_000 : 180_000 });
@@ -403,7 +404,7 @@ export class ShowcasePipeline {
     if (!Array.isArray(render2d)) render2d = render2d.cells ?? [];
 
     const passing = new Set((gate.cells ?? []).filter((cell) => cell.pass).map((cell) => cell.cellId));
-    await stage(context, '65-render3d', [render3dIndex], async () => {
+    let render3d = await stage(context, '65-render3d', [render3dIndex], async () => {
       await mkdir(render3dDir, { recursive: true });
       if (!job.render3d) {
         const value = { status: 'skipped', reason: 'render3d disabled', cells: [] };
@@ -411,7 +412,8 @@ export class ShowcasePipeline {
         return { value, status: 'skipped' };
       }
       const rows = [];
-      for (const cell of cells.filter((candidate) => passing.has(candidate.cellId)).slice(0, job.topK)) {
+      for (const cell of cells.filter((candidate) => passing.has(candidate.cellId))) {
+        if (rows.length >= Math.max(job.topK, job.topK * 3)) break;
         try {
           await renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' });
           rows.push({ cellId: cell.cellId, status: 'complete' });
@@ -423,6 +425,7 @@ export class ShowcasePipeline {
       await atomicJson(render3dIndex, value);
       return { value, status: value.status === 'complete' ? 'complete' : 'skipped' };
     });
+    if (Array.isArray(render3d)) render3d = { status: 'complete', cells: render3d };
 
     const judge = await stage(context, '70-judge', [judgePath], async () => {
       if (!job.judge) {
@@ -447,18 +450,66 @@ export class ShowcasePipeline {
         const verdict = lastJsonLine(result.stdout);
         rows.push(verdict ? { status: 'complete', ...verdict } : { cellId: item.cellId, status: 'error', error: result.stderr.slice(-1000) });
       }
-      const value = { status: 'complete', model: 'gpt-5.6-sol', effort: 'medium', strategy: 'spread8', cells: rows };
+      for (const item of (render3d?.cells ?? []).filter((row) => row.status === 'complete')) {
+        const result = await command(this.python, [
+          this.bridge, 'review3d', '--brief', briefPath,
+          '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
+          '--model', 'gpt-5.6-sol', '--effort', 'medium',
+        ], {
+          cwd: this.root,
+          timeout: 600_000,
+          env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+          allowFailure: true,
+        });
+        const review = lastJsonLine(result.stdout);
+        const existing = rows.find((row) => row.cellId === item.cellId);
+        const row = existing ?? { cellId: item.cellId, status: 'complete' };
+        if (!existing) rows.push(row);
+        row.threeDReview = review ?? { accepted: false, error: result.stderr.slice(-1000) };
+      }
+      for (const row of rows) {
+        const blindPass = row.status === 'complete' && row.plausible === true
+          && Number(row.realism ?? 0) >= 6 && (row.defects ?? []).length === 0;
+        row.productAccepted = passing.has(row.cellId)
+          && (job.render3d ? row.threeDReview?.accepted === true : blindPass);
+      }
+      let acceptedCount = 0;
+      for (const row of rows) {
+        if (!row.productAccepted) continue;
+        acceptedCount += 1;
+        if (acceptedCount > job.topK) row.productAccepted = false;
+      }
+      const value = {
+        status: 'complete',
+        model: 'gpt-5.6-sol',
+        effort: 'medium',
+        strategy: 'spread8',
+        productReviewVersion: 'showcase-3d-product-review-v1',
+        acceptedCells: rows.filter((row) => row.productAccepted).length,
+        cells: rows,
+      };
       await atomicJson(judgePath, value);
       return value;
     });
 
     await stage(context, '90-gallery', [galleryPath], async () => {
-      const headline = render2d.find((row) => row.status === 'complete' && passing.has(row.cellId))
-        ?? render2d.find((row) => row.status === 'complete');
       const judgeRows = judge.cells?.filter((row) => row.status === 'complete') ?? [];
-      const average = (key) => judgeRows.length
-        ? Number((judgeRows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0) / judgeRows.length).toFixed(2))
+      const accepted = new Set(judgeRows.filter((row) => row.productAccepted).map((row) => row.cellId));
+      const accepted3d = (render3d?.cells ?? []).find((row) => row.status === 'complete' && accepted.has(row.cellId));
+      const accepted2d = render2d.find((row) => row.status === 'complete' && accepted.has(row.cellId));
+      const fallback2d = render2d.find((row) => row.status === 'complete' && passing.has(row.cellId))
+        ?? render2d.find((row) => row.status === 'complete');
+      const scoredRows = judgeRows.filter((row) => row.productAccepted);
+      const average = (key) => scoredRows.length
+        ? Number((scoredRows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0) / scoredRows.length).toFixed(2))
         : null;
+      const headline = accepted3d
+        ? `/artifacts/jobs/${job.jobId}/65-render3d/${accepted3d.cellId}/rollout.mp4`
+        : accepted2d
+          ? `/artifacts/jobs/${job.jobId}/60-render2d/${accepted2d.video}`
+          : fallback2d
+            ? `/artifacts/jobs/${job.jobId}/60-render2d/${fallback2d.video}`
+            : null;
       const value = {
         id: job.jobId,
         jobId: job.jobId,
@@ -467,9 +518,11 @@ export class ShowcasePipeline {
         maps: [...new Set(cells.map((cell) => cell.mapId))],
         ambient: job.ambient,
         admitted: passing.size > 0,
+        accepted: accepted.size > 0,
         gate: { passed: passing.size, cells: gate.cells?.length ?? 0 },
+        quality: { accepted: accepted.size, reviewed: judgeRows.length },
         scores: { realism: average('realism'), dynamism: average('dynamism') },
-        headline: headline ? `/artifacts/jobs/${job.jobId}/60-render2d/${headline.video}` : null,
+        headline,
         render3d: job.render3d,
         timings: context.timings,
         createdAt: job.createdAt,

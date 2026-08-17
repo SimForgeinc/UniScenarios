@@ -20,6 +20,7 @@ export interface RenderOptions {
   readonly camera: RenderCamera;
   readonly fps: number;
   readonly redact: boolean;
+  readonly fullClip: boolean;
   readonly devAssets?: string | undefined;
   readonly studioUrl?: string | undefined;
   readonly pretty: boolean;
@@ -46,7 +47,7 @@ type MutableRenderTiers = {
 
 export function parseRenderArgs(argv: readonly string[]): RenderOptions {
   const args = parseArgs(argv, {
-    booleans: ['pretty', 'help', 'redact'],
+    booleans: ['pretty', 'help', 'redact', 'full-clip'],
     values: ['instance', 'out', 'tier', 'format', 'camera', 'fps', 'dev-assets', '3d-url'],
   });
   const trace = args.positionals[0];
@@ -78,6 +79,7 @@ export function parseRenderArgs(argv: readonly string[]): RenderOptions {
     camera,
     fps,
     redact: boolFlag(args, 'redact'),
+    fullClip: boolFlag(args, 'full-clip'),
     devAssets: optionalString(args, 'dev-assets'),
     studioUrl: optionalString(args, '3d-url'),
     pretty: boolFlag(args, 'pretty'),
@@ -99,6 +101,7 @@ export async function render(options: RenderOptions): Promise<number> {
         camera: options.camera,
         fps: options.fps,
         redact: options.redact,
+        fullClip: options.fullClip,
         ...(options.devAssets === undefined ? {} : { devAssets: options.devAssets }),
       });
     } catch (error) {
@@ -118,6 +121,7 @@ export async function render(options: RenderOptions): Promise<number> {
       camera: options.camera,
       fps: options.fps,
       redact: options.redact,
+      fullClip: options.fullClip,
       ...(options.devAssets === undefined ? {} : { devAssets: options.devAssets }),
       ...(options.studioUrl === undefined ? {} : { studioUrl: options.studioUrl }),
     });
