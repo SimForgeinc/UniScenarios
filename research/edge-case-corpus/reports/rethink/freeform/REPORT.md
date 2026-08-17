@@ -275,4 +275,72 @@ per brief; judged: realism μ 5.91, plausible 0.87, dynamism μ 3.12; gate-passe
 6.04/3.27 — FootageLane sol/medium judge) and `/tmp/tgr-freeform-main1/cells`
 (264 cells, ~half gate-failed by design).
 
-## 7. Comparison and falsifier verdicts — pending FootageLane freedom-arm verdicts
+## 7. Comparison and falsifier verdicts
+
+Authoring-surface sha256 before the main run (frozen, printed by the run as
+`surfaceSha256`): `33f77081a14142f56b950d0c4b789a65a2ebaf0ae0ba3d8e68ead67940c2c01d`
+(= frozen c5fb6a80… authoring protocol + the lead-directed cell-EXPORT mix amendment;
+see commit 3a45082 for the two-line diff).
+
+Head-to-head, frozen 50-brief sample, frozen gate v2, shared census, FootageLane
+sol/medium judge (their message 155aaaa2, verdicts in the cell dirs):
+
+| axis | baseline (compiler, luna/med) | freedom (full schema, terra/low) |
+|---|---|---|
+| admission | **0.80** (40/50; CI .67–.89) | 0.18 (9/50; CI .098–.308) |
+| template validity | 50/50 | 49/50 |
+| footage realism, all judged cells | **5.91** (plausible 0.87) | 4.90 |
+| footage dynamism, all judged cells | **3.12** | 2.76 |
+| realism / dynamism, gate-passers | **6.04** / 3.27 (n=250) | 5.20 / 3.39 (n=44) |
+| realism / dynamism, gate-failed | — | 4.84 / 2.64 |
+| census interactingPairs (passing) | 1.00 | **1.44** |
+| census signalPhaseChanges (passing) | 0.00 | **0.26** |
+| tokens total / per admitted | **138K / 3.5K** | 4.69M / 522K |
+| wall | **39 min** | 67 min |
+
+**Falsifier verdicts (pre-registered in §3, stated plainly):**
+
+1. *Template validity < 50% after repairs* — **DOES NOT FIRE.** 49/50 (98%) of final
+   templates validate. The full vocabulary is syntactically wieldable.
+2. *Gate floor: admission < 0.35* — **FIRES.** 0.18 on the full sample; the best grid
+   arm reached 0.27 (4/15). Every model × effort tried is below the floor.
+3. *Dynamism census not better than compiler arm* — **FIRES on the primary reading.**
+   Over ALL final cells freedom is not better (interactingPairs 0.97 vs 1.00). On the
+   gate-passing subset freedom is modestly better (interactingPairs +44%, signal
+   changes 0.26 vs 0.00, hard brakes +25%), but the subset is 44 cells vs 250 and the
+   judged-dynamism cross-check is flat (3.39 vs 3.27, AUC 0.527) — the census bump
+   does not translate to judged aliveness.
+4. *Footage realism worse than compiler arm* — **FIRES.** 4.90 vs 5.91 over all
+   judged cells (AUC freedom>baseline 0.345); still worse restricted to gate-passers
+   (5.20 vs 6.04, AUC 0.365). The "alive-but-inadmissible" rescue is REJECTED by
+   measurement: gate-failed freedom cells are 4.84/2.64 — less real AND less alive
+   than baseline's passers.
+
+**Honest comparison.** On this engine, with this gate, full-schema authoring freedom
+at the grid-selected config LOSES to the hand-built compiler pipeline on admission
+(0.18 vs 0.80), on judged realism (−1.0 point), and on judged dynamism (flat at best),
+at ~150× the token cost per admitted brief. The RETHINK-PLAN §4 escape clause ("loses
+on *every* axis") is not fully met — validity held at 98%, freedom uniquely admitted
+`c3-left-hook-ptw`, did relatively better on owner-list items (6/20 vs its own 3/30
+DEV), and is the only arm that ever changed a signal phase mid-clip — but the thesis
+that freedom is the lever for realism/dynamism is dead as tested. What the models
+cannot do blind is the physics: landing closest-approach timing, clearance, and
+demand simultaneously is exactly what the 8 compilers encode, and 3 gate-feedback
+revise rounds do not teach it (226 repair calls bought 9 admissions). A clean
+negative, and per §3A it is the strongest defence of the compiler approach this
+project has produced.
+
+**Caveats, stated against ourselves too:** single judge family (openai-codex) though
+three models agreed directionally per FootageLane; the full-sample freedom number is
+one config (terra/low) chosen by the pre-registered rule — grid CIs are wide and no
+other config was full-sampled; the pilot's ambient honesty warning priced ambient out
+(49/50 chose `off`), which plausibly cost judged dynamism — an ambient-forced freedom
+arm was NOT run here and EmergentLane's paired result (Δdyn +1.9, Δrealism +0.31 with
+light ambient on COMPILER scenes) suggests ambient-on-admitted-scenes, not authoring
+freedom, is the cheap dynamism lever.
+
+**Effort replication note (owner ask):** on the compiler surface W8 found effort flat.
+Here luna moved 0→0→2 and sol 1→2→2 (pro-effort direction) while terra went 4→2→3 —
+the pre-registered monotone hypothesis fails (§5), all CIs overlap, and the winning
+arm is low-effort. Two-surface summary: no measured surface yet shows a reliable
+effort gain; the freedom surface shows it is at least not uniformly flat.
