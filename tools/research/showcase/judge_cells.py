@@ -69,6 +69,11 @@ def run(cells_root: Path, out: Path) -> tuple[dict, int]:
                           "errors": len(doc["errors"])}
         out.parent.mkdir(parents=True, exist_ok=True)
         _write(out, doc)
+    # The fully-cached resume path never enters the write-after-call block above.
+    doc["summary"] = {"discovered": len(cells), "completed": len(doc["verdicts"]),
+                      "errors": len(doc["errors"])}
+    out.parent.mkdir(parents=True, exist_ok=True)
+    _write(out, doc)
     return doc, failed
 
 
