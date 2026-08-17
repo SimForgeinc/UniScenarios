@@ -111,7 +111,7 @@ files to `packages/playback/src/{controller,model}.ts`.
 
 E2E fixture:
 `/tmp/tgr-emergent-pair1/cells/emergent-pair1-c11-aisle-conflict.off-belmont-research-center-1fe43cbb-2`.
-Its committed run metadata says frozen-gate `pass: true`, clearance 0.491 m at t=6.58 s. The built
+Its run metadata says frozen-gate `pass: true`, clearance 0.491 m at t=6.58 s. The built
 CLI was run without a prestarted display or Studio:
 
 ```text
