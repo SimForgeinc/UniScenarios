@@ -20,15 +20,31 @@ const url = args.get('url') ?? 'http://localhost:5199/';
 const outDir = args.get('out') ?? '/tmp/uniscenarios-verify';
 const settleMs = Number(args.get('settle') ?? 60000);
 const benchMs = Number(args.get('bench') ?? 15000);
+const minTiles = Number(args.get('min-tiles') ?? 30);
+const extraChromeArgs = (args.get('chrome-flags') ?? '')
+  .split(',')
+  .map((flag) => flag.trim())
+  .filter(Boolean);
 
 await mkdir(outDir, { recursive: true });
 
 const browser = await chromium.launch({
   channel: 'chrome',
   headless: false,
-  args: ['--ignore-gpu-blocklist', '--enable-gpu-rasterization', '--window-size=1680,1050'],
+  args: [
+    '--ignore-gpu-blocklist',
+    '--enable-gpu-rasterization',
+    '--window-size=1680,1050',
+    ...extraChromeArgs,
+  ],
 });
 const context = await browser.newContext({ viewport: { width: 1600, height: 960 } });
+// A fresh profile otherwise stops at Studio's first-run graphics chooser and
+// never mounts the viewer. Match the export harness and select the app's full
+// city + vegetation balanced preset before boot.
+await context.addInitScript(() => {
+  localStorage.setItem('uniscenarios.studio.render-quality.v1', JSON.stringify({ preset: 'balanced' }));
+});
 const page = await context.newPage();
 
 const consoleErrors = [];
@@ -62,12 +78,24 @@ const stats = () => page.evaluate(() => window.__viewer?.getStats() ?? null);
 console.log(`> opening ${url}`);
 await page.goto(url, { waitUntil: 'load' });
 await page.waitForFunction(() => Boolean(window.__viewer), null, { timeout: 30000 });
+const gl = await page.evaluate(() => {
+  const canvas = window.__viewer.renderer.domElement;
+  const context = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+  if (!context) return null;
+  const debug = context.getExtension('WEBGL_debug_renderer_info');
+  return {
+    vendor: debug ? context.getParameter(debug.UNMASKED_VENDOR_WEBGL) : context.getParameter(context.VENDOR),
+    renderer: debug ? context.getParameter(debug.UNMASKED_RENDERER_WEBGL) : context.getParameter(context.RENDERER),
+    version: context.getParameter(context.VERSION),
+  };
+});
+console.log(`> WebGL ${JSON.stringify(gl)}`);
 
 // 1. Startup: the coarse city must be on screen quickly.
 const startupBegin = Date.now();
 await page.waitForFunction(
-  () => (window.__viewer?.getStats().residentTiles ?? 0) >= 30,
-  null,
+  (minimum) => (window.__viewer?.getStats().residentTiles ?? 0) >= minimum,
+  minTiles,
   { timeout: 60000 },
 );
 const startupMs = Date.now() - startupBegin;
@@ -97,14 +125,16 @@ console.log('> street level');
 const street = await page.evaluate(() => {
   const viewer = window.__viewer;
   const Vec = viewer.camera.position.constructor;
-  const spot = { x: 690, z: -1755 };
+  const lane = [...window.__editor.laneIndex.all].sort((a, b) => b.length - a.length)[0];
+  const pose = window.__editor.laneIndex.poseAt(lane, lane.length / 2, 0);
+  const spot = { x: pose.x, z: pose.z, lane: lane.rsl };
   const y = viewer.sampleGroundHeight(spot.x, spot.z);
   const base = (y ?? 8) + 1.8;
   viewer.controls.setView(
     new Vec(spot.x - 55, base, spot.z + 30),
     new Vec(spot.x + 90, base + 4, spot.z - 45),
   );
-  return { groundY: y };
+  return { groundY: y, lane: spot.lane };
 });
 console.log(`  sampleGroundHeight -> ${JSON.stringify(street)}`);
 // Let the near LOD0/LOD1 tiles land before judging the street-level frame.
@@ -127,11 +157,15 @@ console.log('> interaction');
 const interaction = { layers: {}, orbit: null, fly: null };
 for (const layer of ['vegetation', 'city']) {
   const before = await page.evaluate(() => window.__viewer.getStats().drawCalls);
-  await page.locator(`[data-testid="layer-panel"] input`).nth(layer === 'city' ? 0 : 1).click();
+  await page.evaluate((name) => {
+    window.__viewer[`${name}Group`].visible = false;
+  }, layer);
   await page.waitForTimeout(400);
   const after = await page.evaluate(() => window.__viewer.getStats().drawCalls);
   interaction.layers[layer] = { before, after, dropped: before - after };
-  await page.locator(`[data-testid="layer-panel"] input`).nth(layer === 'city' ? 0 : 1).click();
+  await page.evaluate((name) => {
+    window.__viewer[`${name}Group`].visible = true;
+  }, layer);
   await page.waitForTimeout(300);
 }
 const poseOf = () => page.evaluate(() => window.__viewer.camera.position.toArray());
@@ -165,6 +199,9 @@ const finalStats = await stats();
 
 const report = {
   url,
+  chromeArgs: extraChromeArgs,
+  minTiles,
+  gl,
   startupMs,
   startupStats,
   settledStats,
