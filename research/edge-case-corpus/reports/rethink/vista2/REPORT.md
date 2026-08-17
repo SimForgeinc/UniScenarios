@@ -310,17 +310,21 @@ neither 3. **Union 47/50 = 0.94.**
    pixels.
 2. **"…or beat it on realism/dynamism" — measured, and the visual arm does NOT
    beat the compiler there.** FootageLane's calibrated judge (sol/medium, same
-   instrument as the other arms): vista2 sol/high all cells n=1086 realism 5.11 /
-   dynamism 2.79 / plausible 0.85 (gate-PASS subset n=336: 6.05/3.22); sol/low
-   partial n=375: 5.34/3.02 (PASS n=158: 5.99/3.25); ownerfix partial n=117:
-   4.90/2.95 (PASS n=49: 5.98/3.49). Compiler baseline: 5.91/3.12 (its passers
-   6.04/3.27); text-freedom arm 4.90/2.76. **Gate-passing scenes from EVERY arm
-   converge to the same ~6.0 realism / ~3.2 dynamism band** — the "tidy-but-dead"
-   signature. Census agrees: 2.2 actors, high hard-brake share, no ambient, no
-   signal events — the visual arm did not wield the deep vocabulary (signal probes
+   instrument as the other arms; all three vista roots judged to completion,
+   verdicts in the cell dirs): vista2 sol/high n=1086 realism 5.11 / dynamism 2.79
+   / plausible 0.85 (gate-PASS subset n=336: 6.05/3.22); sol/low n=1082: 5.42/3.05
+   (PASS n=438: **6.18**/3.27); ownerfix n=338: 5.15/2.88 (PASS n=144: 5.93/3.31).
+   Compiler baseline: 5.91/3.12 (its passers 6.04/3.27); text-freedom arm
+   4.90/2.76. **Gate-passing scenes from EVERY arm converge to the same ~6.0
+   realism / ~3.2-3.3 dynamism band** — the "tidy-but-dead" signature. (Footnote:
+   sol/low's passers at 6.18 are the highest-realism bucket measured anywhere in
+   the rethink — but still inside the dead dynamism band; EmergentLane's
+   ambient-ON pairs move dynamism +1.74 where no authoring surface moved it at
+   all.) Census agrees: 2.2 actors, high hard-brake share, no ambient, no signal
+   events — the visual arm did not wield the deep vocabulary (signal probes
    failed; ambient not in the action set). Realism is currently bounded by the
    gate's shape and the dead-world vocabulary, not by the authoring surface — the
-   lead's original diagnosis, now measured across three surfaces.
+   lead's original diagnosis, now measured across three authoring surfaces.
 3. **">5x cost for parity" — fires against the COMPILER.** The visual arm does not
    reach compiler admission (0.72 < 0.80) and costs ~300x tokens and ~6-9x wall
    per brief. For raw gate admission on briefs the compilers already host, the
