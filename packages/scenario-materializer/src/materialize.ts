@@ -2525,14 +2525,9 @@ class Materializer {
         this.template.mapSignalPlans,
         {
           mapId: this.bundle.mapId,
-          controlDigest: contentHash(controls),
           clipSeconds: this.template.choreography.clipSeconds,
           warmupSeconds: this.template.choreography.warmupSeconds,
           signalCatalog: this.bundle.signalCatalog,
-          topology: this.bundle.topology,
-          conflictPairsByJunction: Object.fromEntries(
-            Object.entries(this.bundle.index.junctionDescriptors).map(([id, descriptor]) => [id, descriptor.conflictPairs]),
-          ),
           worldSignalSetIds: this.worldSignalSetIds(controls.signalPrograms),
         },
       );

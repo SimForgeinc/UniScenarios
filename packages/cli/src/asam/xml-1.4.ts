@@ -62,12 +62,16 @@ function traceWorldPosition(x: number, y: number, headingRad: number, elevation?
 
 function trajectoryXml(actorId: string, trace: SimTrace, warmupSeconds: number, elevation?: WorldElevation): string {
   const track = trace.ticks.actors[actorId]!;
+  const kinematicIndex = (index: number): number => (index === 0 && trace.ticks.t.length > 1 ? 1 : index);
+  const motionSpeed = (index: number): number => {
+    const sample = kinematicIndex(index);
+    return track.speedMps[sample]! * (track.motionDirection?.[sample] ?? 1);
+  };
   const vertices = trace.ticks.t.map((t, index) => {
-    const direction = track.motionDirection?.[index] ?? 1;
     return [
       `<Vertex time="${finite(t + warmupSeconds)}">`,
-      `  <Position>${traceWorldPosition(track.x[index]!, track.y[index]!, track.headingRad[index]!, elevation, actorId)}</Position>`,
-      `  <Motion speed_longitudinal="${finite(track.speedMps[index]! * direction)}"/>`,
+      `  <Position>${traceWorldPosition(track.x[index]!, track.y[index]!, track.headingRad[kinematicIndex(index)]!, elevation, actorId)}</Position>`,
+      `  <Motion speed_longitudinal="${finite(motionSpeed(index))}"/>`,
       '</Vertex>',
     ].join('\n');
   });
