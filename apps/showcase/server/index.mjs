@@ -100,6 +100,7 @@ function normalizeJob(input, jobId) {
   }
   return {
     jobId,
+    id: `showcase-${jobId}`,
     briefId: `showcase-${jobId}`,
     category: 'showcase.custom',
     brief: input.brief.trim(),
@@ -232,8 +233,9 @@ async function directoryIndex(root, current = root) {
   return files;
 }
 
-async function gallery(jobsDir) {
+async function gallery(dataDir) {
   const cards = [];
+  const jobsDir = join(dataDir, 'jobs');
   for (const entry of await readdir(jobsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
     const path = join(jobsDir, entry.name, '90-gallery.json');
@@ -244,6 +246,21 @@ async function gallery(jobsDir) {
       else cards.push(value);
     } catch {
       // An incomplete atomic temp file is hidden; a corrupt committed card is omitted.
+    }
+  }
+  const seedsDir = join(dataDir, 'gallery-seed');
+  if (await exists(seedsDir)) {
+    for (const entry of await readdir(seedsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const path = join(seedsDir, entry.name, '90-gallery.json');
+      if (!(await exists(path))) continue;
+      try {
+        const value = JSON.parse(await readFile(path, 'utf8'));
+        if (Array.isArray(value)) cards.push(...value);
+        else cards.push(value);
+      } catch {
+        // Same atomic/corrupt-file behavior as live job cards.
+      }
     }
   }
   return cards.sort((a, b) => String(b.createdAt ?? '').localeCompare(String(a.createdAt ?? '')));
@@ -301,7 +318,7 @@ export async function createShowcaseServer({
         return sendJson(response, 202, { jobId });
       }
       if (request.method === 'GET' && url.pathname === '/api/gallery') {
-        return sendJson(response, 200, await gallery(runner.jobsDir));
+        return sendJson(response, 200, await gallery(runner.dataDir));
       }
       const full = /^\/api\/jobs\/([0-9a-f-]+)\/full$/.exec(url.pathname);
       if (request.method === 'GET' && full) {

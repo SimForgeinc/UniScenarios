@@ -135,3 +135,22 @@ test('all endpoints reject missing/wrong auth and accept query or bearer auth', 
     body: JSON.stringify({ brief: 'A valid but unauthorized brief.' }),
   })).status, 401);
 });
+
+test('gallery discovers committed per-card gallery seeds on first load', async (t) => {
+  const { base, runner } = await fixture(t);
+  const seed = join(runner.dataDir, 'gallery-seed', '001');
+  await mkdir(join(seed, '60-render2d', 'cell-1'), { recursive: true });
+  await writeFile(join(seed, '60-render2d', 'cell-1', 'rollout.mp4'), 'seed mp4');
+  await atomicJson(join(seed, '90-gallery.json'), {
+    id: 'seed-001',
+    brief: 'A seeded scenario.',
+    media: '/artifacts/gallery-seed/001/60-render2d/cell-1/rollout.mp4',
+  });
+
+  const cards = await fetch(`${base}/api/gallery?token=${TOKEN}`).then((response) => response.json());
+  assert.equal(cards.length, 1);
+  assert.equal(cards[0].id, 'seed-001');
+  const artifact = await fetch(`${base}${cards[0].media}?token=${TOKEN}`);
+  assert.equal(artifact.status, 200);
+  assert.equal(await artifact.text(), 'seed mp4');
+});

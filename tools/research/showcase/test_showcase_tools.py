@@ -40,6 +40,10 @@ class AuthorHelpersTest(unittest.TestCase):
 
 
 class GallerySelectionTest(unittest.TestCase):
+    def test_map_id_comes_from_instance_evidence(self):
+        instance = {"manifest": {"replayKey": {"mapId": "yale-street"}}}
+        self.assertEqual(gallery._map_id(instance, {"map": "street"}), "yale-street")
+
     def test_gate_is_primary_rank(self):
         passing = candidate("/a", "pass", "one", True, 1, 1)
         failing = candidate("/a", "fail", "two", False, 10, 10)

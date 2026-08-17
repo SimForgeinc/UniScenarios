@@ -103,9 +103,14 @@ def _brief(meta: dict, verdict: dict) -> str:
     if notes.lower().startswith("brief:"):
         return notes.split(":", 1)[1].strip()
     key = meta.get("briefId") or meta.get("harvestId")
-    if key:
+    if key and not str(key).startswith("emergent-h2-"):
         return str(key).replace("-", " ").replace("_", " ")
     return str(verdict.get("mechanismObserved") or meta.get("cellId"))
+
+
+def _map_id(instance: dict, meta: dict) -> str | None:
+    return ((instance.get("manifest") or {}).get("replayKey") or {}).get("mapId") \
+        or meta.get("map")
 
 
 def _render(instance: Path, trace: Path, out: Path, dev_assets: Path) -> float:
@@ -142,14 +147,20 @@ def materialize(selected: list[dict], out: Path, dev_assets: Path, force: bool) 
         wall = _render(cell_dir / "instance.json", cell_dir / "trace.json.gz",
                        render_dir, dev_assets)
         meta, verdict = row["meta"], row["verdict"]
-        relative = lambda path: path.relative_to(ROOT).as_posix()  # noqa: E731
+        instance = _json(cell_dir / "instance.json")
+        map_id = _map_id(instance, meta)
+        # The server's /artifacts route is rooted at showcase-data, which is the
+        # parent of the default gallery-seed directory.
+        data_root = out.parent
+        relative = lambda path: path.relative_to(data_root).as_posix()  # noqa: E731
         video = relative(render_dir / "rollout.mp4")
+        media_url = "/artifacts/" + video
         card = {
             "id": f"seed-{index:03d}", "jobId": f"seed-{index:03d}",
             "cellId": cell_id, "source": "gallery-seed",
-            "sourceRoot": str(row["root"]), "brief": _brief(meta, verdict),
+            "sourceCorpus": row["root"].parent.name, "brief": _brief(meta, verdict),
             "engine": meta.get("stream", "unknown"),
-            "map": meta.get("map"), "maps": [meta.get("map")] if meta.get("map") else [],
+            "map": map_id, "maps": [map_id] if map_id else [],
             "admitted": bool((meta.get("gate") or {}).get("pass")),
             "gate": meta.get("gate"),
             "scores": {"realism": verdict.get("realism"),
@@ -157,7 +168,11 @@ def materialize(selected: list[dict], out: Path, dev_assets: Path, force: bool) 
                        "plausible": verdict.get("plausible"),
                        "confidence": verdict.get("confidence")},
             "judge": verdict,
-            "headline": video, "headlineVideo": video, "video": video,
+            "headline": media_url, "headlineVideo": media_url, "media": media_url,
+            "headlineArtifact": media_url, "video": media_url,
+            "realism": verdict.get("realism"), "dynamism": verdict.get("dynamism"),
+            "admittedCells": 1 if (meta.get("gate") or {}).get("pass") else 0,
+            "totalCells": 1,
             "artifacts": {
                 "instance": relative(cell_dir / "instance.json"),
                 "trace": relative(cell_dir / "trace.json.gz"),
