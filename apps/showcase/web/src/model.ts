@@ -25,6 +25,19 @@ export function cells(job: JobIndex | null): CellVerdict[] {
   return Array.isArray(job.cells) ? job.cells : Object.entries(job.cells).map(([id, cell]) => ({ cellId: id, ...cell }));
 }
 
+export function threeDVideos(job: JobIndex | null): Array<{ cell: CellVerdict; artifact: Artifact }> {
+  return cells(job).flatMap((cell) => {
+    const candidates = (cell.artifacts ?? []).filter((artifact) => {
+      const path = artifact.path ?? artifact.url ?? '';
+      return path.includes('/65-render3d/') && artifactKind(artifact) === 'video';
+    });
+    const artifact = candidates.find((item) => /\/rollout\.mp4(?:\?|$)/.test(item.path ?? item.url ?? ''))
+      ?? candidates.find((item) => /\/video\.mp4(?:\?|$)/.test(item.path ?? item.url ?? ''))
+      ?? candidates[0];
+    return artifact ? [{ cell, artifact }] : [];
+  });
+}
+
 export function artifactKind(artifact: Artifact | string): 'image' | 'video' | 'download' {
   const value = typeof artifact === 'string' ? artifact : `${artifact.type ?? ''} ${artifact.path ?? artifact.url ?? ''}`;
   if (/\.(png|jpe?g|webp|gif)(\?|$)|\bimage\b/i.test(value)) return 'image';

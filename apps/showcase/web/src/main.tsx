@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { artifactUrl, getGallery, getJob, submitJob, subscribe } from './api';
-import { artifactKind, artifacts, cardId, cardMedia, cells, scopeStageArtifacts, stageList, STAGES } from './model';
+import { artifactKind, artifacts, cardId, cardMedia, cells, scopeStageArtifacts, stageList, STAGES, threeDVideos } from './model';
 import type { Artifact, GalleryCard, JobIndex, StageEvent, SubmitPayload } from './types';
 import './style.css';
 
@@ -73,14 +73,58 @@ function CellGrid({ job }: { job: JobIndex | null }) {
   return <div class="cell-grid">{rows.map((cell) => { const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted; const judge = cell.judge; return <details class="cell" key={cell.cellId ?? cell.id}><summary><div><small>{cell.map ? mapLabel(cell.map) : 'map'}</small><b>{cell.cellId ?? cell.id}</b></div><Chip tone={gate === true ? 'pass' : gate === false ? 'fail' : ''}>{verdict(gate)}</Chip></summary><div class="cell-body"><div class="chip-row"><Score label="Realism" value={judge?.realism} /><Score label="Dynamism" value={judge?.dynamism} />{judge?.plausible != null && <Chip tone={judge.plausible ? 'pass' : 'fail'}>{judge.plausible ? 'plausible' : 'implausible'}</Chip>}</div>{typeof cell.gate === 'object' && cell.gate.firstFailure && <p class="failure">First failure: {cell.gate.firstFailure}</p>}<div class="artifacts">{artifacts(cell).map((item, i) => <ArtifactView key={i} artifact={item} />)}</div><pre>{JSON.stringify(cell, null, 2)}</pre></div></details>; })}</div>;
 }
 
+function ThreeDGallery({ job, status }: { job: JobIndex | null; status: string }) {
+  const videos = threeDVideos(job);
+  if (!videos.length) {
+    const message = status === 'running'
+      ? 'Your 3D videos are rendering now. They will appear here automatically.'
+      : status === 'complete'
+        ? 'This job did not produce a 3D video. Run another job with 3D rendering enabled.'
+        : '3D videos will appear here as soon as gate-passing scenarios finish rendering.';
+    return <div class="empty video-empty"><div class="render-pulse" /><h2>3D video gallery</h2><p>{message}</p></div>;
+  }
+  return <div class="job-video-gallery">{videos.map(({ cell, artifact }) => {
+    const id = cell.cellId ?? cell.id ?? 'scenario';
+    const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted;
+    const source = artifact.path ?? artifact.url ?? '';
+    return <article class="job-video-card" key={id}>
+      <video src={artifactUrl(source)} aria-label={`3D rollout for ${id}`} muted autoPlay loop playsInline controls preload="metadata" />
+      <div class="job-video-meta"><div><small>{cell.map ? mapLabel(cell.map) : '3D scenario'}</small><h2>{id}</h2></div><div class="chip-row">
+        <Chip tone={gate ? 'pass' : ''}>{gate ? 'Gate passed' : '3D render'}</Chip>
+        <Score label="Realism" value={cell.judge?.realism} /><Score label="Dynamism" value={cell.judge?.dynamism} />
+      </div></div>
+    </article>;
+  })}</div>;
+}
+
 function JobDetail({ id }: { id: string }) {
-  const [job, setJob] = useState<JobIndex | null>(null); const [live, setLive] = useState<Record<string, StageEvent>>({}); const [connected, setConnected] = useState(false); const [error, setError] = useState<unknown>();
+  const [job, setJob] = useState<JobIndex | null>(null);
+  const [live, setLive] = useState<Record<string, StageEvent>>({});
+  const [connected, setConnected] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [error, setError] = useState<unknown>();
   const refresh = () => getJob(id).then(setJob).catch(setError);
-  useEffect(() => { refresh(); const stop = subscribe(id, (incoming) => { const event = scopeStageArtifacts(id, incoming); const key = event.stage.match(/\d{2}/)?.[0] ?? event.stage; setLive((old) => ({ ...old, [key]: event })); if (event.status === 'complete' || event.status === 'failed') refresh(); }, setConnected); return stop; }, [id]);
+  useEffect(() => {
+    refresh();
+    const stop = subscribe(id, (incoming) => {
+      const event = scopeStageArtifacts(id, incoming);
+      const key = event.stage.match(/\d{2}/)?.[0] ?? event.stage;
+      setLive((old) => ({ ...old, [key]: event }));
+      if (event.status === 'complete' || event.status === 'failed') refresh();
+    }, setConnected);
+    return stop;
+  }, [id]);
   const stages = useMemo(() => stageList(job, live), [job, live]);
-  return <main><button class="back" onClick={() => navigate('#/')}>← Gallery</button><section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh index</button></section><ErrorBox error={error} />
-    <section><div class="section-title"><div><p class="eyebrow">PIPELINE</p><h2>Stage timeline</h2></div><p>Expand any stage to inspect its exact output and artifacts.</p></div><div class="timeline">{stages.map((event, i) => <StageCard event={event} index={i} key={STAGES[i][0]} />)}</div></section>
-    <section><div class="section-title"><div><p class="eyebrow">EVIDENCE</p><h2>Scenario cells</h2></div><p>Gate and footage-judge verdicts by map, site, and draw.</p></div><CellGrid job={job} /></section>
+  const completed = stages.filter((stage) => stage.status === 'complete').length;
+  return <main><button class="back" onClick={() => navigate('#/')}>← Gallery</button>
+    <section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh</button></section>
+    <ErrorBox error={error} />
+    <section class="video-gallery-section"><div class="section-title"><div><p class="eyebrow">3D OUTPUT</p><h2>Your scenario videos</h2></div><p>{completed}/{STAGES.length} pipeline stages complete. Videos appear here automatically.</p></div><ThreeDGallery job={job} status={stages[8]?.status ?? 'pending'} /></section>
+    <button class="details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails((value) => !value)}>{showDetails ? 'Hide pipeline details' : 'Show pipeline details'} <span>{showDetails ? '↑' : '↓'}</span></button>
+    {showDetails && <div class="pipeline-details">
+      <section><div class="section-title"><div><p class="eyebrow">PIPELINE DETAILS</p><h2>Intermediate stages</h2></div><p>Optional diagnostics: inspect exact outputs and artifacts from every stage.</p></div><div class="timeline">{stages.map((event, i) => <StageCard event={event} index={i} key={STAGES[i][0]} />)}</div></section>
+      <section><div class="section-title"><div><p class="eyebrow">CELL DETAILS</p><h2>Gate and judge evidence</h2></div><p>Optional per-location gate and footage-judge verdicts.</p></div><CellGrid job={job} /></section>
+    </div>}
   </main>;
 }
 

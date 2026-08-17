@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artifactKind, cells, normalizeGallery, normalizeJob, scopeStageArtifacts, stageList } from './model';
+import { artifactKind, cells, normalizeGallery, normalizeJob, scopeStageArtifacts, stageList, threeDVideos } from './model';
 
 describe('showcase contract adapters', () => {
   it('merges object-shaped stage indexes with live SSE updates', () => {
@@ -28,6 +28,19 @@ describe('showcase contract adapters', () => {
     expect(job.engine).toBe('compiler');
     expect(cells(job)[0].gate).toMatchObject({ pass: true });
     expect(cells(job)[0].artifacts?.[0].path).toBe('jobs/abc/60-render2d/cell-1/rollout.mp4');
+  });
+  it('selects one preferred 3D rollout video per rendered cell', () => {
+    const job = normalizeJob({ jobId: 'abc', files: [
+      { path: '40-cells/index.json', json: { cells: [{ cellId: 'cell-1', mapId: 'el-camino-road' }, { cellId: 'cell-2', mapId: 'yale-street' }] } },
+      { path: '65-render3d/cell-1/frame.png', size: 12 },
+      { path: '65-render3d/cell-1/video.mp4', size: 13 },
+      { path: '65-render3d/cell-1/rollout.mp4', size: 14 },
+      { path: '60-render2d/cell-2/rollout.mp4', size: 15 },
+    ] });
+    const videos = threeDVideos(job);
+    expect(videos).toHaveLength(1);
+    expect(videos[0].cell.cellId).toBe('cell-1');
+    expect(videos[0].artifact.path).toBe('jobs/abc/65-render3d/cell-1/rollout.mp4');
   });
   it('normalizes nested gallery metrics and SSE paths from the real server', () => {
     const [card] = normalizeGallery([{ jobId: 'abc', headline: '/artifacts/jobs/abc/movie.mp4', gate: { passed: 2, cells: 3 }, scores: { realism: 8.2, dynamism: 7.4 } }]);
