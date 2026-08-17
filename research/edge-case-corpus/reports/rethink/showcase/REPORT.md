@@ -431,3 +431,47 @@ The first real submission exposed that the frozen compiler expects `brief.id`; i
 `20-author` with a recorded `job-error.json`. P3 added the missing ID to normalized submissions and
 backward-compatible restart hydration, then reran the complete successful job above. No result from
 the failed attempt is represented as successful evidence.
+
+## Lead acceptance — owner-facing browser flow, 2D + real 3D + judge
+
+After all five packets landed, the lead built the web bundle, started the actual production server,
+opened it in Chromium, submitted a job through the UI, and observed every intermediate stage.
+
+```text
+SHOWCASE_TOKEN=demo-local SHOWCASE_HOST=127.0.0.1 SHOWCASE_PORT=4174 \
+  pnpm --filter @uniscenarios/showcase start
+
+# Browser submission:
+# brief: A stopped lead vehicle is revealed beyond a blind crest and the ego brakes hard to avoid it.
+# engine=compiler, draws=1, maxSites/map=1, ambient=light, render3d=true, topK=1, judge=true
+# Browser UI job id: 32c6c35f-9fa8-4354-b757-cc65399bb6c0
+```
+
+The browser exposed stages 00, 10, 15, 20, 30, 40, 50, 60, 65, 70 and 90 independently. After
+completion, every stage read `COMPLETE`; the cell grid showed three failures and one frozen-gate pass
+across four maps. The gallery record reports:
+
+```json
+{
+  "engine": "compiler",
+  "maps": 4,
+  "gate": {"passed": 1, "cells": 4},
+  "render3d": true,
+  "scores": {"realism": 2.5, "dynamism": 3.0},
+  "timingsSeconds": {
+    "author": 68.283,
+    "simulate": 55.050,
+    "gate": 0.097,
+    "render2d": 3.753,
+    "render3d": 310.372,
+    "judge": 100.619
+  }
+}
+```
+
+Artifacts include four 2D rollout videos and one real Studio/Three 3D bundle for the admitted
+El Camino cell: three PNG frames, a 2.2 MB H.264 video, matching source instance/trace, preflight,
+render manifest, and review JSON. Visual inspection confirmed the authored vehicles, ambient
+traffic, multilane road geometry and city assets are visible in the 3D frame. This is a complete,
+browser-submitted prompt-to-gallery receipt; unlike the P3 acceptance, neither 3D nor judging was
+skipped.

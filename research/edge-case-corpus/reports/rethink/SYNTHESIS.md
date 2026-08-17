@@ -31,7 +31,7 @@ Model side: sol "never worse" (W8) and the chosen judge; **luna is the outlier j
 
 ## 3. Footage review (owner mandate) — VIABLE, calibrated, in production
 
-- Judge sol/medium/spread8: **AUC 0.853** [.75,.95] good-vs-absurd; 4.9K tok / 13.5 s per verdict; ~2,400 verdicts/hour; ~9,400 verdicts, 0 errors, vision-asserted every session.
+- Judge sol/medium/spread8: **AUC 0.853** [.75,.95] good-vs-absurd; 4.9K tok / 13.5 s per verdict; ~2,400 verdicts/hour. Final service total: **4,360 cells / 13,080 verdicts / 80.4M tokens / 0 judge errors**, vision-asserted every session.
 - **Gate ⊥ realism at scale** (AUC 0.47–0.51 vs gate verdicts): the gate certifies criticality, not looks. First independent instrument confirming the plan's thesis.
 - **Corpus deadness quantified**: dynamism median 3/10 everywhere scripted; compiler = "tidy, plausible, dead".
 - Known weak class: 1-2-frame VRU-occluder overlaps (render cue proposal filed). Realism is a score (test-retest SD 0.69), not a per-cell verdict.
