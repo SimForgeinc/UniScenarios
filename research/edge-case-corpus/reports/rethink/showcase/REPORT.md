@@ -15,15 +15,15 @@ Verification run on 2026-08-16:
 ```text
 $ pnpm --filter showcase-web test
 Test Files  1 passed (1)
-Tests       2 passed (2)
+Tests       4 passed (4)
 
 $ pnpm --filter showcase-web build
 vite v6.4.3 building for production...
 ✓ 9 modules transformed.
 dist/index.html                  0.45 kB │ gzip:  0.29 kB
 dist/assets/index-DK7YcmS9.css   8.54 kB │ gzip:  2.84 kB
-dist/assets/index-C8ogr-F5.js   27.62 kB │ gzip: 10.55 kB
-✓ built in 143ms
+dist/assets/index-CE8mEKO4.js   30.23 kB │ gzip: 11.43 kB
+✓ built in 315ms
 
 $ pnpm build
 $ pnpm -r build
@@ -38,7 +38,21 @@ apps/studio build: Done
 
 The production `dist/` bundle was served with `pnpm --filter showcase-web mock -- --static` and walked with `playwright-core` using `/usr/bin/google-chrome` at 1440×1000. The walkthrough also submitted the form and asserted navigation to the mock server's returned job ID. Captures are committed in `p4-screens/`: `gallery.png`, `job-detail.png`, and `submit.png`.
 
-Needs the real server: an end-to-end smoke against actual job-index shapes and generated image/video artifacts. The frontend uses adapters for both array- and object-shaped `stages`/`cells`, but the frozen contract does not prescribe the internal `/full` JSON schema, so this must be confirmed once P3 exposes a runnable server. The mock verifies all frozen endpoint names, POST field names, SSE event fields, navigation, and artifact rendering behavior.
+After P3 commit `5bb710b` landed, P4 added and tested adapters for its concrete `/full` file-index shape, nested gallery `gate`/`scores`, and job-relative SSE artifact paths. The P3 server suite also passes:
+
+```text
+$ pnpm --filter @uniscenarios/showcase test
+# tests 3
+# pass 3
+# fail 0
+
+# Real committed server on :4317, frontend on :4318 through its API proxy:
+gallery_http=200
+real_server_browser_smoke=PASS
+server_root_http=404
+```
+
+Still needs server/integration work: P3 does not currently mount `apps/showcase/web/dist` at `/` (`GET /?token=...` returned 404), so the single-process production deployment promised by the plan is not yet wired. P4 does not own `apps/showcase/server/` and did not change it. The browser smoke confirmed the authenticated real gallery API through the frontend proxy; a full costly generation/render job and real MP4 playback were not run in P4. The mock verifies POST, SSE, full job navigation, filmstrip, cells, and artifact presentation without inventing rendered evidence.
 
 ### P2 — 3D render tier + Q3D qualification
 

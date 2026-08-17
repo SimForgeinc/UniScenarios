@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { artifactKind, cells, stageList } from './model';
+import { artifactKind, cells, normalizeGallery, normalizeJob, scopeStageArtifacts, stageList } from './model';
 
 describe('showcase contract adapters', () => {
   it('merges object-shaped stage indexes with live SSE updates', () => {
@@ -14,5 +14,24 @@ describe('showcase contract adapters', () => {
     expect(cells({ cells: { alpha: { map: 'sf' } } })[0].cellId).toBe('alpha');
     expect(artifactKind({ path: 'rollout.mp4' })).toBe('video');
     expect(artifactKind({ path: 'frame.png' })).toBe('image');
+  });
+  it('adapts the real server file index into stages, cells, and scoped artifacts', () => {
+    const job = normalizeJob({ jobId: 'abc', files: [
+      { path: '00-brief.json', json: { brief: 'A real brief', engine: 'auto' } },
+      { path: '10-route.json', json: { engine: 'compiler' } },
+      { path: '40-cells/index.json', json: { cells: [{ cellId: 'cell-1', mapId: 'yale-street' }] } },
+      { path: '50-gate.json', json: { cells: [{ cellId: 'cell-1', pass: true }] } },
+      { path: '60-render2d/cell-1/rollout.mp4', size: 12 },
+      { path: '70-judge.json', json: { cells: [{ cellId: 'cell-1', realism: 8, dynamism: 7 }] } },
+    ] });
+    expect(job.brief).toBe('A real brief');
+    expect(job.engine).toBe('compiler');
+    expect(cells(job)[0].gate).toMatchObject({ pass: true });
+    expect(cells(job)[0].artifacts?.[0].path).toBe('jobs/abc/60-render2d/cell-1/rollout.mp4');
+  });
+  it('normalizes nested gallery metrics and SSE paths from the real server', () => {
+    const [card] = normalizeGallery([{ jobId: 'abc', headline: '/artifacts/jobs/abc/movie.mp4', gate: { passed: 2, cells: 3 }, scores: { realism: 8.2, dynamism: 7.4 } }]);
+    expect(card).toMatchObject({ media: '/artifacts/jobs/abc/movie.mp4', admittedCells: 2, totalCells: 3, realism: 8.2, dynamism: 7.4 });
+    expect(scopeStageArtifacts('abc', { stage: '20-author', status: 'complete', artifacts: [{ path: '20-author/template.json' }] }).artifacts?.[0].path).toBe('jobs/abc/20-author/template.json');
   });
 });

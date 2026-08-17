@@ -15,6 +15,8 @@ export interface JobIndex {
   cells?: CellVerdict[] | Record<string, CellVerdict>; artifacts?: Artifact[];
   [key: string]: unknown;
 }
+export interface IndexedFile { path: string; size?: number; json?: unknown; jsonError?: boolean }
+export interface RawJobIndex { jobId: string; files: IndexedFile[] }
 export interface GalleryCard {
   jobId?: string; id?: string; brief?: string; headline?: string; engine?: Engine;
   maps?: string[]; admitted?: number; total?: number; admittedCells?: number; totalCells?: number;

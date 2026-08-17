@@ -1,6 +1,7 @@
-import type { Artifact, GalleryCard, JobIndex, StageEvent, SubmitPayload } from './types';
+import { normalizeGallery, normalizeJob } from './model';
+import type { Artifact, GalleryCard, JobIndex, RawJobIndex, StageEvent, SubmitPayload } from './types';
 
-const token = new URLSearchParams(location.search).get('token');
+const token = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('token');
 
 export function withToken(path: string): string {
   if (!token) return path;
@@ -17,10 +18,10 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function getGallery(): Promise<GalleryCard[]> {
   const result = await json<GalleryCard[] | { cards?: GalleryCard[]; gallery?: GalleryCard[] }>('/api/gallery');
-  return Array.isArray(result) ? result : result.cards ?? result.gallery ?? [];
+  return normalizeGallery(Array.isArray(result) ? result : result.cards ?? result.gallery ?? []);
 }
 
-export const getJob = (id: string) => json<JobIndex>(`/api/jobs/${encodeURIComponent(id)}/full`);
+export const getJob = async (id: string) => normalizeJob(await json<JobIndex | RawJobIndex>(`/api/jobs/${encodeURIComponent(id)}/full`));
 
 export async function submitJob(payload: SubmitPayload): Promise<string> {
   const result = await json<{ jobId: string }>('/api/jobs', {

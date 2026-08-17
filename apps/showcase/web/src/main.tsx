@@ -1,7 +1,7 @@
 import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { artifactUrl, getGallery, getJob, submitJob, subscribe } from './api';
-import { artifactKind, artifacts, cardId, cardMedia, cells, stageList, STAGES } from './model';
+import { artifactKind, artifacts, cardId, cardMedia, cells, scopeStageArtifacts, stageList, STAGES } from './model';
 import type { Artifact, GalleryCard, JobIndex, StageEvent, SubmitPayload } from './types';
 import './style.css';
 
@@ -43,7 +43,7 @@ function Gallery() {
   useEffect(() => { getGallery().then(setCards).catch(setError).finally(() => setLoading(false)); }, []);
   return <main><section class="hero"><div><p class="eyebrow">EDGE-CASE CORPUS</p><h1>Scenes worth inspecting.</h1><p>Generated scenarios, gate evidence, and rendered behavior—from brief to verdict.</p></div><button class="primary" onClick={() => navigate('#/submit')}>Submit a scenario <span>→</span></button></section><ErrorBox error={error} />
     {loading ? <div class="empty">Loading gallery…</div> : !cards.length ? <div class="empty"><h2>No gallery entries yet</h2><p>Submit the first edge-case prompt to start the pipeline.</p></div> : <section class="gallery" aria-label="Scenario gallery">{cards.map((card) => {
-      const id = cardId(card); const admitted = card.admitted ?? card.admittedCells ?? 0; const total = card.total ?? card.totalCells ?? 0;
+      const id = cardId(card); const admitted = card.admittedCells ?? (typeof card.admitted === 'number' ? card.admitted : 0); const total = card.totalCells ?? card.total ?? 0;
       return <article class="gallery-card" key={id} onClick={() => navigate(`#/jobs/${encodeURIComponent(id)}`)} tabindex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`#/jobs/${encodeURIComponent(id)}`)}>
         <Media source={cardMedia(card)} label={card.brief ?? 'Scenario render'} loop />
         <div class="card-body"><div class="chip-row"><Chip tone="engine">{card.engine ?? 'auto'}</Chip><Chip tone={admitted ? 'pass' : 'fail'}>{admitted}/{total} admitted</Chip></div><h2>{card.headline ?? card.brief ?? 'Untitled scenario'}</h2>{card.headline && <p>{card.brief}</p>}<div class="chip-row"><Score label="Realism" value={card.realism} /><Score label="Dynamism" value={card.dynamism} /></div><div class="map-row">{card.maps?.map((map) => <Chip key={map}>{mapLabel(map)}</Chip>)}</div></div>
@@ -76,7 +76,7 @@ function CellGrid({ job }: { job: JobIndex | null }) {
 function JobDetail({ id }: { id: string }) {
   const [job, setJob] = useState<JobIndex | null>(null); const [live, setLive] = useState<Record<string, StageEvent>>({}); const [connected, setConnected] = useState(false); const [error, setError] = useState<unknown>();
   const refresh = () => getJob(id).then(setJob).catch(setError);
-  useEffect(() => { refresh(); const stop = subscribe(id, (event) => { const key = event.stage.match(/\d{2}/)?.[0] ?? event.stage; setLive((old) => ({ ...old, [key]: event })); if (event.status === 'complete' || event.status === 'failed') refresh(); }, setConnected); return stop; }, [id]);
+  useEffect(() => { refresh(); const stop = subscribe(id, (incoming) => { const event = scopeStageArtifacts(id, incoming); const key = event.stage.match(/\d{2}/)?.[0] ?? event.stage; setLive((old) => ({ ...old, [key]: event })); if (event.status === 'complete' || event.status === 'failed') refresh(); }, setConnected); return stop; }, [id]);
   const stages = useMemo(() => stageList(job, live), [job, live]);
   return <main><button class="back" onClick={() => navigate('#/')}>← Gallery</button><section class="job-heading"><div><div class="chip-row"><Chip tone="engine">{job?.engine ?? (job?.options?.engine as string) ?? 'routing'}</Chip><Chip tone={connected ? 'live' : ''}><span class="live-dot" />{connected ? 'live' : 'reconnecting'}</Chip><Chip>{job?.status ?? 'in progress'}</Chip></div><h1>{job?.brief ?? (job?.options?.brief as string) ?? `Job ${id}`}</h1><p class="mono">{id}</p></div><button onClick={refresh}>Refresh index</button></section><ErrorBox error={error} />
     <section><div class="section-title"><div><p class="eyebrow">PIPELINE</p><h2>Stage timeline</h2></div><p>Expand any stage to inspect its exact output and artifacts.</p></div><div class="timeline">{stages.map((event, i) => <StageCard event={event} index={i} key={STAGES[i][0]} />)}</div></section>
