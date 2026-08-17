@@ -339,6 +339,30 @@ out-footage authored ones — as a minority worth filtering for, which is exactl
 this instrument is for.
 
 
+### Round 7 — FreeformLane FREEDOM arm (the Stream-A decisive cut)
+
+h2 stage-2 depth cells + vista growth judged in passing (648 verdicts), then
+`roots --roots /tmp/tgr-freeform-main1/cells` + `judge --agree-every 1`
+(906 verdicts, 0 errors). Freedom arm = terra/low (their grid winner), 264 cells,
+admission 9/50 briefs. **Clean negative, stated plainly (sol/medium judge):**
+
+| bucket | n | realism μ/med | dynamism μ/med | plausible |
+|---|---|---|---|---|
+| freedom ALL | 264 | 4.90 / 5 | 2.76 / 3 | 0.82 |
+| freedom gate-PASS | 44 | 5.20 / 5 | 3.39 / 3 | 0.84 |
+| freedom gate-FAIL | 220 | 4.84 / 4 | 2.64 / 3 | 0.81 |
+| baseline ALL | 300 | 5.91 / 6 | 3.12 / 3 | 0.87 |
+| baseline gate-PASS | 250 | 6.04 / 7 | 3.27 / 3 | 0.85 |
+| baseline gate-FAIL | 50 | 5.26 / 5 | 2.38 / 3 | 0.96 |
+
+AUC freedom>baseline: realism **0.345**, dynamism **0.382** (all cells); gate-PASS-only
+realism 0.365, dynamism 0.527 (flat). The "alive-but-inadmissible" hypothesis is
+DISCONFIRMED: freedom's gate-failures are less real AND no more alive. Full-schema
+freedom at terra/low bought neither admission nor footage quality — the compiler's
+static duets remain better-looking. (Stream A's falsifier, measured by Stream B's
+instrument; the ambient/harvest levers from Stream C remain the only measured footage
+wins.)
+
 ## Cost ledger (updated per stage)
 
 | stage | calls | tokens in/out | wall |
@@ -356,4 +380,5 @@ this instrument is for.
 | scaled round 4 (pair1 full + vista) | 1884 judge | (cumulative below) | 2913 s |
 | scaled round 5 (h2 + vista) | 2199 judge | (cumulative below) | 3223 s |
 | scaled round 6 (h2 complete + promotions) | 1839 judge | (cumulative below) | ~48 min |
-| **scaled cumulative** | **10344 judge** | **51,096,386 total** | — |
+| scaled round 7 (h2 stage-2 + freedom arm) | 1554 judge | (cumulative below) | ~37 min |
+| **scaled cumulative** | **11898 judge** | **58,783,641 total** | — |
