@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(ROOT, 'tools', 'tg-research', 'worldgen'))
 sys.path.insert(0, os.path.join(ROOT, 'tools', 'gates'))
 import mine  # noqa: E402  (pre-registered miner, reused)
 
-TPL_KIND = {'jS': 'junction', 'jL': 'junction', 'ml': 'multilane'}
+TPL_KIND = {'jS': 'junction', 'jL': 'junction', 'ml': 'multilane', 'bo': 'junction'}
 
 
 def collect_cells(out_dir):

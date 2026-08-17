@@ -246,23 +246,92 @@ zero LLM tokens, and every admit carries a full living-traffic context that Foot
 more dynamic. The honest framing: harvest is not an admission-rate engine; it is a mechanism-
 diversity engine whose per-cell cost is dominated by engine throughput (EngineLane's lane).
 
-### Stage 2 (depth, ≥50 seeds/config — in flight)
+### Stage 2 results (depth, 62 seeds/config on the top-6 ego-productive configs)
 
-Top-6 ego-productive configs (from stage-1 egoT1 counts), seeds 13–62 (→ 62 seeds/config total):
-jS.aggr24@el-camino/0345f435, ml.dense32@el-camino/228606bf, jS.aggr24@belmont/0516b055,
-jL.dense32@el-camino/024dbd44, jL.dense32@belmont/023f6c42, jS.dense32@yale/0123925723.
-*(results pending)*
+300 more cells (seeds 13–62 on jS.aggr24@el-camino/0345f435, ml.dense32@el-camino/228606bf,
+jS.aggr24@belmont/0516b055, jL.dense32@el-camino/024dbd44, jL.dense32@belmont/023f6c42,
+jS.dense32@yale/0123925723; `plan-stage2.json`). Full corpus re-mined: 948 world cells,
+45 k+ events, T1 31 939, ego-involved 2 739; spectrum shape unchanged (8 categories).
+60 further promotions from stage-2 cells: **0 new admits** (deaths: C4 +35, C5 +15, C2 +6, C3 +4).
 
+**The honest lesson:** ego-involved-T1 event count is a poor predictor of PROMOTABLE events.
+The depth configs were picked on event volume, and their volume is dominated by
+dissolution-prone types (crossing-behind passes, queue shear) that die at C4 once the pair
+becomes mutually visible. Final yields, stated both ways:
+- stage-1 grid (648 cells, 120 promotions): **17.0 admitted / 1000 world-runs**;
+- combined (948 cells, 180 promotions): **11.6 / 1000** — still ≥10× the PREREG F1 floor (~1/1000).
+Yield is promotion-policy-dependent; the C4-dissolution ceiling is structural (the engine's
+authored-conflict governor reacts), and the per-actor policy hook (EngineLane design note, GO
+given) is the lever that would lift it.
 
-## 4. Bonus probe — signal blackout
+**Cost, final:** world-runs 29.4 core-h (948 cells, mean 112 s) + promotions/mining ~1.3 core-h →
+**≈ 2.8 core-h per admitted cell** (11 admits). Authored-path anchor: ~35 s LLM/brief at ~0.75 DEV
+admission ≈ 47 s + trivial compute per admitted cell. Two orders of magnitude apart; the harvest
+buys mechanism classes and living context, not admission volume.
 
-*(pending; only if time permits after arms (i)/(ii))*
+**FootageLane cross-read of the 11 admits (sol/medium):** bimodal. 3/11 are joint-axis wins that
+beat every authored gate-passer on realism+dynamism together (authored anchor 6.04/3.27):
+ml.dense32.s7-yale 8/7 plausible, ml.aggr24.s8-el-camino 7/8 plausible, jL.heavy16.s8-yale 7/6
+plausible. The other 8 read "alive but weird" — tag-strip costs plausibility on most (judge sees
+the de-ambiented counterpart's behavior without its crowd context). Mined admits CAN look both
+more alive and as-real-or-realer than authored — a minority do (their §5/round tables).
 
-## Falsifier verdicts (RETHINK-PLAN §3C)
+## 4. Bonus probe — signal blackout (owner list: "stoplight blackout becoming an implicit four-way stop")
 
-*(to be stated plainly at close; ledger below updated as evidence lands)*
+Template `emergent-blackout.template.json`: signalized 4-arm junction (required), ego straight,
+4 × `@world set signal:feature:blackout-junction:{ego,opposing,left,right}.phase = off` at t = 2 s;
+dark-fallback semantics (signals.ts:251-276) degrade every dark head to a stop with one
+coordinationId per junction. 60 cells planned (`plan-blackout.json`: 2 matched sites × 3 profiles
+× 10 seeds).
 
-- ambient breaks replay determinism: **pending**
-- gate C5 rejects everything from ambient contacts: **pending**
-- harvest yield ≈0 / only trivial rear-ends: **pending**
-- footage judge scores ambient less realistic: **owned by FootageLane on my artifacts; pending**
+- **yale-street site 1736fd44 failed entirely** (30/30 `signal_unbindable`: "no physical signal
+  head binds the ego movement for feature blackout-junction at site junction 303",
+  timingSource synthetic-default) — a real map-binding limitation worth an EngineLane ticket, and
+  the reason this probe reports from one site.
+- **el-camino site: 30/30 cells ran**; signal tracks confirm heads reach `off` at t = 2.0 s.
+- **Four-way-stop discipline DOES emerge.** Stop-then-proceed cycles (full stop < 0.3 m/s ≥ 0.5 s
+  then restart > 2 m/s) after t=2: **87 cycles, 6.6% of ambient actors** vs **9 cycles, 0.9%** in
+  the signals-working jS.heavy16 yale baseline (same measurement window; 20 cells each side,
+  ≥960 actors per side). ≈ 7× more stop-and-proceed negotiation at the dark junction.
+- **No deadlock explosion:** terminal standstill 65.8% (blackout) vs 59.6% (baseline) — heavy
+  queues exist in both (20 s settle + junction), blackout adds ~6 pp, not gridlock.
+- Mined events in the 30 cells: 1 298 (43/cell), 422 yield-forced stops, 56 ego-involved.
+
+Verdict: **YES — an implicit four-way-stop negotiation emerges organically** from dark-fallback +
+ambient reactive drivers, measurable in stop-and-proceed discipline; it cannot be gate-certified
+(hesitation is low-demand → C4, §3), which again marks the gate, not the phenomenon.
+
+## 5. Falsifier verdicts (RETHINK-PLAN §3C) — stated plainly
+
+| falsifier | verdict | evidence |
+|---|---|---|
+| ambient breaks replay determinism (bit-compare) | **FALSE** | 36/36 re-run batch traces byte-identical (4 arms × 9 cells); CLI ≡ programmatic digest `6156d010…`; custom-profile double-run digest `4f555ded…` identical |
+| gate C5 rejects everything from ambient contacts | **FALSE** | arm (i): C5-from-ambient-contact = 6.8–8.0% of cells; survival off 38.6% → heavy 31.7% (−7 pp, not collapse) |
+| harvest yield ≈ 0, or only trivial rear-ends | **FALSE** | 11 frozen-gate admits; stage-1 17.0/1000, combined 11.6/1000 (floor ~1/1000); spectrum 8 categories, C1 total 9% — the opposite of rear-end soup |
+| footage judge scores ambient less realistic | **FALSE** (with structure) | light ambient: realism +0.17 (p=0.012) AND dynamism +1.74 — the only arm lifting both; city/heavy realism flat (n.s.), plausibility slides 0.64→0.46; FootageLane full-sample tables |
+
+Additional negative results, reported with equal weight:
+- Tag-strip promotion admission is capped by **C4 dissolution** (52% of promotion deaths): the
+  promoted pair becomes mutually visible and the engine's conflict governor kills the demand.
+  Relabeling cannot fully preserve an emerged conflict; a per-actor policy hook can.
+- Ego-T1 event volume does **not** predict promotable volume (stage-2: 60 promotions, 0 admits).
+- Hesitation/negotiation phenomena (four-way stop, deadlock proxies) are real and abundant in the
+  mined layer but **structurally un-certifiable by the frozen gate** (C4 demands decel/TTC).
+- Site concentration: 5/11 admits from one el-camino site; admits are site-pinned instances and
+  portability is not claimed.
+
+## 6. Artifacts, cost, and cleanup
+
+- `/tmp/tgr-emergent-pair1/cells/` — 964 arm (i) contract cells (judged by FootageLane, kept).
+- `/tmp/tgr-emergent-h2/cells/` — 1 008 world cells (948 harvest + 60 blackout) + 180 promoted
+  subdirs (judged, kept); `mining/` holds events.jsonl, collisions.jsonl, mining-summary.json,
+  promotions.jsonl, raw-gate.json, promoted-gate.json.
+- Screens `/tmp/tgr-emergent-screen{1,2}/` (traces deletable; screen.json kept), equivalence probe
+  `/tmp/tgr-emergent-equiv/`, determinism probe `/tmp/tgr-det-{a,b}` (deletable).
+- Compute totals this stream: arm (i) ≈ 11 core-h, arm (ii)+blackout ≈ 31 core-h, screens ≈ 1.5
+  core-h. LLM tokens spent by this stream: 0 (all instruments deterministic; judging spent on
+  FootageLane's ledger). Gate tripwire re-verified PASS at every gating step (`harvest_gate.py`
+  asserts it at entry).
+- Prior-tooling note: on-disk `promote.py` imports a `probe_lib` that no longer exists in the tree
+  (deleted post-c3ab4c0); the tag-strip supersession sidesteps it, recast fallback would need a
+  one-file restore from git history.
