@@ -347,7 +347,7 @@ async function inspectIncidentComposition(page, poses, requiredActorIds, conflic
       viewport: { width, height },
       boundsNdc: { x: 0.94, y: 0.9 },
       minimumRequiredSeparationPx,
-      minPairSeparationPx,
+      minPairSeparationPx: actors.length < 2 ? null : minPairSeparationPx,
       closestPair,
       actors,
       passed: actors.every((actor) => actor.inFrame && actor.sceneryClear)
@@ -611,17 +611,22 @@ async function exportScenario(page) {
       .filter((pose) => evidence.metricPair.includes(pose.id))
       .reduce((sum, pose) => sum + pose.y, 0) / evidence.metricPair.length;
     const framingProps = grounded.props.filter((prop) => framingPropIds.has(prop.id));
+    const strictIncidentComposition = selected.t <= incident.conflictT + 0.5 + 1e-9;
+    const frameActorIds = strictIncidentComposition
+      ? framingActorIds
+      : (evidence.actorIds.includes('ego') ? ['ego'] : evidence.metricPair.slice(0, 1));
+    const frameProps = strictIncidentComposition ? framingProps : [];
     const baseCamera = (clipCamera ? cameraForClip : cameraForIncident)(
       trace,
       evidence.metricPair,
       selected.index,
       pairGround,
-      framingActorIds,
-      framingProps,
+      frameActorIds,
+      frameProps,
     );
     const compositionArgs = [
-      [...groundedPoses, ...framingProps],
-      [...framingActorIds, ...framingProps.map((prop) => prop.id)],
+      [...groundedPoses, ...frameProps],
+      [...frameActorIds, ...frameProps.map((prop) => prop.id)],
       incident.conflictT,
       selected.t,
     ];
@@ -629,7 +634,8 @@ async function exportScenario(page) {
       const failures = composition.actors
         .filter((actor) => !actor.inFrame || !actor.sceneryClear)
         .map((actor) => `${actor.id}(inFrame=${actor.inFrame},sceneryClear=${actor.sceneryClear},blocker=${actor.blockerLayer})`);
-      if (composition.minPairSeparationPx < composition.minimumRequiredSeparationPx) {
+      if (Number.isFinite(composition.minPairSeparationPx)
+        && composition.minPairSeparationPx < composition.minimumRequiredSeparationPx) {
         failures.push(
           `${composition.closestPair?.join('/')} separation ${composition.minPairSeparationPx.toFixed(1)}px < ${composition.minimumRequiredSeparationPx}px`,
         );

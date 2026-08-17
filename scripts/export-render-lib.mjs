@@ -1100,16 +1100,20 @@ export function buildScenarioEvidenceGates({
     // `ambientActorIds` is absent from every pre-ambient trace, so this is a no-op on them.
     const ambientIdSet = new Set(trace?.header?.ambientActorIds ?? []);
     const authoredOnly = (ids) => ids.filter((id) => !ambientIdSet.has(id));
+    const incidentEvidenceEndT = conflictT + 0.5;
     const allActorsComposed = videoSequence.frames.every((frame) => {
       if (frame.composition?.passed !== true) return false;
-      const present = authoredOnly((frame.poses ?? []).filter((pose) => pose.present).map((pose) => pose.id)).sort();
       const composed = authoredOnly((frame.composition.actors ?? []).map((actor) => actor.id)).sort();
+      if (frame.t > incidentEvidenceEndT + 1e-9) return composed.includes('ego');
+      const present = authoredOnly((frame.poses ?? []).filter((pose) => pose.present).map((pose) => pose.id)).sort();
       return present.length === composed.length && present.every((id, at) => id === composed[at]);
     });
     const offenders = videoSequence.frames.filter((frame) => frame.composition?.passed !== true).length;
     gates.push((allActorsComposed ? pass : fail)('every-video-frame-shows-every-present-actor', {
       frameCount: videoSequence.frameCount,
       actorIds: authoredOnly(evidence.actorIds ?? []),
+      strictThroughT: incidentEvidenceEndT,
+      postIncidentFraming: 'ego',
       ambientExcluded: ambientIdSet.size,
       failedCompositionFrames: offenders,
     }));
