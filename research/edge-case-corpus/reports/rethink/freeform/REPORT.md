@@ -196,8 +196,83 @@ defects — surface is FROZEN for the measured arms:
 run report prints it as `surfaceSha256`; grid and main arms must match it.
 
 
-## 5. Grid — pending
+## 5. Grid (owner directive: models × efforts)
 
-## 6. Main arms — pending
 
-## 7. Comparison and falsifier verdicts — pending
+Driver: `tools/research/freeform/grid_run.py --tag g1` (`ff-grid`/`ff-grid2` under
+hub); 15-brief frozen subset (`grid-subset.json`), reduced final draws=6/max-sites=6
+as pre-declared in §3; surface c5fb6a80 for all nine arms. Full per-arm reports in
+`data/grid-g1-*-report.json`; ranking in `data/grid-result-g1.json`; analyzer output
+in `data/grid-analysis.json`.
+
+| arm | admitted/15 | Wilson 95% CI | total tokens | wall s |
+|---|---|---|---|---|
+| terra-low **(winner)** | 4 | .109–.520 | 1,359,018 | 1,458 |
+| terra-high | 3 | .070–.452 | 1,692,950 | 2,207 |
+| terra-medium | 2 | .037–.379 | 1,341,826 | 1,265 |
+| sol-medium | 2 | .037–.379 | 1,545,930 | 1,882 |
+| sol-high | 2 | .037–.379 | 1,861,993 | 2,826 |
+| luna-high | 2 | .037–.379 | 2,118,279 | 3,400 |
+| sol-low | 1 | .012–.298 | 1,626,457 | 1,621 |
+| luna-low | 0 | .000–.204 | 1,575,042 | 2,171 |
+| luna-medium | 0 | .000–.204 | 1,824,145 | 3,190 |
+
+Winner by the §3 rule: **terra/low** (highest admitted; tiebreaks unused).
+
+**H-freedom-effort verdict: NOT SUPPORTED as pre-registered.** Per model
+(admitted low→medium→high): luna 0→0→2, sol 1→2→2, terra 4→2→3. Luna and sol are
+non-decreasing with a positive low→high delta (2 of 3 models), but terra is not
+non-decreasing, so the conjunctive criterion fails. Every pairwise CI above overlaps;
+at n=15 no directional claim survives. The honest statement: **effort is not flat on
+the freedom surface the way W8 measured it flat on the compiler surface (luna moves
+0→2), but the pre-registered monotone pattern is absent, and the best single arm is a
+LOW-effort one.** Reasoning cost still rises with effort (luna 1.58M→2.12M tokens).
+
+## 6. Main arms (frozen 50-brief sample, full protocol)
+
+Commands (both under hub, reports archived in `data/`):
+- baseline: `.venv/bin/python tools/research/freeform/baseline_arm.py --run-id base1
+  --sample all --workers 3 --batch-concurrency 1` (frozen author_llm, luna/medium)
+- freedom: `.venv/bin/python tools/research/freeform/harness.py --run-id main1
+  --sample all --model gpt-5.6-terra --effort low --arm freedom --workers 6
+  --batch-concurrency 1` (surface 33f77081 = frozen c5fb6a80 + the lead-directed
+  select_keep cell-EXPORT amendment only; authoring protocol byte-identical)
+
+| arm | admitted | DEV | OWNER | validity | first-failures (cells) | tokens | tok/admitted | wall |
+|---|---|---|---|---|---|---|---|---|
+| baseline (compiler, luna/med) | **40/50 = 0.80** | 22/30 | 18/20 | 50/50 | C3 595, C2 218, C1 210, C4 208, C5 89 | 138,244 | 3,456 | 2,336 s |
+| freedom (full schema, terra/low) | **9/50 = 0.18** | 3/30 | 6/20 | 49/50 | C5 2576, C2 1654, C3 1545, C4 1483, C1 559 | 4,693,912 | 521,545 | 3,991 s |
+
+Freedom repair statistics: 226 repair calls over 50 briefs (validate 68, site 25,
+revise 133; mean 4.52/brief). Freedom admitted one brief the compiler could not
+(`c3-left-hook-ptw`); the compiler admitted 32 briefs freedom could not. Freedom did
+relatively better on owner items (6/20) than DEV (3/30) — the compiler's 8 families
+were tuned on DEV-like briefs.
+
+Dynamism census (shared frozen instrument, per-cell means over final-batch cells):
+
+| metric (mean/cell) | baseline all | baseline passing | freedom all | freedom passing |
+|---|---|---|---|---|
+| actorsMoving | 1.93* | 1.93 | 1.77 | 2.30 |
+| interactingPairs | 1.00 | 1.00 | 0.97 | 1.44 |
+| signalPhaseChanges | 0.00 | 0.00 | 0.14 | 0.26 |
+| swerveEvents | 0.09 | 0.09 | 0.08 | 0.14 |
+| laneChangesExecuted | 0.01 | 0.01 | 0.02 | 0.01 |
+| hardBrakeEvents | 1.98 | 1.98 | 1.95 | 2.48 |
+| actorCount | 2.00 | 2.00 | 2.15 | 2.31 |
+| ambientCount | 0.00 | 0.00 | 0.00 | 0.00 |
+
+(*baseline all-cells ≈ passing-cells: the compiler's scenes are homogeneous.)
+Where freedom cells PASS the gate they are measurably more dynamic than the
+compiler's on interactingPairs (+44%), signalPhaseChanges (0.26 vs 0.00), actors
+moving, and hard brakes — but the effect is small in absolute terms, and every model
+chose `ambient: off` in the main arm (49/50 briefs; the pilot's honesty warning about
+ambient smothering the ego priced ambient out entirely — recorded as a finding, not
+tuned away).
+
+Cell artifacts for FootageLane: `/tmp/tgr-freeform-base1/cells` (300 cells, all six
+per brief; judged: realism μ 5.91, plausible 0.87, dynamism μ 3.12; gate-passers
+6.04/3.27 — FootageLane sol/medium judge) and `/tmp/tgr-freeform-main1/cells`
+(264 cells, ~half gate-failed by design).
+
+## 7. Comparison and falsifier verdicts — pending FootageLane freedom-arm verdicts
