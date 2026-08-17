@@ -355,6 +355,17 @@ $ curl -sS -o /tmp/showcase-p3-acceptance.mp4 \
 $ ffprobe -v error -show_entries format=duration,size -of json \
     /tmp/showcase-p3-acceptance.mp4
 {"format":{"duration":"0.333333","size":"29095"}}
+
+$ curl -sS -D - -o /tmp/showcase-p3-index.html \
+    'http://127.0.0.1:4175/?token=showcase-p3-acceptance'
+HTTP/1.1 200 OK
+set-cookie: showcase_token=showcase-p3-acceptance; Path=/; HttpOnly; SameSite=Strict
+content-type: text/html; charset=utf-8
+
+$ curl -sS -o /dev/null -w 'asset_http=%{http_code}\n' \
+    -H 'Cookie: showcase_token=showcase-p3-acceptance' \
+    'http://127.0.0.1:4175/assets/index-CotKFEUW.js'
+asset_http=200
 ```
 
 Measured stage times were author 43.764 s, site match 3.448 s, batch/cell copy 26.161 s, frozen gate
