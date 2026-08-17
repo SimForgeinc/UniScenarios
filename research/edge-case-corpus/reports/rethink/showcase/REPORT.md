@@ -141,3 +141,110 @@ simulation/map regression assertions, including temporary-lane-drop, bus-pullout
 intersection-arrival cases. No P1 renderer assertion failed. This broader-suite limitation is
 reported rather than represented as green; the requested new tests, CLI typecheck, workspace build,
 and end-to-end 2D acceptance smoke are green.
+
+### P5 — pipeline glue + gallery preseed
+
+Implemented the three requested entrypoints under `tools/research/showcase/` without changing the
+frozen source implementations:
+
+- `author_one.py` writes `20-author/template.json` and inspectable transcripts for either a
+  single compiler brief or one Vista2 episode. Compiler mode imports
+  `tools/gates/author_llm.py`, calls its `decide()` then `compile_and_validate()` functions, and
+  sets `VISTA_MODEL=gpt-5.6-sol` / `VISTA_EFFORT=medium` before that module imports `vlm.py`.
+  Vista2 requires a caller-provided `--guide`, preserves the action JSONL, LLM JSONL, GUIDE,
+  action PNGs, and current validated template even if a deliberately short episode ends without
+  portability admission.
+- `judge_cells.py` discovers contract cell directories and fixes the configuration to
+  gpt-5.6-sol/medium/spread8, vision assertion required, redacted render required. It atomically
+  checkpoints after every cell and skips completed `cellId`s on resume.
+- `preseed_gallery.py` ranks vision-asserted sol verdicts lexicographically by gate pass then
+  realism+dynamism (with score tie-breaks), reserves representation for every surviving source
+  root, copies each instance/trace/meta/verdict out of `/tmp`, and re-renders at 12 FPS. It wrote
+  24 independent `showcase-data/gallery-seed/<n>/90-gallery.json` layouts with MP4s. P5 also made
+  the showcase server discover these per-card seed files and verified their media endpoint, so
+  `/api/gallery` is populated on first load.
+
+Frozen gate verification at session start:
+
+```text
+$ .venv/bin/python tools/gates/verify_gate_hash.py
+GATE-HASH TRIPWIRE: PASS -- frozen gate v1 1a08698e95fca4bc / v2 3823182614e5a5ba unchanged
+```
+
+Compiler smoke (gateway environment was explicitly set as shown):
+
+```text
+$ /usr/bin/time -f 'COMMAND_WALL_S=%e' env \
+    OPENAI_BASE_URL=http://127.0.0.1:4141/v1 OPENAI_API_KEY=x \
+    .venv/bin/python tools/research/showcase/author_one.py \
+    --engine compiler --brief 'a slower lead vehicle brakes hard' \
+    --out /tmp/showcase-p5-compiler
+valid=true; 20-author/template.json + transcript.json written
+adapter wall=12.590 s; command wall=12.71 s
+```
+
+The reused frozen `decide()` interface returns decision text but not response usage, so compiler
+tokens are recorded as `null` with that reason; no token count was estimated.
+
+Short Vista2 smoke using the mature, provided main-run GUIDE seed:
+
+```text
+$ /usr/bin/time -f 'COMMAND_WALL_S=%e' env \
+    OPENAI_BASE_URL=http://127.0.0.1:4141/v1 OPENAI_API_KEY=x \
+    .venv/bin/python tools/research/showcase/author_one.py \
+    --engine vista2 --brief 'a delivery van pulls out while a cyclist approaches' \
+    --guide /tmp/tgr-vista-main1/GUIDE.md --budget 4 --wall-cap 600 \
+    --out /tmp/showcase-p5-vista2
+PASS gpt-5.6-sol sees red ('Red'); valid=true; admitted=false
+adapter wall=60.655 s; command wall=62.86 s
+4 calls; input=29,827; output=2,016; reasoning=1,251 tokens; LLM wall=42.877 s
+```
+
+This was intentionally a four-action smoke, not an admission run. It ended with a valid template,
+5 action transcript rows, 4 LLM rows, and 3 PNG observations, but did **not** win the portability
+gate; P5 does not claim that it did.
+
+Three-cell judge smoke and fully cached resume:
+
+```text
+$ /usr/bin/time -f 'COMMAND_WALL_S=%e' env \
+    OPENAI_BASE_URL=http://127.0.0.1:4141/v1 OPENAI_API_KEY=x \
+    .venv/bin/python tools/research/showcase/judge_cells.py \
+    --cells /tmp/showcase-p5-judge-cells --out /tmp/showcase-p5-judge.json
+discovered=3; completed=3; errors=0; command wall=28.84 s
+judge latency sum=27.47 s; input=12,882; output=1,206; reasoning=943 tokens
+
+$ .venv/bin/python tools/research/showcase/judge_cells.py \
+    --cells /tmp/showcase-p5-judge-cells --out /tmp/showcase-p5-judge.json
+cached <cell-1>; cached <cell-2>; cached <cell-3>
+discovered=3; completed=3; errors=0
+```
+
+Gallery generation and measured result:
+
+```text
+$ /usr/bin/time -f 'COMMAND_WALL_S=%e' \
+    .venv/bin/python tools/research/showcase/preseed_gallery.py \
+    --count 24 --out showcase-data/gallery-seed
+freeform: 300 eligible; emergent-pair: 964; emergent-h2: 1,117; vista-main: 1,086
+populated 24 cards; command wall=20.00 s
+```
+
+The committed seed is 46 MB: 24 cards, 24 non-empty H.264 MP4s, 24 copied instances, and 24 copied
+gzip traces. All selected cells pass the frozen gate; realism+dynamism sums range 11–16. The
+selection contains six cells from each of the four requested roots, covers all five maps, and no
+card depends on its temporary source root. A second render after correcting evidence-derived map
+IDs and artifact-root-relative URLs took 20.93 s.
+
+Focused verification:
+
+```text
+$ .venv/bin/python tools/research/showcase/test_showcase_tools.py -v
+Ran 5 tests in 0.001s — OK
+
+$ pnpm --filter @uniscenarios/showcase test
+tests 3; pass 3; fail 0
+
+$ pnpm --filter @uniscenarios/showcase build
+node --check server/index.mjs && node --check server/pipeline.mjs  # exit 0
+```
