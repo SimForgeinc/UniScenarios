@@ -5,7 +5,14 @@ import { artifactKind, artifacts, cardId, cardMedia, cells, stageList, STAGES } 
 import type { Artifact, GalleryCard, JobIndex, StageEvent, SubmitPayload } from './types';
 import './style.css';
 
-const MAPS = ['San Francisco', 'Las Vegas', 'Boston', 'Singapore', 'Tel Aviv'];
+const MAPS = [
+  ['yale-street', 'Yale Street'],
+  ['belmont-research-center', 'Belmont Research Center'],
+  ['el-camino-road', 'El Camino Road'],
+  ['easterbrook-discovery-school', 'Easterbrook Discovery School'],
+  ['richmond-field-station', 'Richmond Field Station'],
+] as const;
+const mapLabel = (id: string) => MAPS.find(([mapId]) => mapId === id)?.[1] ?? id;
 
 function navigate(hash: string) { location.hash = hash; }
 function useRoute() {
@@ -39,7 +46,7 @@ function Gallery() {
       const id = cardId(card); const admitted = card.admitted ?? card.admittedCells ?? 0; const total = card.total ?? card.totalCells ?? 0;
       return <article class="gallery-card" key={id} onClick={() => navigate(`#/jobs/${encodeURIComponent(id)}`)} tabindex={0} onKeyDown={(e) => e.key === 'Enter' && navigate(`#/jobs/${encodeURIComponent(id)}`)}>
         <Media source={cardMedia(card)} label={card.brief ?? 'Scenario render'} loop />
-        <div class="card-body"><div class="chip-row"><Chip tone="engine">{card.engine ?? 'auto'}</Chip><Chip tone={admitted ? 'pass' : 'fail'}>{admitted}/{total} admitted</Chip></div><h2>{card.headline ?? card.brief ?? 'Untitled scenario'}</h2>{card.headline && <p>{card.brief}</p>}<div class="chip-row"><Score label="Realism" value={card.realism} /><Score label="Dynamism" value={card.dynamism} /></div><div class="map-row">{card.maps?.map((map) => <Chip key={map}>{map}</Chip>)}</div></div>
+        <div class="card-body"><div class="chip-row"><Chip tone="engine">{card.engine ?? 'auto'}</Chip><Chip tone={admitted ? 'pass' : 'fail'}>{admitted}/{total} admitted</Chip></div><h2>{card.headline ?? card.brief ?? 'Untitled scenario'}</h2>{card.headline && <p>{card.brief}</p>}<div class="chip-row"><Score label="Realism" value={card.realism} /><Score label="Dynamism" value={card.dynamism} /></div><div class="map-row">{card.maps?.map((map) => <Chip key={map}>{mapLabel(map)}</Chip>)}</div></div>
       </article>;
     })}</section>}
   </main>;
@@ -63,7 +70,7 @@ function StageCard({ event, index }: { event: StageEvent; index: number }) {
 function verdict(value?: boolean) { return value == null ? '—' : value ? 'PASS' : 'FAIL'; }
 function CellGrid({ job }: { job: JobIndex | null }) {
   const rows = cells(job); if (!rows.length) return <div class="empty small">Cells appear after simulation.</div>;
-  return <div class="cell-grid">{rows.map((cell) => { const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted; const judge = cell.judge; return <details class="cell" key={cell.cellId ?? cell.id}><summary><div><small>{cell.map ?? 'map'}</small><b>{cell.cellId ?? cell.id}</b></div><Chip tone={gate === true ? 'pass' : gate === false ? 'fail' : ''}>{verdict(gate)}</Chip></summary><div class="cell-body"><div class="chip-row"><Score label="Realism" value={judge?.realism} /><Score label="Dynamism" value={judge?.dynamism} />{judge?.plausible != null && <Chip tone={judge.plausible ? 'pass' : 'fail'}>{judge.plausible ? 'plausible' : 'implausible'}</Chip>}</div>{typeof cell.gate === 'object' && cell.gate.firstFailure && <p class="failure">First failure: {cell.gate.firstFailure}</p>}<div class="artifacts">{artifacts(cell).map((item, i) => <ArtifactView key={i} artifact={item} />)}</div><pre>{JSON.stringify(cell, null, 2)}</pre></div></details>; })}</div>;
+  return <div class="cell-grid">{rows.map((cell) => { const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted; const judge = cell.judge; return <details class="cell" key={cell.cellId ?? cell.id}><summary><div><small>{cell.map ? mapLabel(cell.map) : 'map'}</small><b>{cell.cellId ?? cell.id}</b></div><Chip tone={gate === true ? 'pass' : gate === false ? 'fail' : ''}>{verdict(gate)}</Chip></summary><div class="cell-body"><div class="chip-row"><Score label="Realism" value={judge?.realism} /><Score label="Dynamism" value={judge?.dynamism} />{judge?.plausible != null && <Chip tone={judge.plausible ? 'pass' : 'fail'}>{judge.plausible ? 'plausible' : 'implausible'}</Chip>}</div>{typeof cell.gate === 'object' && cell.gate.firstFailure && <p class="failure">First failure: {cell.gate.firstFailure}</p>}<div class="artifacts">{artifacts(cell).map((item, i) => <ArtifactView key={i} artifact={item} />)}</div><pre>{JSON.stringify(cell, null, 2)}</pre></div></details>; })}</div>;
 }
 
 function JobDetail({ id }: { id: string }) {
@@ -77,7 +84,7 @@ function JobDetail({ id }: { id: string }) {
   </main>;
 }
 
-const initial: SubmitPayload = { brief: '', engine: 'auto', nScenarios: 3, maps: [...MAPS], maxSitesPerMap: 3, ambient: 'light', seed: 42, render3d: true, topK: 3, judge: true };
+const initial: SubmitPayload = { brief: '', engine: 'auto', nScenarios: 3, maps: MAPS.map(([id]) => id), maxSitesPerMap: 3, ambient: 'light', seed: 42, render3d: true, topK: 3, judge: true };
 function Submit() {
   const [form, setForm] = useState(initial); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
   const update = <K extends keyof SubmitPayload>(key: K, value: SubmitPayload[K]) => setForm((old) => ({ ...old, [key]: value }));
@@ -89,7 +96,7 @@ function Submit() {
       <label><span>Max sites / map</span><input type="number" min="1" max="20" value={form.maxSitesPerMap} onInput={(e) => update('maxSitesPerMap', e.currentTarget.valueAsNumber)} /></label>
       <label><span>Ambient traffic</span><select value={form.ambient} onChange={(e) => update('ambient', e.currentTarget.value as SubmitPayload['ambient'])}>{['off', 'light', 'moderate', 'city', 'heavy'].map((v) => <option value={v}>{v}</option>)}</select></label>
       <label><span>Seed</span><input type="number" value={form.seed} onInput={(e) => update('seed', e.currentTarget.valueAsNumber)} /></label>
-      <fieldset class="wide"><legend>Maps</legend><div class="map-options">{MAPS.map((map) => <label class="check"><input type="checkbox" checked={form.maps.includes(map)} onChange={(e) => update('maps', e.currentTarget.checked ? [...form.maps, map] : form.maps.filter((value) => value !== map))} /><span>{map}</span></label>)}</div></fieldset>
+      <fieldset class="wide"><legend>Maps</legend><div class="map-options">{MAPS.map(([id, label]) => <label class="check" key={id}><input type="checkbox" checked={form.maps.includes(id)} onChange={(e) => update('maps', e.currentTarget.checked ? [...form.maps, id] : form.maps.filter((value) => value !== id))} /><span>{label}</span></label>)}</div></fieldset>
       <label class="toggle"><input type="checkbox" checked={form.render3d} onChange={(e) => update('render3d', e.currentTarget.checked)} /><span><b>3D rendering</b><small>Render highest-ranked passing cells</small></span></label>
       <label><span>3D top K</span><input type="number" min="1" max="10" disabled={!form.render3d} value={form.topK} onInput={(e) => update('topK', e.currentTarget.valueAsNumber)} /></label>
       <label class="toggle"><input type="checkbox" checked={form.judge} onChange={(e) => update('judge', e.currentTarget.checked)} /><span><b>Footage judge</b><small>Score realism and dynamism</small></span></label>
