@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { createShowcaseServer } from './index.mjs';
+import { createShowcaseServer, resolveSchedulerSettings } from './index.mjs';
 import { atomicJson, rankCandidates, retryKind } from './pipeline.mjs';
 
 const TOKEN = 'test-showcase-token';
@@ -46,6 +46,34 @@ class StubEngine {
       createdAt: job.createdAt,
     });
   }
+}
+
+class BlockingEngine {
+  constructor() {
+    this.active = 0;
+    this.maximumActive = 0;
+    this.releasePromise = new Promise((resolve) => {
+      this.release = resolve;
+    });
+  }
+
+  async run() {
+    this.active += 1;
+    this.maximumActive = Math.max(this.maximumActive, this.active);
+    try {
+      await this.releasePromise;
+    } finally {
+      this.active -= 1;
+    }
+  }
+}
+
+async function eventually(predicate, message) {
+  for (let attempt = 0; attempt < 200; attempt += 1) {
+    if (predicate()) return;
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  assert.fail(message);
 }
 
 test('candidate ranking prefers judged quality while preserving site diversity', () => {
@@ -245,4 +273,146 @@ test('gallery discovers committed per-card gallery seeds on first load', async (
   const artifact = await fetch(`${base}${cards[0].media}?token=${TOKEN}`);
   assert.equal(artifact.status, 200);
   assert.equal(await artifact.text(), 'seed mp4');
+});
+
+test('scheduler bounds four active jobs and preserves the legacy concurrency option', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'showcase-concurrency-test-'));
+  const engine = new BlockingEngine();
+  const { runner } = await createShowcaseServer({
+    token: TOKEN,
+    dataDir,
+    engine,
+    concurrency: 4,
+    env: {},
+  });
+  t.after(async () => rm(dataDir, { recursive: true, force: true }));
+
+  for (let index = 0; index < 6; index += 1) {
+    await runner.submit({ methodology: 'custom', brief: `Queued campaign job number ${index}.` });
+  }
+  await eventually(() => engine.active === 4, 'four jobs became active');
+  assert.equal(engine.maximumActive, 4);
+  assert.equal(runner.queue.length, 2);
+
+  engine.release();
+  await eventually(() => runner.active === 0, 'all queued jobs completed');
+  assert.equal(engine.maximumActive, 4);
+});
+
+test('scheduler configuration uses bounded production defaults and rejects oversubscription', () => {
+  assert.deepEqual(resolveSchedulerSettings({ env: {} }), {
+    jobConcurrency: 4,
+    batchConcurrency: 3,
+    render2dConcurrency: 4,
+    render3dConcurrency: 2,
+    judgeConcurrency: 4,
+  });
+  const configured = resolveSchedulerSettings({
+    env: {
+      SHOWCASE_JOB_CONCURRENCY: '5',
+      SHOWCASE_BATCH_CONCURRENCY: '6',
+      SHOWCASE_2D_CONCURRENCY: '3',
+      SHOWCASE_3D_CONCURRENCY: '4',
+      SHOWCASE_JUDGE_CONCURRENCY: '7',
+    },
+  });
+  assert.equal(configured.batchConcurrency, 6);
+  assert.equal(configured.judgeConcurrency, 7);
+  assert.throws(
+    () => resolveSchedulerSettings({ env: { SHOWCASE_JOB_CONCURRENCY: '999999' } }),
+    /jobConcurrency must be an integer from 1 to 8/,
+  );
+  assert.throws(
+    () => resolveSchedulerSettings({ render3dConcurrency: Number.POSITIVE_INFINITY, env: {} }),
+    /render3dConcurrency must be an integer from 1 to 4/,
+  );
+});
+
+test('job evidence normalizes campaign metadata and records scheduler limits', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'showcase-metadata-test-'));
+  const engine = new StubEngine();
+  const { runner } = await createShowcaseServer({
+    token: TOKEN,
+    dataDir,
+    engine,
+    jobConcurrency: 1,
+    batchConcurrency: 5,
+    render2dConcurrency: 3,
+    render3dConcurrency: 2,
+    judgeConcurrency: 6,
+    env: {},
+  });
+  t.after(async () => rm(dataDir, { recursive: true, force: true }));
+
+  const jobId = await runner.submit({
+    methodology: 'custom',
+    brief: 'A campaign metadata normalization case.',
+    campaignId: '  edge-cases-67x5  ',
+    campaignCaseId: '  case-07  ',
+    campaignAttempt: 9,
+  });
+  const saved = JSON.parse(await readFile(join(runner.jobsDir, jobId, '00-brief.json'), 'utf8'));
+  assert.equal(saved.campaignId, 'edge-cases-67x5');
+  assert.equal(saved.campaignCaseId, 'case-07');
+  assert.equal(saved.campaignAttempt, 9);
+  assert.deepEqual(saved.scheduler, {
+    jobConcurrency: 1,
+    batchConcurrency: 5,
+    render2dConcurrency: 3,
+    render3dConcurrency: 2,
+    judgeConcurrency: 6,
+  });
+  await eventually(() => runner.ensureState(jobId).done, 'metadata job completed');
+});
+
+test('recovery replays a persisted job error as a terminal event', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'showcase-recovery-test-'));
+  const jobId = '11111111-1111-4111-8111-111111111111';
+  const jobDir = join(dataDir, 'jobs', jobId);
+  await mkdir(jobDir, { recursive: true });
+  await atomicJson(join(jobDir, '00-brief.json'), {
+    jobId,
+    briefId: `showcase-${jobId}`,
+    brief: 'A recovered terminal failure.',
+  });
+  await atomicJson(join(jobDir, 'job-error.json'), {
+    error: 'persisted failure',
+    failedAt: new Date().toISOString(),
+  });
+  const { runner } = await createShowcaseServer({
+    token: TOKEN,
+    dataDir,
+    engine: new StubEngine(),
+    env: {},
+  });
+  t.after(async () => rm(dataDir, { recursive: true, force: true }));
+
+  const events = [];
+  const subscription = runner.subscribe(jobId, (event) => events.push(event));
+  assert.equal(subscription.done, true);
+  assert.deepEqual(events.at(-1), {
+
+    stage: 'job',
+    status: 'error',
+    artifacts: ['job-error.json'],
+  });
+  assert.equal(runner.queue.length, 0);
+});
+test('campaign endpoint publishes the strict accepted-video report', async (t) => {
+  const { base, runner } = await fixture(t);
+  const campaignDir = join(runner.dataDir, 'campaigns', 'edge-cases-67x5');
+  await mkdir(campaignDir, { recursive: true });
+  await atomicJson(join(campaignDir, 'report.json'), {
+    campaignId: 'edge-cases-67x5',
+    targetValidVideos: 5,
+    cases: [{ id: 'case-1', title: 'Case one', attempts: [], validVideos: [] }],
+    totals: { validVideos: 0, targetVideos: 335 },
+    validityContract: { productAccepted: true, uniqueVideoSha256Required: true },
+  });
+  const response = await fetch(`${base}/api/campaigns/edge-cases-67x5?token=${TOKEN}`);
+  assert.equal(response.status, 200);
+  const report = await response.json();
+  assert.equal(report.campaignId, 'edge-cases-67x5');
+  assert.equal(report.validityContract.productAccepted, true);
+  assert.equal((await fetch(`${base}/api/campaigns/missing?token=${TOKEN}`)).status, 404);
 });

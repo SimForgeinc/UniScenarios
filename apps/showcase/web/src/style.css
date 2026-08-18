@@ -26,3 +26,60 @@ main { width:min(1240px, calc(100% - 48px)); min-height:calc(100vh - 150px); mar
 .methodology-card { margin-top:22px; padding:22px; border:1px solid #35445a; border-radius:14px; background:linear-gradient(145deg,#151e2b,#10151e); } .methodology-card h2 { margin-bottom:8px; } .methodology-card p:not(.eyebrow) { margin-bottom:18px; } form>fieldset:first-child { margin-bottom:22px; } form>label.wide { display:block; } .check span { display:grid; gap:3px; } .check small { color:var(--muted); font-weight:400; max-width:360px; } .check input:checked+span small { color:#173326; }
 @media(max-width:700px){ header { padding:0 18px; } main { width:calc(100% - 28px); padding-top:34px; } .hero,.job-heading,.section-title { align-items:start; flex-direction:column; } .gallery { grid-template-columns:1fr; } .form-grid { grid-template-columns:1fr; } .wide { grid-column:auto; } .stage summary { grid-template-columns:12px 34px 1fr auto 16px; } .elapsed { display:none; } .stage-content { margin-left:0; } .submit-actions { gap:15px; align-items:stretch; flex-direction:column; } }
 @media(max-width:700px){ .job-video-gallery { grid-template-columns:1fr; } .job-video-meta { align-items:start; flex-direction:column; } .job-video-meta .chip-row { justify-content:flex-start; } }
+.campaign-hero { align-items:start; margin-bottom:34px; } .campaign-hero h1 { font-size:clamp(1.9rem,3.8vw,3.3rem); max-width:760px; margin-bottom:14px; } .campaign-hero p:last-child { max-width:700px; font-size:.95rem; }
+.campaign-sync { display:grid; gap:9px; justify-items:end; } .campaign-sync p { margin:0; font-size:.71rem; color:#5d6879; }
+.stat-grid { display:grid; grid-template-columns:repeat(12,1fr); gap:14px; }
+.stat { display:grid; grid-column:span 4; align-content:start; gap:9px; padding:17px 18px; border:1px solid var(--line); border-radius:14px; background:linear-gradient(145deg,#131925,#0e131c); }
+.stat small { color:var(--muted); font-size:.63rem; font-weight:800; letter-spacing:.13em; text-transform:uppercase; }
+.stat b { font-size:1.75rem; line-height:1; letter-spacing:-.035em; font-variant-numeric:tabular-nums; }
+.stat b em { font-style:normal; color:#5d6879; font-size:.95rem; letter-spacing:0; }
+.stat span { color:var(--muted); font-size:.74rem; line-height:1.45; }
+.stat.lead b { font-size:2.15rem; }
+@media(max-width:1040px){ .stat { grid-column:span 6; } }
+.meter { height:6px; border-radius:99px; background:#1b2231; overflow:hidden; }
+.meter i { display:block; height:100%; border-radius:99px; background:linear-gradient(90deg,#5fd3a4,var(--accent)); transition:width .6s cubic-bezier(.16,1,.3,1); }
+.contract-note { display:grid; gap:11px; margin:24px 0 4px; padding:18px 20px; border:1px solid #2b3a4d; border-left:3px solid var(--accent); border-radius:12px; background:#101722; }
+.contract-note p:not(.eyebrow) { margin:0; max-width:900px; font-size:.8rem; }
+.pips { display:inline-flex; gap:3px; } .pip { width:14px; height:6px; border-radius:99px; background:#242c3b; } .pip.on { background:var(--accent); box-shadow:0 0 8px #9af5cb55; }
+.filter-row { display:flex; gap:7px; } .filter { padding:.42rem .78rem; border-radius:99px; color:var(--muted); font-size:.75rem; } .filter.on { color:#07110d; background:var(--accent); border-color:var(--accent); font-weight:800; }
+.campaign-ledger { border-top:1px solid var(--line); } .campaign-case { border-bottom:1px solid var(--line); }
+.campaign-case summary { min-height:62px; display:grid; grid-template-columns:30px 1fr auto 48px 112px 18px; gap:14px; align-items:center; cursor:pointer; }
+.campaign-case summary b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.93rem; font-weight:600; }
+.campaign-case summary .chip { justify-content:center; }
+.campaign-case.complete .case-index { color:var(--accent); }
+.case-index { color:#5d6879; font-family:ui-monospace,monospace; font-size:.78rem; }
+.case-count { color:var(--muted); font-size:.78rem; font-variant-numeric:tabular-nums; }
+.case-body { display:grid; gap:16px; padding:2px 0 26px; }
+.case-note { margin:0; font-size:.82rem; max-width:820px; }
+.attempt-head { display:flex; justify-content:space-between; align-items:baseline; gap:16px; border-top:1px solid var(--line); padding-top:14px; }
+.attempt-head h4 { margin:0; color:#cbd3df; font-size:.72rem; letter-spacing:.11em; text-transform:uppercase; }
+.attempt-head span { color:var(--muted); font-size:.74rem; }
+.attempt-list { display:grid; gap:6px; margin:0; padding:0; list-style:none; }
+.attempt-list li { display:grid; grid-template-columns:34px 92px minmax(0,1fr) auto; gap:12px; align-items:center; padding:9px 13px; border:1px solid var(--line); border-radius:10px; background:var(--panel); font-size:.78rem; }
+.attempt-list li.failed { border-color:#5a3236; } .attempt-list li .failure { grid-column:1/-1; margin:0; }
+.attempt-number { color:#5d6879; font-family:ui-monospace,monospace; } .attempt-meta { color:var(--muted); font-variant-numeric:tabular-nums; }
+.ghost-link { justify-self:start; max-width:100%; padding:0; border:0; background:transparent; color:var(--accent); font-size:.78rem; text-align:left; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ghost-link:hover { border-color:transparent; text-decoration:underline; }
+.campaign-videos { grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px; }
+.campaign-video-card .job-video-meta { flex-direction:column; align-items:start; gap:10px; padding:15px 16px 8px; }
+.campaign-video-card .job-video-meta h2 { max-width:none; white-space:normal; font-family:inherit; font-size:.95rem; line-height:1.35; }
+.campaign-video-card .job-video-meta .chip-row { justify-content:flex-start; }
+.campaign-video-foot { display:flex; justify-content:space-between; align-items:center; gap:12px; padding:0 16px 14px; color:#5d6879; font-family:ui-monospace,monospace; font-size:.67rem; }
+.campaign-video-foot span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.campaign-video-foot .ghost-link { flex:0 0 auto; font-size:.72rem; }
+.contract-note .chip,.campaign-sync .chip { text-transform:none; }
+@media(max-width:700px){
+  header { padding:0 14px; } nav { gap:.4rem; } nav button { padding:.5rem .62rem; font-size:.82rem; } .brand small { display:none; }
+  .campaign-sync { justify-items:start; }
+  .stat-grid { grid-template-columns:1fr; } .stat { grid-column:auto; } .stat.lead b { font-size:1.9rem; }
+  .campaign-videos { grid-template-columns:1fr; }
+  .campaign-video-foot { flex-wrap:wrap; row-gap:5px; } .campaign-video-foot span { flex:1 1 100%; }
+  .campaign-case summary { display:flex; flex-wrap:wrap; align-items:center; column-gap:10px; row-gap:10px; min-height:0; padding:15px 0; }
+  .campaign-case summary .case-index { flex:0 0 22px; }
+  .campaign-case summary b { flex:1 1 calc(100% - 34px); white-space:normal; font-size:.9rem; }
+  .campaign-case summary .chip { margin-left:auto; }
+  .campaign-case summary .chevron { flex:0 0 12px; }
+  .attempt-list li { display:flex; flex-wrap:wrap; gap:7px 10px; } .attempt-list li .ghost-link { flex:1 1 100%; }
+  .filter-row { flex-wrap:wrap; }
+}
+@media(max-width:430px){ .brand span:last-child { display:none; } }

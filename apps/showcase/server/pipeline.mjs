@@ -14,6 +14,7 @@ import {
   stat,
   writeFile,
 } from 'node:fs/promises';
+import { availableParallelism, loadavg } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 
@@ -290,16 +291,96 @@ function gatewayAvailable(host = '127.0.0.1', port = 4141) {
   });
 }
 
+function concurrencySetting(value, fallback, name, max) {
+  const resolved = value ?? fallback;
+  if (!Number.isInteger(resolved) || resolved < 1 || resolved > max) {
+    throw new RangeError(`${name} must be an integer from 1 to ${max}`);
+  }
+  return resolved;
+}
+
+class Semaphore {
+  constructor(limit) {
+    this.limit = limit;
+    this.active = 0;
+    this.waiters = [];
+  }
+
+  async run(action) {
+    if (this.active < this.limit) {
+      this.active += 1;
+    } else {
+      await new Promise((resolvePromise) => this.waiters.push(resolvePromise));
+    }
+    try {
+      return await action();
+    } finally {
+      const next = this.waiters.shift();
+      if (next) next();
+      else this.active -= 1;
+    }
+  }
+}
+
+async function mapConcurrent(values, concurrency, worker) {
+  const results = new Array(values.length);
+  let nextIndex = 0;
+  const workers = Array.from({ length: Math.min(concurrency, values.length) }, async () => {
+    while (nextIndex < values.length) {
+      const index = nextIndex;
+      nextIndex += 1;
+      results[index] = await worker(values[index], index);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
 export class ShowcasePipeline {
-  constructor({ root, python, cli } = {}) {
+  constructor({
+    root,
+    python,
+    cli,
+    jobConcurrency = 4,
+    batchConcurrency = 3,
+    render2dConcurrency = 4,
+    render3dConcurrency = 2,
+    judgeConcurrency = 4,
+  } = {}) {
     this.root = root ?? resolve(import.meta.dirname, '../../..');
     this.python = python ?? join(this.root, '.venv', 'bin', 'python');
     this.cli = cli ?? join(this.root, 'packages', 'cli', 'bin', 'uniscenarios.js');
     this.bridge = join(this.root, 'tools', 'research', 'showcase', 'stages.py');
+    this.schedulerSettings = Object.freeze({
+      jobConcurrency: concurrencySetting(jobConcurrency, 4, 'jobConcurrency', 8),
+      batchConcurrency: concurrencySetting(batchConcurrency, 3, 'batchConcurrency', 12),
+      render2dConcurrency: concurrencySetting(render2dConcurrency, 4, 'render2dConcurrency', 8),
+      render3dConcurrency: concurrencySetting(render3dConcurrency, 2, 'render3dConcurrency', 4),
+      judgeConcurrency: concurrencySetting(judgeConcurrency, 4, 'judgeConcurrency', 8),
+    });
+    this.batchConcurrency = this.schedulerSettings.batchConcurrency;
+    this.render2d = new Semaphore(this.schedulerSettings.render2dConcurrency);
+    this.render3d = new Semaphore(this.schedulerSettings.render3dConcurrency);
+    this.judge = new Semaphore(this.schedulerSettings.judgeConcurrency);
   }
 
   async run(job, externalContext) {
-    const context = { ...externalContext, root: this.root, python: this.python, cli: this.cli, timings: {} };
+    const load1AtStart = loadavg()[0];
+    const effectiveBatchConcurrency = load1AtStart > availableParallelism() * 1.25
+      ? 1
+      : this.batchConcurrency;
+    const context = {
+      ...externalContext,
+      root: this.root,
+      python: this.python,
+      cli: this.cli,
+      timings: {},
+      scheduler: {
+        ...(job.scheduler ?? this.schedulerSettings),
+        effectiveBatchConcurrency,
+        load1AtStart: Number(load1AtStart.toFixed(2)),
+      },
+    };
     const briefPath = join(context.jobDir, '00-brief.json');
     const routePath = join(context.jobDir, '10-route.json');
     const precheckPath = join(context.jobDir, '15-precheck.json');
@@ -356,6 +437,7 @@ export class ShowcasePipeline {
           fallbackToVisual: job.fallbackToVisual === true,
         },
         semanticContract,
+        scheduler: context.scheduler,
       };
       await atomicJson(routePath, value);
       return value;
@@ -376,7 +458,7 @@ export class ShowcasePipeline {
         ];
         if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
         if (subcommand === 'author') {
-          args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', '2');
+          args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', String(context.scheduler.effectiveBatchConcurrency));
         }
         await command(this.python, args, {
           cwd: this.root,
@@ -434,7 +516,7 @@ export class ShowcasePipeline {
     let cells = await stage(context, '40-cells', [cellsIndex], async () => {
       const batchDir = join(context.jobDir, '.batch');
       await rm(batchDir, { recursive: true, force: true });
-      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', '2'];
+      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', String(context.scheduler.effectiveBatchConcurrency)];
       if (job.maps.length === MAPS.length) args.push('--all-maps');
       else args.push('--maps', job.maps.join(','));
       if (job.ambient !== 'off') args.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
@@ -473,22 +555,26 @@ export class ShowcasePipeline {
 
     let render2d = await stage(context, '60-render2d', [render2dIndex], async () => {
       await mkdir(render2dDir, { recursive: true });
-      const rendered = [];
-      for (const cell of cells.filter((candidate) =>
-        passing.has(candidate.cellId) && candidate.traceFile && candidate.instanceFile)) {
-        const out = join(render2dDir, cell.cellId);
-        try {
-          await renderCell(context, cell, out, { tier: '2d' });
-          let redacted = null;
-          if (job.judge) {
-            redacted = join(out, 'redacted');
-            await renderCell(context, cell, redacted, { tier: '2d', redact: true });
+      const candidates = cells.filter((candidate) =>
+        passing.has(candidate.cellId) && candidate.traceFile && candidate.instanceFile);
+      const rendered = await mapConcurrent(
+        candidates,
+        this.schedulerSettings.render2dConcurrency,
+        async (cell) => {
+          const out = join(render2dDir, cell.cellId);
+          try {
+            await this.render2d.run(() => renderCell(context, cell, out, { tier: '2d' }));
+            let redacted = null;
+            if (job.judge) {
+              redacted = join(out, 'redacted');
+              await this.render2d.run(() => renderCell(context, cell, redacted, { tier: '2d', redact: true }));
+            }
+            return { cellId: cell.cellId, status: 'complete', video: `${cell.cellId}/rollout.mp4`, redacted: redacted ? `${cell.cellId}/redacted` : null };
+          } catch (error) {
+            return { cellId: cell.cellId, status: 'error', error: String(error.message ?? error).slice(-1000) };
           }
-          rendered.push({ cellId: cell.cellId, status: 'complete', video: `${cell.cellId}/rollout.mp4`, redacted: redacted ? `${cell.cellId}/redacted` : null });
-        } catch (error) {
-          rendered.push({ cellId: cell.cellId, status: 'error', error: String(error.message ?? error).slice(-1000) });
-        }
-      }
+        },
+      );
       await atomicJson(render2dIndex, { cells: rendered });
       return { value: rendered, status: rendered.some((row) => row.status === 'complete') ? 'complete' : 'error' };
     });
@@ -499,25 +585,29 @@ export class ShowcasePipeline {
       if (await exists(render2dQualityPath)) {
         qualityRows = (await readJson(render2dQualityPath)).cells ?? [];
       } else {
-        for (const item of render2d.filter((row) => row.status === 'complete' && row.redacted)) {
-          const cell = cells.find((candidate) => candidate.cellId === item.cellId);
-          const result = await command(this.python, [
-            this.bridge, 'judge', '--cell', cell.cellDir,
-            '--render', join(render2dDir, item.redacted),
-            '--model', job.judgeModel ?? 'gpt-5.6-sol',
-            '--effort', job.judgeEffort ?? 'medium',
-            '--strategy', job.judgeStrategy ?? 'spread8',
-          ], {
-            cwd: this.root,
-            timeout: 600_000,
-            env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
-            allowFailure: true,
-          });
-          const verdict = lastJsonLine(result.stdout);
-          qualityRows.push(verdict
-            ? { status: 'complete', ...verdict }
-            : { cellId: item.cellId, status: 'error', error: result.stderr.slice(-1000) });
-        }
+        qualityRows = await mapConcurrent(
+          render2d.filter((row) => row.status === 'complete' && row.redacted),
+          this.schedulerSettings.judgeConcurrency,
+          async (item) => this.judge.run(async () => {
+            const cell = cells.find((candidate) => candidate.cellId === item.cellId);
+            const result = await command(this.python, [
+              this.bridge, 'judge', '--cell', cell.cellDir,
+              '--render', join(render2dDir, item.redacted),
+              '--model', job.judgeModel ?? 'gpt-5.6-sol',
+              '--effort', job.judgeEffort ?? 'medium',
+              '--strategy', job.judgeStrategy ?? 'spread8',
+            ], {
+              cwd: this.root,
+              timeout: 600_000,
+              env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+              allowFailure: true,
+            });
+            const verdict = lastJsonLine(result.stdout);
+            return verdict
+              ? { status: 'complete', ...verdict }
+              : { cellId: item.cellId, status: 'error', error: result.stderr.slice(-1000) };
+          }),
+        );
         await atomicJson(render2dQualityPath, { status: 'complete', cells: qualityRows });
       }
     }
@@ -528,30 +618,30 @@ export class ShowcasePipeline {
         await atomicJson(render3dIndex, value);
         return { value, status: 'skipped' };
       }
-      const rows = [];
-      for (const cell of rankCandidates(
+      const candidates = rankCandidates(
         cells.filter((candidate) => passing.has(candidate.cellId)),
         qualityRows,
-      )) {
-        if (rows.length >= Math.max(job.topK, job.topK * 3)) break;
-        let rendered = false;
-        let lastError;
-        for (let attempt = 1; attempt <= 2 && !rendered; attempt += 1) {
-          try {
-            await renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' });
-            rows.push({ cellId: cell.cellId, status: 'complete', attempts: attempt });
-            rendered = true;
-          } catch (error) {
-            lastError = error;
-            const message = String(error?.message ?? error);
-            const transient = /Execution context was destroyed|navigation|Target closed|ECONNRESET|fetch failed/i.test(message);
-            if (!transient || attempt === 2) break;
+      ).slice(0, job.topK * 3);
+      const rows = await mapConcurrent(
+        candidates,
+        this.schedulerSettings.render3dConcurrency,
+        async (cell) => {
+          let lastError;
+          for (let attempt = 1; attempt <= 2; attempt += 1) {
+            try {
+              await this.render3d.run(() =>
+                renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' }));
+              return { cellId: cell.cellId, status: 'complete', attempts: attempt };
+            } catch (error) {
+              lastError = error;
+              const message = String(error?.message ?? error);
+              const transient = /Execution context was destroyed|navigation|Target closed|ECONNRESET|fetch failed/i.test(message);
+              if (!transient || attempt === 2) break;
+            }
           }
-        }
-        if (!rendered) {
-          rows.push({ cellId: cell.cellId, status: 'error', error: String(lastError?.message ?? lastError).slice(-1000) });
-        }
-      }
+          return { cellId: cell.cellId, status: 'error', error: String(lastError?.message ?? lastError).slice(-1000) };
+        },
+      );
       const value = { status: rows.some((row) => row.status === 'complete') ? 'complete' : 'unavailable', cells: rows };
       await atomicJson(render3dIndex, value);
       return { value, status: value.status === 'complete' ? 'complete' : 'skipped' };
@@ -570,23 +660,32 @@ export class ShowcasePipeline {
         return { value, status: 'skipped' };
       }
       const rows = qualityRows.map((row) => ({ ...row }));
-      for (const item of (render3d?.cells ?? []).filter((row) => row.status === 'complete')) {
-        const result = await command(this.python, [
-          this.bridge, 'review3d', '--brief', briefPath,
-          '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
-          '--model', job.judgeModel ?? 'gpt-5.6-sol',
-          '--effort', job.judgeEffort ?? 'medium',
-        ], {
-          cwd: this.root,
-          timeout: 600_000,
-          env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
-          allowFailure: true,
-        });
-        const review = lastJsonLine(result.stdout);
+      const reviews = await mapConcurrent(
+        (render3d?.cells ?? []).filter((row) => row.status === 'complete'),
+        this.schedulerSettings.judgeConcurrency,
+        async (item) => this.judge.run(async () => {
+          const result = await command(this.python, [
+            this.bridge, 'review3d', '--brief', briefPath,
+            '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
+            '--model', job.judgeModel ?? 'gpt-5.6-sol',
+            '--effort', job.judgeEffort ?? 'medium',
+          ], {
+            cwd: this.root,
+            timeout: 600_000,
+            env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+            allowFailure: true,
+          });
+          return {
+            cellId: item.cellId,
+            review: lastJsonLine(result.stdout) ?? { accepted: false, error: result.stderr.slice(-1000) },
+          };
+        }),
+      );
+      for (const item of reviews) {
         const existing = rows.find((row) => row.cellId === item.cellId);
         const row = existing ?? { cellId: item.cellId, status: 'complete' };
         if (!existing) rows.push(row);
-        row.threeDReview = review ?? { accepted: false, error: result.stderr.slice(-1000) };
+        row.threeDReview = item.review;
       }
       for (const row of rows) {
         const blindPass = row.status === 'complete' && row.plausible === true

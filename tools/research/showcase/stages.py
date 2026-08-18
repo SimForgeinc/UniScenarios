@@ -116,26 +116,52 @@ def author(args):
     os.environ['VISTA_MODEL'] = args.model
     os.environ['VISTA_EFFORT'] = args.effort
     import author_llm as module
+    import httpx
 
     brief = load(args.brief)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
     captured = io.StringIO()
+    usage = {'calls': 0, 'input_tokens': 0, 'output_tokens': 0,
+             'reasoning_tokens': 0, 'wallS': 0.0}
+    original_post = httpx.post
+
+    def observed_post(url, **kwargs):
+        call_started = time.monotonic()
+        response = original_post(url, **kwargs)
+        usage['calls'] += 1
+        usage['wallS'] += time.monotonic() - call_started
+        try:
+            provider = response.json().get('usage') or {}
+        except Exception:  # noqa: BLE001
+            provider = {}
+        usage['input_tokens'] += provider.get('input_tokens') or 0
+        usage['output_tokens'] += provider.get('output_tokens') or 0
+        usage['reasoning_tokens'] += (
+            (provider.get('output_tokens_details') or {}).get('reasoning_tokens') or 0)
+        return response
+
     started = time.monotonic()
-    with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
-        row = module.author_brief(
-            brief,
-            probe_draws=args.probe_draws,
-            final_draws=args.draws,
-            max_sites=args.max_sites,
-            concurrency=args.concurrency,
-            log_dir=None,
-        )
+    httpx.post = observed_post
+    try:
+        with contextlib.redirect_stdout(captured), contextlib.redirect_stderr(captured):
+            row = module.author_brief(
+                brief,
+                probe_draws=args.probe_draws,
+                final_draws=args.draws,
+                max_sites=args.max_sites,
+                concurrency=args.concurrency,
+                log_dir=None,
+            )
+    finally:
+        httpx.post = original_post
+    usage['wallS'] = round(usage['wallS'], 3)
     transcript = {
         'implementation': 'tools/gates/author_llm.py:author_brief',
         'model': args.model,
         'effort': args.effort,
         'wallS': round(time.monotonic() - started, 3),
+        'usage': usage,
         'brief': brief,
         'result': row,
         'log': captured.getvalue()[-20000:],

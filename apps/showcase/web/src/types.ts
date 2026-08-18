@@ -29,3 +29,39 @@ export interface SubmitPayload {
   ambient: 'off' | 'light' | 'moderate' | 'city' | 'heavy'; seed: number;
   render3d: boolean; topK: number; judge: boolean;
 }
+
+export type CampaignAttemptStatus = 'queued' | 'running' | 'complete' | 'failed' | string;
+export type CampaignCaseState = 'complete' | 'running' | 'blocked' | 'idle';
+export interface CampaignUsage { calls: number; inputTokens: number; outputTokens: number; reasoningTokens: number; modelWallS: number }
+export interface CampaignAttemptMetrics {
+  wallS?: number; stageSeconds?: Record<string, number>; tokens?: CampaignUsage;
+  tokenAccounting?: { authorTranscripts?: number; judgeLedgers?: number; dollarCost?: number | null; note?: string };
+}
+export interface CampaignAttempt {
+  number: number; jobId: string; seed?: number; status: CampaignAttemptStatus;
+  submittedAt?: string; finishedAt?: string; acceptedVideos?: number; error?: string; metrics?: CampaignAttemptMetrics;
+}
+export interface CampaignVideo {
+  sha256: string; jobId?: string; cellId?: string; source?: string; url: string;
+  mapId?: string | null; realism?: number | null; dynamism?: number | null; acceptedAt?: string;
+}
+export interface CampaignCase { id: string; title: string; index: number; attempts: CampaignAttempt[]; validVideos: CampaignVideo[] }
+export interface CampaignTotals {
+  cases: number; completeCases: number; targetVideos: number; validVideos: number;
+  jobs: number; activeJobs: number; failedJobs: number; wallS: number;
+  stageSeconds: Record<string, number>; tokens: CampaignUsage;
+  elapsedHours: number; validVideosPerHour: number; jobsPerHour: number; meanTokensPerValidVideo: number | null;
+}
+export interface CampaignValidityContract {
+  productAccepted?: boolean; frozenGateRequired?: boolean; briefAware3dReviewRequired?: boolean;
+  uniqueVideoSha256Required?: boolean; minimumPerCase?: number;
+}
+export interface CampaignReport {
+  campaignId: string; targetValidVideos: number; methodology?: string; version?: number;
+  startedAt?: string; updatedAt: string; cases: CampaignCase[]; totals: CampaignTotals;
+  validityContract: CampaignValidityContract;
+}
+export interface CampaignCaseProgress {
+  state: CampaignCaseState; accepted: number; target: number;
+  attempts: number; active: number; failed: number; latest?: CampaignAttempt;
+}

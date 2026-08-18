@@ -1,5 +1,8 @@
 import { normalizeGallery, normalizeJob } from './model';
-import type { Artifact, GalleryCard, JobIndex, RawJobIndex, StageEvent, SubmitPayload } from './types';
+import type {
+  Artifact, CampaignCase, CampaignCaseProgress, CampaignReport, CampaignTotals, CampaignVideo,
+  GalleryCard, JobIndex, RawJobIndex, StageEvent, SubmitPayload,
+} from './types';
 
 const token = typeof location === 'undefined' ? null : new URLSearchParams(location.search).get('token');
 
@@ -49,4 +52,73 @@ export function artifactUrl(artifact: Artifact | string): string {
   if (/^(data:|blob:|https?:\/\/)/.test(raw)) return raw;
   if (raw.startsWith('/artifacts/')) return withToken(raw);
   return withToken(`/artifacts/${raw.replace(/^\/+/, '')}`);
+}
+
+export const CAMPAIGN_ID = 'edge-cases-67x5';
+
+const count = (value: unknown) => (Number.isFinite(Number(value)) ? Number(value) : 0);
+/** Strict campaign validity: only unique, hashed, published 3D videos may ever be presented as a result. */
+function acceptedVideos(raw: CampaignVideo[] | undefined): CampaignVideo[] {
+  const seen = new Set<string>();
+  return (raw ?? []).filter((video) => {
+    if (!video?.url || !video.sha256 || seen.has(video.sha256)) return false;
+    seen.add(video.sha256);
+    return true;
+  });
+}
+
+export function normalizeCampaign(raw: Partial<CampaignReport>): CampaignReport {
+  const target = count(raw.targetValidVideos ?? raw.validityContract?.minimumPerCase);
+  const cases: CampaignCase[] = (raw.cases ?? []).map((item, index) => ({
+    ...item,
+    id: item.id ?? `case-${index + 1}`,
+    title: item.title ?? item.id ?? `Case ${index + 1}`,
+    index: Number.isFinite(item.index) ? item.index : index,
+    attempts: item.attempts ?? [],
+    validVideos: acceptedVideos(item.validVideos),
+  }));
+  const validVideos = cases.reduce((sum, item) => sum + item.validVideos.length, 0);
+  const totals: CampaignTotals = {
+    ...raw.totals,
+    cases: raw.totals?.cases ?? cases.length,
+    completeCases: cases.filter((item) => target > 0 && item.validVideos.length >= target).length,
+    targetVideos: count(raw.totals?.targetVideos) || cases.length * target,
+    validVideos,
+    jobs: count(raw.totals?.jobs), activeJobs: count(raw.totals?.activeJobs), failedJobs: count(raw.totals?.failedJobs),
+    wallS: count(raw.totals?.wallS), stageSeconds: raw.totals?.stageSeconds ?? {},
+    tokens: {
+      calls: count(raw.totals?.tokens?.calls), inputTokens: count(raw.totals?.tokens?.inputTokens),
+      outputTokens: count(raw.totals?.tokens?.outputTokens), reasoningTokens: count(raw.totals?.tokens?.reasoningTokens),
+      modelWallS: count(raw.totals?.tokens?.modelWallS),
+    },
+    elapsedHours: count(raw.totals?.elapsedHours), validVideosPerHour: count(raw.totals?.validVideosPerHour),
+    jobsPerHour: count(raw.totals?.jobsPerHour),
+    meanTokensPerValidVideo: raw.totals?.meanTokensPerValidVideo ?? null,
+  };
+  return {
+    ...raw,
+    campaignId: raw.campaignId ?? CAMPAIGN_ID,
+    targetValidVideos: target,
+    updatedAt: raw.updatedAt ?? '',
+    cases, totals,
+    validityContract: raw.validityContract ?? {},
+  };
+}
+
+export function campaignCaseProgress(item: CampaignCase, target: number): CampaignCaseProgress {
+  const accepted = item.validVideos.length;
+  const active = item.attempts.filter((attempt) => attempt.status === 'queued' || attempt.status === 'running').length;
+  const failed = item.attempts.filter((attempt) => attempt.status === 'failed').length;
+  const latest = item.attempts.at(-1);
+  const state = accepted >= target && target > 0 ? 'complete'
+    : active > 0 ? 'running'
+      : latest?.status === 'failed' ? 'blocked' : 'idle';
+  return { state, accepted, target, attempts: item.attempts.length, active, failed, latest };
+}
+
+export async function getCampaign(id: string): Promise<CampaignReport> {
+  const response = await fetch(withToken(`/api/campaigns/${encodeURIComponent(id)}`));
+  if (response.status === 404) throw new Error(`No published report for campaign "${id}" yet. The runner writes report.json on its first publish cycle.`);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return normalizeCampaign(await response.json() as Partial<CampaignReport>);
 }

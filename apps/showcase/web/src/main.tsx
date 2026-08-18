@@ -1,8 +1,11 @@
 import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { artifactUrl, getGallery, getJob, submitJob, subscribe } from './api';
+import { artifactUrl, campaignCaseProgress, CAMPAIGN_ID, getCampaign, getGallery, getJob, submitJob, subscribe } from './api';
 import { artifactKind, artifacts, cardId, cardMedia, cells, scopeStageArtifacts, stageList, STAGES, threeDVideos } from './model';
-import type { Artifact, GalleryCard, JobIndex, StageEvent, SubmitPayload } from './types';
+import type {
+  Artifact, CampaignCase, CampaignCaseState, CampaignReport, CampaignValidityContract, CampaignVideo,
+  GalleryCard, JobIndex, StageEvent, SubmitPayload,
+} from './types';
 import './style.css';
 
 const MAPS = [
@@ -18,8 +21,11 @@ function navigate(hash: string) { location.hash = hash; }
 function useRoute() {
   const [hash, setHash] = useState(location.hash || '#/');
   useEffect(() => { const update = () => setHash(location.hash || '#/'); addEventListener('hashchange', update); return () => removeEventListener('hashchange', update); }, []);
-  const match = hash.match(/^#\/jobs\/([^/?]+)/);
-  return match ? { view: 'job' as const, id: decodeURIComponent(match[1]) } : hash.startsWith('#/submit') ? { view: 'submit' as const } : { view: 'gallery' as const };
+  const job = hash.match(/^#\/jobs\/([^/?]+)/);
+  const campaign = hash.match(/^#\/campaigns\/([^/?]+)/);
+  if (job) return { view: 'job' as const, id: decodeURIComponent(job[1]) };
+  if (campaign) return { view: 'campaign' as const, id: decodeURIComponent(campaign[1]) };
+  return hash.startsWith('#/submit') ? { view: 'submit' as const } : { view: 'gallery' as const };
 }
 
 function Chip({ children, tone = '' }: { children: preact.ComponentChildren; tone?: string }) { return <span class={`chip ${tone}`}>{children}</span>; }
@@ -27,7 +33,7 @@ function Score({ label, value }: { label: string; value?: number }) { return <Ch
 function ErrorBox({ error }: { error: unknown }) { return error ? <div class="error" role="alert">{error instanceof Error ? error.message : String(error)}</div> : null; }
 
 function Header() {
-  return <header><button class="brand" onClick={() => navigate('#/')}><span class="brand-mark">U</span><span><b>UniScenarios</b><small>pipeline showcase</small></span></button><nav><button onClick={() => navigate('#/')}>Gallery</button><button class="primary compact" onClick={() => navigate('#/submit')}>New job</button></nav></header>;
+  return <header><button class="brand" onClick={() => navigate('#/')}><span class="brand-mark">U</span><span><b>UniScenarios</b><small>pipeline showcase</small></span></button><nav><button onClick={() => navigate('#/')}>Gallery</button><button onClick={() => navigate(`#/campaigns/${CAMPAIGN_ID}`)}>Campaign</button><button class="primary compact" onClick={() => navigate('#/submit')}>New job</button></nav></header>;
 }
 
 function Media({ source, label, loop = false }: { source?: string; label: string; loop?: boolean }) {
@@ -127,6 +133,180 @@ function JobDetail({ id }: { id: string }) {
   </main>;
 }
 
+const compactCount = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
+const plainCount = new Intl.NumberFormat('en');
+function duration(seconds?: number) {
+  if (!seconds || seconds < 0) return '—';
+  if (seconds < 90) return `${Math.round(seconds)}s`;
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.round((seconds - hours * 3600) / 60);
+  return hours ? `${hours}h ${String(minutes).padStart(2, '0')}m` : `${minutes}m`;
+}
+function ago(iso?: string) {
+  const elapsed = iso ? Date.now() - Date.parse(iso) : Number.NaN;
+  if (!Number.isFinite(elapsed)) return '';
+  const minutes = Math.round(elapsed / 60_000);
+  if (minutes < 60) return `${Math.max(1, minutes)}m ago`;
+  const hours = Math.round(minutes / 60);
+  return hours < 48 ? `${hours}h ago` : `${Math.round(hours / 24)}d ago`;
+}
+
+function Meter({ value, max, label }: { value: number; max: number; label: string }) {
+  const percent = max > 0 ? Math.min(100, (value / max) * 100) : 0;
+  return <div class="meter" role="progressbar" aria-label={label} aria-valuenow={value} aria-valuemin={0} aria-valuemax={max}><i style={{ width: `${percent.toFixed(2)}%` }} /></div>;
+}
+function Stat({ label, value, hint, children }: { label: string; value: string; hint?: string; children?: preact.ComponentChildren }) {
+  return <div class="stat"><small>{label}</small><b>{value}</b>{children}{hint && <span>{hint}</span>}</div>;
+}
+function Pips({ value, max }: { value: number; max: number }) {
+  return <span class="pips" role="img" aria-label={`${value} of ${max} accepted videos`}>{Array.from({ length: max }, (_, index) => <span key={index} class={index < value ? 'pip on' : 'pip'} />)}</span>;
+}
+
+function AcceptedVideo({ video, caseTitle, heading }: { video: CampaignVideo; caseTitle: string; heading: string }) {
+  const jobId = video.jobId;
+  return <article class="job-video-card campaign-video-card">
+    <video src={artifactUrl(video.url)} aria-label={`Accepted 3D video for ${caseTitle}`} controls playsInline preload="metadata" muted loop />
+    <div class="job-video-meta">
+      <div><small>{video.mapId ? mapLabel(video.mapId) : 'accepted 3D render'}</small><h2 title={heading}>{heading}</h2></div>
+      <div class="chip-row"><Chip tone="pass">strictly accepted</Chip>{video.realism != null && <Score label="Realism" value={video.realism} />}{video.dynamism != null && <Score label="Dynamism" value={video.dynamism} />}</div>
+    </div>
+    <div class="campaign-video-foot">
+      <span title={`sha256 ${video.sha256}${video.acceptedAt ? ` · accepted ${new Date(video.acceptedAt).toLocaleString()}` : ''}`}>{video.acceptedAt ? `accepted ${ago(video.acceptedAt)} · ` : ''}sha {video.sha256.slice(0, 10)}</span>
+      {jobId && <button class="ghost-link" onClick={() => navigate(`#/jobs/${encodeURIComponent(jobId)}`)}>Inspect job evidence →</button>}
+    </div>
+  </article>;
+}
+
+const CASE_STATE: Record<CampaignCaseState, [label: string, tone: string]> = {
+  complete: ['complete', 'pass'], running: ['rendering', 'live'], blocked: ['needs retry', 'fail'], idle: ['pending', ''],
+};
+const ATTEMPT_TONE: Record<string, string> = { complete: 'pass', failed: 'fail', running: 'live', queued: '' };
+
+function CampaignCaseRow({ item, target }: { item: CampaignCase; target: number }) {
+  const progress = campaignCaseProgress(item, target);
+  const [label, tone] = CASE_STATE[progress.state];
+  const stateLabel = progress.state === 'idle' && progress.attempts > 0 ? 'awaiting attempt' : label;
+  const [open, setOpen] = useState(false);
+  return <details class={`campaign-case ${progress.state}`} onToggle={(event) => setOpen(event.currentTarget.open)}>
+    <summary>
+      <span class="case-index">{String(item.index + 1).padStart(2, '0')}</span>
+      <b>{item.title}</b>
+      <Pips value={progress.accepted} max={target} />
+      <span class="case-count">{progress.accepted}/{target}</span>
+      <Chip tone={tone}>{stateLabel}</Chip>
+      <span class="chevron">⌄</span>
+    </summary>
+    {open && <div class="case-body">
+      {progress.accepted > 0
+        ? <div class="job-video-gallery campaign-videos">{item.validVideos.map((video) => <AcceptedVideo key={video.sha256} video={video} caseTitle={item.title} heading={video.cellId ?? `sha ${video.sha256.slice(0, 12)}`} />)}</div>
+        : <p class="case-note">No attempt has cleared strict acceptance for this case yet. Attempts below are status only—rejected or failed renders are never shown as results.</p>}
+      <div class="attempt-head"><h4>Attempts</h4><span>{progress.attempts} submitted · {progress.active} in flight · {progress.failed} failed</span></div>
+      {progress.attempts === 0
+        ? <p class="case-note">Waiting for the campaign runner to submit the first attempt.</p>
+        : <ol class="attempt-list">{item.attempts.map((attempt) => <li key={attempt.number} class={attempt.status}>
+          <span class="attempt-number">#{attempt.number}</span>
+          <Chip tone={ATTEMPT_TONE[attempt.status] ?? ''}>{attempt.status}</Chip>
+          <button class="ghost-link mono" onClick={() => navigate(`#/jobs/${encodeURIComponent(attempt.jobId)}`)}>{attempt.jobId}</button>
+          <span class="attempt-meta">{attempt.status === 'running' || attempt.status === 'queued' ? 'in flight' : duration(attempt.metrics?.wallS)}</span>
+          {attempt.error && <span class="failure">{attempt.error}</span>}
+        </li>)}</ol>}
+    </div>}
+  </details>;
+}
+
+const CONTRACT_LABELS: Record<string, string> = {
+  productAccepted: 'judge productAccepted: true',
+  frozenGateRequired: 'frozen C1–C6 gate',
+  briefAware3dReviewRequired: 'brief-aware 3D review',
+  uniqueVideoSha256Required: 'unique MP4 SHA-256',
+};
+const CASE_FILTERS = [['all', 'All cases'], ['open', 'In progress'], ['complete', 'Complete']] as const;
+type CaseFilter = (typeof CASE_FILTERS)[number][0];
+
+function Campaign({ id }: { id: string }) {
+  const [report, setReport] = useState<CampaignReport | null>(null);
+  const [error, setError] = useState<unknown>();
+  const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<CaseFilter>('all');
+  const load = () => getCampaign(id).then((value) => { setReport(value); setError(undefined); }).catch(setError).finally(() => setLoading(false));
+  useEffect(() => {
+    setReport(null);
+    setError(undefined);
+    setLoading(true);
+    load();
+    const timer = setInterval(load, 30_000);
+    return () => clearInterval(timer);
+  }, [id]);
+  const target = report?.targetValidVideos ?? 0;
+  const cases = report?.cases ?? [];
+  const visible = useMemo(() => cases.filter((item) => {
+    if (filter === 'complete') return item.validVideos.length >= target;
+    if (filter === 'open') return item.validVideos.length < target;
+    return true;
+  }), [cases, filter, target]);
+  const latest = useMemo(() => cases
+    .flatMap((item) => item.validVideos.map((video) => ({ video, title: item.title })))
+    .sort((left, right) => (right.video.acceptedAt ?? '').localeCompare(left.video.acceptedAt ?? ''))
+    .slice(0, 6), [cases]);
+  const totals = report?.totals;
+  const contract = report?.validityContract ?? {};
+  const allTokens = totals ? totals.tokens.inputTokens + totals.tokens.outputTokens + totals.tokens.reasoningTokens : 0;
+  return <main class="campaign-page">
+    <section class="hero campaign-hero">
+      <div>
+        <p class="eyebrow">STRICT-ACCEPTANCE CAMPAIGN</p>
+        <h1>{totals ? `${totals.cases} edge cases, ${target} accepted videos each.` : 'Edge-case campaign progress.'}</h1>
+        <p>A render counts only when the frozen gate passes, brief-aware 3D product review marks it <span class="mono">productAccepted</span>, and its MP4 hash is new within the case. Everything else stays an attempt—never a result.</p>
+      </div>
+      <div class="campaign-sync">
+        <Chip tone={error ? 'fail' : 'live'}><span class="live-dot" />{error ? 'refresh failing' : 'auto-refresh 30s'}</Chip>
+        <p class="mono">{report?.updatedAt ? `report published ${new Date(report.updatedAt).toLocaleTimeString()}` : 'no report yet'}</p>
+        <button onClick={load}>Refresh now</button>
+      </div>
+    </section>
+    <ErrorBox error={error} />
+    {!report || !totals ? (loading
+      ? <div class="empty">Loading campaign report…</div>
+      : <div class="empty"><h2>No campaign report yet</h2><p>Results appear once the runner publishes <span class="mono">report.json</span> for <span class="mono">{id}</span>. This page retries every 30 seconds.</p></div>) : <>
+      <section class="stat-grid" aria-label="Campaign totals">
+        <div class="stat lead">
+          <small>Accepted videos</small>
+          <b>{plainCount.format(totals.validVideos)}<em>/{plainCount.format(totals.targetVideos)}</em></b>
+          <Meter value={totals.validVideos} max={totals.targetVideos} label="Accepted videos against strict target" />
+          <span>{totals.targetVideos ? ((totals.validVideos / totals.targetVideos) * 100).toFixed(1) : '0.0'}% of the strict target · {duration(totals.elapsedHours * 3600)} elapsed</span>
+        </div>
+        <Stat label="Complete cases" value={`${totals.completeCases}/${totals.cases}`} hint={`${target} accepted videos required per case`}>
+          <Meter value={totals.completeCases} max={totals.cases} label="Cases at full acceptance" />
+        </Stat>
+        <Stat label="Jobs submitted" value={plainCount.format(totals.jobs)} hint={`${totals.activeJobs} in flight · ${totals.failedJobs} failed · ${duration(totals.wallS)} job wall time`} />
+        <Stat label="Throughput" value={`${totals.validVideosPerHour.toFixed(2)} videos/h`} hint={`${totals.jobsPerHour.toFixed(2)} jobs/h sustained`} />
+        <Stat label="Model tokens" value={compactCount.format(allTokens)} hint={`${compactCount.format(totals.tokens.inputTokens)} in · ${compactCount.format(totals.tokens.outputTokens)} out · ${compactCount.format(totals.tokens.reasoningTokens)} reasoning`} />
+        <Stat label="Tokens per accepted video" value={totals.meanTokensPerValidVideo == null ? '—' : compactCount.format(totals.meanTokensPerValidVideo)} hint={`${plainCount.format(totals.tokens.calls)} model calls · ${duration(totals.tokens.modelWallS)} model time`} />
+      </section>
+      <section class="contract-note">
+        <p class="eyebrow">VALIDITY CONTRACT</p>
+        <div class="chip-row">
+          {Object.entries(CONTRACT_LABELS).filter(([key]) => contract[key as keyof CampaignValidityContract] === true).map(([key, label]) => <Chip tone="pass" key={key}>{label}</Chip>)}
+          <Chip>≥ {contract.minimumPerCase ?? target} per case</Chip>
+        </div>
+        <p>Only videos satisfying every clause are playable below. Pending, rejected, and failed attempts appear as status with links to their raw pipeline evidence.</p>
+      </section>
+      <section>
+        <div class="section-title"><div><p class="eyebrow">ACCEPTED RESULTS</p><h2>Latest accepted 3D videos</h2></div><p>Newest acceptances first. Every case keeps its full accepted set in the ledger below.</p></div>
+        {latest.length
+          ? <div class="job-video-gallery campaign-videos">{latest.map(({ video, title }) => <AcceptedVideo key={video.sha256} video={video} caseTitle={title} heading={title} />)}</div>
+          : <div class="empty video-empty"><div class="render-pulse" /><h2>No accepted videos yet</h2><p>{totals.jobs
+            ? `${plainCount.format(totals.jobs)} attempts submitted, ${totals.activeJobs} still running. A video appears the moment it clears the gate and brief-aware 3D review.`
+            : 'The campaign runner has not submitted its first attempt yet.'}</p></div>}
+      </section>
+      <section>
+        <div class="section-title"><div><p class="eyebrow">CASE LEDGER</p><h2>Per-case progress</h2></div><div class="filter-row" role="group" aria-label="Filter cases">{CASE_FILTERS.map(([value, label]) => <button key={value} class={filter === value ? 'filter on' : 'filter'} aria-pressed={filter === value} onClick={() => setFilter(value)}>{label}</button>)}</div></div>
+        {visible.length ? <div class="campaign-ledger">{visible.map((item) => <CampaignCaseRow key={item.id} item={item} target={target} />)}</div> : <div class="empty small">No cases match this filter.</div>}
+      </section>
+    </>}
+  </main>;
+}
+
 const initial: SubmitPayload = { brief: '', methodology: 'production', engine: 'auto', nScenarios: 3, maps: MAPS.map(([id]) => id), maxSitesPerMap: 3, ambient: 'light', seed: 42, render3d: true, topK: 3, judge: true };
 function Submit() {
   const [form, setForm] = useState(initial); const [busy, setBusy] = useState(false); const [error, setError] = useState<unknown>();
@@ -157,6 +337,13 @@ function Submit() {
   </form></main>;
 }
 
-function App() { const route = useRoute(); return <><Header />{route.view === 'job' ? <JobDetail id={route.id} /> : route.view === 'submit' ? <Submit /> : <Gallery />}<footer>UniScenarios · intermediate outputs preserved stage by stage</footer></>; }
+function App() {
+  const route = useRoute();
+  return <><Header />
+    {route.view === 'job' ? <JobDetail id={route.id} />
+      : route.view === 'campaign' ? <Campaign id={route.id} />
+        : route.view === 'submit' ? <Submit /> : <Gallery />}
+    <footer>UniScenarios · intermediate outputs preserved stage by stage</footer></>;
+}
 
 render(<App />, document.getElementById('app')!);

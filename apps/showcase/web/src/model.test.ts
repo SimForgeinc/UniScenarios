@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { artifactUrl, campaignCaseProgress, normalizeCampaign } from './api';
 import { artifactKind, cells, normalizeGallery, normalizeJob, scopeStageArtifacts, stageList, threeDVideos } from './model';
+import type { CampaignReport } from './types';
 
 describe('showcase contract adapters', () => {
   it('merges object-shaped stage indexes with live SSE updates', () => {
@@ -49,5 +51,46 @@ describe('showcase contract adapters', () => {
     const [card] = normalizeGallery([{ jobId: 'abc', headline: '/artifacts/jobs/abc/movie.mp4', gate: { passed: 2, cells: 3 }, scores: { realism: 8.2, dynamism: 7.4 } }]);
     expect(card).toMatchObject({ media: '/artifacts/jobs/abc/movie.mp4', admittedCells: 2, totalCells: 3, realism: 8.2, dynamism: 7.4 });
     expect(scopeStageArtifacts('abc', { stage: '20-author', status: 'complete', artifacts: [{ path: '20-author/template.json' }] }).artifacts?.[0].path).toBe('jobs/abc/20-author/template.json');
+  });
+});
+
+describe('campaign report contract', () => {
+  const rawCampaign: unknown = {
+    campaignId: 'edge-cases-67x5', targetValidVideos: 5, updatedAt: '2026-08-17T04:00:00Z',
+    cases: [
+      { id: 'unprotected-left-dense', title: 'Unprotected left turn across dense traffic', index: 0,
+        attempts: [
+          { number: 1, jobId: 'job-1', status: 'complete', metrics: { wallS: 912, tokens: { calls: 4, inputTokens: 10, outputTokens: 5, reasoningTokens: 1, modelWallS: 30 } } },
+          { number: 2, jobId: 'job-2', status: 'running' },
+        ],
+        validVideos: [
+          { sha256: 'aa11', url: '/artifacts/campaigns/edge-cases-67x5/videos/unprotected-left-dense/aa11.mp4', jobId: 'job-1', realism: 8.2 },
+          { sha256: 'aa11', url: '/artifacts/campaigns/edge-cases-67x5/videos/unprotected-left-dense/aa11.mp4' },
+          { sha256: 'bb22' },
+        ] },
+      { id: 'wave-through', title: 'Drivers waving you through against right-of-way',
+        attempts: [{ number: 1, jobId: 'job-3', status: 'failed', error: 'render crashed' }], validVideos: [] },
+    ],
+    validityContract: { productAccepted: true, minimumPerCase: 5 },
+  };
+  const report = normalizeCampaign(rawCampaign as Partial<CampaignReport>);
+
+  it('presents only uniquely hashed, published videos and recomputes progress totals', () => {
+    expect(report.cases[0].validVideos.map((video) => video.sha256)).toEqual(['aa11']);
+    expect(report.cases[1].index).toBe(1);
+    expect(report.totals).toMatchObject({ cases: 2, completeCases: 0, targetVideos: 10, validVideos: 1, jobs: 0, activeJobs: 0 });
+    expect(report.totals.tokens).toMatchObject({ calls: 0, inputTokens: 0 });
+    expect(report.totals.meanTokensPerValidVideo).toBeNull();
+  });
+  it('derives per-case state without promoting failed or pending attempts to results', () => {
+    expect(campaignCaseProgress(report.cases[0], 5)).toMatchObject({ state: 'running', accepted: 1, attempts: 2, active: 1, failed: 0 });
+    expect(campaignCaseProgress(report.cases[1], 5)).toMatchObject({ state: 'blocked', accepted: 0, attempts: 1, failed: 1 });
+    expect(campaignCaseProgress({ ...report.cases[1], attempts: [] }, 5).state).toBe('idle');
+    const filled = { ...report.cases[0], validVideos: [0, 1, 2, 3, 4].map((n) => ({ sha256: `hash-${n}`, url: `/artifacts/campaigns/x/videos/${n}.mp4` })) };
+    expect(campaignCaseProgress(filled, 5).state).toBe('complete');
+  });
+  it('plays accepted campaign videos through the artifact route', () => {
+    expect(artifactUrl(report.cases[0].validVideos[0].url)).toBe('/artifacts/campaigns/edge-cases-67x5/videos/unprotected-left-dense/aa11.mp4');
+    expect(artifactKind(report.cases[0].validVideos[0].url)).toBe('video');
   });
 });

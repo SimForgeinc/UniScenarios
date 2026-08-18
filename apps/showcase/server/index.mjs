@@ -73,6 +73,46 @@ function optionalInteger(value, fallback, name, min, max) {
   return value;
 }
 
+const SCHEDULER_BOUNDS = Object.freeze({
+  jobConcurrency: [1, 8],
+  batchConcurrency: [1, 12],
+  render2dConcurrency: [1, 8],
+  render3dConcurrency: [1, 4],
+  judgeConcurrency: [1, 8],
+});
+
+function boundedSetting(value, fallback, name) {
+  const [min, max] = SCHEDULER_BOUNDS[name];
+  if (value === undefined) return fallback;
+  const parsed = typeof value === 'string' && value.trim() !== '' ? Number(value) : value;
+  if (!Number.isInteger(parsed) || parsed < min || parsed > max) {
+    throw new RangeError(`${name} must be an integer from ${min} to ${max}`);
+  }
+  return parsed;
+}
+
+export function resolveSchedulerSettings({
+  jobConcurrency,
+  batchConcurrency,
+  render2dConcurrency,
+  render3dConcurrency,
+  judgeConcurrency,
+  env = process.env,
+} = {}) {
+  return Object.freeze({
+    jobConcurrency: boundedSetting(jobConcurrency ?? env.SHOWCASE_JOB_CONCURRENCY, 4, 'jobConcurrency'),
+    batchConcurrency: boundedSetting(batchConcurrency ?? env.SHOWCASE_BATCH_CONCURRENCY, 3, 'batchConcurrency'),
+    render2dConcurrency: boundedSetting(render2dConcurrency ?? env.SHOWCASE_2D_CONCURRENCY, 4, 'render2dConcurrency'),
+    render3dConcurrency: boundedSetting(render3dConcurrency ?? env.SHOWCASE_3D_CONCURRENCY, 2, 'render3dConcurrency'),
+    judgeConcurrency: boundedSetting(judgeConcurrency ?? env.SHOWCASE_JUDGE_CONCURRENCY, 4, 'judgeConcurrency'),
+  });
+}
+
+function campaignValue(value) {
+  if (typeof value !== 'string') return null;
+  return value.trim().slice(0, 120) || null;
+}
+
 function normalizeJob(input, jobId) {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
     throw Object.assign(new Error('JSON body must be an object'), { status: 400 });
@@ -134,16 +174,26 @@ function normalizeJob(input, jobId) {
     judgeEffort: 'medium',
     judgeStrategy: 'spread8',
     fallbackToVisual: production,
+    campaignId: campaignValue(input.campaignId),
+    campaignCaseId: campaignValue(input.campaignCaseId),
+    campaignAttempt: input.campaignAttempt === undefined
+      ? null
+      : optionalInteger(input.campaignAttempt, null, 'campaignAttempt', 1, 10_000),
     createdAt: new Date().toISOString(),
   };
 }
 
 export class JobRunner {
-  constructor({ dataDir, engine, concurrency = 2 }) {
+  constructor({ dataDir, engine, concurrency = 4, scheduler }) {
     this.dataDir = dataDir;
     this.jobsDir = join(dataDir, 'jobs');
     this.engine = engine;
-    this.concurrency = concurrency;
+    this.concurrency = boundedSetting(concurrency, 4, 'jobConcurrency');
+    this.scheduler = resolveSchedulerSettings({
+      ...(scheduler ?? {}),
+      jobConcurrency: this.concurrency,
+      env: {},
+    });
     this.queue = [];
     this.active = 0;
     this.states = new Map();
@@ -164,7 +214,7 @@ export class JobRunner {
         ['00-brief', ['00-brief.json']],
         ['10-route', ['10-route.json']],
         ['15-precheck', ['15-precheck.json']],
-        ['20-author', ['20-author/template.json', '20-author/transcript.json']],
+        ['20-author', ['20-author/template.json', '20-author/transcript.json', '20-author/contract-verdict.json']],
         ['30-sites', ['30-sites.json']],
         ['40-cells', ['40-cells/index.json']],
         ['50-gate', ['50-gate.json']],
@@ -185,6 +235,8 @@ export class JobRunner {
       }
       if (await exists(join(jobDir, '90-gallery.json'))) {
         state.done = true;
+      } else if (await exists(join(jobDir, 'job-error.json'))) {
+        this.emit(entry.name, { stage: 'job', status: 'error', artifacts: ['job-error.json'] });
       } else {
         this.queue.push({ job, jobDir });
       }
@@ -206,12 +258,16 @@ export class JobRunner {
     const state = this.ensureState(jobId);
     state.events.push(value);
     for (const listener of state.listeners) listener(value);
-    if (event.stage === '90-gallery' && event.status === 'complete') state.done = true;
+    if (
+      (event.stage === '90-gallery' && event.status === 'complete')
+      || (event.stage === 'job' && event.status === 'error')
+    ) state.done = true;
   }
 
   async submit(input) {
     const jobId = randomUUID();
     const job = normalizeJob(input, jobId);
+    job.scheduler = { ...this.scheduler };
     const jobDir = join(this.jobsDir, jobId);
     await mkdir(jobDir, { recursive: false });
     await atomicJson(join(jobDir, '00-brief.json'), job);
@@ -240,13 +296,12 @@ export class JobRunner {
       await this.engine.run(job, { jobDir, emit: (event) => this.emit(job.jobId, event) });
       this.ensureState(job.jobId).done = true;
     } catch (error) {
-      this.emit(job.jobId, { stage: 'job', status: 'error', artifacts: [] });
-      this.ensureState(job.jobId).done = true;
       await atomicJson(join(jobDir, 'job-error.json'), {
         error: String(error.message ?? error),
         stack: String(error.stack ?? '').split('\n').slice(0, 12),
         failedAt: new Date().toISOString(),
       });
+      this.emit(job.jobId, { stage: 'job', status: 'error', artifacts: ['job-error.json'] });
     }
   }
 
@@ -376,11 +431,31 @@ export async function createShowcaseServer({
   token,
   dataDir = join(REPO_ROOT, 'showcase-data'),
   webDir = join(REPO_ROOT, 'apps', 'showcase', 'web', 'dist'),
-  engine = new ShowcasePipeline({ root: REPO_ROOT }),
-  concurrency = 2,
+  engine,
+  concurrency,
+  jobConcurrency,
+  batchConcurrency,
+  render2dConcurrency,
+  render3dConcurrency,
+  judgeConcurrency,
+  env = process.env,
 } = {}) {
+  const scheduler = resolveSchedulerSettings({
+    jobConcurrency: jobConcurrency ?? concurrency,
+    batchConcurrency,
+    render2dConcurrency,
+    render3dConcurrency,
+    judgeConcurrency,
+    env,
+  });
   if (typeof token !== 'string' || token.length === 0) throw new Error('SHOWCASE_TOKEN is required');
-  const runner = new JobRunner({ dataDir: resolve(dataDir), engine, concurrency });
+  const selectedEngine = engine ?? new ShowcasePipeline({ root: REPO_ROOT, ...scheduler });
+  const runner = new JobRunner({
+    dataDir: resolve(dataDir),
+    engine: selectedEngine,
+    concurrency: scheduler.jobConcurrency,
+    scheduler,
+  });
   await runner.initialize();
 
   const server = createServer(async (request, response) => {
@@ -396,6 +471,12 @@ export async function createShowcaseServer({
       }
       if (request.method === 'GET' && url.pathname === '/api/gallery') {
         return sendJson(response, 200, await gallery(runner.dataDir));
+      }
+      const campaign = /^\/api\/campaigns\/([a-zA-Z0-9._-]+)$/.exec(url.pathname);
+      if (request.method === 'GET' && campaign) {
+        const reportPath = join(runner.dataDir, 'campaigns', campaign[1], 'report.json');
+        if (!(await exists(reportPath))) return sendJson(response, 404, { error: 'campaign not found' });
+        return sendJson(response, 200, JSON.parse(await readFile(reportPath, 'utf8')));
       }
       const full = /^\/api\/jobs\/([0-9a-f-]+)\/full$/.exec(url.pathname);
       if (request.method === 'GET' && full) {
@@ -449,6 +530,7 @@ if (invokedDirectly) {
   const { server } = await createShowcaseServer({
     token: process.env.SHOWCASE_TOKEN,
     dataDir: process.env.SHOWCASE_DATA_DIR ?? join(REPO_ROOT, 'showcase-data'),
+    env: process.env,
   });
   server.listen(port, host, () => process.stdout.write(`showcase server listening on http://${host}:${port}\n`));
 }

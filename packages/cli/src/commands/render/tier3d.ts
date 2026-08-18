@@ -1,7 +1,8 @@
 import { spawn, type ChildProcess } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { open, readFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:net';
+import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 
 import { CliError } from '../../errors.js';
@@ -187,18 +188,33 @@ async function startXvfb(env: NodeJS.ProcessEnv): Promise<{ display: string; pro
     });
   }
   for (let number = 90; number < 200; number += 1) {
-    if (existsSync(`/tmp/.X${number}-lock`) || existsSync(`/tmp/.X11-unix/X${number}`)) continue;
-    const display = `:${number}`;
-    const processRef = managedProcess(executable, [
-      display, '-screen', '0', '1920x1080x24', '+extension', 'GLX', '+render', '-noreset',
-    ], { cwd: REPO_ROOT, env });
-    const deadline = Date.now() + 5_000;
-    while (Date.now() < deadline) {
-      if (existsSync(`/tmp/.X11-unix/X${number}`)) return { display, process: processRef };
-      if (processRef.child.exitCode !== null || processRef.child.signalCode !== null) break;
-      await new Promise((resolve) => setTimeout(resolve, 50));
+    const reservationPath = `/tmp/.uniscenarios-X${number}.lock`;
+    let reservation;
+    try {
+      reservation = await open(reservationPath, 'wx');
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'EEXIST') continue;
+      throw error;
     }
-    await processRef.stop();
+    try {
+      if (existsSync(`/tmp/.X${number}-lock`) || existsSync(`/tmp/.X11-unix/X${number}`)) continue;
+      const display = `:${number}`;
+      const processRef = managedProcess(executable, [
+        display, '-screen', '0', '1920x1080x24', '+extension', 'GLX', '+render', '-noreset',
+      ], { cwd: REPO_ROOT, env });
+      const deadline = Date.now() + 5_000;
+      while (Date.now() < deadline) {
+        if (existsSync(`/tmp/.X11-unix/X${number}`)) return { display, process: processRef };
+        if (processRef.child.exitCode !== null || processRef.child.signalCode !== null) break;
+        await delay(50);
+      }
+      await processRef.stop();
+    } finally {
+      await reservation.close();
+      await unlink(reservationPath).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'ENOENT') throw error;
+      });
+    }
   }
   throw new CliError('display_unavailable', 'could not allocate an Xvfb display for 3D rendering');
 }
