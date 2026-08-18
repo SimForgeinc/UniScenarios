@@ -282,8 +282,10 @@ async function setView(page, eye, target, fovDeg = null) {
  * shelter, so every present incident actor must project inside the canvas and
  * have an unobstructed ray through the static city/vegetation layers.
  */
-async function inspectIncidentComposition(page, poses, requiredActorIds, conflictT, sampleT) {
-  return page.evaluate(({ actorPoses, ids, conflict, t }) => {
+async function inspectIncidentComposition(
+  page, poses, requiredActorIds, separationActorIds, conflictT, sampleT,
+) {
+  return page.evaluate(({ actorPoses, ids, separationIds, conflict, t }) => {
     const viewer = window.__viewer;
     const editor = window.__editor;
     if (!viewer || !editor) throw new Error('Studio viewer is unavailable for composition inspection');
@@ -328,17 +330,18 @@ async function inspectIncidentComposition(page, poses, requiredActorIds, conflic
     });
     raycaster.near = savedNear;
     raycaster.far = savedFar;
+    const separationActors = actors.filter((actor) => separationIds.includes(actor.id));
     let minPairSeparationPx = Infinity;
     let closestPair = null;
-    for (let i = 0; i < actors.length; i += 1) {
-      for (let j = i + 1; j < actors.length; j += 1) {
+    for (let i = 0; i < separationActors.length; i += 1) {
+      for (let j = i + 1; j < separationActors.length; j += 1) {
         const separation = Math.hypot(
-          actors[i].pixel[0] - actors[j].pixel[0],
-          actors[i].pixel[1] - actors[j].pixel[1],
+          separationActors[i].pixel[0] - separationActors[j].pixel[0],
+          separationActors[i].pixel[1] - separationActors[j].pixel[1],
         );
         if (separation < minPairSeparationPx) {
           minPairSeparationPx = separation;
-          closestPair = [actors[i].id, actors[j].id];
+          closestPair = [separationActors[i].id, separationActors[j].id];
         }
       }
     }
@@ -347,13 +350,16 @@ async function inspectIncidentComposition(page, poses, requiredActorIds, conflic
       viewport: { width, height },
       boundsNdc: { x: 0.94, y: 0.9 },
       minimumRequiredSeparationPx,
-      minPairSeparationPx: actors.length < 2 ? null : minPairSeparationPx,
+      minPairSeparationPx: separationActors.length < 2 ? null : minPairSeparationPx,
       closestPair,
       actors,
       passed: actors.every((actor) => actor.inFrame && actor.sceneryClear)
-        && (actors.length < 2 || minPairSeparationPx >= minimumRequiredSeparationPx),
+        && (separationActors.length < 2 || minPairSeparationPx >= minimumRequiredSeparationPx),
     };
-  }, { actorPoses: poses, ids: requiredActorIds, conflict: conflictT, t: sampleT });
+  }, {
+    actorPoses: poses, ids: requiredActorIds, separationIds: separationActorIds,
+    conflict: conflictT, t: sampleT,
+  });
 }
 
 async function sha256(file) {
@@ -627,6 +633,7 @@ async function exportScenario(page) {
     const compositionArgs = [
       [...groundedPoses, ...frameProps],
       [...frameActorIds, ...frameProps.map((prop) => prop.id)],
+      evidence.metricPair,
       incident.conflictT,
       selected.t,
     ];
