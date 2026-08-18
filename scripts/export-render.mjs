@@ -471,7 +471,12 @@ async function exportScenario(page) {
       });
     }
   }
-  const preflight = buildIncidentRenderPreflight(trace, evidence);
+  // The scenario's own eligibility declaration decides whether a recorded
+  // collision condemns the clip; absent a result document the strict policy
+  // applies, which is what `validateScenarioResult` already demands.
+  const preflight = buildIncidentRenderPreflight(trace, evidence, {
+    collisionPolicy: resultDoc?.eligibility?.collisionPolicy ?? 'reject',
+  });
   const preflightFile = path.join(outDir, 'preflight.json');
   await writeJsonAtomic(preflightFile, {
     ...preflight,
@@ -482,8 +487,10 @@ async function exportScenario(page) {
     countsTowardScenarioCoverage: false,
   });
   if (preflight.verdict !== 'pass') {
+    const failed = preflight.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id);
     throw new Error(
-      `scenario render preflight rejected: ${preflight.gates.filter((gate) => gate.status === 'fail').map((gate) => gate.id).join(', ')}`,
+      `scenario render preflight rejected: ${failed.join(', ')}`
+      + `${preflight.defectCodes.length > 0 ? ` [${preflight.defectCodes.join(', ')}]` : ''}`,
     );
   }
   const topologyDomains = await topologyEvidence(instanceDoc, trace, evidence.mapId);
@@ -891,7 +898,7 @@ async function exportScenario(page) {
       startT: selection.startT,
       endT: selection.endT,
       fps: videoFps,
-      ...(corpusMode ? { coverage: 'full-clip' } : {}),
+      ...(selection.coverage ? { coverage: selection.coverage, clipWindow: selection.window } : {}),
       frameCount: records.length,
       frames: records,
     };

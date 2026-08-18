@@ -15,6 +15,7 @@ export const SCENARIO_REVIEW_PROVENANCE_FILES = [
   'pnpm-lock.yaml',
   'scripts/export-render.mjs',
   'scripts/export-render-lib.mjs',
+  'scripts/trace-validity-lib.mjs',
   'scripts/render-scenario-batch.mjs',
   'scripts/review-scenario-evidence.mjs',
   'scripts/scenario-review-ledger-lib.mjs',

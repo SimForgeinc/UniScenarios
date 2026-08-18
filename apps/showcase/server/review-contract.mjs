@@ -164,6 +164,15 @@ function hasEvidenceText(review, records) {
   return records.some((record) => record.text.trim());
 }
 
+function blockedBy(codes, prefixes) {
+  return codes.some((code) => prefixes.some((prefix) => code.startsWith(prefix)));
+}
+
+/** Does this defect-code set condemn the scenario itself? The contract's prefixes are the rule. */
+export function blocksSemantic(codes) {
+  return blockedBy(codes ?? [], SEMANTIC.blockingPrefixes);
+}
+
 /**
  * -> the shared acceptance contract for one reviewed cell: semanticAccepted, presentationAccepted,
  * defectCodes, unsupportedReason, plus the attributable evidence (defects, axes, tier) behind them.
@@ -270,13 +279,35 @@ export function evaluateReview(review, tier) {
   result.defectCodes = [...codes].sort();
   result.unsupportedReason = reasons.length ? reasons[0] : null;
   if (!reasons.length && result.tier === FULL_TIER) {
-    result.semanticAccepted = !result.defectCodes.some((code) =>
-      SEMANTIC.blockingPrefixes.some((prefix) => code.startsWith(prefix)));
+    result.semanticAccepted = !blockedBy(result.defectCodes, SEMANTIC.blockingPrefixes);
     result.presentationAccepted = (result.semanticAccepted || !PRESENTATION.requiresSemantic)
-      && !result.defectCodes.some((code) =>
-        PRESENTATION.blockingPrefixes.some((prefix) => code.startsWith(prefix)));
+      && !blockedBy(result.defectCodes, PRESENTATION.blockingPrefixes);
   }
   return result;
+}
+
+/**
+ * Fold in attributable defect codes the reviewer could not see: the deterministic trace validators
+ * and the exporter's own classified render failures. The contract's blocking prefixes stay the only
+ * acceptance predicate, and evidence added here can only revoke a verdict, never grant one.
+ */
+export function withDefectCodes(result, ...lists) {
+  const codes = new Set(result.defectCodes);
+  for (const list of lists) {
+    for (const code of list ?? []) {
+      if (typeof code === 'string' && code) codes.add(code);
+    }
+  }
+  const defectCodes = [...codes].sort();
+  const semanticAccepted = result.semanticAccepted && !blockedBy(defectCodes, SEMANTIC.blockingPrefixes);
+  return {
+    ...result,
+    defectCodes,
+    semanticAccepted,
+    presentationAccepted: result.presentationAccepted
+      && (semanticAccepted || !PRESENTATION.requiresSemantic)
+      && !blockedBy(defectCodes, PRESENTATION.blockingPrefixes),
+  };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { evaluateTraceValidity, frozenTailSpan } from './trace-validity-lib.mjs';
 
 export const TRACE_CHANNELS = [
   'x',
@@ -31,6 +32,11 @@ const KIND_DEFAULT_MODELS = {
 };
 
 const SEMANTIC_RENDER_KINDS = new Set(['animal', 'scooter', 'static_object']);
+
+// How long a trimmed presentation clip holds after every incident participant
+// has come to rest. Long enough to read the outcome, short enough that the
+// remaining stationary seconds are not filmed.
+const CLIP_REST_HOLD_SECONDS = 0.75;
 
 export function canonicalJson(value) {
   return writeCanonical(value);
@@ -576,41 +582,126 @@ export function selectIncidentVideoFrames(trace, fps = 12) {
 }
 
 /**
- * Uniform trace samples across the complete recorded clip.
+ * The presentation window of a full scenario clip: everything the incident
+ * needs, and nothing after it.
  *
- * The incident-window sequence above is deliberately short: it exists to prove
- * the reveal. A corpus video instead has to show the entire authored clip, so
- * this walks every recorded tick window at the requested frame rate from the
- * first tick to the last one.
+ * The incident-window sequence above is deliberately short -- it exists to
+ * prove the reveal -- while a product clip has to show the whole event. It does
+ * not have to show dead air. This keeps the same pre-event lead and the same
+ * bounded aftermath that the four named phases use, so pre-event, reveal and
+ * conflict are always inside the clip, and then stops early when every incident
+ * participant has come to rest and stays at rest to the end of the recording.
+ * An authored 20s clip whose conflict lands at 6s spent 12s filming stationary
+ * cars; the aftermath is still there, the freeze is not.
+ */
+export function clipVideoWindow(trace) {
+  const times = trace?.ticks?.t;
+  if (!Array.isArray(times) || times.length === 0) throw new Error('cannot select frames from an empty trace');
+  const dt = Number.isFinite(trace.header?.dt) && trace.header.dt > 0
+    ? trace.header.dt
+    : (times.length > 1 ? times[1] - times[0] : 0.02);
+  const incident = incidentWindow(trace);
+  const first = times[0];
+  const last = times[times.length - 1];
+  const clamp = (time) => Math.max(first, Math.min(last, time));
+  // A declared occlusion metric can name a conflict instant the recording never
+  // reached (`10-officer-flashing-red-junction` predicts 23.6s in a 20s clip).
+  // A presentation clip cannot show a conflict that was never recorded, so fail
+  // closed instead of shipping a window that silently omits the event.
+  if (!(incident.losOpenT >= first && incident.conflictT < last)) {
+    throw new Error(
+      `trace does not record its declared incident window: reveal ${incident.losOpenT}, `
+      + `conflict ${incident.conflictT}, recorded ${first}..${last}`,
+    );
+  }
+  // Identical to the named-phase lead/lag in `selectIncidentFrames`, so the
+  // clip can never omit a frame the four-phase evidence bundle relies on.
+  const preEventLeadS = Math.max(1, 8 * dt);
+  const aftermathLagS = Math.max(2, 20 * dt);
+  const minimumAftermathS = Math.max(1, 10 * dt);
+  const startIndex = nearestIndex(times, clamp(incident.losOpenT - preEventLeadS));
+  const aftermathEndT = clamp(incident.conflictT + aftermathLagS);
+  const floorEndT = clamp(incident.conflictT + minimumAftermathS);
+  // Every participant has to be at rest before the tail is irrelevant; one of
+  // them still rolling is still incident aftermath.
+  const restSpans = incident.pair.map((actorId) => frozenTailSpan(trace, actorId));
+  const restT = restSpans.every((span) => span !== null)
+    ? Math.max(...restSpans.map((span) => span.startT))
+    : null;
+  let endT = aftermathEndT;
+  let trimmedTail = null;
+  if (restT !== null) {
+    const heldEndT = Math.max(floorEndT, restT + CLIP_REST_HOLD_SECONDS);
+    if (heldEndT < aftermathEndT) {
+      endT = heldEndT;
+      trimmedTail = {
+        restT,
+        holdSeconds: CLIP_REST_HOLD_SECONDS,
+        actorIds: incident.pair,
+        droppedSeconds: Number((aftermathEndT - heldEndT).toFixed(6)),
+      };
+    }
+  }
+  const endIndex = Math.max(startIndex + 1, nearestIndex(times, endT));
+  if (endIndex >= times.length) throw new Error('trace is too short to carry a trimmed presentation clip');
+  return {
+    basis: incident.basis,
+    startIndex,
+    endIndex,
+    startT: times[startIndex],
+    endT: times[endIndex],
+    revealT: incident.losOpenT,
+    conflictT: incident.conflictT,
+    aftermathEndT,
+    preEventLeadS,
+    pair: incident.pair,
+    trimmedTail,
+  };
+}
+
+/**
+ * Uniform trace samples across the trimmed presentation clip.
+ *
+ * Bounds are snapped to real recorded ticks so the declared window and the
+ * encoded frames cannot disagree.
  */
 export function selectClipVideoFrames(trace, fps = 12) {
   if (!Number.isFinite(fps) || fps < 1) throw new Error('video fps must be a positive number');
-  const times = trace?.ticks?.t;
-  if (!Array.isArray(times) || times.length === 0) throw new Error('cannot select frames from an empty trace');
-  const startT = times[0];
-  const endT = times[times.length - 1];
+  const window = clipVideoWindow(trace);
+  const times = trace.ticks.t;
+  const { startT, endT } = window;
   const count = Math.ceil((endT - startT) * fps);
   const selected = [];
   for (let frame = 0; frame <= count; frame += 1) {
     const targetT = Math.min(endT, startT + frame / fps);
     const index = nearestIndex(times, targetT);
+    if (index > window.endIndex) break;
     if (selected.at(-1)?.index === index) continue;
     selected.push({ index, targetT, t: times[index] });
   }
-  if (selected.at(-1)?.index !== times.length - 1) {
-    selected.push({ index: times.length - 1, targetT: endT, t: endT });
+  if (selected.at(-1)?.index !== window.endIndex) {
+    selected.push({ index: window.endIndex, targetT: endT, t: endT });
   }
-  return { fps, startT, endT, frames: selected };
+  return { fps, startT, endT, coverage: 'incident-clip', window, frames: selected };
 }
 
-/** Cheap trace-only gate that runs before any browser or GPU rendering. */
-export function buildIncidentRenderPreflight(trace, evidence) {
+/**
+ * Cheap trace-only gate that runs before any browser or GPU rendering.
+ *
+ * Frame selectability is necessary but not sufficient: a trace whose bodies
+ * collided, left the road corridor or froze after an engine-recorded failure
+ * can still yield four distinct phases, and rendering it wastes a GPU export on
+ * footage that no reviewer should ever be shown. The physical-validity findings
+ * are deterministic, so they belong here rather than in review.
+ */
+export function buildIncidentRenderPreflight(trace, evidence, { collisionPolicy = 'reject' } = {}) {
   const selectedFrames = selectIncidentFrames(trace);
   const aftermath = selectedFrames.find((frame) => frame.phase === 'aftermath');
   const presence = Object.fromEntries(evidence.metricPair.map((id) => [
     id,
     aftermath ? trace.ticks.actors[id]?.present?.[aftermath.index] !== 0 : false,
   ]));
+  const validity = evaluateTraceValidity(trace, { collisionPolicy });
   const gates = [
     {
       id: 'four-distinct-incident-phases',
@@ -627,12 +718,25 @@ export function buildIncidentRenderPreflight(trace, evidence) {
         rationale: 'An aftermath frame must show the incident participants; despawning at conflict is a visible teleport.',
       },
     },
+    {
+      id: 'trace-physical-validity',
+      status: validity.semanticAccepted ? 'pass' : 'fail',
+      evidence: {
+        collisionPolicy: validity.collisionPolicy,
+        defectCodes: validity.defectCodes,
+        findings: validity.findings,
+        unsupportedReason: validity.unsupportedReason,
+      },
+    },
   ];
   return {
     schema: 'uniscenarios.scenario-render-preflight.v1',
     verdict: gates.every((gate) => gate.status === 'pass') ? 'pass' : 'reject',
     gates,
+    defectCodes: validity.defectCodes,
+    unsupportedReason: validity.unsupportedReason,
     selectedFrames,
+    clipWindow: clipVideoWindow(trace),
   };
 }
 
@@ -1091,26 +1195,32 @@ export function buildScenarioEvidenceGates({
     endT: videoSequence?.endT ?? null,
   }));
 
-  // Corpus renders declare full-clip coverage. The catalog incident export
-  // never sets this, so these two gates are additive: they only ever run for a
-  // sequence that claims to cover the whole recorded clip.
-  if (videoSequence?.coverage === 'full-clip') {
-    const times = trace.ticks.t;
-    const firstT = times[0];
-    const lastT = times[times.length - 1];
-    const coversClip = videoSequence.startT === firstT
-      && videoSequence.endT === lastT
-      && videoSequence.frames?.[0]?.t === firstT
-      && videoSequence.frames?.[videoSequence.frames.length - 1]?.t === lastT
-      && videoSequence.frameCount >= Math.floor((lastT - firstT) * videoSequence.fps);
-    gates.push((coversClip ? pass : fail)('video-covers-full-clip-duration', {
-      clipStartT: firstT,
-      clipEndT: lastT,
+  // A product clip declares the trimmed incident-clip coverage. The catalog
+  // incident export never sets it, so these two gates are additive: they only
+  // ever run for a sequence that claims to cover the presentation window.
+  if (videoSequence?.coverage === 'incident-clip') {
+    const window = clipVideoWindow(trace);
+    const frames = videoSequence.frames ?? [];
+    const minimumFrameCount = Math.floor((window.endT - window.startT) * videoSequence.fps);
+    const coversWindow = videoSequence.startT === window.startT
+      && videoSequence.endT === window.endT
+      && frames[0]?.t === window.startT
+      && frames[frames.length - 1]?.t === window.endT
+      && window.startT <= revealT
+      && window.endT > conflictT
+      && videoSequence.frameCount >= minimumFrameCount;
+    gates.push((coversWindow ? pass : fail)('video-covers-incident-clip-window', {
+      clipStartT: window.startT,
+      clipEndT: window.endT,
+      revealT,
+      conflictT,
+      aftermathEndT: window.aftermathEndT,
+      trimmedTail: window.trimmedTail,
       startT: videoSequence.startT ?? null,
       endT: videoSequence.endT ?? null,
       fps: videoSequence.fps ?? null,
       frameCount: videoSequence.frameCount ?? null,
-      minimumFrameCount: Math.floor((lastT - firstT) * videoSequence.fps),
+      minimumFrameCount,
     }));
 
     // AUTHORED actors only. Generated background road users are scenery: they must be visible IN the

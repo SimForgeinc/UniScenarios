@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
-import { atomicJson, retryKind, stage } from './pipeline.mjs';
+import { atomicJson, planRetry, stage } from './pipeline.mjs';
 import {
   acceptanceCache,
   acceptsCampaignVideo,
@@ -203,7 +203,7 @@ test('a campaign video is a result only under the current contract with both ver
   assert.equal(campaignVideoRow(legacy, 'clean'), null);
 });
 
-test('retryKind spends an authoring cycle only on scenario defects', () => {
+test('the retry plan spends an authoring cycle only on scenario defects', () => {
   const production = { render3d: true, judge: true, fallbackToVisual: true, topK: 3 };
   const scenarioOnly = judgeDocument([judgedCell('a', { ...REVIEW, eventSequence: 'fail' })]);
   const presentationOnly = judgeDocument([
@@ -211,14 +211,23 @@ test('retryKind spends an authoring cycle only on scenario defects', () => {
   ]);
   const accepted = judgeDocument([judgedCell('a', REVIEW)]);
 
-  assert.equal(retryKind({ engine: 'compiler' }, production, scenarioOnly), 'visual-fallback');
-  assert.equal(retryKind({ engine: 'vista2' }, production, scenarioOnly), 'visual-repair');
-  assert.equal(retryKind({ engine: 'compiler' }, { ...production, _fallbackDepth: 1 }, scenarioOnly), null);
-  assert.equal(retryKind({ engine: 'compiler' }, production, presentationOnly), null);
-  assert.equal(retryKind({ engine: 'compiler' }, production, accepted), null);
-  assert.equal(retryKind({ engine: 'compiler' }, production, { status: 'skipped', cells: [] }), null);
+  assert.equal(planRetry({ engine: 'compiler' }, production, scenarioOnly).kind, 'compiler-to-visual-fallback');
+  assert.equal(planRetry({ engine: 'vista2' }, production, scenarioOnly).kind, 'scenario-defect-reauthor');
+  assert.equal(planRetry({ engine: 'compiler' }, { ...production, _fallbackDepth: 1 }, scenarioOnly).kind, 'scenario-defect-reauthor');
+  assert.equal(
+    planRetry({ engine: 'compiler' }, { ...production, _fallbackDepth: 1, _reauthorDepth: 1 }, scenarioOnly).retry,
+    'manual-review',
+  );
+  // A camera defect is repaired where it happened, and the author never sees it.
+  const presentation = planRetry({ engine: 'compiler' }, production, presentationOnly);
+  assert.equal(presentation.retry, 'recompose');
+  assert.deepEqual(presentation.cellIds, ['a']);
+  assert.equal(planRetry({ engine: 'compiler' }, production, accepted).retry, 'none');
+  assert.equal(planRetry({ engine: 'compiler' }, production, { status: 'skipped', cells: [] }).retry, 'none');
   // No presentation evidence at all still escalates to the visual author.
-  assert.equal(retryKind({ engine: 'compiler' }, production, judgeDocument([])), 'visual-fallback');
+  const nothing = planRetry({ engine: 'compiler' }, production, judgeDocument([]));
+  assert.equal(nothing.kind, 'compiler-to-visual-fallback');
+  assert.deepEqual(nothing.defectCodes, ['scenario.no_eligible_simulation']);
 });
 
 test('historical judge documents normalize to attributable verdicts that are never current', () => {

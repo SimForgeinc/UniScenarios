@@ -12,6 +12,7 @@ import {
   campaignVideoRow,
   CONTRACT_SHA256,
   CONTRACT_VERSION,
+  isCurrentAcceptance,
   REVIEW_VERSION,
 } from './review-contract.mjs';
 
@@ -602,9 +603,6 @@ async function jobMetrics(jobDir, submittedAt, finishedAt) {
   for (const path of files.filter((value) => basename(value) === '90-gallery.json')) {
     let gallery;
     try { gallery = await readJson(path); } catch { continue; }
-    const copiedRepairSummary = gallery.repairedFromRejectedAttempt === true
-      && typeof gallery.repairEvidence === 'string';
-    if (copiedRepairSummary) continue;
     timingLedgers += 1;
     for (const [stage, seconds] of Object.entries(gallery.timings ?? {})) {
       const numeric = Number(seconds);
@@ -634,6 +632,18 @@ function escapeHtml(value) {
 }
 function safeCellId(value) {
   return typeof value === 'string' && value.length > 0 && basename(value) === value && !value.includes(sep) ? value : null;
+}
+
+/**
+ * A render directory named by `75-product.json`, relative to the job directory.
+ * A promoted attempt lives in a subdirectory, so this is a path rather than a
+ * single name; it still may never escape the job.
+ */
+function safeRenderDir(value) {
+  if (typeof value !== 'string' || value.length === 0 || value.length > 200) return null;
+  const segments = value.split('/');
+  if (segments.length < 2 || segments.length > 4) return null;
+  return segments.every((segment) => /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(segment)) ? segments.join('/') : null;
 }
 
 /**
@@ -983,20 +993,27 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
   }
 
   async function collectAccepted(item, attempt, jobDir, gallery) {
-    const judgePath = join(jobDir, '70-judge.json');
-    if (!(await exists(judgePath)) || item.validVideos.length >= state.targetValidVideos) return;
-    let judge;
-    try { judge = await readJson(judgePath); } catch { return; }
+    // `75-product.json` is the cross-attempt decision: it names the cell that won and the directory
+    // that cell's own render was written to, so a promoted presentation retry is collected from
+    // where it actually lives. A job written before that stage collects from its 70-judge verdict.
+    const product = await readJson(join(jobDir, '75-product.json')).catch(() => null);
+    const document = isCurrentAcceptance(product)
+      ? product
+      : await readJson(join(jobDir, '70-judge.json')).catch(() => null);
+    if (!document || item.validVideos.length >= state.targetValidVideos) return;
     let indexedCells = [];
     try { indexedCells = (await readJson(join(jobDir, '40-cells', 'index.json'))).cells ?? []; } catch { /* map id remains unknown */ }
     const known = new Set(item.validVideos.map((video) => video.sha256));
-    for (const row of judge.cells ?? []) {
-      if (!acceptsCampaignVideo(judge, row) || item.validVideos.length >= state.targetValidVideos) continue;
+    for (const row of document.cells ?? []) {
+      // Both verdicts, nothing left unattributed, and the current contract hash. A decision from a
+      // superseded contract carries a stale identity and can never become a durable video.
+      if (!acceptsCampaignVideo(document, row) || item.validVideos.length >= state.targetValidVideos) continue;
       const cellId = safeCellId(row.cellId);
-      if (!cellId) continue;
+      const renderDir = cellId ? safeRenderDir(row.renderDir ?? `65-render3d/${cellId}`) : null;
+      if (!cellId || !renderDir) continue;
       const candidates = [
-        join(jobDir, '65-render3d', cellId, 'rollout.mp4'),
-        join(jobDir, '65-render3d', cellId, 'video.mp4'),
+        join(jobDir, renderDir, 'rollout.mp4'),
+        join(jobDir, renderDir, 'video.mp4'),
       ];
       let videoPath = null;
       for (const candidate of candidates) {
@@ -1012,6 +1029,8 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         sha256: digest,
         jobId: attempt.jobId,
         cellId,
+        renderDir,
+        acceptedAttempt: document.acceptedAttempt ?? null,
         source: relative(jobDir, videoPath).split('\\').join('/'),
         url: `/artifacts/campaigns/${config.id}/${relativeVideo.split('\\').join('/')}`,
         mapId: indexedCell?.mapId ?? ((gallery.maps ?? []).length === 1 ? gallery.maps[0] : null),
@@ -1019,9 +1038,9 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         dynamism: row.dynamism ?? null,
         semanticAccepted: true,
         presentationAccepted: true,
-        reviewContractVersion: judge.contract?.version ?? CONTRACT_VERSION,
-        reviewContractSha256: judge.contract?.sha256 ?? CONTRACT_SHA256,
-        reviewVersion: judge.contract?.reviewVersion ?? REVIEW_VERSION,
+        reviewContractVersion: document.contract?.version ?? CONTRACT_VERSION,
+        reviewContractSha256: document.contract?.sha256 ?? CONTRACT_SHA256,
+        reviewVersion: document.contract?.reviewVersion ?? REVIEW_VERSION,
         acceptedAt: now(),
       });
       known.add(digest);
@@ -1038,11 +1057,19 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         if (valid.length >= state.targetValidVideos || !/^[a-f0-9]{64}$/.test(video.sha256) || known.has(video.sha256)) accepted = false;
         const attempt = accepted ? item.attempts.find((value) => value.jobId === video.jobId) : null;
         if (accepted && (!attempt?.jobId || !safeCellId(video.cellId))) accepted = false;
-        let judge;
+        let document;
         if (accepted) {
-          try { judge = await readJson(join(jobsDir, attempt.jobId, '70-judge.json')); } catch { accepted = false; }
+          const product = await readJson(join(jobsDir, attempt.jobId, '75-product.json')).catch(() => null);
+          document = isCurrentAcceptance(product)
+            ? product
+            : await readJson(join(jobsDir, attempt.jobId, '70-judge.json')).catch(() => null);
+          if (!document) accepted = false;
         }
-        if (accepted && !campaignVideoRow(judge, video.cellId)) accepted = false;
+        const row = accepted ? campaignVideoRow(document, video.cellId) : null;
+        if (accepted && !row) accepted = false;
+        // The decision must still name the directory the saved bytes were copied from.
+        const renderDir = row ? safeRenderDir(row.renderDir ?? `65-render3d/${video.cellId}`) : null;
+        if (accepted && (video.renderDir ?? renderDir) !== renderDir) accepted = false;
         if (accepted && video.reviewContractSha256 !== CONTRACT_SHA256) accepted = false;
         const target = accepted ? videoTarget(item, video.sha256) : null;
         if (accepted && (!(await nonemptyFile(target)) || await fileSha256(target) !== video.sha256)) accepted = false;

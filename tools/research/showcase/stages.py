@@ -392,6 +392,10 @@ def review_3d(args):
                 candidates.append(frame)
         except (OSError, subprocess.CalledProcessError, KeyError):
             candidates = []
+    # A render whose encoded frame sequence is unavailable is still reviewable
+    # from the four named phase stills, but that is a weaker basis and the
+    # verdict has to say so rather than pretend otherwise.
+    frame_basis = 'video-sequence' if candidates else 'named-phase-stills'
     if not candidates:
         candidates = [
             render / 'frames' / 'frame-000.png',
@@ -486,6 +490,7 @@ def review_3d(args):
             'defects': verdict['defects'],
             'contract': review.contract_identity(),
         },
+        'frameBasis': frame_basis,
         'framesUsed': [str(frame.relative_to(render)) for frame in frames],
         'latencyS': round(wall, 2),
         'tokens': {

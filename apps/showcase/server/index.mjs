@@ -220,9 +220,11 @@ export class JobRunner {
         ['30-sites', ['30-sites.json']],
         ['40-cells', ['40-cells/index.json']],
         ['50-gate', ['50-gate.json']],
+        ['55-eligibility', ['55-eligibility.json']],
         ['60-render2d', ['60-render2d/index.json']],
         ['65-render3d', ['65-render3d/index.json']],
         ['70-judge', ['70-judge.json']],
+        ['75-product', ['75-product.json']],
         ['90-gallery', ['90-gallery.json']],
       ];
       for (const [stage, artifacts] of savedStages) {
