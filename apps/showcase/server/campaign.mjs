@@ -20,7 +20,7 @@ for (let index = 2; index < process.argv.length; index += 1) {
 }
 const configPath = resolve(String(args.get('config') ?? join(ROOT, 'apps/showcase/campaigns/edge-cases.json')));
 const dataRoot = resolve(String(args.get('data') ?? join(ROOT, 'showcase-data')));
-const server = String(args.get('server') ?? process.env.SHOWCASE_SERVER ?? 'http://127.0.0.1:4174');
+const server = String(args.get('server') ?? process.env.SHOWCASE_SERVER ?? 'http://127.0.0.1:4174').replace(/\/+$/, '');
 const token = String(args.get('token') ?? process.env.SHOWCASE_TOKEN ?? 'demo-local');
 const config = JSON.parse(await readFile(configPath, 'utf8'));
 const runtimeConfig = config.runtime ?? {};
