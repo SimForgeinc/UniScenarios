@@ -25,7 +25,7 @@ FOOTAGE = ROOT / 'tools' / 'research' / 'footage'
 sys.path.insert(0, str(GATES))
 import semantic_contract as semantic
 
-PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v2'
+PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v3'
 PRODUCT_REVIEW_PROMPT = """You are the final acceptance reviewer for a generated autonomous-driving scenario.
 You receive the user's exact requested edge case followed by time-ordered frames from the REAL 3D render.
 Reject aggressively: this is training-data QA, not a creativity exercise.
@@ -36,7 +36,8 @@ Check all of the following independently:
 2. visualGrounding: Are every vehicle and actor correctly resting on the visible road/ground, without
    sinking, floating, clipping through geometry, or occupying an impossible surface?
 3. actorFidelity: Are the requested actor types visibly present (for example motorcycle vs car, SUV vs sedan)?
-4. eventSequence: Across the frames, does the requested reveal/conflict/reaction actually occur in order?
+4. eventSequence: Across the frames, does the requested event onset (or reveal when requested), conflict,
+   and reaction actually occur in order?
 5. realism/plausibility: Could this exact scene exist and behave this way in real traffic?
 
 The frames use an external incident camera, not the ego driver's eye point. A target visible to this
