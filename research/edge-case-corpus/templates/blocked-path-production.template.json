@@ -325,7 +325,7 @@
       {
         "id": "ego-reroutes",
         "actor": "ego",
-        "trigger": { "kind": "at", "t": 5 },
+        "trigger": { "kind": "at", "t": 6.5 },
         "verb": "route",
         "target": {
           "mode": "polyline",
