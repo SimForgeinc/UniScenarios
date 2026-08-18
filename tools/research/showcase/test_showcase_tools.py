@@ -861,6 +861,13 @@ class ExitEvaluatorTest(unittest.TestCase):
                 "crossing-VRU": self._outcomes(accepted=5),
             })
 
+class ReviewFrameTimebaseTest(unittest.TestCase):
+    def test_clipped_video_seeks_are_relative_to_clip_start(self):
+        self.assertEqual(stages._video_seek_time(5.42, 5.42), 0.0)
+        self.assertAlmostEqual(stages._video_seek_time(7.68, 5.42), 2.26)
+        self.assertEqual(stages._video_seek_time(4.0, 5.42), 0.0)
+
+
 
 def _story(item):
     return gallery._story_key(item["meta"])

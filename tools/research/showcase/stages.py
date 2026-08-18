@@ -354,6 +354,11 @@ def raw_defects(value):
         records.append(record)
     return records
 
+def _video_seek_time(simulation_t, video_start_t):
+    """Translate an absolute simulation timestamp into the clipped video's timebase."""
+    return max(0.0, float(simulation_t) - float(video_start_t))
+
+
 
 def review_3d(args):
     sys.path.insert(0, str(FOOTAGE))
@@ -364,6 +369,7 @@ def review_3d(args):
     render = pathlib.Path(args.render)
     manifest = load(render / 'manifest.json')
     video_records = manifest.get('videoSequence', {}).get('frames', [])
+    video_start_t = manifest.get('videoSequence', {}).get('startT', 0)
     phase_times = [row.get('t') for row in manifest.get('frames', [])
                    if isinstance(row.get('t'), (int, float))]
     candidates = []
@@ -384,11 +390,14 @@ def review_3d(args):
                     candidates.append(retained)
                     continue
                 frame = pathlib.Path(review_tmp.name) / f'frame-{ordinal:02d}.png'
+                seek_t = _video_seek_time(record['t'], video_start_t)
                 subprocess.run([
                     'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
-                    '-ss', str(record['t']), '-i', str(render / 'video.mp4'),
+                    '-ss', str(seek_t), '-i', str(render / 'video.mp4'),
                     '-frames:v', '1', str(frame),
                 ], check=True)
+                if not frame.is_file():
+                    raise FileNotFoundError(f'ffmpeg wrote no frame at video t={seek_t}')
                 candidates.append(frame)
         except (OSError, subprocess.CalledProcessError, KeyError):
             candidates = []
