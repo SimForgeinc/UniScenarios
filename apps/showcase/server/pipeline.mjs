@@ -41,8 +41,88 @@ import {
   sha256Text,
   withDefectCodes,
 } from './review-contract.mjs';
+import {
+  ACCEPTANCE_SPLIT_SCHEMA,
+  ATTEMPT_RECORD_SCHEMA,
+  FUNNEL_STAGE_IDS,
+  GENERATOR_PIPELINE_STAGES,
+  PRODUCT_PIPELINE_STAGES,
+  classifyOperational,
+  trajectoryFeatures,
+  trajectoryFingerprint,
+} from './benchmark.mjs';
 
 const execFileAsync = promisify(execFile);
+
+/**
+ * Linux USER_HZ. `/proc/self/stat` reports child CPU in these ticks and Node
+ * exposes no `sysconf(_SC_CLK_TCK)`, so the assumption is declared in every
+ * record it feeds rather than hidden.
+ */
+const CLOCK_TICKS_PER_SECOND = 100;
+
+function selfCpuSeconds() {
+  const usage = process.cpuUsage();
+  return (usage.user + usage.system) / 1_000_000;
+}
+
+/**
+ * CPU seconds burned by reaped child processes. Every heavy pipeline stage is a
+ * child process (`node`, `python`, headless browser), so without this the
+ * measured CPU would be almost entirely missing.
+ */
+async function reapedChildCpuSeconds() {
+  try {
+    const stat = await readFile('/proc/self/stat', 'utf8');
+    const fields = stat.slice(stat.lastIndexOf(')') + 2).split(' ');
+    const cutime = Number(fields[13]);
+    const cstime = Number(fields[14]);
+    if (!Number.isFinite(cutime) || !Number.isFinite(cstime)) return null;
+    return (cutime + cstime) / CLOCK_TICKS_PER_SECOND;
+  } catch {
+    return null;
+  }
+}
+
+let gpuProbeAvailable = null;
+
+/**
+ * One GPU utilisation sample. Host-wide by construction: `nvidia-smi` cannot
+ * attribute utilisation to a caller, so consumers are told the attribution
+ * instead of being handed an unattributable number as if it were per-attempt.
+ */
+async function gpuSample() {
+  if (gpuProbeAvailable === false || process.env.SHOWCASE_BENCHMARK_GPU === '0') return null;
+  try {
+    const result = await execFileAsync('nvidia-smi', [
+      '--query-gpu=utilization.gpu,memory.used,memory.total',
+      '--format=csv,noheader,nounits',
+    ], { timeout: 5_000 });
+    const rows = result.stdout.trim().split(/\r?\n/)
+      .map((line) => line.split(',').map((value) => Number(value.trim())))
+      .filter((row) => row.length >= 3 && row.every(Number.isFinite));
+    if (rows.length === 0) throw new Error('nvidia-smi returned no parsable rows');
+    gpuProbeAvailable = true;
+    return {
+      utilizationPct: Math.max(...rows.map((row) => row[0])),
+      memoryUsedMiB: Math.max(...rows.map((row) => row[1])),
+      memoryTotalMiB: Math.max(...rows.map((row) => row[2])),
+      devices: rows.length,
+    };
+  } catch {
+    gpuProbeAvailable = false;
+    return null;
+  }
+}
+
+async function resourceSample() {
+  return {
+    at: Date.now(),
+    selfCpuS: selfCpuSeconds(),
+    childCpuS: await reapedChildCpuSeconds(),
+    gpu: await gpuSample(),
+  };
+}
 
 export const MAPS = [
   'yale-street',
@@ -72,6 +152,118 @@ export async function atomicJson(path, value) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
+}
+
+export function emptyUsage() {
+  return { calls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, modelWallS: 0 };
+}
+
+function addUsage(total, usage, wallS = 0) {
+  if (!usage || typeof usage !== 'object') return;
+  total.calls += Number(usage.calls ?? (usage.in != null || usage.input_tokens != null ? 1 : 0)) || 0;
+  total.inputTokens += Number(usage.inputTokens ?? usage.input_tokens ?? usage.in ?? 0) || 0;
+  total.outputTokens += Number(usage.outputTokens ?? usage.output_tokens ?? usage.out ?? 0) || 0;
+  total.reasoningTokens += Number(usage.reasoningTokens ?? usage.reasoning_tokens ?? usage.reasoning ?? 0) || 0;
+  total.modelWallS += Number(usage.modelWallS ?? usage.wallS ?? usage.llmWallS ?? wallS ?? 0) || 0;
+}
+
+export function mergeUsage(total, usage) {
+  addUsage(total, usage);
+  total.modelWallS = Number(total.modelWallS.toFixed(3));
+  return total;
+}
+
+async function walkFiles(dir) {
+  if (!(await exists(dir))) return [];
+  const paths = [];
+  for (const entry of await readdir(dir, { withFileTypes: true })) {
+    const path = join(dir, entry.name);
+    if (entry.isDirectory()) paths.push(...await walkFiles(path));
+    else paths.push(path);
+  }
+  return paths;
+}
+
+function authorUsageInto(document, usage) {
+  const attempts = Array.isArray(document.attempts) ? document.attempts : [];
+  const attemptUsages = attempts.map((attempt) => attempt?.row?.usage).filter(Boolean);
+  if (attemptUsages.length) {
+    for (const item of attemptUsages) addUsage(usage, item);
+    return;
+  }
+  addUsage(
+    usage,
+    document.usage ?? document.result?.usage ?? document.episode?.usage ?? document.cost?.tokens,
+    document.wallS ?? document.cost?.wallS,
+  );
+}
+
+/**
+ * Provider-recorded token usage for one job, attributed to the stage that spent it.
+ *
+ * Author usage is deduplicated by evidence-file content hash; vision usage is
+ * deduplicated by the reviewer's `rawResponseSha256`, so the same verdict copied
+ * from `60-render2d/quality.json` into `70-judge.json` (or promoted out of a
+ * repair attempt) is billed exactly once.
+ */
+export async function collectJobUsage(jobDir) {
+  const byStage = {
+    '20-author': emptyUsage(),
+    '60-render2d': emptyUsage(),
+    '70-judge': emptyUsage(),
+  };
+  const files = await walkFiles(jobDir);
+  const contractAttemptPaths = files.filter((value) => basename(value) === 'contract-attempts.json');
+  const contractAttemptDirs = new Set(contractAttemptPaths.map((value) => dirname(value)));
+  const authorPaths = [
+    ...contractAttemptPaths,
+    ...files.filter((value) => basename(value) === 'transcript.json' && !contractAttemptDirs.has(dirname(value))),
+  ];
+  const seenAuthor = new Set();
+  for (const path of authorPaths) {
+    let bytes;
+    try { bytes = await readFile(path); } catch { continue; }
+    const hash = createHash('sha256').update(bytes).digest('hex');
+    if (seenAuthor.has(hash)) continue;
+    seenAuthor.add(hash);
+    try { authorUsageInto(JSON.parse(bytes), byStage['20-author']); } catch { /* malformed evidence is not billable */ }
+  }
+  const seenVision = new Set();
+  const visionPaths = files.filter((value) => ['70-judge.json', 'quality.json'].includes(basename(value)));
+  for (const path of visionPaths.sort()) {
+    let document;
+    try { document = await readJson(path); } catch { continue; }
+    for (const row of document.cells ?? []) {
+      const twoDKey = `2d:${row?._meta?.promptSha256 ?? ''}:${row?.rawResponseSha256 ?? row?.cellId ?? ''}`;
+      if (row?._meta?.tokens && !seenVision.has(twoDKey)) {
+        seenVision.add(twoDKey);
+        addUsage(byStage['60-render2d'], row._meta.tokens, row._meta.latencyS);
+      }
+      const review = row?.threeDReview;
+      const threeDKey = `3d:${review?.version ?? ''}:${review?.rawResponseSha256 ?? row?.cellId ?? ''}`;
+      if (review?.tokens && !seenVision.has(threeDKey)) {
+        seenVision.add(threeDKey);
+        addUsage(byStage['70-judge'], review.tokens, review.latencyS);
+      }
+    }
+  }
+  const tokens = emptyUsage();
+  for (const usage of Object.values(byStage)) addUsage(tokens, usage);
+  for (const usage of [tokens, ...Object.values(byStage)]) {
+    usage.modelWallS = Number(usage.modelWallS.toFixed(3));
+  }
+  return {
+    tokens,
+    byStage,
+    tokenAccounting: {
+      version: 3,
+      authorEvidenceFiles: seenAuthor.size,
+      visionVerdicts: seenVision.size,
+      dollarCost: null,
+      note: 'Author usage deduplicated by evidence hash, vision usage by reviewer response hash. '
+        + 'No price table is available, so spend stays null instead of being estimated.',
+    },
+  };
 }
 
 /**
@@ -176,13 +368,212 @@ function artifactPath(jobDir, path) {
   return relative(jobDir, path).split('\\').join('/');
 }
 
+/**
+ * Append one measured row to the attempt's stage ledger.
+ *
+ * `wallS`, `cpuS`, and the GPU sample are `null` whenever they were not
+ * measured — a reused artifact has no wall time of its own, and a host without
+ * an NVIDIA GPU has no utilisation to report.
+ */
+function recordStage(context, row) {
+  const ledger = context.benchmark?.stages;
+  if (!ledger) return;
+  const existing = ledger.findIndex((entry) => entry.name === row.name);
+  if (existing >= 0) ledger.splice(existing, 1, row);
+  else ledger.push(row);
+}
+
+function stageDelta(before, after) {
+  if (!before || !after) return { cpuS: null, gpu: null };
+  const self = after.selfCpuS != null && before.selfCpuS != null ? after.selfCpuS - before.selfCpuS : null;
+  const child = after.childCpuS != null && before.childCpuS != null ? after.childCpuS - before.childCpuS : null;
+  const cpuS = self == null && child == null
+    ? null
+    : Number((Math.max(0, self ?? 0) + Math.max(0, child ?? 0)).toFixed(3));
+  const gpu = after.gpu
+    ? {
+      utilizationPct: after.gpu.utilizationPct,
+      memoryUsedMiB: after.gpu.memoryUsedMiB,
+      memoryTotalMiB: after.gpu.memoryTotalMiB,
+      devices: after.gpu.devices,
+      attribution: 'host-wide',
+    }
+    : null;
+  return { cpuS, gpu };
+}
+
+async function persistBenchmark(context) {
+  if (!context?.benchmark || !context.benchmarkPath) return;
+  try {
+    await atomicJson(context.benchmarkPath, context.benchmark);
+  } catch {
+    // Evidence persistence must never mask the stage failure that is in flight.
+  }
+}
+
+/**
+ * Fold a `70-judge.json` document into the attempt record. Called for the
+ * attempt's own judgement and again when a repair attempt's judgement is
+ * promoted, so the record always describes the evidence that was actually kept.
+ *
+ * This records the semantic verdict only. Presentation acceptance is the
+ * deliverable decision and is read from `75-product.json` by
+ * `applyProductEvidence`, because the product stage is what rations `topK` and
+ * promotes a repaired attempt.
+ */
+function applyJudgeEvidence(context, judge) {
+  const record = context?.benchmark;
+  if (!record) return;
+  const rows = (judge?.cells ?? []).filter((row) => row?.status === 'complete');
+  const byId = new Map(rows.map((row) => [row.cellId, row]));
+  for (const cell of record.cells) {
+    const row = byId.get(cell.cellId);
+    if (!row) continue;
+    cell.semanticAccepted = row.semanticAccepted === true;
+    cell.presentationAccepted = row.presentationAccepted === true;
+    cell.defectCodes = row.defectCodes ?? [];
+    cell.realism = row.acceptance?.axes?.realism ?? row.threeDReview?.realism ?? row.realism ?? null;
+    cell.dynamism = row.dynamism ?? null;
+    cell.productReviewVersion = judge?.contract?.reviewVersion ?? null;
+  }
+  // The contract identity carried by the document is the only truthful review version:
+  // it is the hash-enforced one the verdict was actually produced under.
+  record.models.productReviewVersion = judge?.contract?.reviewVersion ?? null;
+  record.counts.productReviewed = rows.length;
+  record.counts.semanticAccepted = rows.filter((row) => row.semanticAccepted === true).length;
+  record.funnel['semantic-3d'] = record.counts.semanticAccepted > 0;
+  record.outcome.semanticAccepted = record.funnel['semantic-3d'];
+  record.outcome.defectCodes = [...new Set(rows.flatMap((row) => row.defectCodes ?? []))].sort();
+  // A defect the contract could not attribute keeps its raw reviewer text, so it is
+  // reported verbatim rather than counted under a code it was never given.
+  record.outcome.unclassifiedDefects = [...new Set(rows.flatMap((row) => (row.acceptance?.defects ?? [])
+    .filter((defect) => !defect?.code)
+    .map((defect) => String(defect?.text ?? '').slice(0, 200))
+    .filter(Boolean)))].slice(0, 16);
+  record.outcome.unsupportedReason = rows.find((row) => row.unsupportedReason)?.unsupportedReason ?? null;
+}
+
+/**
+ * Fold `75-product.json` into the attempt record.
+ *
+ * The product decision is the deliverable verdict: it rations presentation to
+ * `topK`, folds in the deterministic defect codes that rejected cells before any
+ * reviewer saw them, and names the attempt whose render was promoted. Reading
+ * presentation acceptance anywhere else would credit footage the product stage
+ * never shipped.
+ */
+function applyProductEvidence(context, product) {
+  const record = context?.benchmark;
+  if (!record) return;
+  const rows = product?.cells ?? [];
+  const byId = new Map(rows.map((row) => [row.cellId, row]));
+  for (const cell of record.cells) {
+    const row = byId.get(cell.cellId);
+    if (!row) continue;
+    cell.presentationAccepted = row.presentationAccepted === true;
+    cell.defectCodes = row.defectCodes ?? cell.defectCodes ?? [];
+  }
+  record.counts.presentationAccepted = rows.filter((row) => row.presentationAccepted === true).length;
+  record.funnel.presentation = record.counts.presentationAccepted > 0;
+  record.outcome.presentationAccepted = record.funnel.presentation;
+  record.outcome.acceptedAttempt = product?.acceptedAttempt ?? null;
+  record.outcome.defectCodes = [...new Set([
+    ...(record.outcome.defectCodes ?? []),
+    ...(product?.defectCodes ?? []),
+  ])].sort();
+}
+
+/**
+ * Assign the terminal outcome of an attempt.
+ *
+ * An operational failure censors the attempt at the first funnel stage it had
+ * not yet reached, so every stage outcome observed before the failure stays in
+ * its denominator and no infrastructure outage can be read as a generator miss.
+ */
+function finalizeAttemptRecord(context, error) {
+  const record = context?.benchmark;
+  if (!record) return;
+  const finishedMs = Date.now();
+  record.execution.finishedAt = new Date().toISOString();
+  record.execution.resumedStages = [...new Set(context.resumedStages ?? [])];
+  record.execution.resumed = record.execution.resumedStages.length > 0;
+  // A retired artifact is evidence of a superseded contract, not of reuse: the stage was
+  // recomputed and billed, so the retirement is recorded separately from `resumedStages`.
+  record.execution.staleArtifacts = { ...(context.staleArtifacts ?? {}) };
+  record.outcome.failedStage = context.failedStage ?? null;
+  const paidStages = record.stages.filter((row) => Number.isFinite(row.wallS));
+  const sumWall = (names) => {
+    const rows = paidStages.filter((row) => names.includes(row.name));
+    return rows.length > 0 ? Number(rows.reduce((total, row) => total + row.wallS, 0).toFixed(3)) : null;
+  };
+  record.cost.wallS = Number(((finishedMs - context.startedAtMs) / 1000).toFixed(3));
+  record.cost.generatorWallS = sumWall(GENERATOR_PIPELINE_STAGES);
+  record.cost.productWallS = sumWall(PRODUCT_PIPELINE_STAGES);
+  const cpuRows = record.stages.filter((row) => Number.isFinite(row.cpuS));
+  const exclusive = record.concurrency.activeJobsAtStart === 1
+    && record.concurrency.peakActiveJobs === 1;
+  record.cost.cpu = cpuRows.length === 0 ? null : {
+    totalS: Number(cpuRows.reduce((total, row) => total + row.cpuS, 0).toFixed(3)),
+    measuredStages: cpuRows.length,
+    attribution: exclusive ? 'exclusive' : 'process-shared',
+    clockTicksPerSecond: CLOCK_TICKS_PER_SECOND,
+    source: 'process.cpuUsage plus /proc/self/stat cutime+cstime',
+  };
+  const gpuRows = record.stages.map((row) => row.gpu).filter(Boolean);
+  record.cost.gpu = gpuRows.length === 0 ? null : {
+    samples: gpuRows.length,
+    meanUtilizationPct: Number(
+      (gpuRows.reduce((total, row) => total + row.utilizationPct, 0) / gpuRows.length).toFixed(2),
+    ),
+    peakUtilizationPct: Math.max(...gpuRows.map((row) => row.utilizationPct)),
+    peakMemoryUsedMiB: Math.max(...gpuRows.map((row) => row.memoryUsedMiB)),
+    gpuSecondsEquivalent: record.cost.wallS == null ? null : Number((
+      (gpuRows.reduce((total, row) => total + row.utilizationPct, 0) / gpuRows.length / 100)
+      * record.cost.wallS
+    ).toFixed(3)),
+    attribution: 'host-wide',
+  };
+  if (!error) {
+    record.outcome.kind = record.funnel.presentation
+      ? 'presentation-accepted'
+      : record.funnel['semantic-3d'] ? 'semantics-only' : 'rejected';
+    return;
+  }
+  const message = String(error?.message ?? error);
+  record.outcome.error = message.slice(-1000);
+  const operational = classifyOperational(message);
+  record.outcome.operational = operational;
+  record.outcome.kind = operational ? 'operational-failure' : 'failed';
+  if (!operational) return;
+  const firstUnreached = FUNNEL_STAGE_IDS.find((id) => record.funnel[id] !== true);
+  record.outcome.censoredAtStage = firstUnreached ?? null;
+}
+
 export async function stage(context, name, artifacts, action, { cacheKey } = {}) {
   const present = await Promise.all(artifacts.map((path) => exists(path)));
+  const relativeArtifacts = artifacts.map((p) => artifactPath(context.jobDir, p));
   const single = artifacts.length === 1 && artifacts[0].endsWith('.json') ? artifacts[0] : null;
   if (present.every(Boolean)) {
     const cached = single ? await readJson(single) : undefined;
     if (!cacheKey || cached?.cache?.key === cacheKey) {
-      context.emit({ stage: name, status: 'complete', artifacts: artifacts.map((p) => artifactPath(context.jobDir, p)) });
+      // A genuine cache hit under the current key. This attempt did not pay for the
+      // stage, so it is recorded as reused with null durations rather than as a
+      // zero-second measurement that would flatter every throughput denominator.
+      context.emit({ stage: name, status: 'complete', artifacts: relativeArtifacts });
+      recordStage(context, {
+        name,
+        status: 'reused',
+        startedAt: null,
+        finishedAt: null,
+        wallS: null,
+        cpuS: null,
+        gpu: null,
+        artifacts: relativeArtifacts,
+        error: null,
+        note: 'artifacts already present; this attempt did not pay for the stage',
+      });
+      context.resumedStages?.push(name);
+      await persistBenchmark(context);
       return cached;
     }
     // A verdict cached under a different contract, prompt, or review implementation is evidence
@@ -190,22 +581,94 @@ export async function stage(context, name, artifacts, action, { cacheKey } = {})
     const retired = join(dirname(single), '.stale', `${basename(single)}.${String(cached?.cache?.key ?? 'unkeyed').slice(0, 12)}`);
     await mkdir(dirname(retired), { recursive: true });
     await rename(single, retired);
-    context.staleArtifacts[name] = {
+    if (context.staleArtifacts) context.staleArtifacts[name] = {
       previousKey: cached?.cache?.key ?? null,
       artifact: artifactPath(context.jobDir, retired),
       retiredAt: new Date().toISOString(),
     };
+    // The stage is about to be recomputed, so it is not reused: it falls through to the
+    // measured path below and is billed like any other fresh stage.
   }
   context.emit({ stage: name, status: 'running', artifacts: [] });
+  const startedAt = new Date().toISOString();
   const started = Date.now();
-  const result = await action();
-  context.timings[name] = Number(((Date.now() - started) / 1000).toFixed(3));
-  context.emit({ stage: name, status: result?.status ?? 'complete', artifacts: artifacts.map((p) => artifactPath(context.jobDir, p)) });
-  return result?.value ?? result;
+  const before = await resourceSample();
+  try {
+    const result = await action();
+    const wallS = Number(((Date.now() - started) / 1000).toFixed(3));
+    context.timings[name] = wallS;
+    const after = await resourceSample();
+    const status = result?.status ?? 'complete';
+    recordStage(context, {
+      name,
+      status,
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      wallS,
+      ...stageDelta(before, after),
+      artifacts: relativeArtifacts,
+      error: null,
+    });
+    context.emit({ stage: name, status, artifacts: relativeArtifacts });
+    await persistBenchmark(context);
+    return result?.value ?? result;
+  } catch (error) {
+    const wallS = Number(((Date.now() - started) / 1000).toFixed(3));
+    const after = await resourceSample();
+    recordStage(context, {
+      name,
+      status: 'error',
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      wallS,
+      ...stageDelta(before, after),
+      artifacts: [],
+      error: String(error?.message ?? error).slice(-1000),
+    });
+    context.failedStage = name;
+    await persistBenchmark(context);
+    throw error;
+  }
 }
 
 function safeCellId(result) {
   return `${result.mapId}-${result.siteId}-${result.drawIndex}`.replace(/[^a-zA-Z0-9._-]/g, '-');
+}
+
+/**
+ * Quantised trajectory description of one trace, used for diversity evidence.
+ *
+ * Every field is always present and is `null` when it could not be measured, so
+ * an absent or unreadable trace never collapses onto a shared constant that
+ * would read as a duplicate, and a caller can never mistake a missing key for a
+ * field it forgot to record.
+ */
+const UNIDENTIFIED_TRACE = Object.freeze({
+  trajectoryFingerprint: null,
+  trajectoryFeatures: null,
+  traceSha256: null,
+  inputHash: null,
+  traceSeed: null,
+});
+
+export async function traceIdentity(traceFile) {
+  if (!traceFile) return { ...UNIDENTIFIED_TRACE };
+  try {
+    const bytes = await readFile(traceFile);
+    const trace = JSON.parse(gunzipSync(bytes).toString('utf8'));
+    const features = trajectoryFeatures(trace);
+    return {
+      trajectoryFingerprint: trajectoryFingerprint(features),
+      trajectoryFeatures: features,
+      traceSha256: createHash('sha256').update(bytes).digest('hex'),
+      inputHash: trace?.header?.inputHash ?? null,
+      traceSeed: trace?.header?.seed ?? null,
+    };
+  } catch {
+    // A trace that cannot be read still has bytes on disk, but nothing here is
+    // attributable to it, so no field is guessed from a partial parse.
+    return { ...UNIDENTIFIED_TRACE };
+  }
 }
 
 async function copyCells(summary, cellsDir, job) {
@@ -219,6 +682,7 @@ async function copyCells(summary, cellsDir, job) {
     const instanceFile = result.instanceFile && (await exists(result.instanceFile)) ? join(cellDir, 'instance.json') : null;
     if (traceFile) await copyFile(result.traceFile, traceFile);
     if (instanceFile) await copyFile(result.instanceFile, instanceFile);
+    const identity = await traceIdentity(traceFile);
     const meta = {
       cellId,
       briefId: job.briefId,
@@ -229,6 +693,8 @@ async function copyCells(summary, cellsDir, job) {
       draw: result.drawIndex,
       seed: result.paramSeed ?? job.seed ?? null,
       gate: null,
+      trajectoryFingerprint: identity.trajectoryFingerprint,
+      traceSha256: identity.traceSha256,
       notes: 'showcase job cell; gate populated in 50-gate.json',
       batch: {
         status: result.status,
@@ -250,6 +716,11 @@ async function copyCells(summary, cellsDir, job) {
       verdict: result.verdict,
       band: result.band,
       siteScore: result.siteScore,
+      paramSeed: result.paramSeed ?? null,
+      trajectoryFingerprint: identity.trajectoryFingerprint,
+      trajectoryFeatures: identity.trajectoryFeatures,
+      traceSha256: identity.traceSha256,
+      inputHash: identity.inputHash ?? null,
     });
   }
   await atomicJson(join(cellsDir, 'index.json'), {
@@ -587,9 +1058,13 @@ export class ShowcasePipeline {
     this.judge = new Semaphore(this.schedulerSettings.judgeConcurrency);
   }
 
-  async run(job, externalContext) {
+  /**
+   * Create the per-attempt benchmark record. Every field starts either measured
+   * or `null`; stages fill it in as they complete so a crash still leaves a
+   * truthful partial record on disk.
+   */
+  #createContext(job, externalContext) {
     const initialBatch = batchConcurrencyForHost(this.batchConcurrency);
-    const effectiveBatchConcurrency = initialBatch.concurrency;
     const context = {
       ...externalContext,
       root: this.root,
@@ -597,12 +1072,137 @@ export class ShowcasePipeline {
       cli: this.cli,
       timings: {},
       staleArtifacts: {},
+      resumedStages: [],
+      failedStage: null,
       scheduler: {
         ...(job.scheduler ?? this.schedulerSettings),
-        effectiveBatchConcurrency,
+        effectiveBatchConcurrency: initialBatch.concurrency,
         load1AtStart: initialBatch.load1,
       },
     };
+    context.benchmarkPath = join(context.jobDir, '95-benchmark.json');
+    context.startedAtMs = Date.now();
+    context.baseline = null;
+    context.benchmark = {
+      schema: ATTEMPT_RECORD_SCHEMA,
+      acceptanceSchema: ACCEPTANCE_SPLIT_SCHEMA,
+      jobId: job.jobId ?? null,
+      briefId: job.briefId ?? null,
+      campaign: {
+        id: job.campaignId ?? null,
+        caseId: job.campaignCaseId ?? null,
+        attempt: Number.isInteger(job.campaignAttempt) ? job.campaignAttempt : null,
+      },
+      brief: {
+        text: String(job.requestedBrief ?? job.brief ?? '').slice(0, 4000),
+        sha256: createHash('sha256').update(String(job.requestedBrief ?? job.brief ?? '')).digest('hex'),
+        methodology: job.methodology ?? 'custom',
+      },
+      seeds: {
+        requested: job.seed ?? null,
+        ambient: job.ambient === 'off' ? null : (job.seed ?? null),
+        seedIdentity: null,
+        drawSeeds: [],
+      },
+      models: {
+        author: { model: job.authorModel ?? null, effort: job.authorEffort ?? null },
+        judge: { model: job.judgeModel ?? null, effort: job.judgeEffort ?? null, strategy: job.judgeStrategy ?? null },
+        engineRequested: job.engine ?? 'auto',
+        engineResolved: null,
+        productReviewVersion: null,
+      },
+      maps: [...(job.maps ?? [])],
+      execution: {
+        startedAt: new Date().toISOString(),
+        finishedAt: null,
+        cold: externalContext?.processJobIndex === 0,
+        processJobIndex: Number.isInteger(externalContext?.processJobIndex) ? externalContext.processJobIndex : null,
+        processUptimeSAtStart: Number(process.uptime().toFixed(3)),
+        resumed: false,
+        resumedStages: [],
+        staleArtifacts: {},
+        repair: null,
+        coldWarmBasis: 'cold when this attempt is the first job executed by the server process; '
+          + 'resumed lists stages whose artifacts already existed and were therefore not paid for again',
+      },
+      concurrency: {
+        scheduler: { ...context.scheduler },
+        activeJobsAtStart: Number.isInteger(externalContext?.activeJobs) ? externalContext.activeJobs : null,
+        peakActiveJobs: Number.isInteger(externalContext?.activeJobs) ? externalContext.activeJobs : null,
+        logicalCpus: availableParallelism(),
+        load1AtStart: initialBatch.load1,
+        load1AtSimulation: null,
+      },
+      precheck: null,
+      contractFailures: [],
+      stages: [],
+      counts: {
+        sitesMatched: null,
+        cellsSimulated: null,
+        cellsWithTrace: null,
+        gateEvaluated: null,
+        gatePassed: null,
+        admittedCells: null,
+        eligibleCells: null,
+        render2dAttempted: null,
+        render2dComplete: null,
+        semanticReviewed: null,
+        render3dAttempted: null,
+        render3dComplete: null,
+        productReviewed: null,
+        semanticAccepted: null,
+        presentationAccepted: null,
+      },
+      funnel: Object.fromEntries(FUNNEL_STAGE_IDS.map((id) => [id, id === 'submitted'])),
+      cells: [],
+      outcome: {
+        kind: 'running',
+        semanticAccepted: false,
+        presentationAccepted: false,
+        acceptedAttempt: null,
+        defectCodes: [],
+        unclassifiedDefects: [],
+        unsupportedReason: null,
+        operational: null,
+        censoredAtStage: null,
+        failedStage: null,
+        error: null,
+      },
+      cost: {
+        wallS: null,
+        generatorWallS: null,
+        productWallS: null,
+        tokens: emptyUsage(),
+        tokenAccounting: null,
+        cpu: null,
+        gpu: null,
+      },
+    };
+    return context;
+  }
+
+  async run(job, externalContext) {
+    const context = this.#createContext(job, externalContext);
+    context.baseline = await resourceSample();
+    await persistBenchmark(context);
+    let failure = null;
+    try {
+      await this.#execute(job, context, externalContext);
+    } catch (error) {
+      failure = error;
+    }
+    const usage = await collectJobUsage(context.jobDir);
+    context.benchmark.cost.tokens = usage.tokens;
+    context.benchmark.cost.tokenAccounting = usage.tokenAccounting;
+    for (const row of context.benchmark.stages) {
+      row.tokens = usage.byStage[row.name] ?? null;
+    }
+    finalizeAttemptRecord(context, failure);
+    await persistBenchmark(context);
+    if (failure) throw failure;
+  }
+
+  async #execute(job, context, externalContext) {
     const briefPath = join(context.jobDir, '00-brief.json');
     const routePath = join(context.jobDir, '10-route.json');
     const precheckPath = join(context.jobDir, '15-precheck.json');
@@ -673,6 +1273,14 @@ export class ShowcasePipeline {
       await atomicJson(contractPath, semanticContract);
       return { precheck: precheckResult, contract: semanticContract };
     });
+    context.benchmark.models.engineResolved = route.engine;
+    context.benchmark.precheck = {
+      feasible: precheckResult?.feasible ?? null,
+      requires: precheckResult?.requires ?? [],
+      missing: precheckResult?.missing ?? [],
+      notPortable: precheckResult?.notPortable ?? [],
+    };
+    context.benchmark.contractObligations = (semanticContract?.obligations ?? []).map((item) => item?.kind ?? null);
 
     await stage(context, '20-author', [templatePath, transcriptPath, authorContractPath], async () => {
       await mkdir(authorDir, { recursive: true });
@@ -714,9 +1322,14 @@ export class ShowcasePipeline {
         };
         await atomicJson(routePath, route);
       }
+      context.benchmark.funnel['author-ok'] = true;
+      context.benchmark.contractFailures = (contractVerdict?.failures ?? []).map((failure) => (
+        typeof failure === 'string' ? failure : failure?.path ?? failure?.kind ?? JSON.stringify(failure)
+      ));
       if (!contractVerdict?.valid) {
         throw new Error(`authored template violated semantic contract: ${JSON.stringify(contractVerdict?.failures ?? [])}`);
       }
+      context.benchmark.funnel['contract-valid'] = true;
       await atomicJson(authorContractPath, contractVerdict);
       // `batch` derives draw seeds from template identity, site, and draw index.
       // Give that path a stable identity derived from the user-controlled seed.
@@ -724,12 +1337,31 @@ export class ShowcasePipeline {
       const seedIdentity = createHash('sha256').update(`${job.brief}\0${String(job.seed)}`).digest('hex').slice(0, 16);
       template.anchor.id = `showcase-${seedIdentity}`;
       await atomicJson(templatePath, template);
+      context.benchmark.seeds.seedIdentity = seedIdentity;
     });
     const authoredTemplate = await readJson(templatePath);
     context.renderComposition = (authoredTemplate.props ?? [])
       .some((prop) => prop.essentiality === 'required') ? 'all-authored' : 'incident';
     route.methodology.renderComposition = context.renderComposition;
     await atomicJson(routePath, route);
+    if (context.benchmark.funnel['contract-valid'] !== true) {
+      // The stage was reused from a previous run: re-derive the two funnel
+      // flags from the persisted verdict instead of assuming success.
+      const savedVerdict = await exists(authorContractPath) ? await readJson(authorContractPath) : null;
+      context.benchmark.funnel['author-ok'] = await exists(templatePath);
+      context.benchmark.funnel['contract-valid'] = savedVerdict?.valid === true;
+      context.benchmark.contractFailures = (savedVerdict?.failures ?? []).map((failure) => (
+        typeof failure === 'string' ? failure : failure?.path ?? failure?.kind ?? JSON.stringify(failure)
+      ));
+      context.benchmark.seeds.seedIdentity = (authoredTemplate.anchor?.id ?? '').replace(/^showcase-/, '') || null;
+    }
+    context.benchmark.route = {
+      requested: route.requested ?? null,
+      engine: route.engine ?? null,
+      initialEngine: route.initialEngine ?? null,
+      authorFallback: route.authorFallback?.reason ?? null,
+      renderComposition: context.renderComposition,
+    };
 
     const sites = await stage(context, '30-sites', [sitesPath], async () => {
       const args = [this.cli, 'sites', 'match', templatePath];
@@ -742,6 +1374,7 @@ export class ShowcasePipeline {
       await atomicJson(sitesPath, value);
       return value;
     });
+    context.benchmark.counts.sitesMatched = Number(sites?.totalSites ?? 0);
     if ((sites?.totalSites ?? 0) === 0) throw new Error('no matching sites for authored template');
 
     let cells = await stage(context, '40-cells', [cellsIndex], async () => {
@@ -765,6 +1398,31 @@ export class ShowcasePipeline {
       return copied;
     });
     if (!Array.isArray(cells)) cells = await loadCells(cellsDir);
+    context.benchmark.concurrency.load1AtSimulation = context.scheduler.load1AtSimulation ?? null;
+    context.benchmark.counts.cellsSimulated = cells.length;
+    context.benchmark.counts.cellsWithTrace = cells.filter((cell) => cell.traceFile).length;
+    context.benchmark.seeds.drawSeeds = cells.map((cell) => cell.paramSeed ?? null);
+    context.benchmark.cells = cells.map((cell) => ({
+      cellId: cell.cellId,
+      mapId: cell.mapId ?? null,
+      siteId: cell.siteId ?? null,
+      drawIndex: cell.drawIndex ?? null,
+      paramSeed: cell.paramSeed ?? null,
+      batchVerdict: cell.verdict ?? null,
+      band: cell.band ?? null,
+      inputHash: cell.inputHash ?? null,
+      traceSha256: cell.traceSha256 ?? null,
+      trajectoryFingerprint: cell.trajectoryFingerprint ?? null,
+      trajectoryFeatures: cell.trajectoryFeatures ?? null,
+      gatePass: null,
+      gateFirstFailure: null,
+      render2d: null,
+      render3d: null,
+      semanticAccepted: null,
+      presentationAccepted: null,
+      defectCodes: [],
+    }));
+    if (context.benchmark.counts.cellsWithTrace > 0) context.benchmark.funnel['cells-ok'] = true;
 
     const gate = await stage(context, '50-gate', [gatePath], async () => {
       const requestPath = join(context.jobDir, '.gate-request.json');
@@ -788,6 +1446,15 @@ export class ShowcasePipeline {
       return value;
     });
     const passing = new Set((gate.cells ?? []).filter((cell) => cell.pass).map((cell) => cell.cellId));
+    const gateById = new Map((gate.cells ?? []).map((row) => [row.cellId, row]));
+    for (const cell of context.benchmark.cells) {
+      const row = gateById.get(cell.cellId);
+      cell.gatePass = row ? row.pass === true : null;
+      cell.gateFirstFailure = row?.firstFailure ?? null;
+    }
+    context.benchmark.counts.gateEvaluated = gate.cells?.length ?? 0;
+    context.benchmark.counts.gatePassed = passing.size;
+    if (passing.size > 0) context.benchmark.funnel['gate-pass'] = true;
 
     // Deterministic product eligibility, downstream of the frozen gate and
     // upstream of every expensive stage. The frozen contract decides admission;
@@ -806,6 +1473,15 @@ export class ShowcasePipeline {
     const eligible = new Set((eligibility.cells ?? [])
       .filter((row) => row.admitted && row.eligible)
       .map((row) => row.cellId));
+    // Eligibility is the generator's terminal verdict: it is the last thing decided
+    // before a render is paid for, so it closes the generator funnel.
+    context.benchmark.counts.admittedCells = Number(eligibility.admittedCells ?? passing.size) || 0;
+    context.benchmark.counts.eligibleCells = eligible.size;
+    context.benchmark.cells = context.benchmark.cells.map((cell) => {
+      const row = eligibilityByCell.get(cell.cellId);
+      return row ? { ...cell, admitted: row.admitted === true, eligible: row.eligible === true } : cell;
+    });
+    if (eligible.size > 0) context.benchmark.funnel.eligible = true;
 
     let render2d = await stage(context, '60-render2d', [render2dIndex], async () => {
       await mkdir(render2dDir, { recursive: true });
@@ -843,6 +1519,14 @@ export class ShowcasePipeline {
       return { value: rendered, status: rendered.some((row) => row.status === 'complete') ? 'complete' : 'error' };
     });
     if (!Array.isArray(render2d)) render2d = render2d.cells ?? [];
+    const render2dById = new Map(render2d.map((row) => [row.cellId, row]));
+    for (const cell of context.benchmark.cells) {
+      const row = render2dById.get(cell.cellId);
+      cell.render2d = row ? row.status : null;
+    }
+    context.benchmark.counts.render2dAttempted = render2d.length;
+    context.benchmark.counts.render2dComplete = render2d.filter((row) => row.status === 'complete').length;
+    if (context.benchmark.counts.render2dComplete > 0) context.benchmark.funnel['2d-ok'] = true;
 
     let qualityRows = [];
     if (job.judge && await gatewayAvailable()) {
@@ -879,6 +1563,8 @@ export class ShowcasePipeline {
     if (qualityAccessFailure) {
       throw new Error(`model access unavailable during 2D review: ${JSON.stringify(qualityAccessFailure).slice(-1000)}`);
     }
+    context.benchmark.counts.semanticReviewed = qualityRows.filter((row) => row.status === 'complete').length;
+    if (context.benchmark.counts.semanticReviewed > 0) context.benchmark.funnel['semantic-reviewed'] = true;
     let render3d = await stage(context, '65-render3d', [render3dIndex], async () => {
       await mkdir(render3dDir, { recursive: true });
       if (!job.render3d) {
@@ -900,6 +1586,15 @@ export class ShowcasePipeline {
       return { value, status: value.status === 'complete' ? 'complete' : 'skipped' };
     });
     if (Array.isArray(render3d)) render3d = { status: 'complete', cells: render3d };
+    const render3dById = new Map((render3d?.cells ?? []).map((row) => [row.cellId, row]));
+    for (const cell of context.benchmark.cells) {
+      const row = render3dById.get(cell.cellId);
+      cell.render3d = row ? row.status : null;
+    }
+    context.benchmark.counts.render3dAttempted = render3d?.cells?.length ?? 0;
+    context.benchmark.counts.render3dComplete = (render3d?.cells ?? [])
+      .filter((row) => row.status === 'complete').length;
+    if (context.benchmark.counts.render3dComplete > 0) context.benchmark.funnel['3d-ok'] = true;
 
     const judgeModel = job.judgeModel ?? 'gpt-5.6-sol';
     const judgeEffort = job.judgeEffort ?? 'medium';
@@ -958,17 +1653,20 @@ export class ShowcasePipeline {
       });
       const value = {
         status: 'complete',
+        acceptanceSchema: ACCEPTANCE_SPLIT_SCHEMA,
         model: judgeModel,
         effort: judgeEffort,
         strategy: job.judgeStrategy ?? 'spread8',
         contract: contractIdentity(),
         cache: { ...judgeCache, retired: context.staleArtifacts['70-judge'] ?? null },
         ...judgeAcceptanceSummary({ contract: contractIdentity(), cells: rows }),
+        presentationTopK: job.topK,
         cells: rows,
       };
       await atomicJson(judgePath, value);
       return value;
     }, { cacheKey: judgeCache.key });
+    applyJudgeEvidence(context, judge);
 
     // One deterministic control per rejected job, chosen from the defect codes
     // the stages recorded. Presentation faults are repaired where they happened;
@@ -1102,12 +1800,30 @@ export class ShowcasePipeline {
             ...row,
             renderDir: row.renderDir ? `${attemptName}/${row.renderDir}` : null,
           }));
+          // The promoted attempt's own review is the evidence that was kept, so the
+          // attempt record is folded from the repair attempt's artifacts where they
+          // live. Nothing under the rejected attempt is overwritten, so both attempts
+          // stay auditable and `execution.repair` points at the promoted record.
+          applyJudgeEvidence(context, await readJson(join(repairDir, '70-judge.json')));
         }
+        context.benchmark.execution.repair = {
+          kind: plan.kind,
+          accepted: repairedGallery.accepted === true,
+          evidence: `${attemptName}/repair-result.json`,
+          attemptRecord: `${attemptName}/95-benchmark.json`,
+        };
       } catch (error) {
         await atomicJson(join(repairDir, 'repair-result.json'), {
           accepted: false,
           error: String(error.message ?? error),
         });
+        context.benchmark.execution.repair = {
+          kind: plan.kind,
+          accepted: false,
+          evidence: `${attemptName}/repair-result.json`,
+          attemptRecord: `${attemptName}/95-benchmark.json`,
+          error: String(error.message ?? error).slice(-500),
+        };
         context.emit({
           stage: '80-reauthor',
           status: 'failed',
@@ -1153,6 +1869,9 @@ export class ShowcasePipeline {
       await atomicJson(productPath, product);
       return product;
     }) ?? product;
+    // Presentation acceptance is read from the decision that was actually recorded, so a
+    // resumed job reports the attempt it shipped rather than recomputing a fresh verdict.
+    applyProductEvidence(context, decision);
 
     await stage(context, '90-gallery', [galleryPath], async () => {
       const judgeRows = decision.cells ?? [];
@@ -1203,6 +1922,7 @@ export class ShowcasePipeline {
           defectCodes: summary.defectCodeCounts,
           retry: summary.retry,
         },
+        benchmarkRecord: '95-benchmark.json',
         scores: { realism: average('realism'), dynamism: average('dynamism') },
         headline,
         render3d: job.render3d,

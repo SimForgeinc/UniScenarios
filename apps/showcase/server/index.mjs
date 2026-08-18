@@ -198,6 +198,7 @@ export class JobRunner {
     });
     this.queue = [];
     this.active = 0;
+    this.executed = 0;
     this.states = new Map();
   }
 
@@ -226,6 +227,7 @@ export class JobRunner {
         ['70-judge', ['70-judge.json']],
         ['75-product', ['75-product.json']],
         ['90-gallery', ['90-gallery.json']],
+        ['95-benchmark', ['95-benchmark.json']],
       ];
       for (const [stage, artifacts] of savedStages) {
         if ((await Promise.all(artifacts.map((artifact) => exists(join(jobDir, artifact))))).every(Boolean)) {
@@ -296,8 +298,19 @@ export class JobRunner {
   async execute({ job, jobDir }) {
     await rm(join(jobDir, 'job-error.json'), { force: true });
     this.emit(job.jobId, { stage: 'job', status: 'running', artifacts: [] });
+    // `processJobIndex` is what makes cold versus warm a measurement rather than
+    // a guess: index 0 is the first job this process has executed, so no derived
+    // artifact, module, or GPU context has been warmed by a previous attempt.
+    const processJobIndex = this.executed;
+    this.executed += 1;
     try {
-      await this.engine.run(job, { jobDir, emit: (event) => this.emit(job.jobId, event) });
+      await this.engine.run(job, {
+        jobDir,
+        emit: (event) => this.emit(job.jobId, event),
+        processJobIndex,
+        activeJobs: this.active,
+        jobConcurrency: this.concurrency,
+      });
       this.ensureState(job.jobId).done = true;
     } catch (error) {
       const failure = classifyFailure(error);
@@ -486,11 +499,29 @@ export async function createShowcaseServer({
       if (request.method === 'GET' && url.pathname === '/api/gallery') {
         return sendJson(response, 200, await gallery(runner.dataDir));
       }
+      const campaignBenchmark = /^\/api\/campaigns\/([a-zA-Z0-9._-]+)\/benchmark$/.exec(url.pathname);
+      if (request.method === 'GET' && campaignBenchmark) {
+        const reportPath = join(runner.dataDir, 'campaigns', campaignBenchmark[1], 'report.json');
+        if (!(await exists(reportPath))) return sendJson(response, 404, { error: 'campaign not found' });
+        const report = JSON.parse(await readFile(reportPath, 'utf8'));
+        // The campaign runner publishes the block at `totals.benchmark`.
+        const benchmark = report.totals?.benchmark;
+        if (!benchmark) {
+          return sendJson(response, 409, { error: 'campaign report predates the benchmark schema' });
+        }
+        return sendJson(response, 200, benchmark);
+      }
       const campaign = /^\/api\/campaigns\/([a-zA-Z0-9._-]+)$/.exec(url.pathname);
       if (request.method === 'GET' && campaign) {
         const reportPath = join(runner.dataDir, 'campaigns', campaign[1], 'report.json');
         if (!(await exists(reportPath))) return sendJson(response, 404, { error: 'campaign not found' });
         return sendJson(response, 200, JSON.parse(await readFile(reportPath, 'utf8')));
+      }
+      const attemptRecord = /^\/api\/jobs\/([0-9a-f-]+)\/benchmark$/.exec(url.pathname);
+      if (request.method === 'GET' && attemptRecord) {
+        const recordPath = join(runner.jobsDir, attemptRecord[1], '95-benchmark.json');
+        if (!(await exists(recordPath))) return sendJson(response, 404, { error: 'attempt record not found' });
+        return sendJson(response, 200, JSON.parse(await readFile(recordPath, 'utf8')));
       }
       const full = /^\/api\/jobs\/([0-9a-f-]+)\/full$/.exec(url.pathname);
       if (request.method === 'GET' && full) {

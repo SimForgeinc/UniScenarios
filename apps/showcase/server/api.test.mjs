@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 
+import { ATTEMPT_RECORD_SCHEMA, BENCHMARK_REPORT_SCHEMA } from './benchmark.mjs';
 import { createShowcaseServer, resolveSchedulerSettings } from './index.mjs';
 import {
   applyProductDecision,
@@ -715,21 +716,27 @@ test('a failed job persists a declared unsupported reason instead of an operatio
   assert.deepEqual(document.defectCodes, ['unsupported_geometry']);
 });
 
-test('campaign endpoint publishes the strict accepted-video report', async (t) => {
+test('campaign endpoints publish the acceptance-split report and its benchmark block', async (t) => {
   const { base, runner } = await fixture(t);
   const campaignDir = join(runner.dataDir, 'campaigns', 'edge-cases-67x5');
   await mkdir(campaignDir, { recursive: true });
+  const benchmark = {
+    schema: BENCHMARK_REPORT_SCHEMA,
+    corpus: { entries: 67, outcomes: { accepted: 1, attempting: 0, exhausted: 0, unsupported: 0, pending: 66 }, accountedFor: true },
+    funnel: { stages: [], monotone: true },
+  };
   await atomicJson(join(campaignDir, 'report.json'), {
     campaignId: 'edge-cases-67x5',
     targetValidVideos: 5,
-    cases: [{ id: 'case-1', title: 'Case one', attempts: [], validVideos: [] }],
-    totals: { validVideos: 0, targetVideos: 335 },
+    cases: [{ id: 'case-1', title: 'Case one', attempts: [], validVideos: [], outcome: 'pending' }],
+    totals: { validVideos: 0, targetVideos: 335, benchmark },
     validityContract: {
       semanticAcceptedRequired: true,
       presentationAcceptedRequired: true,
       currentReviewContractRequired: true,
       uniqueVideoSha256Required: true,
       reviewContractSha256: CONTRACT_SHA256,
+      distinctTrajectoryFingerprintRequired: true,
     },
   });
   const response = await fetch(`${base}/api/campaigns/edge-cases-67x5?token=${TOKEN}`);
@@ -739,5 +746,69 @@ test('campaign endpoint publishes the strict accepted-video report', async (t) =
   assert.equal(report.validityContract.semanticAcceptedRequired, true);
   assert.equal(report.validityContract.presentationAcceptedRequired, true);
   assert.equal(report.validityContract.reviewContractSha256, CONTRACT_SHA256);
+  assert.equal(report.validityContract.distinctTrajectoryFingerprintRequired, true);
+  assert.equal(report.totals.benchmark.corpus.entries, 67);
   assert.equal((await fetch(`${base}/api/campaigns/missing?token=${TOKEN}`)).status, 404);
+
+  // The benchmark block is also reachable on its own, so a reporter never has to
+  // download the full 67-case ledger to verify the numbers.
+  const direct = await fetch(`${base}/api/campaigns/edge-cases-67x5/benchmark?token=${TOKEN}`);
+  assert.equal(direct.status, 200);
+  assert.deepEqual(await direct.json(), benchmark);
+  assert.equal((await fetch(`${base}/api/campaigns/missing/benchmark?token=${TOKEN}`)).status, 404);
+
+  // A report written before this schema existed is refused, not silently faked.
+  const legacyDir = join(runner.dataDir, 'campaigns', 'legacy');
+  await mkdir(legacyDir, { recursive: true });
+  await atomicJson(join(legacyDir, 'report.json'), { campaignId: 'legacy', totals: {} });
+  const legacy = await fetch(`${base}/api/campaigns/legacy/benchmark?token=${TOKEN}`);
+  assert.equal(legacy.status, 409);
+  assert.match((await legacy.json()).error, /predates the benchmark schema/);
+});
+
+test('a job exposes the one benchmark record written for its attempt', async (t) => {
+  const { base, runner } = await fixture(t);
+  const jobId = '22222222-2222-4222-8222-222222222222';
+  const jobDir = join(runner.jobsDir, jobId);
+  await mkdir(jobDir, { recursive: true });
+  assert.equal((await fetch(`${base}/api/jobs/${jobId}/benchmark?token=${TOKEN}`)).status, 404);
+  const record = {
+    schema: ATTEMPT_RECORD_SCHEMA,
+    jobId,
+    execution: { cold: true, processJobIndex: 0, resumed: false, resumedStages: [] },
+    concurrency: { activeJobsAtStart: 1, logicalCpus: 8 },
+    funnel: { submitted: true },
+    outcome: { kind: 'running', censoredAtStage: null, operational: null, defectCodes: [] },
+  };
+  await atomicJson(join(jobDir, '95-benchmark.json'), record);
+  const response = await fetch(`${base}/api/jobs/${jobId}/benchmark?token=${TOKEN}`);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), record);
+});
+
+test('the runner tells each attempt whether it is the process cold start and how busy the host is', async (t) => {
+  const dataDir = await mkdtemp(join(tmpdir(), 'showcase-coldwarm-test-'));
+  t.after(async () => rm(dataDir, { recursive: true, force: true }));
+  const seen = [];
+  const engine = {
+    async run(job, context) {
+      seen.push({
+        jobId: job.jobId,
+        processJobIndex: context.processJobIndex,
+        activeJobs: context.activeJobs,
+        jobConcurrency: context.jobConcurrency,
+      });
+      await atomicJson(join(context.jobDir, '90-gallery.json'), { jobId: job.jobId });
+      context.emit({ stage: '90-gallery', status: 'complete', artifacts: ['90-gallery.json'] });
+    },
+  };
+  const { runner } = await createShowcaseServer({ token: TOKEN, dataDir, engine, env: {} });
+  await runner.submit({ brief: 'First attempt on a cold process.', methodology: 'custom' });
+  await eventually(() => seen.length === 1, 'first job never ran');
+  await runner.submit({ brief: 'Second attempt on a warm process.', methodology: 'custom' });
+  await eventually(() => seen.length === 2, 'second job never ran');
+  assert.equal(seen[0].processJobIndex, 0, 'the first job of the process is the cold one');
+  assert.equal(seen[1].processJobIndex, 1, 'every later job is warm');
+  assert.ok(seen.every((entry) => Number.isInteger(entry.activeJobs)));
+  assert.equal(seen[0].jobConcurrency, 4);
 });

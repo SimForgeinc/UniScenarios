@@ -68,8 +68,34 @@ main { width:min(1240px, calc(100% - 48px)); min-height:calc(100vh - 150px); mar
 .campaign-video-foot span { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .campaign-video-foot .ghost-link { flex:0 0 auto; font-size:.72rem; }
 .contract-note .chip,.campaign-sync .chip { text-transform:none; }
+.benchmark-unpublished { margin:24px 0 4px; color:var(--muted); font-size:.82rem; }
+.benchmark-panel { margin:8px 0 4px; }
+.benchmark-panel>.section-title { margin-top:34px; }
+.benchmark-block { padding:20px; border:1px solid var(--line); border-radius:14px; background:linear-gradient(145deg,#131925,#0e131c); }
+.benchmark-block+.benchmark-block,.benchmark-throughput+.benchmark-block { margin-top:14px; }
+.benchmark-block h3 { margin:0 0 14px; color:#dce3ed; font-size:.78rem; letter-spacing:.12em; text-transform:uppercase; }
+.benchmark-table-wrap { overflow-x:auto; }
+.benchmark-table { width:100%; border-collapse:collapse; font-size:.76rem; font-variant-numeric:tabular-nums; }
+.benchmark-table th { padding:0 12px 10px; color:var(--muted); font-size:.62rem; letter-spacing:.11em; text-align:left; text-transform:uppercase; white-space:nowrap; }
+.benchmark-table td { padding:11px 12px; border-top:1px solid var(--line); color:#cbd3df; white-space:nowrap; }
+.benchmark-table td:first-child { min-width:240px; white-space:normal; }
+.benchmark-table td:first-child b,.benchmark-table td:first-child small { display:block; }
+.benchmark-table td:first-child small { margin-top:3px; color:var(--muted); }
+.benchmark-throughput { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; margin-top:14px; }
+.benchmark-throughput .benchmark-block { min-width:0; }
+.benchmark-boundary { min-height:2.6em; margin:-5px 0 14px; color:var(--accent); font-size:.78rem; }
+.benchmark-stats { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.benchmark-stats .stat { grid-column:auto; padding:14px; }
+.benchmark-stats .stat b { font-size:1.25rem; }
+.benchmark-diversity .stat { padding:14px; }
+.benchmark-diversity .stat b { font-size:1.25rem; }
+.benchmark-note,.benchmark-operational p { margin:15px 0 0; font-size:.78rem; }
+.benchmark-operational p b { color:#dce3ed; }
+.benchmark-operational .chip-row { margin-top:13px; }
 @media(max-width:700px){
   header { padding:0 14px; } nav { gap:.4rem; } nav button { padding:.5rem .62rem; font-size:.82rem; } .brand small { display:none; }
+  .benchmark-throughput { grid-template-columns:1fr; }
+  .benchmark-stats { grid-template-columns:1fr; }
   .campaign-sync { justify-items:start; }
   .stat-grid { grid-template-columns:1fr; } .stat { grid-column:auto; } .stat.lead b { font-size:1.9rem; }
   .campaign-videos { grid-template-columns:1fr; }

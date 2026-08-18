@@ -1,4 +1,4 @@
-import type { Artifact, CellVerdict, GalleryCard, IndexedFile, JobIndex, RawJobIndex, StageEvent } from './types';
+import type { Artifact, CellVerdict, GalleryCard, IndexedFile, JobIndex, Rate, RawJobIndex, StageEvent } from './types';
 
 export const STAGES = [
   ['00', 'Brief'], ['10', 'Route'], ['15', 'Precheck'], ['20', 'Author'], ['30', 'Sites'],
@@ -38,6 +38,16 @@ export function threeDVideos(job: JobIndex | null): Array<{ cell: CellVerdict; a
       ?? candidates[0];
     return artifact ? [{ cell, artifact }] : [];
   });
+}
+
+/**
+ * A rate is only readable together with its denominator. An absent rate, an
+ * empty denominator, or a null value all render as `n/a`: never as `0%`, which
+ * would read as a measured failure instead of an absent measurement.
+ */
+export function formatRate(rate: Rate | null | undefined): string {
+  if (!rate || rate.denominator === 0 || rate.value === null) return 'n/a';
+  return `${rate.numerator}/${rate.denominator} (${(rate.value * 100).toFixed(1)}%)`;
 }
 
 export function artifactKind(artifact: Artifact | string): 'image' | 'video' | 'download' {

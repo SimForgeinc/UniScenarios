@@ -8,6 +8,13 @@ import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import {
+  ATTEMPT_RECORD_SCHEMA,
+  buildBenchmarkReport,
+  deterministicUnsupportedReason,
+  perHour,
+  verifyBenchmarkReport,
+} from './benchmark.mjs';
+import {
   acceptsCampaignVideo,
   campaignVideoRow,
   CONTRACT_SHA256,
@@ -17,6 +24,7 @@ import {
 } from './review-contract.mjs';
 
 import { classifyFailure, normalizeUnsupportedReason, OPERATIONAL_FAILURE_KINDS, truncateDetail } from './failures.mjs';
+import { MAPS, collectJobUsage, emptyUsage } from './pipeline.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const execFileAsync = promisify(execFile);
@@ -397,7 +405,12 @@ function ledgerFromAttempts(attempts) {
  * refunds historical operational failures instead of charging them to a case's attempt budget.
  * `nextCaseIndex` is dropped: the breadth-first order is derived from depth, not a saved cursor.
  */
-export function migrateCampaignState(saved, { config, reliability = DEFAULT_RELIABILITY, startedAt = now() }) {
+export function migrateCampaignState(saved, {
+  config,
+  reliability = DEFAULT_RELIABILITY,
+  unsupportedAgreement = 2,
+  startedAt = now(),
+}) {
   const target = config.targetValidVideos;
   const source = saved && typeof saved === 'object' && saved.campaignId === config.id ? saved : null;
   const fromVersion = Number.isInteger(source?.version) ? source.version : source ? 1 : CAMPAIGN_STATE_VERSION;
@@ -451,6 +464,9 @@ export function migrateCampaignState(saved, { config, reliability = DEFAULT_RELI
     version: CAMPAIGN_STATE_VERSION,
     campaignId: config.id,
     targetValidVideos: target,
+    unsupportedAgreement: boundedInteger(
+      unsupportedAgreement, 2, 2, 10, 'campaign unsupportedAgreement',
+    ),
     methodology: config.methodology,
     reliability: { ...reliability },
     startedAt: timestamp(source?.startedAt) ?? startedAt,
@@ -507,6 +523,10 @@ export function resolveCampaignRuntime({ config, args = new Map(), env = {}, har
       args.get('submission-ramp') ?? env.SHOWCASE_CAMPAIGN_SUBMISSION_RAMP ?? runtimeConfig.submissionRampPerHeartbeat,
       1, 1, 4, 'campaign submission-ramp',
     ),
+    unsupportedAgreement: boundedInteger(
+      args.get('unsupported-agreement') ?? runtimeConfig.unsupportedAgreement,
+      2, 2, 10, 'campaign unsupported-agreement',
+    ),
     loadPausePerCpu,
     reliability: Object.freeze({
       maxGenerationAttempts: boundedInteger(
@@ -535,94 +555,98 @@ export function resolveCampaignRuntime({ config, args = new Map(), env = {}, har
   });
 }
 
-function emptyUsage() {
-  return { calls: 0, inputTokens: 0, outputTokens: 0, reasoningTokens: 0, modelWallS: 0 };
-}
-function addUsage(total, usage, wallS = 0) {
-  if (!usage || typeof usage !== 'object') return;
-  total.calls += Number(usage.calls ?? (usage.in != null || usage.input_tokens != null ? 1 : 0)) || 0;
-  total.inputTokens += Number(usage.inputTokens ?? usage.input_tokens ?? usage.in ?? 0) || 0;
-  total.outputTokens += Number(usage.outputTokens ?? usage.output_tokens ?? usage.out ?? 0) || 0;
-  total.reasoningTokens += Number(usage.reasoningTokens ?? usage.reasoning_tokens ?? usage.reasoning ?? 0) || 0;
-  total.modelWallS += Number(usage.modelWallS ?? usage.wallS ?? usage.llmWallS ?? wallS ?? 0) || 0;
-}
-async function walk(dir) {
-  if (!(await exists(dir))) return [];
-  const paths = [];
-  for (const entry of await readdir(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) paths.push(...await walk(path));
-    else paths.push(path);
-  }
-  return paths;
-}
-function authorUsage(document, usage) {
-  const attempts = Array.isArray(document.attempts) ? document.attempts : [];
-  const attemptUsages = attempts.map((attempt) => attempt?.row?.usage).filter(Boolean);
-  if (attemptUsages.length) {
-    for (const item of attemptUsages) addUsage(usage, item);
-    return;
-  }
-  const source = document.usage ?? document.result?.usage ?? document.episode?.usage ?? document.cost?.tokens;
-  addUsage(usage, source, document.wallS ?? document.cost?.wallS);
-}
-function judgeUsage(document, usage) {
-  for (const row of document.cells ?? []) {
-    addUsage(usage, row?._meta?.tokens, row?._meta?.latencyS);
-    addUsage(usage, row?.threeDReview?.tokens, row?.threeDReview?.latencyS);
+/**
+ * The pipeline's persisted benchmark record, or `null` when the attempt did not
+ * reach that stage or left malformed evidence behind.
+ */
+async function loadAttemptRecord(jobDir, collectedUsage = null) {
+  try {
+    const record = await readJson(join(jobDir, '95-benchmark.json'));
+    if (record?.schema !== ATTEMPT_RECORD_SCHEMA) return null;
+    const usage = collectedUsage ?? await collectJobUsage(jobDir);
+    record.cost ??= {};
+    record.cost.tokens = usage.tokens;
+    record.cost.tokenAccounting = usage.tokenAccounting;
+    for (const row of record.stages ?? []) row.tokens = usage.byStage[row.name] ?? null;
+    return record;
+  } catch {
+    return null;
   }
 }
+
+function projectStageLedger(record) {
+  return (record?.stages ?? []).map((row) => ({
+    name: row.name,
+    status: row.status,
+    wallS: row.wallS ?? null,
+    cpuS: row.cpuS ?? null,
+    tokens: row.tokens ?? null,
+    error: row.error ?? null,
+  }));
+}
+
+/**
+ * Keep the bounded report evidence in campaign state. Full trajectory features
+ * are retained only for accepted cells; fingerprints remain for duplicate and
+ * diversity accounting without growing state around every trace vector.
+ */
+function projectAttemptRecord(record, acceptedCellIds) {
+  if (!record) return null;
+  return {
+    schema: record.schema,
+    acceptanceSchema: record.acceptanceSchema ?? null,
+    jobId: record.jobId,
+    campaign: record.campaign,
+    seeds: record.seeds,
+    models: record.models,
+    maps: record.maps,
+    route: record.route ?? null,
+    execution: record.execution,
+    concurrency: record.concurrency,
+    precheck: record.precheck,
+    contractFailures: record.contractFailures ?? [],
+    contractObligations: record.contractObligations ?? [],
+    stages: projectStageLedger(record),
+    counts: record.counts,
+    funnel: record.funnel,
+    outcome: record.outcome,
+    cost: record.cost,
+    cells: (record.cells ?? []).map((cell) => ({
+      ...cell,
+      trajectoryFeatures: acceptedCellIds.has(cell.cellId) ? cell.trajectoryFeatures : null,
+    })),
+  };
+}
+
+/**
+ * Campaign wall time includes queue wait; execution and stage measurements come
+ * from the attempt record, while collectJobUsage is the sole token authority.
+ */
 async function jobMetrics(jobDir, submittedAt, finishedAt) {
-  const usage = emptyUsage();
-  const files = await walk(jobDir);
-  const seenAuthor = new Set();
-  const contractAttemptPaths = files.filter((value) => basename(value) === 'contract-attempts.json');
-  const contractAttemptDirs = new Set(contractAttemptPaths.map((value) => dirname(value)));
-  const authorPaths = [
-    ...contractAttemptPaths,
-    ...files.filter((value) => basename(value) === 'transcript.json'
-      && !contractAttemptDirs.has(dirname(value))),
-  ];
-  for (const path of authorPaths) {
-    const bytes = await readFile(path);
-    const hash = sha256(bytes);
-    if (seenAuthor.has(hash)) continue;
-    seenAuthor.add(hash);
-    try { authorUsage(JSON.parse(bytes), usage); } catch { /* preserved malformed evidence is not billable twice */ }
-  }
-  const seenJudge = new Set();
-  for (const path of files.filter((value) => basename(value) === '70-judge.json')) {
-    const bytes = await readFile(path);
-    const hash = sha256(bytes);
-    if (seenJudge.has(hash)) continue;
-    seenJudge.add(hash);
-    try { judgeUsage(JSON.parse(bytes), usage); } catch { /* terminal report records missing coverage */ }
-  }
+  const usage = await collectJobUsage(jobDir);
+  const record = await loadAttemptRecord(jobDir, usage);
+  const stageLedgerRows = projectStageLedger(record);
   const stageSeconds = {};
-  let timingLedgers = 0;
-  for (const path of files.filter((value) => basename(value) === '90-gallery.json')) {
-    let gallery;
-    try { gallery = await readJson(path); } catch { continue; }
-    timingLedgers += 1;
-    for (const [stage, seconds] of Object.entries(gallery.timings ?? {})) {
-      const numeric = Number(seconds);
-      if (!Number.isFinite(numeric) || numeric < 0) continue;
-      stageSeconds[stage] = Number((Number(stageSeconds[stage] ?? 0) + numeric).toFixed(3));
-    }
+  for (const row of stageLedgerRows) {
+    if (!Number.isFinite(Number(row.wallS))) continue;
+    stageSeconds[row.name] = Number((Number(stageSeconds[row.name] ?? 0) + Number(row.wallS)).toFixed(3));
   }
   const startedMs = dateMs(submittedAt);
   const finishedMs = dateMs(finishedAt, startedMs);
   return {
     wallS: Number((Math.max(0, finishedMs - startedMs) / 1000).toFixed(3)),
+    executionWallS: record?.cost?.wallS ?? null,
+    generatorWallS: record?.cost?.generatorWallS ?? null,
+    productWallS: record?.cost?.productWallS ?? null,
     stageSeconds,
-    tokens: usage,
+    tokens: usage.tokens,
+    tokensByStage: usage.byStage,
+    cpu: record?.cost?.cpu ?? null,
+    gpu: record?.cost?.gpu ?? null,
     tokenAccounting: {
-      version: 2,
-      authorTranscripts: seenAuthor.size,
-      judgeLedgers: seenJudge.size,
-      timingLedgers,
-      dollarCost: null,
-      note: 'Provider-recorded tokens are deduplicated by evidence hash. Copied repair summaries are excluded from stage timing totals.',
+      ...usage.tokenAccounting,
+      attemptRecord: record ? '95-benchmark.json' : null,
+      stageLedgerRows,
     },
   };
 }
@@ -674,7 +698,11 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
   const lockPath = join(campaignDir, 'runner.lock');
   const retryBackoff = { baseMs: reliability.retryBackoffMs, maxMs: reliability.maxRetryBackoffMs };
 
-  const state = migrateCampaignState(await readJson(statePath).catch(() => null), { config, reliability });
+  const state = migrateCampaignState(await readJson(statePath).catch(() => null), {
+    config,
+    reliability,
+    unsupportedAgreement: settings.unsupportedAgreement,
+  });
   const circuit = new ProviderCircuit({ ...circuitOptions(reliability), snapshot: state.provider });
   let capacity = null;
 
@@ -884,6 +912,48 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
     }
   }
 
+  function caseRecords(item) {
+    return item.attempts.map((attempt) => attempt.record).filter(Boolean);
+  }
+
+  function benchmarkBlock(elapsedHours) {
+    for (const item of state.cases) {
+      item.unsupported = deterministicUnsupportedReason(caseRecords(item), {
+        minimumAgreeingAttempts: state.unsupportedAgreement,
+      });
+    }
+    const report = buildBenchmarkReport({
+      campaignId: state.campaignId,
+      generatedAt: state.updatedAt,
+      target: state.targetValidVideos,
+      maxGenerationAttempts: reliability.maxGenerationAttempts,
+      minimumAgreeingAttempts: state.unsupportedAgreement,
+      elapsedHours,
+      mapUniverse: MAPS.length,
+      cases: state.cases.map((item) => ({
+        id: item.id,
+        title: item.title,
+        index: item.index,
+        priority: item.priority,
+        target: state.targetValidVideos,
+        acceptedVideos: item.validVideos.length,
+        submittedAttempts: item.attempts.length,
+        activeAttempts: item.attempts.filter(isActive).length,
+        unproductiveStreak: unproductiveStreak(item),
+        operationalFailures: item.operationalFailures.total,
+        records: caseRecords(item),
+        videos: item.validVideos,
+      })),
+    });
+    report.verification = {
+      violations: verifyBenchmarkReport(report, { expectedEntries: state.cases.length }),
+    };
+    report.verification.consistent = report.verification.violations.length === 0;
+    const outcomeById = new Map(report.cases.map((row) => [row.id, row.outcome]));
+    for (const item of state.cases) item.outcome = outcomeById.get(item.id) ?? 'pending';
+    return report;
+  }
+
   function aggregate(nowMs = Date.now()) {
     const options = statusOptions(nowMs);
     const totals = {
@@ -921,20 +991,29 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         else if (attempt.status === 'failed') totals.failedJobs += 1;
         if (!attempt.metrics) continue;
         totals.wallS += Number(attempt.metrics.wallS ?? 0) || 0;
-        addUsage(totals.tokens, attempt.metrics.tokens);
+        const tokens = attempt.metrics.tokens ?? {};
+        totals.tokens.calls += Number(tokens.calls ?? 0) || 0;
+        totals.tokens.inputTokens += Number(tokens.inputTokens ?? 0) || 0;
+        totals.tokens.outputTokens += Number(tokens.outputTokens ?? 0) || 0;
+        totals.tokens.reasoningTokens += Number(tokens.reasoningTokens ?? 0) || 0;
+        totals.tokens.modelWallS += Number(tokens.modelWallS ?? 0) || 0;
         for (const [stage, seconds] of Object.entries(attempt.metrics.stageSeconds ?? {})) {
           totals.stageSeconds[stage] = Number((Number(totals.stageSeconds[stage] ?? 0) + (Number(seconds) || 0)).toFixed(3));
         }
       }
     }
     totals.wallS = Number(totals.wallS.toFixed(3));
-    const elapsedHours = Math.max(1 / 3600, (Date.now() - dateMs(state.startedAt)) / 3_600_000);
+    totals.tokens.modelWallS = Number(totals.tokens.modelWallS.toFixed(3));
+    const elapsedHours = Math.max(1 / 3600, (nowMs - dateMs(state.startedAt)) / 3_600_000);
     totals.elapsedHours = Number(elapsedHours.toFixed(3));
-    totals.validVideosPerHour = Number((totals.validVideos / elapsedHours).toFixed(3));
-    totals.jobsPerHour = Number((totals.jobs / elapsedHours).toFixed(3));
+    const window = elapsedHours >= 1 / 60 ? elapsedHours : null;
+    totals.validVideosPerHour = perHour(totals.validVideos, window);
+    totals.jobsPerHour = perHour(totals.jobs, window);
+    totals.minimumObservationHours = Number((1 / 60).toFixed(6));
     totals.meanTokensPerValidVideo = totals.validVideos
       ? Math.round((totals.tokens.inputTokens + totals.tokens.outputTokens) / totals.validVideos)
       : null;
+    totals.benchmark = benchmarkBlock(window);
     return totals;
   }
 
@@ -953,6 +1032,7 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         frozenGateRequired: true,
         briefAware3dReviewRequired: true,
         uniqueVideoSha256Required: true,
+        distinctTrajectoryFingerprintRequired: true,
         durableCampaignCopyRequired: true,
         currentReviewContractRequired: true,
         reviewContractVersion: CONTRACT_VERSION,
@@ -968,13 +1048,38 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
     const rows = state.cases.map((item) => {
       const attempts = item.attempts.map((attempt) => `#${attempt.number} ${attempt.status}${isOperationalAttempt(attempt) ? ` (${attempt.failureKind})` : ''}`).join(', ') || 'pending';
       const reason = item.unsupportedReason ? ` · unsupported: ${escapeHtml(item.unsupportedReason)}` : '';
+      const unsupported = item.unsupported
+        ? `<div class="muted">benchmark unsupported: ${escapeHtml(item.unsupported.reason)} (${item.unsupported.agreeingAttempts} agreeing attempts)</div>`
+        : '';
       const videos = item.validVideos.map((video, index) => `<figure><video controls preload="none" src="${escapeHtml(video.url)}"></video><figcaption>${index + 1}. ${escapeHtml(video.cellId)} · ${escapeHtml(video.sha256.slice(0, 12))}</figcaption></figure>`).join('');
-      return `<tr><td>${item.index + 1}</td><td><b>${escapeHtml(item.title)}</b><div class="muted">${escapeHtml(item.status)} · ${escapeHtml(attempts)}${reason}</div>${videos ? `<details><summary>${item.validVideos.length} accepted videos</summary><div class="videos">${videos}</div></details>` : ''}</td><td>${item.validVideos.length}/${state.targetValidVideos}</td></tr>`;
+      return `<tr><td>${item.index + 1}</td><td><b>${escapeHtml(item.title)}</b><div class="muted">${escapeHtml(item.status)} · benchmark ${escapeHtml(item.outcome)} · ${escapeHtml(attempts)}${reason}</div>${unsupported}${videos ? `<details><summary>${item.validVideos.length} accepted videos</summary><div class="videos">${videos}</div></details>` : ''}</td><td>${item.validVideos.length}/${state.targetValidVideos}</td></tr>`;
     }).join('\n');
+    const benchmark = totals.benchmark;
+    const percent = (rate) => (rate?.value == null ? 'n/a' : `${(rate.value * 100).toFixed(1)}%`);
+    const funnelRows = benchmark.funnel.stages.map((row) => `<tr><td>${escapeHtml(row.id)}</td><td>${escapeHtml(row.phase)}</td><td>${row.reached}/${row.denominator}</td><td>${percent(row.stepRate)}</td><td>${row.stepRate.wilson95 ? `${(row.stepRate.wilson95.low * 100).toFixed(1)}–${(row.stepRate.wilson95.high * 100).toFixed(1)}%` : 'n/a'}</td><td>${row.censoredHere}</td></tr>`).join('\n');
+    const outcomeRows = Object.entries(benchmark.corpus.outcomes)
+      .map(([outcome, count]) => `<div class="metric"><b>${count}/${benchmark.corpus.entries}</b><br>${escapeHtml(outcome)}</div>`).join('');
     const throttle = capacity.throttleReason ? ` Throttled: ${escapeHtml(capacity.throttleReason)}.` : '';
-    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(config.id)}</title><style>body{font:14px system-ui;background:#0b0e14;color:#e8edf5;margin:32px}h1{margin-bottom:4px}.muted,figcaption{color:#95a0b2}.metrics{display:flex;gap:12px;flex-wrap:wrap}.metric{padding:12px 16px;background:#151b25;border-radius:10px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{text-align:left;vertical-align:top;padding:9px;border-bottom:1px solid #29303c}.videos{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}video{width:100%;background:#000}figure{margin:0}a{color:#8de8c0}summary{cursor:pointer;margin-top:7px}</style></head><body><h1>${escapeHtml(config.id)}</h1><p class="muted">Strict frozen gate + brief-aware 3D product acceptance + per-case SHA-256 uniqueness. Heartbeat ${escapeHtml(state.heartbeatAt)}. Provider circuit ${escapeHtml(capacity.provider.state)}.${throttle}</p><div class="metrics"><div class="metric"><b>${totals.validVideos}/${totals.targetVideos}</b><br>valid videos</div><div class="metric"><b>${totals.completeCases}/${totals.cases}</b><br>complete cases</div><div class="metric"><b>${totals.exhaustedCases}/${totals.unsupportedCases}</b><br>exhausted/unsupported</div><div class="metric"><b>${totals.activeJobs}/${capacity.effectiveMaxActiveJobs}</b><br>active/effective jobs</div><div class="metric"><b>${totals.generationAttempts}</b><br>generation attempts</div><div class="metric"><b>${totals.operationalFailures}</b><br>operational failures</div><div class="metric"><b>${capacity.load1}</b><br>load1</div><div class="metric"><b>${totals.validVideosPerHour}</b><br>videos/hour</div><div class="metric"><b>${totals.tokens.inputTokens + totals.tokens.outputTokens}</b><br>tokens</div></div><p><a href="report.json">Live report JSON</a></p><table><thead><tr><th>#</th><th>Case and attempt status</th><th>Accepted</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
+    const hourlyVideos = totals.validVideosPerHour.value == null ? 'n/a' : totals.validVideosPerHour.value;
+    const hourlyWindow = totals.validVideosPerHour.denominatorHours == null
+      ? 'too short a window'
+      : `${totals.validVideosPerHour.denominatorHours} h`;
+    const html = `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="30"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escapeHtml(config.id)}</title><style>body{font:14px system-ui;background:#0b0e14;color:#e8edf5;margin:32px}h1{margin-bottom:4px}.muted,figcaption{color:#95a0b2}.metrics{display:flex;gap:12px;flex-wrap:wrap}.metric{padding:12px 16px;background:#151b25;border-radius:10px}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{text-align:left;vertical-align:top;padding:9px;border-bottom:1px solid #29303c}.videos{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}video{width:100%;background:#000}figure{margin:0}a{color:#8de8c0}summary{cursor:pointer;margin-top:7px}h2{margin-top:32px;font-size:15px}</style></head><body><h1>${escapeHtml(config.id)}</h1><p class="muted">Strict frozen gate + brief-aware 3D product acceptance + per-case SHA-256 uniqueness + distinct trace fingerprint. Heartbeat ${escapeHtml(state.heartbeatAt)}. Provider circuit ${escapeHtml(capacity.provider.state)}.${throttle}</p><div class="metrics"><div class="metric"><b>${totals.validVideos}/${totals.targetVideos}</b><br>valid videos</div><div class="metric"><b>${totals.completeCases}/${totals.cases}</b><br>complete cases</div><div class="metric"><b>${totals.exhaustedCases}/${totals.unsupportedCases}</b><br>exhausted/unsupported</div><div class="metric"><b>${totals.activeJobs}/${capacity.effectiveMaxActiveJobs}</b><br>active/effective jobs</div><div class="metric"><b>${totals.generationAttempts}</b><br>generation attempts</div><div class="metric"><b>${totals.operationalFailures}</b><br>operational failures</div><div class="metric"><b>${capacity.load1}</b><br>load1</div><div class="metric"><b>${hourlyVideos}</b><br>videos/hour over ${hourlyWindow}</div><div class="metric"><b>${totals.tokens.inputTokens + totals.tokens.outputTokens}</b><br>tokens</div></div><h2>Corpus accounting (all ${benchmark.corpus.entries} entries)</h2><div class="metrics">${outcomeRows}</div><h2>Funnel — every rate carries its denominator</h2><table><thead><tr><th>stage</th><th>phase</th><th>reached/denominator</th><th>step rate</th><th>Wilson 95%</th><th>censored here</th></tr></thead><tbody>${funnelRows}</tbody></table><h2>Throughput — generator ends at deterministic eligibility</h2><div class="metrics"><div class="metric"><b>${benchmark.throughput.generator.eligibleAttempts}/${benchmark.throughput.generator.attempts}</b><br>generator yield</div><div class="metric"><b>${benchmark.throughput.generator.wallS.p50 ?? 'n/a'} / ${benchmark.throughput.generator.wallS.p90 ?? 'n/a'}</b><br>generator wall p50/p90 s</div><div class="metric"><b>${benchmark.throughput.product.presentationAcceptedAttempts}/${benchmark.throughput.product.attempts}</b><br>product yield</div><div class="metric"><b>${benchmark.throughput.product.wallS.p50 ?? 'n/a'} / ${benchmark.throughput.product.wallS.p90 ?? 'n/a'}</b><br>product wall p50/p90 s</div><div class="metric"><b>${benchmark.operational.attempts}</b><br>operational failures (censored)</div></div><h2>Diversity — keyed on trace fingerprint, not MP4 bytes</h2><div class="metrics"><div class="metric"><b>${benchmark.diversity.distinctTrajectoryFingerprints}/${benchmark.diversity.videos}</b><br>distinct trajectories</div><div class="metric"><b>${benchmark.diversity.reencodedOnlyVideos}</b><br>re-encode-only duplicates</div><div class="metric"><b>${benchmark.diversity.maps.distinct}/${MAPS.length}</b><br>maps covered</div><div class="metric"><b>${benchmark.diversity.sites.distinct}</b><br>distinct sites</div><div class="metric"><b>${benchmark.diversity.pairwise.shapeM.p50 ?? 'n/a'}</b><br>pairwise shape distance p50 m</div></div><p class="muted">Report consistency: ${benchmark.verification.consistent ? 'no violations' : escapeHtml(benchmark.verification.violations.join('; '))}</p><p><a href="report.json">Live report JSON</a></p><h2>Per-case ledger</h2><table><thead><tr><th>#</th><th>Case and attempt status</th><th>Accepted</th></tr></thead><tbody>${rows}</tbody></table></body></html>`;
     await atomicWrite(htmlPath, html);
-    console.log(JSON.stringify({ at: state.updatedAt, heartbeatSequence: state.heartbeatSequence, capacity, ...totals }));
+    console.log(JSON.stringify({
+      at: state.updatedAt,
+      heartbeatSequence: state.heartbeatSequence,
+      capacity,
+      ...totals,
+      benchmark: {
+        outcomes: benchmark.corpus.outcomes,
+        generatorYield: benchmark.throughput.generator.yield,
+        productYield: benchmark.throughput.product.yield,
+        operationalFailures: benchmark.operational.attempts,
+        distinctTrajectories: benchmark.diversity.distinctTrajectoryFingerprints,
+        consistent: benchmark.verification.consistent,
+      },
+    }));
   }
 
   function videoTarget(item, digest) {
@@ -1034,6 +1139,10 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         source: relative(jobDir, videoPath).split('\\').join('/'),
         url: `/artifacts/campaigns/${config.id}/${relativeVideo.split('\\').join('/')}`,
         mapId: indexedCell?.mapId ?? ((gallery.maps ?? []).length === 1 ? gallery.maps[0] : null),
+        siteId: indexedCell?.siteId ?? null,
+        trajectoryFingerprint: indexedCell?.trajectoryFingerprint ?? null,
+        trajectoryFeatures: indexedCell?.trajectoryFeatures ?? null,
+        traceSha256: indexedCell?.traceSha256 ?? null,
         realism: row.acceptance?.axes?.realism ?? row.threeDReview?.realism ?? row.realism ?? null,
         dynamism: row.dynamism ?? null,
         semanticAccepted: true,
@@ -1087,6 +1196,13 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
     }
   }
 
+  async function attachRecord(item, attempt, jobDir) {
+    const acceptedCellIds = new Set(
+      item.validVideos.filter((video) => video.jobId === attempt.jobId).map((video) => video.cellId),
+    );
+    attempt.record = projectAttemptRecord(await loadAttemptRecord(jobDir), acceptedCellIds);
+  }
+
   async function refreshAttempts() {
     const refreshedJobs = new Set();
     for (const item of state.cases) {
@@ -1131,7 +1247,8 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
             circuit.recordSuccess();
             noteGenerationOutcome(item, acceptedByAttempt(attempt) > 0);
           }
-          if (attempt.metrics?.tokenAccounting?.version !== 2) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+          if (attempt.metrics?.tokenAccounting?.version !== 3) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+          await attachRecord(item, attempt, jobDir);
         } else if (await exists(errorPath)) {
           let error;
           try { error = await readJson(errorPath); } catch { continue; }
@@ -1158,9 +1275,11 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
               noteGenerationOutcome(item, false);
             }
           }
-          if (attempt.metrics?.tokenAccounting?.version !== 2) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+          if (attempt.metrics?.tokenAccounting?.version !== 3) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+          await attachRecord(item, attempt, jobDir);
         } else if (await exists(jobDir)) {
           attempt.status = 'running';
+          await attachRecord(item, attempt, jobDir);
         }
       }
     }

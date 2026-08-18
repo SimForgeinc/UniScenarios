@@ -92,6 +92,17 @@ const RULES = DEFECTS.rules.map((rule) => ({ code: rule.code, pattern: new RegEx
 /** The one defect code the pipeline itself contributes: the frozen physical gate's verdict. */
 export const GATE_DEFECT_CODE = DEFECTS.axisCodes.gate;
 
+/**
+ * The contract's declared defect vocabulary, plus the code it falls back to when
+ * reviewer prose matches no rule. This is the only defect taxonomy in the
+ * system: it is covered by the contract hash, so a report that counts these
+ * codes is describing the same contract the verdicts were produced under.
+ */
+export const DEFECT_CODE_VOCABULARY = Object.freeze([...new Set([...DEFECTS.codes, FALLBACK_CODE])].sort());
+
+/** Codes the pipeline contributes itself, rather than attributing from reviewer prose. */
+export const PIPELINE_DEFECT_CODES = Object.freeze([...(DEFECTS.pipelineCodes ?? [])]);
+
 /** The review code whose change must invalidate a cached 70-judge artifact. */
 export const REVIEW_CODE_PATHS = Object.freeze([
   'apps/showcase/server/review-contract.mjs',

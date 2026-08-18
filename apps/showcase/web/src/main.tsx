@@ -1,10 +1,10 @@
 import { render } from 'preact';
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import { artifactUrl, campaignCaseProgress, CAMPAIGN_ID, getCampaign, getGallery, getJob, submitJob, subscribe } from './api';
-import { artifactKind, artifacts, cardId, cardMedia, cells, scopeStageArtifacts, stageList, STAGES, threeDVideos } from './model';
+import { artifactKind, artifacts, cardId, cardMedia, cells, formatRate, scopeStageArtifacts, stageList, STAGES, threeDVideos } from './model';
 import type {
-  Artifact, CampaignCase, CampaignCaseState, CampaignReport, CampaignValidityContract, CampaignVideo,
-  GalleryCard, JobIndex, StageEvent, SubmitPayload,
+  Artifact, CampaignBenchmark, CampaignCase, CampaignCaseState, CampaignReport, CampaignValidityContract, CampaignVideo,
+  GalleryCard, HourlyRate, JobIndex, Rate, StageEvent, SubmitPayload,
 } from './types';
 import './style.css';
 
@@ -28,7 +28,7 @@ function useRoute() {
   return hash.startsWith('#/submit') ? { view: 'submit' as const } : { view: 'gallery' as const };
 }
 
-function Chip({ children, tone = '' }: { children: preact.ComponentChildren; tone?: string }) { return <span class={`chip ${tone}`}>{children}</span>; }
+function Chip({ children, tone = '', title }: { children: preact.ComponentChildren; tone?: string; title?: string }) { return <span class={`chip ${tone}`} title={title}>{children}</span>; }
 function Score({ label, value }: { label: string; value?: number }) { return <Chip>{label} <b>{value == null ? '—' : value.toFixed(1)}</b></Chip>; }
 function ErrorBox({ error }: { error: unknown }) { return error ? <div class="error" role="alert">{error instanceof Error ? error.message : String(error)}</div> : null; }
 
@@ -162,6 +162,128 @@ function Pips({ value, max }: { value: number; max: number }) {
   return <span class="pips" role="img" aria-label={`${value} of ${max} accepted videos`}>{Array.from({ length: max }, (_, index) => <span key={index} class={index < value ? 'pip on' : 'pip'} />)}</span>;
 }
 
+const BENCHMARK_OUTCOMES = ['accepted', 'attempting', 'exhausted', 'unsupported', 'pending'] as const;
+function benchmarkSeconds(value: number | null) {
+  return value === null ? 'n/a' : `${value.toFixed(1)}s`;
+}
+function formatWilson(rate: Rate | null | undefined) {
+  if (!rate || rate.denominator === 0 || rate.value === null || rate.wilson95 === null) return 'n/a';
+  return `${(rate.wilson95.low * 100).toFixed(1)}–${(rate.wilson95.high * 100).toFixed(1)}%`;
+}
+/** The percentage alone, for tables that already show `reached/denominator`. */
+function formatPercent(rate: Rate | null | undefined) {
+  if (!rate || rate.denominator === 0 || rate.value === null) return 'n/a';
+  return `${(rate.value * 100).toFixed(1)}%`;
+}
+/**
+ * A per-hour rate is meaningless without the window it was divided by, so an
+ * unmeasured window renders as `n/a` rather than an extrapolated number.
+ */
+function formatHourly(rate: HourlyRate, unit: string) {
+  if (rate.value === null || !rate.denominatorHours) return `n/a ${unit}`;
+  return `${rate.value.toFixed(2)} ${unit}`;
+}
+function hourlyHint(rate: HourlyRate) {
+  return !rate.denominatorHours
+    ? 'observation window too short to sustain a rate'
+    : `${rate.numerator} over ${rate.denominatorHours.toFixed(3)} h`;
+}
+function BenchmarkHistogram({ label, values }: { label: string; values: Record<string, number> }) {
+  return <div><small>{label}</small><div class="chip-row">{Object.entries(values).map(([name, count]) => <Chip key={name}>{count} × {name}</Chip>)}</div></div>;
+}
+function BenchmarkPanel({ benchmark }: { benchmark?: CampaignBenchmark }) {
+  if (!benchmark) return <p class="benchmark-unpublished">This campaign has not published benchmark evidence yet.</p>;
+  const { corpus, funnel, throughput, execution, diversity, operational } = benchmark;
+  return <section class="benchmark-panel" aria-labelledby="benchmark-title">
+    <div class="section-title">
+      <div><p class="eyebrow">BENCHMARK EVIDENCE</p><h2 id="benchmark-title">Stage-separated evidence</h2></div>
+      <p>Measured conversion, throughput, diversity, and censored operational evidence.</p>
+    </div>
+    <div class="benchmark-block">
+      <h3>Corpus accounting</h3>
+      <div class="chip-row">
+        {BENCHMARK_OUTCOMES.map((outcome) => <Chip key={outcome}>{corpus.outcomes[outcome]}/{corpus.entries} {outcome}</Chip>)}
+        {!corpus.accountedFor && <Chip tone="fail">accounting mismatch</Chip>}
+      </div>
+    </div>
+    <div class="benchmark-block">
+      <h3>Funnel</h3>
+      <div class="benchmark-table-wrap">
+        <table class="benchmark-table">
+          <thead><tr><th>Stage</th><th>Phase</th><th>Reached / denominator</th><th>Step rate</th><th>Wilson 95%</th><th>Censored here</th></tr></thead>
+          <tbody>{funnel.stages.map((stage) => <tr key={stage.id}>
+            <td><b>{stage.label}</b><small>denominator: {stage.denominatorStage} · evidence: {stage.evidence}</small></td>
+            <td>{stage.phase}</td>
+            <td>{stage.reached}/{stage.denominator}</td>
+            <td>{formatPercent(stage.stepRate)}</td>
+            <td>{formatWilson(stage.stepRate)}</td>
+            <td>{stage.censoredHere}</td>
+          </tr>)}</tbody>
+        </table>
+      </div>
+    </div>
+    <div class="benchmark-throughput">
+      <div class="benchmark-block">
+        <h3>Generator</h3>
+        <p class="benchmark-boundary">generator throughput ends at deterministic eligibility</p>
+        <div class="stat-grid benchmark-stats">
+          <Stat label="Eligible yield" value={formatRate(throughput.generator.yield)} />
+          <Stat label="Gate yield" value={formatRate(throughput.generator.gateYield)} />
+          <Stat label="Eligible attempts/hour" value={formatHourly(throughput.generator.eligibleAttemptsPerHour, 'attempts/h')} hint={hourlyHint(throughput.generator.eligibleAttemptsPerHour)} />
+          <Stat label="Eligible cells/hour" value={formatHourly(throughput.generator.eligibleCellsPerHour, 'cells/h')} hint={hourlyHint(throughput.generator.eligibleCellsPerHour)} />
+          <Stat label="Wall p50" value={benchmarkSeconds(throughput.generator.wallS.p50)} hint={`p90 ${benchmarkSeconds(throughput.generator.wallS.p90)}`} />
+        </div>
+      </div>
+      <div class="benchmark-block">
+        <h3>Product</h3>
+        <p class="benchmark-boundary">product throughput adds render and review</p>
+        <div class="stat-grid benchmark-stats">
+          <Stat label="Yield" value={formatRate(throughput.product.yield)} />
+          <Stat label="Accepted attempts/hour" value={formatHourly(throughput.product.presentationAcceptedAttemptsPerHour, 'attempts/h')} hint={hourlyHint(throughput.product.presentationAcceptedAttemptsPerHour)} />
+          <Stat label="Accepted cells/hour" value={formatHourly(throughput.product.presentationAcceptedCellsPerHour, 'cells/h')} hint={hourlyHint(throughput.product.presentationAcceptedCellsPerHour)} />
+          <Stat label="Wall p50" value={benchmarkSeconds(throughput.product.wallS.p50)} hint={`p90 ${benchmarkSeconds(throughput.product.wallS.p90)}`} />
+        </div>
+      </div>
+    </div>
+    <div class="benchmark-block">
+      <h3>Execution conditions</h3>
+      <div class="stat-grid benchmark-stats">
+        <Stat
+          label="Cold vs warm"
+          value={formatRate(execution.cold)}
+          hint={`${execution.cold.denominator - execution.cold.numerator} warm · ${execution.cold.denominator} measured`}
+        />
+        <Stat label="Resumed attempts" value={formatRate(execution.resumed)} />
+        <Stat label="Active jobs at start" value={execution.concurrency.activeJobsAtStart.p50 === null ? 'n/a' : `p50 ${execution.concurrency.activeJobsAtStart.p50.toFixed(1)}`} hint={`peak p90 ${execution.concurrency.peakActiveJobs.p90 ?? 'n/a'}`} />
+        <Stat label="Host load at start" value={execution.concurrency.load1AtStart.p50 === null ? 'n/a' : `p50 ${execution.concurrency.load1AtStart.p50.toFixed(2)}`} hint={`simulation p50 ${execution.concurrency.load1AtSimulation.p50 ?? 'n/a'}`} />
+      </div>
+      <BenchmarkHistogram label="Logical CPUs" values={execution.concurrency.logicalCpus} />
+      <BenchmarkHistogram label="Schedulers" values={execution.concurrency.scheduler} />
+      <BenchmarkHistogram label="Author model / effort" values={execution.models.author} />
+      <BenchmarkHistogram label="Judge model / effort / strategy" values={execution.models.judge} />
+      <BenchmarkHistogram label="Engine requested" values={execution.models.engineRequested} />
+      <BenchmarkHistogram label="Engine resolved" values={execution.models.engineResolved} />
+      <BenchmarkHistogram label="Product review version" values={execution.models.productReviewVersion} />
+    </div>
+    <div class="benchmark-block">
+      <h3>Diversity</h3>
+      <div class="stat-grid benchmark-diversity">
+        <Stat label="Trace fingerprints" value={`${diversity.distinctTrajectoryFingerprints}/${diversity.videos}`} hint={`${diversity.unfingerprintedVideos} videos unfingerprinted`} />
+        <Stat label="Re-encode-only duplicates" value={plainCount.format(diversity.reencodedOnlyVideos)} />
+        <Stat label="Map coverage" value={formatRate(diversity.maps.coverage)} />
+        <Stat label="Distinct sites" value={plainCount.format(diversity.sites.distinct)} />
+        <Stat label="Pairwise shape distance p50" value={diversity.pairwise.shapeM.p50 === null ? 'n/a' : `${diversity.pairwise.shapeM.p50.toFixed(3)}m`} />
+      </div>
+      <p class="benchmark-note">{diversity.note}</p>
+    </div>
+    <div class="benchmark-block benchmark-operational">
+      <h3>Operational</h3>
+      <p><b>{plainCount.format(operational.attempts)} censored attempts.</b> Operational failures are excluded from the generation denominator but reported.</p>
+      <div class="chip-row">{Object.entries(operational.byClass).map(([name, count]) => <Chip key={name}>{count}/{operational.attempts} {name}</Chip>)}</div>
+    </div>
+  </section>;
+}
+
 function AcceptedVideo({ video, caseTitle, heading }: { video: CampaignVideo; caseTitle: string; heading: string }) {
   const jobId = video.jobId;
   return <article class="job-video-card campaign-video-card">
@@ -178,14 +300,24 @@ function AcceptedVideo({ video, caseTitle, heading }: { video: CampaignVideo; ca
 }
 
 const CASE_STATE: Record<CampaignCaseState, [label: string, tone: string]> = {
-  complete: ['complete', 'pass'], running: ['rendering', 'live'], blocked: ['needs retry', 'fail'], idle: ['pending', ''],
+  complete: ['complete', 'pass'], running: ['rendering', 'live'], blocked: ['needs retry', 'fail'],
+  idle: ['pending', ''], unsupported: ['unsupported', 'fail'],
+};
+// The runner's own outcome wins when it is published: it distinguishes an
+// exhausted attempt budget and a deterministic unsupported blocker from a case
+// that merely has a failed attempt.
+const OUTCOME_LABEL: Record<string, string> = {
+  accepted: 'complete', attempting: 'attempting', exhausted: 'attempts exhausted',
+  unsupported: 'unsupported', pending: 'pending',
 };
 const ATTEMPT_TONE: Record<string, string> = { complete: 'pass', failed: 'fail', running: 'live', queued: '' };
 
 function CampaignCaseRow({ item, target }: { item: CampaignCase; target: number }) {
   const progress = campaignCaseProgress(item, target);
   const [label, tone] = CASE_STATE[progress.state];
-  const stateLabel = progress.state === 'idle' && progress.attempts > 0 ? 'awaiting attempt' : label;
+  const stateLabel = progress.outcome
+    ? OUTCOME_LABEL[progress.outcome] ?? label
+    : progress.state === 'idle' && progress.attempts > 0 ? 'awaiting attempt' : label;
   const [open, setOpen] = useState(false);
   return <details class={`campaign-case ${progress.state}`} onToggle={(event) => setOpen(event.currentTarget.open)}>
     <summary>
@@ -193,7 +325,7 @@ function CampaignCaseRow({ item, target }: { item: CampaignCase; target: number 
       <b>{item.title}</b>
       <Pips value={progress.accepted} max={target} />
       <span class="case-count">{progress.accepted}/{target}</span>
-      <Chip tone={tone}>{stateLabel}</Chip>
+      <Chip tone={tone} title={progress.unsupportedReason ?? undefined}>{stateLabel}</Chip>
       <span class="chevron">⌄</span>
     </summary>
     {open && <div class="case-body">
@@ -221,6 +353,7 @@ const CONTRACT_LABELS: Record<string, string> = {
   briefAware3dReviewRequired: 'brief-aware 3D review',
   currentReviewContractRequired: 'current review contract',
   uniqueVideoSha256Required: 'unique MP4 SHA-256',
+  distinctTrajectoryFingerprintRequired: 'distinct trace fingerprint',
 };
 const CASE_FILTERS = [['all', 'All cases'], ['open', 'In progress'], ['complete', 'Complete']] as const;
 type CaseFilter = (typeof CASE_FILTERS)[number][0];
@@ -281,10 +414,11 @@ function Campaign({ id }: { id: string }) {
           <Meter value={totals.completeCases} max={totals.cases} label="Cases at full acceptance" />
         </Stat>
         <Stat label="Jobs submitted" value={plainCount.format(totals.jobs)} hint={`${totals.activeJobs} in flight · ${totals.failedJobs} failed · ${duration(totals.wallS)} job wall time`} />
-        <Stat label="Throughput" value={`${totals.validVideosPerHour.toFixed(2)} videos/h`} hint={`${totals.jobsPerHour.toFixed(2)} jobs/h sustained`} />
+        <Stat label="Throughput" value={formatHourly(totals.validVideosPerHour, 'videos/h')} hint={`${formatHourly(totals.jobsPerHour, 'jobs/h')} · ${hourlyHint(totals.validVideosPerHour)}`} />
         <Stat label="Model tokens" value={compactCount.format(allTokens)} hint={`${compactCount.format(totals.tokens.inputTokens)} in · ${compactCount.format(totals.tokens.outputTokens)} out · ${compactCount.format(totals.tokens.reasoningTokens)} reasoning`} />
         <Stat label="Tokens per accepted video" value={totals.meanTokensPerValidVideo == null ? '—' : compactCount.format(totals.meanTokensPerValidVideo)} hint={`${plainCount.format(totals.tokens.calls)} model calls · ${duration(totals.tokens.modelWallS)} model time`} />
       </section>
+      <BenchmarkPanel benchmark={totals.benchmark} />
       <section class="contract-note">
         <p class="eyebrow">VALIDITY CONTRACT</p>
         <div class="chip-row">
