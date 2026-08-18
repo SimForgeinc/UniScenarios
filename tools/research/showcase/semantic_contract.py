@@ -145,3 +145,17 @@ def build_proven_ltap_variant(contract, brief, root):
         {"id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "required", "of": "ego", "maxMps2": 8},
     ]
     return template
+
+def build_proven_product_variant(contract, brief, root):
+    text = brief.get("brief", "").lower()
+    if re.search(r"\b(?:accident|construction)\b.*\bblock(?:ing|s|ed)?\b.*\b(?:normal )?path\b", text):
+        source = Path(root) / "research/edge-case-corpus/templates/blocked-path-production.template.json"
+        template = json.loads(source.read_text())
+        template["meta"].update({
+            "name": brief["id"],
+            "description": brief["brief"][:4000],
+            "author": "showcase/proven-blocked-path-specialization",
+        })
+        template["anchor"]["id"] = f"showcase-blocked-{brief['id'][-24:]}"
+        return template
+    return build_proven_ltap_variant(contract, brief, root)

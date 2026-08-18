@@ -199,20 +199,20 @@ def vista_author(args):
     failures = []
     final_row = None
     final_template = None
-    proven = (semantic.build_proven_ltap_variant(author_contract, original_brief, ROOT)
+    proven = (semantic.build_proven_product_variant(author_contract, original_brief, ROOT)
               if 'POST-RENDER REPAIR FEEDBACK' not in original_brief.get('brief', '') else None)
     proven_failures = semantic.validate_template(proven, author_contract) if proven else []
     if proven and not proven_failures:
-        final_template = out / 'proven-ltap.template.json'
+        final_template = out / 'proven-product.template.json'
         atomic_json(final_template, proven)
         final_row = {
             'admitted': False,
             'actions': 0,
-            'implementation': 'semantic_contract.build_proven_ltap_variant',
-            'reason': 'recognized contract specialized from a frozen-gate-proven LTAP recipe; downstream gate evaluation remains authoritative',
+            'implementation': 'semantic_contract.build_proven_product_variant',
+            'reason': 'recognized product mechanism specialized from a frozen-gate-proven recipe; downstream gate and product review remain authoritative',
         }
         attempts.append({
-            'attempt': 'proven-ltap',
+            'attempt': 'proven-product',
             'briefId': original_brief['id'],
             'row': final_row,
             'contractFailures': [],
@@ -221,7 +221,7 @@ def vista_author(args):
         atomic_json(out / 'contract-attempts.json', {
             'contract': author_contract,
             'attempts': attempts,
-            'acceptedAttempt': 'proven-ltap',
+            'acceptedAttempt': 'proven-product',
         })
     else:
         run_vista2.preflight(args.model, args.effort)

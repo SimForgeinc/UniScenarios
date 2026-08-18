@@ -1,0 +1,151 @@
+{
+  "scenarioVersion": 2,
+  "meta": {
+    "name": "campaign-blocked-path-proven",
+    "description": "A construction closure fully blocks the ego lane. A stopped pickup and transverse barriers force the ego to change lanes and pass the closure.",
+    "createdAt": "2026-08-16T00:00:00.000Z",
+    "modifiedAt": "2026-08-16T00:00:00.000Z",
+    "appVersion": "uniscenarios/0.0.1",
+    "archetype": "showcase.custom",
+    "tags": ["showcase", "construction", "blocked-path"],
+    "author": "showcase/deterministic-blocked-path",
+    "negativeControl": false
+  },
+  "params": { "declarations": [], "constraints": [] },
+  "environment": { "weather": "clear", "timeOfDay": "afternoon" },
+  "anchor": {
+    "id": "showcase-blocked-path-production",
+    "corridor": {
+      "throughLanesSameDir": { "value": [2, 8], "essentiality": "required" },
+      "runwayDownstreamM": { "value": [120, null], "essentiality": "required" },
+      "throughLanesOpposing": { "value": [1, 8], "essentiality": "required" },
+      "requiresAdjacent": { "value": ["sidewalk"], "essentiality": "preferred", "weight": 3 }
+    },
+    "features": [],
+    "policy": { "allowMirror": false, "maxSitesPerMap": 6, "diversity": "moderate", "minScore": 0.35 }
+  },
+  "roles": [
+    {
+      "id": "ego",
+      "kind": "on_reference",
+      "label": "vehicle under test",
+      "actor": { "class": "car", "catalogId": "vehicle.sedan" },
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 40, "tFrac": 0, "headingOffsetRad": 0 },
+      "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 25, 50)"
+    },
+    {
+      "id": "lead_pickup",
+      "kind": "relative_to",
+      "ref": "ego",
+      "label": "pickup stopped at closure",
+      "essentiality": "required",
+      "actor": { "class": "car", "catalogId": "vehicle.pickup" },
+      "dsM": 55,
+      "dLane": 0,
+      "headingOffsetRad": 0,
+      "tFrac": 0,
+      "initialSpeedKph": 35
+    }
+  ],
+  "props": [
+    {
+      "id": "taper-cone-1",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 96, "headingOffsetRad": 0, "lateralM": 1.45, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-2",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 106, "headingOffsetRad": 0, "lateralM": 1, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-3",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 116, "headingOffsetRad": 0, "lateralM": 0.55, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "road-work-sign",
+      "catalogId": "construction.sign_road_work",
+      "label": "road work sign",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 112, "headingOffsetRad": 0, "lateralM": -1.4, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "full-lane-barrier",
+      "catalogId": "construction.jersey_barrier_run",
+      "label": "full lane closure barrier",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 132, "headingOffsetRad": 1.5707963267948966, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 1.5707963267948966,
+      "scale": 1
+    },
+    {
+      "id": "arrow-board",
+      "catalogId": "construction.arrow_board",
+      "label": "flashing closure arrow",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 122, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    }
+  ],
+  "choreography": {
+    "clipSeconds": 20,
+    "warmupSeconds": 2,
+    "interactions": [
+      {
+        "id": "ego-flow",
+        "actor": "ego",
+        "trigger": { "kind": "at", "t": 0 },
+        "verb": "speed",
+        "target": { "mode": "absolute", "valueKph": 45 },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 2 }
+      },
+      {
+        "id": "lead-flow",
+        "actor": "lead_pickup",
+        "trigger": { "kind": "at", "t": 0 },
+        "verb": "speed",
+        "target": { "mode": "absolute", "valueKph": 35 },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 2 }
+      },
+      {
+        "id": "lead-stops-at-closure",
+        "actor": "lead_pickup",
+        "trigger": { "kind": "at", "t": 5 },
+        "verb": "speed",
+        "target": { "mode": "stop" },
+        "dynamics": { "shape": "linear", "constraint": "rate", "value": 6 }
+      },
+      {
+        "id": "ego-reroutes",
+        "actor": "ego",
+        "trigger": { "kind": "at", "t": 3.5 },
+        "verb": "changeLane",
+        "target": { "mode": "relative", "dk": -1 },
+        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2.5 }
+      }
+    ]
+  },
+  "invariants": [
+    { "id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "required", "of": "ego", "maxMps2": 8 },
+    { "id": "closure-event-order", "kind": "event_order", "essentiality": "required", "events": ["ego-reroutes", "lead-stops-at-closure"], "strict": true }
+  ],
+  "variants": [],
+  "metricSubject": "ego"
+}
