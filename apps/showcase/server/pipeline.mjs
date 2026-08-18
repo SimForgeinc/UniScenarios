@@ -763,7 +763,7 @@ export class ShowcasePipeline {
         model: job.judgeModel ?? 'gpt-5.6-sol',
         effort: job.judgeEffort ?? 'medium',
         strategy: job.judgeStrategy ?? 'spread8',
-        productReviewVersion: 'showcase-3d-product-review-v3',
+        productReviewVersion: 'showcase-3d-product-review-v4',
         acceptedCells: rows.filter((row) => row.productAccepted).length,
         cells: rows,
       };

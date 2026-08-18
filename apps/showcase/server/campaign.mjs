@@ -22,6 +22,7 @@ const configPath = resolve(String(args.get('config') ?? join(ROOT, 'apps/showcas
 const dataRoot = resolve(String(args.get('data') ?? join(ROOT, 'showcase-data')));
 const server = String(args.get('server') ?? process.env.SHOWCASE_SERVER ?? 'http://127.0.0.1:4174').replace(/\/+$/, '');
 const token = String(args.get('token') ?? process.env.SHOWCASE_TOKEN ?? 'demo-local');
+const PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v4';
 const config = JSON.parse(await readFile(configPath, 'utf8'));
 const runtimeConfig = config.runtime ?? {};
 function boundedInteger(value, fallback, minimum, maximum, name) {
@@ -494,7 +495,9 @@ async function collectAccepted(item, attempt, jobDir, gallery) {
   try { indexedCells = (await readJson(join(jobDir, '40-cells', 'index.json'))).cells ?? []; } catch { /* map id remains unknown */ }
   const known = new Set(item.validVideos.map((video) => video.sha256));
   for (const row of judge.cells ?? []) {
-    if (row.productAccepted !== true || item.validVideos.length >= state.targetValidVideos) continue;
+    if (row.productAccepted !== true
+      || row.threeDReview?.version !== PRODUCT_REVIEW_VERSION
+      || item.validVideos.length >= state.targetValidVideos) continue;
     const cellId = safeCellId(row.cellId);
     if (!cellId) continue;
     const candidates = [
@@ -520,6 +523,7 @@ async function collectAccepted(item, attempt, jobDir, gallery) {
       mapId: indexedCell?.mapId ?? ((gallery.maps ?? []).length === 1 ? gallery.maps[0] : null),
       realism: row.threeDReview?.realism ?? row.realism ?? null,
       dynamism: row.dynamism ?? null,
+      productReviewVersion: row.threeDReview.version,
       acceptedAt: now(),
     });
     known.add(digest);
@@ -540,7 +544,10 @@ async function validateSavedVideos() {
       if (accepted) {
         try { judge = await readJson(join(jobsDir, attempt.jobId, '70-judge.json')); } catch { accepted = false; }
       }
-      if (accepted && !(judge.cells ?? []).some((row) => row.cellId === video.cellId && row.productAccepted === true)) accepted = false;
+      if (accepted && !(judge.cells ?? []).some((row) =>
+        row.cellId === video.cellId
+        && row.productAccepted === true
+        && row.threeDReview?.version === PRODUCT_REVIEW_VERSION)) accepted = false;
       const target = accepted ? videoTarget(item, video.sha256) : null;
       if (accepted && (!(await nonemptyFile(target)) || await fileSha256(target) !== video.sha256)) accepted = false;
       if (!accepted) {

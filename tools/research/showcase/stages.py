@@ -14,6 +14,7 @@ import os
 import pathlib
 import shutil
 import sys
+import subprocess
 import tempfile
 import time
 
@@ -25,7 +26,7 @@ FOOTAGE = ROOT / 'tools' / 'research' / 'footage'
 sys.path.insert(0, str(GATES))
 import semantic_contract as semantic
 
-PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v3'
+PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v4'
 PRODUCT_REVIEW_PROMPT = """You are the final acceptance reviewer for a generated autonomous-driving scenario.
 You receive the user's exact requested edge case followed by time-ordered frames from the REAL 3D render.
 Reject aggressively: this is training-data QA, not a creativity exercise.
@@ -363,12 +364,43 @@ def review_3d(args):
     futil.assert_vision_session(args.model)
     brief = load(args.brief)
     render = pathlib.Path(args.render)
-    candidates = [
-        render / 'frames' / 'frame-000.png',
-        render / 'frames' / 'frame-001.png',
-        render / 'frame.png',
-        render / 'frames' / 'frame-003.png',
-    ]
+    manifest = load(render / 'manifest.json')
+    video_records = manifest.get('videoSequence', {}).get('frames', [])
+    phase_times = [row.get('t') for row in manifest.get('frames', [])
+                   if isinstance(row.get('t'), (int, float))]
+    candidates = []
+    review_tmp = None
+    if video_records and phase_times and (render / 'video.mp4').is_file():
+        start_t, end_t = min(phase_times), max(phase_times)
+        targets = [start_t + (end_t - start_t) * index / 7 for index in range(8)]
+        selected = []
+        for target in targets:
+            record = min(video_records, key=lambda row: abs(row.get('t', target) - target))
+            if record.get('sequenceIndex') not in [row.get('sequenceIndex') for row in selected]:
+                selected.append(record)
+        review_tmp = tempfile.TemporaryDirectory(prefix='.review-frames-', dir=render)
+        try:
+            for ordinal, record in enumerate(selected):
+                retained = render / 'video-frames' / f'frame-{record["sequenceIndex"]:05d}.png'
+                if retained.is_file():
+                    candidates.append(retained)
+                    continue
+                frame = pathlib.Path(review_tmp.name) / f'frame-{ordinal:02d}.png'
+                subprocess.run([
+                    'ffmpeg', '-y', '-hide_banner', '-loglevel', 'error',
+                    '-ss', str(record['t']), '-i', str(render / 'video.mp4'),
+                    '-frames:v', '1', str(frame),
+                ], check=True)
+                candidates.append(frame)
+        except (OSError, subprocess.CalledProcessError, KeyError):
+            candidates = []
+    if not candidates:
+        candidates = [
+            render / 'frames' / 'frame-000.png',
+            render / 'frames' / 'frame-001.png',
+            render / 'frame.png',
+            render / 'frames' / 'frame-003.png',
+        ]
     frames = []
     seen = set()
     for frame in candidates:
@@ -377,7 +409,6 @@ def review_3d(args):
             frames.append(frame)
     if not frames:
         raise RuntimeError(f'no 3D review frames in {render}')
-    manifest = load(render / 'manifest.json')
     instance = load(render / 'source' / 'instance.json')
     authored_ids = [actor['id'] for actor in instance.get('input', {}).get('actors', [])
                     if not actor.get('id', '').startswith('ambient:')]
@@ -464,6 +495,8 @@ def review_3d(args):
         },
         'rawResponseSha256': futil.sha256_text(raw),
     })
+    if review_tmp is not None:
+        review_tmp.cleanup()
 
 
 
