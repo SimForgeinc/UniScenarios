@@ -6,6 +6,7 @@ import { copyFile, mkdir, open, readFile, readdir, rename, stat, unlink, writeFi
 import { availableParallelism, freemem, hostname, loadavg, totalmem } from 'node:os';
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { promisify } from 'node:util';
+import { modelAccessFailure } from './model-access.mjs';
 
 const ROOT = resolve(import.meta.dirname, '../../..');
 const execFileAsync = promisify(execFile);
@@ -590,6 +591,9 @@ async function refreshAttempts() {
         attempt.status = 'failed';
         attempt.finishedAt = error.failedAt ?? attempt.finishedAt ?? now();
         attempt.error = error.error ?? 'job failed';
+        if (modelAccessFailure(attempt.error)) {
+          gatewayStatus = { available: false, checkedAt: now(), error: attempt.error.slice(-500) };
+        }
         if (attempt.metrics?.tokenAccounting?.version !== 2) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
       } else if (await exists(jobDir)) {
         attempt.status = 'running';

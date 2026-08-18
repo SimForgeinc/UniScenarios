@@ -17,6 +17,7 @@ import {
 import { availableParallelism, loadavg } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { modelAccessFailure } from './model-access.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -624,6 +625,10 @@ export class ShowcasePipeline {
         await atomicJson(render2dQualityPath, { status: 'complete', cells: qualityRows });
       }
     }
+    const qualityAccessFailure = qualityRows.find(modelAccessFailure);
+    if (qualityAccessFailure) {
+      throw new Error(`model access unavailable during 2D review: ${JSON.stringify(qualityAccessFailure).slice(-1000)}`);
+    }
     let render3d = await stage(context, '65-render3d', [render3dIndex], async () => {
       await mkdir(render3dDir, { recursive: true });
       if (!job.render3d) {
@@ -694,6 +699,10 @@ export class ShowcasePipeline {
           };
         }),
       );
+      const reviewAccessFailure = reviews.find(modelAccessFailure);
+      if (reviewAccessFailure) {
+        throw new Error(`model access unavailable during 3D review: ${JSON.stringify(reviewAccessFailure).slice(-1000)}`);
+      }
       for (const item of reviews) {
         const existing = rows.find((row) => row.cellId === item.cellId);
         const row = existing ?? { cellId: item.cellId, status: 'complete' };

@@ -6,6 +6,7 @@ import test from 'node:test';
 
 import { createShowcaseServer, resolveSchedulerSettings } from './index.mjs';
 import { atomicJson, rankCandidates, retryKind } from './pipeline.mjs';
+import { modelAccessFailure } from './model-access.mjs';
 
 const TOKEN = 'test-showcase-token';
 
@@ -75,6 +76,12 @@ async function eventually(predicate, message) {
   }
   assert.fail(message);
 }
+
+test('model access failures are distinguished from product rejection', () => {
+  assert.equal(modelAccessFailure({ error: 'HTTP 401: No credential available for provider openai-codex' }), true);
+  assert.equal(modelAccessFailure({ error: 'HTTP 429: rate_limit_error' }), true);
+  assert.equal(modelAccessFailure({ accepted: false, defects: ['frozen_actor'] }), false);
+});
 
 test('candidate ranking prefers judged quality while preserving site diversity', () => {
   const cells = [
