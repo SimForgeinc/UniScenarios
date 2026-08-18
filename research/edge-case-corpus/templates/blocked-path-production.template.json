@@ -46,7 +46,7 @@
       "dLane": 0,
       "headingOffsetRad": 0,
       "tFrac": 0,
-      "initialSpeedKph": 20
+      "initialSpeedKph": 25
     }
   ],
   "props": [
@@ -230,7 +230,7 @@
         "actor": "lead_pickup",
         "trigger": { "kind": "at", "t": 0 },
         "verb": "speed",
-        "target": { "mode": "absolute", "valueKph": 20 },
+        "target": { "mode": "absolute", "valueKph": 25 },
         "dynamics": { "shape": "linear", "constraint": "rate", "value": 2 }
       },
       {
