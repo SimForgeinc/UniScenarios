@@ -552,7 +552,7 @@ export class ShowcasePipeline {
     const gate = await stage(context, '50-gate', [gatePath], async () => {
       const requestPath = join(context.jobDir, '.gate-request.json');
       await atomicJson(requestPath, {
-        brief: job.brief,
+        brief: job.requestedBrief ?? job.brief,
         cells: cells.map((cell) => ({
           cellId: cell.cellId,
           traceFile: cell.traceFile,
@@ -696,6 +696,7 @@ export class ShowcasePipeline {
           const result = await command(this.python, [
             this.bridge, 'review3d', '--brief', briefPath,
             '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
+            '--request-text', job.requestedBrief ?? job.brief,
             '--model', job.judgeModel ?? 'gpt-5.6-sol',
             '--effort', job.judgeEffort ?? 'medium',
           ], {
@@ -764,6 +765,7 @@ export class ShowcasePipeline {
       const repairJob = {
         ...job,
         briefId: `${job.briefId}-${visualFallback ? 'visual-fallback' : 'repair-01'}`,
+        requestedBrief: job.requestedBrief ?? job.brief,
         brief: `${job.brief}\n\nPOST-RENDER REPAIR FEEDBACK FROM REJECTED ATTEMPT:\n${repairFeedback.map((item) => `- ${item}`).join('\n')}\nReauthor the executable scenario; do not merely explain these defects.`,
         engine: 'vista2',
         fallbackToVisual: false,

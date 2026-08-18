@@ -412,7 +412,8 @@ def review_3d(args):
         'frameOrder': frame_context,
         'traceFacts': trace_context,
     }
-    prompt = (f'{PRODUCT_REVIEW_PROMPT}\n\nUSER REQUEST:\n{brief["brief"]}'
+    request_text = args.request_text or brief['brief']
+    prompt = (f'{PRODUCT_REVIEW_PROMPT}\n\nUSER REQUEST:\n{request_text}'
               f'\n\nGROUND-TRUTH EVIDENCE:\n{json.dumps(evidence, separators=(",", ":"))}')
     content = [{'type': 'input_text', 'text': prompt}]
     content.extend({'type': 'input_image', 'image_url': futil.png_data_url(str(frame))}
@@ -522,6 +523,7 @@ def main():
     cmd.add_argument('--brief', required=True)
     cmd.add_argument('--render', required=True)
     cmd.add_argument('--cell-id', required=True)
+    cmd.add_argument('--request-text')
     cmd.add_argument('--model', default='gpt-5.6-sol')
     cmd.add_argument('--effort', default='medium')
     cmd.set_defaults(func=review_3d)
