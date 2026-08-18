@@ -54,7 +54,7 @@
       "catalogId": "construction.traffic_cone",
       "label": "closure taper cone",
       "essentiality": "required",
-      "pose": { "laneOffset": 0, "s": 96, "headingOffsetRad": 0, "lateralM": 1.45, "lateralRef": "lane_centre" },
+      "pose": { "laneOffset": 0, "s": 80, "headingOffsetRad": 0, "lateralM": 1.5, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
     },
@@ -63,7 +63,7 @@
       "catalogId": "construction.traffic_cone",
       "label": "closure taper cone",
       "essentiality": "required",
-      "pose": { "laneOffset": 0, "s": 106, "headingOffsetRad": 0, "lateralM": 1, "lateralRef": "lane_centre" },
+      "pose": { "laneOffset": 0, "s": 86, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
     },
@@ -72,7 +72,61 @@
       "catalogId": "construction.traffic_cone",
       "label": "closure taper cone",
       "essentiality": "required",
-      "pose": { "laneOffset": 0, "s": 116, "headingOffsetRad": 0, "lateralM": 0.55, "lateralRef": "lane_centre" },
+      "pose": { "laneOffset": 0, "s": 92, "headingOffsetRad": 0, "lateralM": 0.9, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-4",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 98, "headingOffsetRad": 0, "lateralM": 0.6, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-5",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 104, "headingOffsetRad": 0, "lateralM": 0.3, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-6",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 110, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "closure-drum-left",
+      "catalogId": "construction.channelizer_drum",
+      "label": "lane closure drum",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 120, "headingOffsetRad": 0, "lateralM": -1, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "closure-drum-center",
+      "catalogId": "construction.channelizer_drum",
+      "label": "lane closure drum",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 120, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "closure-drum-right",
+      "catalogId": "construction.channelizer_drum",
+      "label": "lane closure drum",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 120, "headingOffsetRad": 0, "lateralM": 1, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
     },
@@ -97,9 +151,18 @@
     {
       "id": "arrow-board",
       "catalogId": "construction.arrow_board",
-      "label": "flashing closure arrow",
+      "label": "closure arrow board",
       "essentiality": "required",
-      "pose": { "laneOffset": 0, "s": 122, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
+      "pose": { "laneOffset": 0, "s": 126, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-excavator",
+      "catalogId": "construction.excavator",
+      "label": "excavator occupying closed lane",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 150, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
     }
@@ -138,7 +201,7 @@
         "trigger": { "kind": "at", "t": 3.5 },
         "verb": "changeLane",
         "target": { "mode": "relative", "dk": -1 },
-        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 2.5 }
+        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 4 }
       }
     ]
   },
