@@ -558,14 +558,38 @@ async function exportScenario(page) {
     ? [...evidence.actorIds].filter((id) => !ambientActorIdSet.has(id))
     : [...new Set([...evidence.metricPair, ...occluderActorIds])].filter((id) => !ambientActorIdSet.has(id));
   const declaredOccluderIds = new Set(trace.metrics.revealToConflict?.relevantOccluderIds ?? []);
-  const framingPropIds = new Set(evidence.props.filter((prop) => {
-    if (allAuthored) return true;
-    const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
-    const relation = prop.occludes
-      && evidence.metricPair.includes(prop.occludes.observer)
-      && evidence.metricPair.includes(prop.occludes.target);
-    return declared || relation;
-  }).map((prop) => prop.id));
+  let framingPropIds;
+  if (allAuthored) {
+    const conflictIndex = trace.ticks.t.reduce((best, value, index) => (
+      Math.abs(value - incident.conflictT) < Math.abs(trace.ticks.t[best] - incident.conflictT)
+        ? index
+        : best
+    ), 0);
+    const conflictViews = renderViewsAtTraceIndex(instanceDoc, trace, evidence, conflictIndex);
+    const pair = conflictViews.actors.filter((actor) => evidence.metricPair.includes(actor.id));
+    const center = {
+      x: pair.reduce((sum, actor) => sum + actor.x, 0) / pair.length,
+      z: pair.reduce((sum, actor) => sum + actor.z, 0) / pair.length,
+    };
+    const nearestByCatalog = new Map();
+    for (const prop of conflictViews.props) {
+      const distance = Math.hypot(prop.x - center.x, prop.z - center.z);
+      const current = nearestByCatalog.get(prop.catalogId);
+      if (!current || distance < current.distance) nearestByCatalog.set(prop.catalogId, { prop, distance });
+    }
+    framingPropIds = new Set([...nearestByCatalog.values()]
+      .sort((left, right) => left.distance - right.distance || left.prop.id.localeCompare(right.prop.id))
+      .slice(0, 6)
+      .map(({ prop }) => prop.id));
+  } else {
+    framingPropIds = new Set(evidence.props.filter((prop) => {
+      const declared = declaredOccluderIds.has(prop.id) || declaredOccluderIds.has(`prop:${prop.id}`);
+      const relation = prop.occludes
+        && evidence.metricPair.includes(prop.occludes.observer)
+        && evidence.metricPair.includes(prop.occludes.target);
+      return declared || relation;
+    }).map((prop) => prop.id));
+  }
 
   // Sticky across the whole export: an accepted orbit offset is retried first
   // on the next frame so the clip keeps one stable shot.
@@ -627,13 +651,14 @@ async function exportScenario(page) {
     const frameProps = strictIncidentComposition && selected.phase !== 'pre-event'
       ? framingProps
       : [];
+    const cameraProps = allAuthored ? framingProps : frameProps;
     const baseCamera = (clipCamera ? cameraForClip : cameraForIncident)(
       trace,
       evidence.metricPair,
       selected.index,
       pairGround,
       frameActorIds,
-      frameProps,
+      cameraProps,
     );
     const compositionArgs = [
       [...groundedPoses, ...frameProps],
