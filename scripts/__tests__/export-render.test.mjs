@@ -8,6 +8,7 @@ import {
   buildScenarioEvidenceGates,
   buildIncidentRenderPreflight,
   cameraActorClearance,
+  incidentWindow,
   cameraForIncident,
   selectIncidentFrames,
   selectIncidentVideoFrames,
@@ -253,6 +254,21 @@ test('selects named pre-event, reveal, conflict, and aftermath ticks determinist
   assert.equal(selected[1].t, nearestT(trace.metrics.revealToConflict.losOpenT));
   assert.equal(selected[2].t, nearestT(trace.metrics.revealToConflict.conflictT));
   assert.equal(selected[3].t, nearestT(trace.metrics.revealToConflict.conflictT + 2));
+});
+
+test('keeps a non-colliding incident at its TTC hazard instead of the clip boundary', () => {
+  const trace = {
+    header: { dt: 1 },
+    ticks: { t: Array.from({ length: 21 }, (_, index) => index) },
+    events: [{ kind: 'trigger_fired', t: 5 }],
+    metrics: {
+      minTTC: { pair: ['ego', 'lead'], t: 11, value: 1.8 },
+      minDistance: [{ pair: ['ego', 'lead'], t: 20, minDistanceM: 1.9 }],
+    },
+  };
+  const window = incidentWindow(trace);
+  assert.equal(window.conflictT, 12.8);
+  assert.equal(window.losOpenT, 5);
 });
 
 test('selects a continuous, monotonic incident-video sequence', async () => {

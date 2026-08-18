@@ -483,7 +483,12 @@ export function incidentWindow(trace) {
   const predictedConflictT = Number.isFinite(criticality.value)
     ? criticality.t + criticality.value
     : criticality.t;
-  const rawConflictT = Number.isFinite(closest?.t) ? closest.t : predictedConflictT;
+  // A non-colliding pair can keep converging until the clip boundary after its
+  // actionable TTC minimum. Do not let that trailing closest-approach sample
+  // move the rendered incident away from the recorded hazard.
+  const rawConflictT = Number.isFinite(closest?.t)
+    ? Math.min(closest.t, predictedConflictT)
+    : predictedConflictT;
   const conflictLow = first + Math.max(0.5, 4 * dt);
   const conflictHigh = last - Math.max(0.25, 4 * dt);
   if (!(conflictHigh > conflictLow)) {
