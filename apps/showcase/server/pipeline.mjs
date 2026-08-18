@@ -17,6 +17,7 @@ import {
 import { availableParallelism, loadavg } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
+import { gunzipSync } from 'node:zlib';
 import { modelAccessFailure } from './model-access.mjs';
 
 const execFileAsync = promisify(execFile);
@@ -49,6 +50,15 @@ export async function atomicJson(path, value) {
 
 async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
+}
+
+async function traceCollisionCount(path) {
+  try {
+    const trace = JSON.parse(gunzipSync(await readFile(path)).toString('utf8'));
+    return Array.isArray(trace?.metrics?.collisions) ? trace.metrics.collisions.length : Number.POSITIVE_INFINITY;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
 }
 
 function lastJsonLine(text) {
@@ -645,10 +655,16 @@ export class ShowcasePipeline {
         await atomicJson(render3dIndex, value);
         return { value, status: 'skipped' };
       }
-      const candidates = rankCandidates(
-        cells.filter((candidate) => passing.has(candidate.cellId)),
-        qualityRows,
-      ).slice(0, job.topK * 3);
+      const gatePassing = cells.filter((candidate) => passing.has(candidate.cellId));
+      const collisionFreeRequired = (semanticContract.obligations ?? [])
+        .some((obligation) => obligation.kind === 'collision_free');
+      const eligible = collisionFreeRequired
+        ? (await Promise.all(gatePassing.map(async (candidate) => ({
+            candidate,
+            collisionCount: await traceCollisionCount(candidate.traceFile),
+          })))).filter((row) => row.collisionCount === 0).map((row) => row.candidate)
+        : gatePassing;
+      const candidates = rankCandidates(eligible, qualityRows).slice(0, job.topK * 3);
       const rows = await mapConcurrent(
         candidates,
         this.schedulerSettings.render3dConcurrency,
