@@ -213,11 +213,16 @@ class Scene:
         h = hashlib.sha256(self.brief['id'].encode()).hexdigest()[:8]
         return ('vista2-%s-%s' % (slug[:47], h)).replace('--', '-')
 
+    def _description(self):
+        """Keep repair evidence from overflowing the v2 metadata contract."""
+        description = str(self.brief.get('brief', ''))
+        return description if len(description) <= 4000 else description[:3999].rstrip() + '…'
+
     def template(self):
         now = '2026-08-16T00:00:00.000Z'
         return {
             'scenarioVersion': 2,
-            'meta': {'name': self.brief['id'], 'description': self.brief['brief'],
+            'meta': {'name': self.brief['id'], 'description': self._description(),
                      'createdAt': now, 'modifiedAt': now,
                      'appVersion': 'uniscenarios/0.0.1',
                      'archetype': self.brief.get('category', 'unknown'),
