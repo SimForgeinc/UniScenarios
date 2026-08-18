@@ -645,10 +645,10 @@ async function exportScenario(page) {
     const frameActorIds = strictIncidentComposition
       ? framingActorIds
       : (evidence.actorIds.includes('ego') ? ['ego'] : evidence.metricPair.slice(0, 1));
-    // Pre-event establishes the actors and road. Static incident furniture may
-    // still be far down-corridor and would force an unusably distant camera;
-    // require it from reveal through conflict, when it is causally visible.
-    const frameProps = strictIncidentComposition && selected.phase !== 'pre-event'
+    // Pre-event and reveal establish the actors and road. Static incident
+    // furniture can still be far down-corridor then; require it in the
+    // conflict composition, when it is causally visible.
+    const frameProps = strictIncidentComposition && selected.phase === 'conflict'
       ? framingProps
       : [];
     const cameraProps = allAuthored ? framingProps : frameProps;
