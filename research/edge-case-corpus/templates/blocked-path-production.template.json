@@ -235,7 +235,7 @@
       {
         "id": "lead-stops-at-closure",
         "actor": "lead_pickup",
-        "trigger": { "kind": "at", "t": 5 },
+        "trigger": { "kind": "at", "t": 3.5 },
         "verb": "speed",
         "target": { "mode": "stop" },
         "dynamics": { "shape": "linear", "constraint": "rate", "value": 6 }
@@ -243,16 +243,16 @@
       {
         "id": "ego-reroutes",
         "actor": "ego",
-        "trigger": { "kind": "at", "t": 3.5 },
+        "trigger": { "kind": "at", "t": 5 },
         "verb": "changeLane",
         "target": { "mode": "relative", "dk": -1 },
-        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 5 }
+        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 6 }
       }
     ]
   },
   "invariants": [
     { "id": "ego-decel-budget", "kind": "decel_budget", "essentiality": "required", "of": "ego", "maxMps2": 8 },
-    { "id": "closure-event-order", "kind": "event_order", "essentiality": "required", "events": ["ego-reroutes", "lead-stops-at-closure"], "strict": true }
+    { "id": "closure-event-order", "kind": "event_order", "essentiality": "required", "events": ["lead-stops-at-closure", "ego-reroutes"], "strict": true }
   ],
   "variants": [],
   "metricSubject": "ego"
