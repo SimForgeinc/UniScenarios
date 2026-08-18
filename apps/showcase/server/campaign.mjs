@@ -292,8 +292,10 @@ async function capacitySnapshot() {
     effectiveMaxActiveJobs = 0;
     throttleReason = `GPU memory ${gpuFreeGiB} GiB is below 1.5 GiB`;
   } else if (load1 > hardware.logicalCpus * loadPausePerCpu) {
-    effectiveMaxActiveJobs = Math.min(1, maxActive);
-    throttleReason = `load1 ${load1.toFixed(2)} exceeds ${(hardware.logicalCpus * loadPausePerCpu).toFixed(2)}`;
+    const complementaryCapacity = memoryAvailableGiB >= 12
+      && (gpuFreeGiB == null || gpuFreeGiB >= 2.5) ? 2 : 1;
+    effectiveMaxActiveJobs = Math.min(complementaryCapacity, maxActive);
+    throttleReason = `load1 ${load1.toFixed(2)} exceeds ${(hardware.logicalCpus * loadPausePerCpu).toFixed(2)}; complementary-stage capacity ${effectiveMaxActiveJobs}`;
   }
   return {
     observedAt: now(),
