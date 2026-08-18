@@ -3,6 +3,7 @@
 
     qualify.py breadth        refresh the 67-case breadth config from the campaign
     qualify.py gold-template  seal a hash-bound gold manifest for humans to label
+    qualify.py label          validate human label patches and reseal the gold manifest
     qualify.py review         review each identical video N times under the current contract
     qualify.py calibrate      confusion matrix, FPR/FNR, field flip rate, realism SD
     qualify.py evaluate       machine exit evaluator over a qualification run
@@ -158,6 +159,43 @@ def gold_template(args):
         "labelled": sum(1 for entry in loaded["entries"] if entry["label"] is not None),
         "eligible": len(q.eligible_gold(loaded)),
     })
+
+def label(args):
+    """Apply separately authored human labels, then reseal the immutable manifest."""
+    manifest = q.load_gold(args.gold, args.root)
+    document = q.load_json(args.labels)
+    patches = document.get("labels") if isinstance(document, dict) else document
+    if not isinstance(patches, list) or not patches:
+        raise q.QualificationError("label patch must be a non-empty array or an object with labels")
+    entries = {entry["evidenceId"]: entry for entry in manifest["entries"]}
+    seen = set()
+    for index, patch in enumerate(patches):
+        if not isinstance(patch, dict):
+            raise q.QualificationError(f"labels[{index}] must be an object")
+        unknown = sorted(set(patch) - {"evidenceId", "label"})
+        if unknown:
+            raise q.QualificationError(
+                f"labels[{index}] carries unexpected fields: {', '.join(unknown)}")
+        evidence_id = patch.get("evidenceId")
+        if evidence_id in seen:
+            raise q.QualificationError(f"label patch duplicates evidenceId {evidence_id!r}")
+        if evidence_id not in entries:
+            raise q.QualificationError(f"label patch names unknown evidenceId {evidence_id!r}")
+        seen.add(evidence_id)
+        entries[evidence_id]["label"] = q.assert_human_label(
+            patch.get("label"), f"labels[{index}].label")
+    manifest["entries"] = list(entries.values())
+    manifest["manifestSha256"] = q.gold_seal(manifest)
+    q.dump_json(args.gold, manifest)
+    loaded = q.load_gold(args.gold, args.root)
+    _emit({
+        "gold": str(args.gold),
+        "manifestSha256": loaded["manifestSha256"],
+        "labelled": sum(1 for entry in loaded["entries"] if entry["label"] is not None),
+        "eligible": len(q.eligible_gold(loaded)),
+    })
+
+
 
 
 # --------------------------------------------------- repeated identical review
@@ -332,6 +370,12 @@ def main():
     cmd.add_argument("--out", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
     cmd.add_argument("--id", default="reviewer-gold-v1")
     cmd.set_defaults(func=gold_template)
+
+    cmd = sub.add_parser("label")
+    cmd.add_argument("--gold", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
+    cmd.add_argument("--labels", required=True,
+                     help="human-authored JSON patches; model-produced labels are refused")
+    cmd.set_defaults(func=label)
 
     cmd = sub.add_parser("review")
     cmd.add_argument("--gold", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))

@@ -4,6 +4,9 @@ import importlib.util
 import json
 from pathlib import Path
 import tempfile
+from contextlib import redirect_stdout
+from io import StringIO
+from types import SimpleNamespace
 import unittest
 
 
@@ -24,6 +27,7 @@ semantic = load("semantic_contract")
 review = load("review_contract")
 stages = load("stages")
 qual = load("qualification")
+qualify_cli = load("qualify")
 
 FULL_REVIEW = {"tier": "3d", "mechanismFidelity": "yes", "visualGrounding": "pass",
                "actorFidelity": "pass", "eventSequence": "pass", "plausible": True,
@@ -866,6 +870,56 @@ class ReviewFrameTimebaseTest(unittest.TestCase):
         self.assertEqual(stages._video_seek_time(5.42, 5.42), 0.0)
         self.assertAlmostEqual(stages._video_seek_time(7.68, 5.42), 2.26)
         self.assertEqual(stages._video_seek_time(4.0, 5.42), 0.0)
+
+
+class HumanGoldLabelCommandTest(unittest.TestCase):
+    def test_human_patch_reseals_the_manifest(self):
+        source = REPO / "apps/showcase/campaigns/reviewer-gold.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            gold = Path(tmp) / "gold.json"
+            gold.write_bytes(source.read_bytes())
+            evidence_id = json.loads(gold.read_text())["entries"][0]["evidenceId"]
+            patch = Path(tmp) / "labels.json"
+            patch.write_text(json.dumps({"labels": [{
+                "evidenceId": evidence_id,
+                "label": {
+                    "labeler": "reviewer@example.com",
+                    "labeledAt": "2026-08-18T00:00:00Z",
+                    "semanticAccepted": False,
+                    "presentationAccepted": False,
+                    "defectCodes": ["scenario.mechanism"],
+                    "unsupportedReason": None,
+                },
+            }]}))
+            with redirect_stdout(StringIO()):
+                qualify_cli.label(SimpleNamespace(
+                    root=str(REPO), gold=str(gold), labels=str(patch)))
+            loaded = qual.load_gold(gold, REPO)
+            self.assertEqual(loaded["entries"][0]["label"]["labeler"],
+                             "reviewer@example.com")
+            self.assertEqual(loaded["manifestSha256"], qual.gold_seal(loaded))
+
+    def test_model_authored_patch_is_refused(self):
+        source = REPO / "apps/showcase/campaigns/reviewer-gold.json"
+        with tempfile.TemporaryDirectory() as tmp:
+            gold = Path(tmp) / "gold.json"
+            gold.write_bytes(source.read_bytes())
+            evidence_id = json.loads(gold.read_text())["entries"][0]["evidenceId"]
+            patch = Path(tmp) / "labels.json"
+            patch.write_text(json.dumps([{
+                "evidenceId": evidence_id,
+                "label": {
+                    "labeler": "gpt-5.6-sol",
+                    "labeledAt": "2026-08-18T00:00:00Z",
+                    "semanticAccepted": False,
+                    "presentationAccepted": False,
+                    "defectCodes": ["scenario.mechanism"],
+                    "unsupportedReason": None,
+                },
+            }]))
+            with self.assertRaisesRegex(qualify_cli.q.QualificationError, "names a model"):
+                qualify_cli.label(SimpleNamespace(
+                    root=str(REPO), gold=str(gold), labels=str(patch)))
 
 
 
