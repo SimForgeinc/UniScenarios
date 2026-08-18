@@ -173,7 +173,8 @@ def author(args):
     atomic_json(out / 'transcript.json', transcript)
     template = row.get('template')
     if not template or not os.path.isfile(template):
-        raise RuntimeError('compiler produced no reusable template: %s' % row.get('error', 'unknown error'))
+        reason = row.get('detail') or row.get('error', 'unknown error')
+        raise RuntimeError('compiler produced no reusable template: %s' % reason)
     atomic_copy(template, out / 'template.json')
     clip_seconds = enforce_minimum_clip(out / 'template.json')
     emit({'template': str(out / 'template.json'), 'transcript': str(out / 'transcript.json'),
