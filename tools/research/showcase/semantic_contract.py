@@ -27,6 +27,27 @@ def derive_contract(brief, structures):
     if re.search(r"\bwithout collid|no collision|collision[- ]free", text): add("collision_free")
     return {"version": "showcase-semantic-contract-v1", "briefId": brief["id"], "structures": sorted(set(structures)), "obligations": obligations}
 
+def complete_template(template):
+    """Fill representation-owned safety invariants without inventing behavior."""
+    completed = copy.deepcopy(template)
+    if completed.get("invariants"):
+        return completed, []
+    role_ids = [role.get("id") for role in completed.get("roles", []) if role.get("id")]
+    subject = completed.get("metricSubject")
+    if subject not in role_ids:
+        subject = "ego" if "ego" in role_ids else (role_ids[0] if role_ids else None)
+    if subject is None:
+        return completed, []
+    invariant = {
+        "id": "product-decel-budget",
+        "kind": "decel_budget",
+        "essentiality": "required",
+        "of": subject,
+        "maxMps2": 8,
+    }
+    completed["invariants"] = [invariant]
+    return completed, [invariant]
+
 
 def _required_value(value):
     if not isinstance(value, dict) or value.get("essentiality") != "required": return None

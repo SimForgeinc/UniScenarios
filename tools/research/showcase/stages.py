@@ -104,8 +104,12 @@ def contract(args):
 
 
 def validate_contract(args):
-    failures = semantic.validate_template(load(args.template), load(args.contract))
-    emit({'valid': not failures, 'failures': failures})
+    template, added_invariants = semantic.complete_template(load(args.template))
+    if added_invariants:
+        atomic_json(pathlib.Path(args.template), template)
+    failures = semantic.validate_template(template, load(args.contract))
+    emit({'valid': not failures, 'failures': failures,
+          'representationDefaults': {'invariants': added_invariants}})
 
 
 
@@ -248,7 +252,9 @@ def vista_author(args):
             candidate = attempt_dir / 'candidate.template.json'
             atomic_copy(template_source, candidate)
             enforce_minimum_clip(candidate)
-            failures = semantic.validate_template(load(candidate), author_contract)
+            candidate_template, _ = semantic.complete_template(load(candidate))
+            atomic_json(candidate, candidate_template)
+            failures = semantic.validate_template(candidate_template, author_contract)
             if not row.get('admitted'):
                 failures.append({
                     'kind': 'frozen_gate_admission',

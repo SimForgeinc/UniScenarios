@@ -299,6 +299,14 @@ function concurrencySetting(value, fallback, name, max) {
   return resolved;
 }
 
+function batchConcurrencyForHost(configured) {
+  const load1 = loadavg()[0];
+  return {
+    concurrency: load1 > availableParallelism() * 1.25 ? 1 : configured,
+    load1: Number(load1.toFixed(2)),
+  };
+}
+
 class Semaphore {
   constructor(limit) {
     this.limit = limit;
@@ -365,10 +373,8 @@ export class ShowcasePipeline {
   }
 
   async run(job, externalContext) {
-    const load1AtStart = loadavg()[0];
-    const effectiveBatchConcurrency = load1AtStart > availableParallelism() * 1.25
-      ? 1
-      : this.batchConcurrency;
+    const initialBatch = batchConcurrencyForHost(this.batchConcurrency);
+    const effectiveBatchConcurrency = initialBatch.concurrency;
     const context = {
       ...externalContext,
       root: this.root,
@@ -378,7 +384,7 @@ export class ShowcasePipeline {
       scheduler: {
         ...(job.scheduler ?? this.schedulerSettings),
         effectiveBatchConcurrency,
-        load1AtStart: Number(load1AtStart.toFixed(2)),
+        load1AtStart: initialBatch.load1,
       },
     };
     const briefPath = join(context.jobDir, '00-brief.json');
@@ -516,7 +522,12 @@ export class ShowcasePipeline {
     let cells = await stage(context, '40-cells', [cellsIndex], async () => {
       const batchDir = join(context.jobDir, '.batch');
       await rm(batchDir, { recursive: true, force: true });
-      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', String(context.scheduler.effectiveBatchConcurrency)];
+      const simulationBatch = batchConcurrencyForHost(this.batchConcurrency);
+      context.scheduler.effectiveBatchConcurrency = simulationBatch.concurrency;
+      context.scheduler.load1AtSimulation = simulationBatch.load1;
+      route.scheduler = context.scheduler;
+      await atomicJson(routePath, route);
+      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', String(simulationBatch.concurrency)];
       if (job.maps.length === MAPS.length) args.push('--all-maps');
       else args.push('--maps', job.maps.join(','));
       if (job.ambient !== 'off') args.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));

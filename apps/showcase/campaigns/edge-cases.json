@@ -7,6 +7,7 @@
     "batchConcurrency": 3,
     "intervalMs": 30000,
     "submissionRecoveryMs": 300000,
+    "submissionRampPerHeartbeat": 1,
     "loadPausePerCpu": 1.25
   },
   "cases": [

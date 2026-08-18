@@ -49,6 +49,10 @@ const submissionRecoveryMs = boundedInteger(
   args.get('submission-recovery-ms') ?? process.env.SHOWCASE_CAMPAIGN_SUBMISSION_RECOVERY_MS ?? runtimeConfig.submissionRecoveryMs,
   300_000, 30_000, 3_600_000, 'campaign submission-recovery-ms',
 );
+const submissionRampPerHeartbeat = boundedInteger(
+  args.get('submission-ramp') ?? process.env.SHOWCASE_CAMPAIGN_SUBMISSION_RAMP ?? runtimeConfig.submissionRampPerHeartbeat,
+  1, 1, 4, 'campaign submission-ramp',
+);
 const loadPausePerCpu = Number(process.env.SHOWCASE_CAMPAIGN_LOAD_PAUSE_PER_CPU ?? runtimeConfig.loadPausePerCpu ?? 1.25);
 if (!Number.isFinite(loadPausePerCpu) || loadPausePerCpu < 0.5 || loadPausePerCpu > 4) {
   throw new Error('campaign loadPausePerCpu must be between 0.5 and 4');
@@ -167,7 +171,14 @@ async function jobMetrics(jobDir, submittedAt, finishedAt) {
   const usage = emptyUsage();
   const files = await walk(jobDir);
   const seenAuthor = new Set();
-  for (const path of files.filter((value) => basename(value) === 'transcript.json')) {
+  const contractAttemptPaths = files.filter((value) => basename(value) === 'contract-attempts.json');
+  const contractAttemptDirs = new Set(contractAttemptPaths.map((value) => dirname(value)));
+  const authorPaths = [
+    ...contractAttemptPaths,
+    ...files.filter((value) => basename(value) === 'transcript.json'
+      && !contractAttemptDirs.has(dirname(value))),
+  ];
+  for (const path of authorPaths) {
     const bytes = await readFile(path);
     const hash = sha256(bytes);
     if (seenAuthor.has(hash)) continue;
@@ -204,6 +215,7 @@ async function jobMetrics(jobDir, submittedAt, finishedAt) {
     stageSeconds,
     tokens: usage,
     tokenAccounting: {
+      version: 2,
       authorTranscripts: seenAuthor.size,
       judgeLedgers: seenJudge.size,
       timingLedgers,
@@ -304,6 +316,7 @@ function runnerStatus() {
     batchConcurrency,
     intervalMs,
     submissionRecoveryMs,
+    submissionRampPerHeartbeat,
     hardware,
     capacity,
   };
@@ -536,14 +549,14 @@ async function refreshAttempts() {
           attempt.acceptanceCollectedAt = now();
         }
         attempt.acceptedVideos = item.validVideos.filter((video) => video.jobId === attempt.jobId).length;
-        if (!attempt.metrics) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+        if (attempt.metrics?.tokenAccounting?.version !== 2) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
       } else if (await exists(errorPath)) {
         let error;
         try { error = await readJson(errorPath); } catch { continue; }
         attempt.status = 'failed';
         attempt.finishedAt = error.failedAt ?? attempt.finishedAt ?? now();
         attempt.error = error.error ?? 'job failed';
-        if (!attempt.metrics) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
+        if (attempt.metrics?.tokenAccounting?.version !== 2) attempt.metrics = await jobMetrics(jobDir, attempt.submittedAt, attempt.finishedAt);
       } else if (await exists(jobDir)) {
         attempt.status = 'running';
       }
@@ -616,10 +629,17 @@ await publish();
 if (!initializeOnly) {
   while (aggregate().completeCases < state.cases.length) {
     let submissionFailed = false;
-    while (activeCount() < capacity.effectiveMaxActiveJobs) {
+    let submittedThisHeartbeat = 0;
+    while (
+      activeCount() < capacity.effectiveMaxActiveJobs
+      && submittedThisHeartbeat < submissionRampPerHeartbeat
+    ) {
       const item = nextCase();
       if (!item) break;
-      try { await submit(item); } catch (error) {
+      try {
+        await submit(item);
+        submittedThisHeartbeat += 1;
+      } catch (error) {
         console.error(String(error?.stack ?? error));
         submissionFailed = true;
         break;
