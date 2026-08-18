@@ -52,12 +52,20 @@ async function readJson(path) {
   return JSON.parse(await readFile(path, 'utf8'));
 }
 
-async function traceCollisionCount(path) {
+async function traceProductEligibility(path) {
   try {
     const trace = JSON.parse(gunzipSync(await readFile(path)).toString('utf8'));
-    return Array.isArray(trace?.metrics?.collisions) ? trace.metrics.collisions.length : Number.POSITIVE_INFINITY;
+    const collisionCount = Array.isArray(trace?.metrics?.collisions)
+      ? trace.metrics.collisions.length
+      : Number.POSITIVE_INFINITY;
+    const interactionFailureCount = (trace?.events ?? []).filter((event) =>
+      ['interaction_aborted', 'lane_change_rejected', 'trigger_skipped'].includes(event?.kind)).length;
+    return { collisionCount, interactionFailureCount };
   } catch {
-    return Number.POSITIVE_INFINITY;
+    return {
+      collisionCount: Number.POSITIVE_INFINITY,
+      interactionFailureCount: Number.POSITIVE_INFINITY,
+    };
   }
 }
 
@@ -658,12 +666,13 @@ export class ShowcasePipeline {
       const gatePassing = cells.filter((candidate) => passing.has(candidate.cellId));
       const collisionFreeRequired = (semanticContract.obligations ?? [])
         .some((obligation) => obligation.kind === 'collision_free');
-      const eligible = collisionFreeRequired
-        ? (await Promise.all(gatePassing.map(async (candidate) => ({
-            candidate,
-            collisionCount: await traceCollisionCount(candidate.traceFile),
-          })))).filter((row) => row.collisionCount === 0).map((row) => row.candidate)
-        : gatePassing;
+      const eligibility = await Promise.all(gatePassing.map(async (candidate) => ({
+        candidate,
+        ...await traceProductEligibility(candidate.traceFile),
+      })));
+      const eligible = eligibility.filter((row) =>
+        row.interactionFailureCount === 0 && (!collisionFreeRequired || row.collisionCount === 0))
+        .map((row) => row.candidate);
       const candidates = rankCandidates(eligible, qualityRows).slice(0, job.topK * 3);
       const rows = await mapConcurrent(
         candidates,
