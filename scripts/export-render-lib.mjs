@@ -776,14 +776,24 @@ export function cameraForIncident(
   const centerZ = poses.reduce((sum, pose) => sum + pose.z, 0) / poses.length;
   const subjectId = pair.includes(trace.header.metricSubject) ? trace.header.metricSubject : pair[0];
   const subject = tracePose(trace, subjectId, cameraIndex);
-  const targetActor = tracePose(trace, pair.find((id) => id !== subjectId), cameraIndex);
-  const sightlineLength = Math.hypot(subject.x - targetActor.x, subject.z - targetActor.z);
+  const targetId = pair.find((id) => id !== subjectId);
+  const subjectAtConflict = tracePose(trace, subjectId, conflictIndex);
+  const targetAtConflict = tracePose(trace, targetId, conflictIndex);
+  const sightlineLength = Math.hypot(
+    subjectAtConflict.x - targetAtConflict.x,
+    subjectAtConflict.z - targetAtConflict.z,
+  );
+  // Keep one azimuth across the evidence sequence. The target may follow the
+  // incident, but a lane change must not spin the camera between phase frames.
   const away = sightlineLength > 1e-6
     ? {
-        x: (subject.x - targetActor.x) / sightlineLength,
-        z: (subject.z - targetActor.z) / sightlineLength,
+        x: (subjectAtConflict.x - targetAtConflict.x) / sightlineLength,
+        z: (subjectAtConflict.z - targetAtConflict.z) / sightlineLength,
       }
-    : { x: -Math.cos(subject.headingRad), z: Math.sin(subject.headingRad) };
+    : {
+        x: -Math.cos(subjectAtConflict.headingRad),
+        z: Math.sin(subjectAtConflict.headingRad),
+      };
   const side = { x: -away.z, z: away.x };
   const radius = Math.max(...poses.map((pose) => Math.hypot(pose.x - centerX, pose.z - centerZ)));
   const revealT = window.losOpenT ?? cameraT;
