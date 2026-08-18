@@ -515,6 +515,9 @@ export function incidentWindow(trace) {
 export function selectIncidentFrames(trace) {
   const times = trace.ticks.t;
   if (!Array.isArray(times) || times.length === 0) throw new Error('cannot select frames from an empty trace');
+  const dt = Number.isFinite(trace.header?.dt) && trace.header.dt > 0
+    ? trace.header.dt
+    : (times.length > 1 ? times[1] - times[0] : 0.02);
   const window = incidentWindow(trace);
   const conflictT = window.conflictT;
   const revealT = window.losOpenT;
@@ -524,11 +527,13 @@ export function selectIncidentFrames(trace) {
   const first = times[0];
   const last = times[times.length - 1];
   const clamp = (time) => Math.max(first, Math.min(last, time));
+  const preEventLeadS = Math.max(1, 8 * dt);
+  const aftermathLagS = Math.max(2, 20 * dt);
   const requested = [
-    { phase: 'pre-event', targetT: clamp(revealT - 0.2) },
+    { phase: 'pre-event', targetT: clamp(revealT - preEventLeadS) },
     { phase: 'reveal', targetT: clamp(revealT) },
     { phase: 'conflict', targetT: clamp(conflictT) },
-    { phase: 'aftermath', targetT: clamp(conflictT + 0.5) },
+    { phase: 'aftermath', targetT: clamp(conflictT + aftermathLagS) },
   ];
   const selected = requested.map(({ phase, targetT }) => {
     const index = nearestIndex(times, targetT);

@@ -249,10 +249,10 @@ test('selects named pre-event, reveal, conflict, and aftermath ticks determinist
     Math.abs(candidate - target) < Math.abs(best - target) ? candidate : best
   ));
   assert.deepEqual(selected.map((frame) => frame.phase), ['pre-event', 'reveal', 'conflict', 'aftermath']);
-  assert.equal(selected[0].t, nearestT(trace.metrics.revealToConflict.losOpenT - 0.2));
+  assert.equal(selected[0].t, nearestT(trace.metrics.revealToConflict.losOpenT - 1));
   assert.equal(selected[1].t, nearestT(trace.metrics.revealToConflict.losOpenT));
   assert.equal(selected[2].t, nearestT(trace.metrics.revealToConflict.conflictT));
-  assert.equal(selected[3].t, nearestT(trace.metrics.revealToConflict.conflictT + 0.5));
+  assert.equal(selected[3].t, nearestT(trace.metrics.revealToConflict.conflictT + 2));
 });
 
 test('selects a continuous, monotonic incident-video sequence', async () => {
