@@ -627,13 +627,15 @@ async function exportScenario(page) {
     const frameProps = strictIncidentComposition && selected.phase !== 'pre-event'
       ? framingProps
       : [];
-    const baseCamera = (clipCamera ? cameraForClip : cameraForIncident)(
+    const cameraProps = allAuthored ? framingProps : frameProps;
+    const cameraStrategy = clipCamera || allAuthored ? cameraForClip : cameraForIncident;
+    const baseCamera = cameraStrategy(
       trace,
       evidence.metricPair,
       selected.index,
       pairGround,
       frameActorIds,
-      frameProps,
+      cameraProps,
     );
     const compositionArgs = [
       [...groundedPoses, ...frameProps],
