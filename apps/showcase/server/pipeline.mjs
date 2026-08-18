@@ -18,7 +18,7 @@ import { availableParallelism, loadavg } from 'node:os';
 import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
-import { modelAccessFailure } from './model-access.mjs';
+import { operationalFailure } from './failures.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -652,7 +652,7 @@ export class ShowcasePipeline {
         await atomicJson(render2dQualityPath, { status: 'complete', cells: qualityRows });
       }
     }
-    const qualityAccessFailure = qualityRows.find(modelAccessFailure);
+    const qualityAccessFailure = qualityRows.find(operationalFailure);
     if (qualityAccessFailure) {
       throw new Error(`model access unavailable during 2D review: ${JSON.stringify(qualityAccessFailure).slice(-1000)}`);
     }
@@ -736,7 +736,7 @@ export class ShowcasePipeline {
           };
         }),
       );
-      const reviewAccessFailure = reviews.find(modelAccessFailure);
+      const reviewAccessFailure = reviews.find(operationalFailure);
       if (reviewAccessFailure) {
         throw new Error(`model access unavailable during 3D review: ${JSON.stringify(reviewAccessFailure).slice(-1000)}`);
       }

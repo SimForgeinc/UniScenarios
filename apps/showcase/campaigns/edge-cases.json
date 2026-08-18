@@ -8,7 +8,13 @@
     "intervalMs": 30000,
     "submissionRecoveryMs": 300000,
     "submissionRampPerHeartbeat": 1,
-    "loadPausePerCpu": 1.25
+    "loadPausePerCpu": 1.25,
+    "maxGenerationAttempts": 4,
+    "providerFailureThreshold": 3,
+    "retryBackoffMs": 30000,
+    "maxRetryBackoffMs": 900000,
+    "providerProbeMaxAgeMs": 1800000,
+    "providerTrialTimeoutMs": 3600000
   },
   "cases": [
     {"id":"unprotected-left-dense","title":"Unprotected left turn across dense traffic","priority":90},

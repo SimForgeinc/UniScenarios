@@ -6,6 +6,7 @@ import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { atomicJson, exists, MAPS, ShowcasePipeline } from './pipeline.mjs';
+import { classifyFailure } from './failures.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const MIME = {
@@ -296,9 +297,15 @@ export class JobRunner {
       await this.engine.run(job, { jobDir, emit: (event) => this.emit(job.jobId, event) });
       this.ensureState(job.jobId).done = true;
     } catch (error) {
+      const failure = classifyFailure(error);
       await atomicJson(join(jobDir, 'job-error.json'), {
         error: String(error.message ?? error),
         stack: String(error.stack ?? '').split('\n').slice(0, 12),
+        operational: failure.operational,
+        failureKind: failure.kind,
+        code: failure.code,
+        defectCodes: [...failure.defectCodes],
+        unsupportedReason: failure.unsupportedReason,
         failedAt: new Date().toISOString(),
       });
       this.emit(job.jobId, { stage: 'job', status: 'error', artifacts: ['job-error.json'] });

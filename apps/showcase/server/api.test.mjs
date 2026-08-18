@@ -6,7 +6,7 @@ import test from 'node:test';
 
 import { createShowcaseServer, resolveSchedulerSettings } from './index.mjs';
 import { atomicJson, rankCandidates, retryKind } from './pipeline.mjs';
-import { modelAccessFailure } from './model-access.mjs';
+import { classifyFailure } from './failures.mjs';
 
 const TOKEN = 'test-showcase-token';
 
@@ -69,6 +69,16 @@ class BlockingEngine {
   }
 }
 
+class FailingEngine {
+  constructor(error) {
+    this.error = error;
+  }
+
+  async run() {
+    throw this.error;
+  }
+}
+
 async function eventually(predicate, message) {
   for (let attempt = 0; attempt < 200; attempt += 1) {
     if (predicate()) return;
@@ -77,10 +87,13 @@ async function eventually(predicate, message) {
   assert.fail(message);
 }
 
-test('model access failures are distinguished from product rejection', () => {
-  assert.equal(modelAccessFailure({ error: 'HTTP 401: No credential available for provider openai-codex' }), true);
-  assert.equal(modelAccessFailure({ error: 'HTTP 429: rate_limit_error' }), true);
-  assert.equal(modelAccessFailure({ accepted: false, defects: ['frozen_actor'] }), false);
+test('typed classification separates operational failures from product rejection', () => {
+  const provider = classifyFailure({ error: 'HTTP 401: No credential available for provider openai-codex' });
+  assert.deepEqual([provider.operational, provider.kind, provider.code], [true, 'model-access', 'no_credential']);
+  const rateLimited = classifyFailure({ error: 'HTTP 429: rate_limit_error' });
+  assert.deepEqual([rateLimited.operational, rateLimited.kind], [true, 'provider']);
+  const rejection = classifyFailure({ accepted: false, defects: ['frozen_actor'] });
+  assert.deepEqual([rejection.operational, rejection.kind, rejection.defectCodes], [false, 'generation', ['frozen_actor']]);
 });
 
 test('candidate ranking prefers judged quality while preserving site diversity', () => {
@@ -405,6 +418,50 @@ test('recovery replays a persisted job error as a terminal event', async (t) => 
   });
   assert.equal(runner.queue.length, 0);
 });
+
+async function failureDocument(t, error, brief) {
+  const dataDir = await mkdtemp(join(tmpdir(), 'showcase-failure-test-'));
+  const { runner } = await createShowcaseServer({
+    token: TOKEN,
+    dataDir,
+    engine: new FailingEngine(error),
+    env: {},
+  });
+  t.after(async () => rm(dataDir, { recursive: true, force: true }));
+  const jobId = await runner.submit({ methodology: 'custom', brief });
+  await eventually(() => runner.ensureState(jobId).done, 'the failing job reached a terminal state');
+  return JSON.parse(await readFile(join(runner.jobsDir, jobId, 'job-error.json'), 'utf8'));
+}
+
+test('a failed job persists the typed failure contract the campaign runner reads', async (t) => {
+  const document = await failureDocument(
+    t,
+    new Error('model access unavailable during 3D review: {"cellId":"cell-1","review":{"error":"HTTP 429"}}'),
+    'A provider outage during 3D review.',
+  );
+  assert.equal(document.operational, true);
+  assert.equal(document.failureKind, 'vision');
+  assert.equal(document.code, 'vision_review_unavailable');
+  assert.equal(document.unsupportedReason, null);
+  assert.deepEqual(document.defectCodes, []);
+  assert.match(document.error, /model access unavailable during 3D review/);
+});
+
+test('a failed job persists a declared unsupported reason instead of an operational failure', async (t) => {
+  const document = await failureDocument(
+    t,
+    Object.assign(new Error('no matching sites for authored template'), {
+      unsupportedReason: 'no reversible lane exists in the five-map catalog',
+      defectCodes: ['unsupported_geometry'],
+    }),
+    'A brief that the map catalog cannot support.',
+  );
+  assert.equal(document.operational, false);
+  assert.equal(document.failureKind, 'unsupported');
+  assert.equal(document.unsupportedReason, 'no reversible lane exists in the five-map catalog');
+  assert.deepEqual(document.defectCodes, ['unsupported_geometry']);
+});
+
 test('campaign endpoint publishes the strict accepted-video report', async (t) => {
   const { base, runner } = await fixture(t);
   const campaignDir = join(runner.dataDir, 'campaigns', 'edge-cases-67x5');
