@@ -608,10 +608,12 @@ function activeCount() {
 }
 
 function nextCase() {
-  const eligible = state.cases.filter((item) =>
-    item.validVideos.length < state.targetValidVideos && !item.attempts.some(isActive));
+  const incomplete = state.cases.filter((item) => item.validVideos.length < state.targetValidVideos);
+  if (incomplete.length === 0) return null;
+  const highestPriority = Math.max(...incomplete.map((item) => item.priority));
+  const eligible = incomplete.filter((item) =>
+    item.priority === highestPriority && !item.attempts.some(isActive));
   if (eligible.length === 0) return null;
-  const highestPriority = Math.max(...eligible.map((item) => item.priority));
   for (let offset = 0; offset < state.cases.length; offset += 1) {
     const index = (state.nextCaseIndex + offset) % state.cases.length;
     const item = state.cases[index];
