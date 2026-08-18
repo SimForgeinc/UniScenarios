@@ -418,7 +418,9 @@ export class ShowcasePipeline {
       if (!precheckResult) throw new Error(`precheck returned no JSON: ${result.stdout.slice(-1000)}`);
     }
     let semanticContract;
-    if (await exists(contractPath)) {
+    if (job.semanticContract) {
+      semanticContract = structuredClone(job.semanticContract);
+    } else if (await exists(contractPath)) {
       semanticContract = await readJson(contractPath);
     } else {
       const result = await command(this.python, [this.bridge, 'contract', '--brief', briefPath], { cwd: this.root });
@@ -747,6 +749,7 @@ export class ShowcasePipeline {
         fallbackToVisual: false,
         _fallbackDepth: visualFallback ? 1 : Number(job._fallbackDepth ?? 0),
         _repairDepth: visualRepair ? 1 : Number(job._repairDepth ?? 0),
+        semanticContract,
       };
       await mkdir(repairDir, { recursive: true });
       await atomicJson(join(repairDir, '00-brief.json'), repairJob);
