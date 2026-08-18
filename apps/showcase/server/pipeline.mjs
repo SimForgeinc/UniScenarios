@@ -680,7 +680,7 @@ export class ShowcasePipeline {
             } catch (error) {
               lastError = error;
               const message = String(error?.message ?? error);
-              const transient = /Execution context was destroyed|navigation|Target closed|ECONNRESET|fetch failed/i.test(message);
+              const transient = /Execution context was destroyed|navigation|Target closed|ECONNRESET|fetch failed|renderer captured an empty scene/i.test(message);
               if (!transient || attempt === 2) break;
             }
           }
