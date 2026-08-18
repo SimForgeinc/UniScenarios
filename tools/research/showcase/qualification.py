@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """Qualification and reviewer calibration for the showcase production restart.
 
-Three artefacts share one decision contract so a reviewer, a human labeller, and
-the exit evaluator all speak the same language:
+`review_contract.py` is the only acceptance authority this workflow has.  It owns
+the review version, the frozen contract hash, both predicates, and the defect
+vocabulary, so nothing here re-derives an acceptance formula or a taxonomy.  What
+this module adds is the evidence discipline around that contract:
 
     semanticAccepted      the visible scene implements the requested mechanism
-    presentationAccepted  the render is grounded, plausible, and defect-free
-    defectCodes           sorted subset of DEFECT_CODES
-    unsupportedReason     non-null only when the stack cannot represent the case
+    presentationAccepted  the footage is usable as delivered
+    defectCodes           sorted subset of the contract's defect vocabulary
+    unsupportedReason     non-null only when the evidence cannot be attributed
 
-Gold decisions are immutable human labels.  The manifest is sealed with a
-digest over its contract and entries, every entry is bound to the sha256 of the
-bytes a reviewer actually saw, and any label carrying model provenance is
-rejected outright.  Every loader here fails closed: a hash mismatch, a missing
-evidence file, or an under-labelled manifest raises instead of degrading.
+Gold decisions are immutable human labels.  The manifest is sealed with a digest
+over its contract binding and its entries, every entry is bound to the sha256 of
+the bytes a reviewer actually saw, and any label carrying model provenance is
+rejected outright.  Every loader fails closed: a superseded contract, a hash
+mismatch, a missing evidence file, or an under-labelled manifest raises instead
+of degrading into a soft verdict.
 
 Nothing in this module performs network, simulator, or renderer work.
 """
@@ -23,7 +26,14 @@ import hashlib
 import json
 import math
 import re
+import sys
 from pathlib import Path
+
+HERE = Path(__file__).resolve().parent
+if str(HERE) not in sys.path:
+    sys.path.insert(0, str(HERE))
+import benchmark_report as bench  # noqa: E402
+import review_contract as contract  # noqa: E402
 
 
 GOLD_SCHEMA = "uniscenarios.showcase-reviewer-gold.v1"
@@ -31,36 +41,36 @@ CALIBRATION_SCHEMA = "uniscenarios.showcase-reviewer-calibration.v1"
 QUALIFICATION_SCHEMA = "uniscenarios.showcase-qualification.v1"
 BREADTH_SCHEMA = "uniscenarios.showcase-breadth.v1"
 VERDICT_SCHEMA = "uniscenarios.showcase-qualification-verdict.v1"
+# Artifacts the integrated pipeline writes and this workflow reads as evidence:
+# the deliverable product decision and the per-attempt benchmark record.
+PRODUCT_SCHEMA = "uniscenarios.showcase-product-decision.v1"
+ATTEMPT_RECORD_SCHEMA = "showcase-benchmark-attempt/v1"
 
-# The frozen product reviewer whose decisions this workflow calibrates.
-REVIEW_VERSION = "showcase-3d-product-review-v4"
-# tools/research/showcase/stages.py:470 accepts at realism >= 6.
-REALISM_MIN = 6.0
+# Every acceptance term below is the contract's, never this module's.
+REVIEW_VERSION = contract.REVIEW_VERSION
+CONTRACT_VERSION = contract.CONTRACT_VERSION
+CONTRACT_SHA256 = contract.CONTRACT_SHA256
+REALISM_MIN = contract.REALISM_MIN
+CONFIDENCE_MIN = contract.CONFIDENCE_MIN
+DEFECT_CODES = tuple(contract.CODES)
 
 DECISION_FIELDS = ("semanticAccepted", "presentationAccepted", "defectCodes", "unsupportedReason")
 BOOLEAN_DECISION_FIELDS = ("semanticAccepted", "presentationAccepted")
 
-DEFECT_CODES = (
-    "actor-mismatch",
-    "grounding-failure",
-    "implausible",
-    "low-realism",
-    "mechanism-mismatch",
-    "sequence-mismatch",
-    "unsupported",
-    "visible-defect",
-)
-
 # Keys and labeller names that only a model-produced review can carry.  Their
 # presence proves the label was not hand-entered, so calibration must refuse it.
 MODEL_PROVENANCE_KEYS = (
+    "acceptance",
     "confidence",
+    "contract",
     "effort",
     "explanation",
+    "frameBasis",
     "framesUsed",
     "latencyS",
     "model",
     "rawResponseSha256",
+    "tier",
     "tokens",
     "version",
     "visionAsserted",
@@ -70,6 +80,10 @@ MODEL_LABELLER = re.compile(
     re.IGNORECASE,
 )
 
+# The integrated pipeline's artifact stages, in numeric order.  Every name is the
+# artifact a runner can observe: `apps/showcase/server/index.mjs` resolves saved
+# stages from exactly these files, and `95-benchmark` is the attempt record that
+# is rewritten after every stage.
 STAGES = (
     "00-brief",
     "10-route",
@@ -78,13 +92,35 @@ STAGES = (
     "30-sites",
     "40-cells",
     "50-gate",
+    "55-eligibility",
     "60-render2d",
     "65-render3d",
     "70-judge",
-    "80-repair",
+    "75-product",
+    "80-presentation-retry",
+    "80-reauthor-01",
     "90-gallery",
+    "95-benchmark",
 )
-STAGE_OUTCOMES = ("pending", "running", "complete", "skipped", "failed")
+# The two stage-local retry branches are mutually exclusive and only a rejected
+# attempt reaches either, so neither may be required of a healthy attempt.
+OPTIONAL_STAGES = ("80-presentation-retry", "80-reauthor-01")
+REQUIRED_STAGES = tuple(stage for stage in STAGES if stage not in OPTIONAL_STAGES)
+# The attempt record's stage ledger names the reauthor branch by the control it
+# ran; the branch's artifacts live in the numbered directory the ledger above
+# names, so both spellings describe the same stage.
+STAGE_ALIASES = {"80-reauthor": "80-reauthor-01"}
+
+# Stage outcomes a runner may record.  `pending` and `running` are the lifecycle
+# states the pipeline emits as stage events; `reused`, `complete`, `skipped`, and
+# `error` are the statuses its stage ledger writes into the attempt record; and
+# `failed` is what the reauthor branch reports when a promoted repair does not
+# complete.
+STAGE_OUTCOMES = ("pending", "running", "reused", "complete", "skipped", "failed", "error")
+
+# Funnel stage ids in order, taken from the benchmark reader so a qualification
+# verdict names the same stages the attempt record it read does.
+FUNNEL_STAGES = tuple(stage for stage, _ in bench.FUNNEL_STAGES)
 
 ATTEMPT_OUTCOMES = ("semantic-accepted", "semantic-rejected", "unsupported", "operational-failure")
 
@@ -131,38 +167,70 @@ def dump_json(path, value):
 
 # ------------------------------------------------------------------ contract
 
-def decision_from_review(review):
-    """Project a frozen `showcase-3d-product-review-v4` record onto the contract."""
-    if review.get("version") not in (None, REVIEW_VERSION):
-        raise QualificationError(f"review version {review.get('version')!r} is not {REVIEW_VERSION}")
-    mechanism = str(review.get("mechanismFidelity", "no")).lower()
-    grounding = str(review.get("visualGrounding", "fail")).lower()
-    actors = str(review.get("actorFidelity", "fail")).lower()
-    sequence = str(review.get("eventSequence", "fail")).lower()
-    plausible = bool(review.get("plausible"))
-    realism = float(review.get("realism", 0.0))
-    defects = [item for item in review.get("defects", []) if str(item).strip()]
-    codes = set()
-    if mechanism != "yes":
-        codes.add("mechanism-mismatch")
-    if actors != "pass":
-        codes.add("actor-mismatch")
-    if sequence != "pass":
-        codes.add("sequence-mismatch")
-    if grounding != "pass":
-        codes.add("grounding-failure")
-    if not plausible:
-        codes.add("implausible")
-    if realism < REALISM_MIN:
-        codes.add("low-realism")
-    if defects:
-        codes.add("visible-defect")
-    return normalize_decision({
-        "semanticAccepted": mechanism == "yes" and actors == "pass" and sequence == "pass",
-        "presentationAccepted": grounding == "pass" and plausible and realism >= REALISM_MIN and not defects,
-        "defectCodes": sorted(codes),
-        "unsupportedReason": None,
-    })
+def contract_binding():
+    """The contract identity every artifact of this workflow is bound to."""
+    return {"version": CONTRACT_VERSION, "sha256": CONTRACT_SHA256, "reviewVersion": REVIEW_VERSION}
+
+
+def assert_current_contract(identity, context):
+    """Fail closed unless `identity` names the contract that is in force now.
+
+    A superseded predicate cannot reproduce the frozen body hash, so the sha256 is
+    the currency test and the version strings are only there to name the drift.
+    """
+    if not isinstance(identity, dict):
+        raise QualificationError(f"{context} carries no review contract identity")
+    review_version = identity.get("reviewVersion")
+    if review_version is not None and review_version != REVIEW_VERSION:
+        raise QualificationError(
+            f"{context} was produced by {review_version!r}, not the current {REVIEW_VERSION}")
+    version = identity.get("version")
+    if version is not None and version != CONTRACT_VERSION:
+        raise QualificationError(
+            f"{context} names review contract {version!r}, not the current {CONTRACT_VERSION}")
+    digest = identity.get("sha256")
+    if digest != CONTRACT_SHA256:
+        raise QualificationError(
+            f"{context} names review contract hash {digest!r}, not the current {CONTRACT_SHA256}")
+    return contract_binding()
+
+
+def assert_current_review(review, context="review"):
+    """Fail closed unless one reviewer emission came from the current contract.
+
+    An emission that declares no contract at all is refused too: the acceptance
+    fields of an unattributed review are not evidence about this contract.
+    """
+    if not isinstance(review, dict):
+        raise QualificationError(f"{context} must be an object")
+    version = review.get("version")
+    if version is not None and version != REVIEW_VERSION:
+        raise QualificationError(
+            f"{context} declares review version {version!r}, not the current {REVIEW_VERSION}")
+    return assert_current_contract(review.get("contract"), context)
+
+
+def decision_from_review(review, context="review"):
+    """Project one current-contract reviewer emission onto the shared decision.
+
+    `review_contract.evaluate` is the only predicate; this adds the fail-closed
+    check that the emission was produced under the contract in force, and the
+    parity check that a reviewer's own acceptance fields are the ones the contract
+    derives from the same evidence.
+    """
+    assert_current_review(review, context)
+    derived = normalize_decision(contract.acceptance_fields(contract.evaluate(review)), context)
+    for field in DECISION_FIELDS:
+        if field not in review:
+            continue
+        declared = review[field]
+        # Codes are a set in artifact form; sorting by text keeps the comparison total
+        # even when a model emits something that is not a string at all.
+        compared = sorted(declared, key=str) if field == "defectCodes" and isinstance(declared, list) else declared
+        if compared != derived[field]:
+            raise QualificationError(f"{context}.{field} is {declared!r} but the contract derives "
+                                     f"{derived[field]!r} from the same evidence")
+    return derived
 
 
 def normalize_decision(value, context="decision"):
@@ -181,21 +249,16 @@ def normalize_decision(value, context="decision"):
     codes = value["defectCodes"]
     if not isinstance(codes, list) or any(not isinstance(code, str) for code in codes):
         raise QualificationError(f"{context}.defectCodes must be a list of strings")
-    unknown_codes = sorted(set(codes) - set(DEFECT_CODES))
-    if unknown_codes:
-        raise QualificationError(f"{context}.defectCodes has unknown codes: {', '.join(unknown_codes)}")
     if len(set(codes)) != len(codes):
         raise QualificationError(f"{context}.defectCodes repeats a code")
     reason = value["unsupportedReason"]
     if reason is not None and (not isinstance(reason, str) or not reason.strip()):
         raise QualificationError(f"{context}.unsupportedReason must be null or a non-empty string")
-    if reason is None and "unsupported" in codes:
-        raise QualificationError(f"{context} uses the unsupported defect code without a reason")
-    if reason is not None:
-        if value["semanticAccepted"] or value["presentationAccepted"]:
-            raise QualificationError(f"{context} cannot accept footage it declares unsupported")
-        if "unsupported" not in codes:
-            raise QualificationError(f"{context} declares unsupportedReason without the unsupported defect code")
+    # The contract itself says whether a decision it did not derive could have come
+    # from it, so the vocabulary and both predicates stay in exactly one place.
+    problems = contract.decision_contradictions(value)
+    if problems:
+        raise QualificationError(f"{context} contradicts the review contract: {'; '.join(problems)}")
     return {
         "semanticAccepted": value["semanticAccepted"],
         "presentationAccepted": value["presentationAccepted"],
@@ -258,6 +321,21 @@ def assert_human_label(label, context):
     }
 
 
+def gold_contract_block():
+    """The contract binding a gold manifest is sealed against.
+
+    Resealing after a contract change is deterministic because every value here is
+    read out of `config/showcase-review-contract.json`; no human label is touched.
+    """
+    return {
+        "fields": list(DECISION_FIELDS),
+        "defectCodes": list(DEFECT_CODES),
+        **contract_binding(),
+        "realismMin": REALISM_MIN,
+        "confidenceMin": CONFIDENCE_MIN,
+    }
+
+
 def load_gold(path, root):
     """Read, re-hash, and validate the gold manifest.  Raises on any doubt."""
     root = Path(root).resolve()
@@ -266,13 +344,14 @@ def load_gold(path, root):
         raise QualificationError(f"gold manifest schema {manifest.get('schema')!r} is not {GOLD_SCHEMA}")
     if manifest.get("labelProvenance") != "human":
         raise QualificationError("gold manifest labelProvenance must be human")
-    contract = manifest.get("reviewContract")
-    if not isinstance(contract, dict) or list(contract.get("fields", [])) != list(DECISION_FIELDS):
+    binding = manifest.get("reviewContract")
+    if not isinstance(binding, dict) or list(binding.get("fields", [])) != list(DECISION_FIELDS):
         raise QualificationError("gold manifest reviewContract.fields must be the shared decision contract")
-    if contract.get("reviewVersion") != REVIEW_VERSION:
-        raise QualificationError(f"gold manifest reviewContract.reviewVersion must be {REVIEW_VERSION}")
-    if list(contract.get("defectCodes", [])) != list(DEFECT_CODES):
-        raise QualificationError("gold manifest reviewContract.defectCodes must be the shared vocabulary")
+    assert_current_contract(binding, "gold manifest reviewContract")
+    if list(binding.get("defectCodes", [])) != list(DEFECT_CODES):
+        raise QualificationError("gold manifest reviewContract.defectCodes must be the contract's defect vocabulary")
+    if binding.get("realismMin") != REALISM_MIN or binding.get("confidenceMin") != CONFIDENCE_MIN:
+        raise QualificationError("gold manifest reviewContract must bind the contract's acceptance thresholds")
     entries = manifest.get("entries")
     if not isinstance(entries, list) or not entries:
         raise QualificationError("gold manifest requires a non-empty entries array")
@@ -340,13 +419,73 @@ def eligible_gold(manifest):
     return eligible
 
 
+def carried_gold_labels(path):
+    """Human labels from a predecessor manifest, verified but not re-bound.
+
+    A manifest sealed under a superseded contract still holds real human work, so a
+    reseal reads its labels through this door rather than `load_gold`, which refuses
+    anything not bound to the contract in force.  A label the current contract
+    cannot express is refused instead of translated: restating a human verdict in a
+    vocabulary the labeller never saw would be fabrication.  Entries that were never
+    labelled stay unlabelled.
+    """
+    manifest = load_json(path)
+    if manifest.get("schema") != GOLD_SCHEMA:
+        raise QualificationError(f"gold manifest schema {manifest.get('schema')!r} is not {GOLD_SCHEMA}")
+    if manifest.get("labelProvenance") != "human":
+        raise QualificationError("gold manifest labelProvenance must be human")
+    if manifest.get("manifestSha256") != gold_seal(manifest):
+        raise QualificationError("gold manifest seal does not match its contents; the manifest is immutable")
+    carried = {}
+    for entry in manifest.get("entries") or []:
+        evidence_id = entry.get("evidenceId")
+        digest = (entry.get("video") or {}).get("sha256")
+        if not isinstance(digest, str) or not SHA256.match(digest):
+            raise QualificationError(f"gold entry {evidence_id!r} carries no video sha256")
+        label = entry.get("label")
+        carried[digest] = {
+            "caseId": entry.get("caseId"),
+            "label": None if label is None else assert_human_label(label, f"gold entry {evidence_id}.label"),
+        }
+    return carried
+
+
 # ---------------------------------------------------- repetitions and metrics
+
+def review_row(review, *, gold_sha256, evidence_id, video_sha256, repetition):
+    """One persisted calibration row: the canonical evaluator output and its provenance.
+
+    The reviewer emission arrives straight from `stages.py review3d`, so the row is
+    a projection of the contract's own verdict for that footage -- never a second
+    opinion computed here -- plus the identity of the contract that produced it.
+    """
+    decision = decision_from_review(review, f"review of {evidence_id}")
+    # The realism the contract itself recorded, clamped by it, never a raw model number.
+    axes = (review.get("acceptance") or {}).get("axes") or {}
+    realism = contract.clamp_number(axes.get("realism", review.get("realism")), 0.0, 10.0)
+    return {
+        "goldSha256": gold_sha256,
+        "evidenceId": evidence_id,
+        "videoSha256": video_sha256,
+        "repetition": repetition,
+        "reviewVersion": REVIEW_VERSION,
+        "contractVersion": CONTRACT_VERSION,
+        "contractSha256": CONTRACT_SHA256,
+        "model": review.get("model"),
+        "effort": review.get("effort"),
+        "realism": realism,
+        "rawResponseSha256": review.get("rawResponseSha256"),
+        **decision,
+    }
+
 
 def group_reviews_by_evidence(reviews, repetitions, gold=None):
     """Group repeated reviews by the digest of the footage that was reviewed.
 
     Grouping is on evidence bytes, never on a scenario or case name: two reviews
-    only belong together when the reviewer saw byte-identical footage.
+    only belong together when the reviewer saw byte-identical footage.  Every row
+    must name the contract in force, so a batch that mixes contract hashes is
+    refused instead of averaged into one reviewer-stability number.
     """
     if not isinstance(repetitions, int) or repetitions < 2:
         raise QualificationError("repetitions must be an integer of at least 2")
@@ -356,8 +495,9 @@ def group_reviews_by_evidence(reviews, repetitions, gold=None):
         digest = review.get("videoSha256")
         if not isinstance(digest, str) or not SHA256.match(digest):
             raise QualificationError(f"{context} is missing a videoSha256 evidence digest")
-        if review.get("reviewVersion") != REVIEW_VERSION:
-            raise QualificationError(f"{context} was produced by {review.get('reviewVersion')!r}, not {REVIEW_VERSION}")
+        assert_current_contract({"version": review.get("contractVersion"),
+                                 "sha256": review.get("contractSha256"),
+                                 "reviewVersion": review.get("reviewVersion")}, context)
         realism = review.get("realism")
         if not isinstance(realism, (int, float)) or isinstance(realism, bool):
             raise QualificationError(f"{context} is missing a numeric realism score")
@@ -457,6 +597,15 @@ def realism_dispersion(groups):
 
 
 def build_calibration(manifest, reviews, repetitions):
+    """Reviewer stability against human gold, all under one contract hash.
+
+    `load_gold` has already refused any label carrying model provenance, so the
+    manifest reaching this point holds hand-entered decisions only; the binding is
+    re-checked here because a calibration report is what the exit evaluator trusts.
+    """
+    assert_current_contract(manifest.get("reviewContract"), "gold manifest reviewContract")
+    if manifest.get("labelProvenance") != "human":
+        raise QualificationError("calibration requires a gold manifest of human labels")
     gold = eligible_gold(manifest)
     if not gold:
         raise QualificationError("the gold manifest carries no labelled, supported entries to calibrate against")
@@ -465,6 +614,7 @@ def build_calibration(manifest, reviews, repetitions):
                    if entry.get("label") and entry["label"]["unsupportedReason"] is not None]
     return {
         "schema": CALIBRATION_SCHEMA,
+        "reviewContract": contract_binding(),
         "reviewVersion": REVIEW_VERSION,
         "goldSha256": manifest["manifestSha256"],
         "repetitions": repetitions,
@@ -494,8 +644,15 @@ def load_breadth(path):
     if stages != list(STAGES):
         raise QualificationError("breadth config stages must be the exact showcase pipeline stages")
     required = list(config.get("requiredStages", []))
-    if not required or any(stage not in stages for stage in required):
-        raise QualificationError("breadth config requiredStages must be a non-empty subset of stages")
+    # Only the two stage-local retry branches may be absent: a healthy attempt
+    # reaches every other stage, so requiring less would hide a truncated run.
+    if required != list(REQUIRED_STAGES):
+        raise QualificationError(
+            "breadth config requiredStages must be every stage except the optional retry branches "
+            f"({', '.join(OPTIONAL_STAGES)})")
+    vocabulary = list(config.get("stageOutcomeVocabulary", []))
+    if vocabulary != list(STAGE_OUTCOMES):
+        raise QualificationError("breadth config stageOutcomeVocabulary must be the current stage outcomes")
     ids = []
     for case in cases:
         case_id = case.get("id")
@@ -519,6 +676,7 @@ def load_qualification(path, breadth):
     config = load_json(path)
     if config.get("schema") != QUALIFICATION_SCHEMA:
         raise QualificationError(f"qualification config schema {config.get('schema')!r} is not {QUALIFICATION_SCHEMA}")
+    assert_current_contract(config.get("reviewContract"), "qualification config reviewContract")
     attempts = config.get("attemptsPerCase")
     if not isinstance(attempts, int) or attempts < 1:
         raise QualificationError("qualification attemptsPerCase must be a positive integer")
@@ -564,44 +722,159 @@ def load_qualification(path, breadth):
 
 # ------------------------------------------------------------ exit evaluation
 
-def attempt_outcome(attempt, judge=None):
+def attempt_record_facts(record, context="attempt record"):
+    """Stage and funnel facts for one attempt, read only from its 95-benchmark record.
+
+    The attempt record is the pipeline's own continuously rewritten evidence, so a
+    crashed attempt still reports the stages it paid for.  Nothing about acceptance
+    is read here: this answers only how far the attempt got and why it stopped.
+    """
+    if record is None:
+        return {"attemptRecord": None, "funnel": None, "furthestStage": None,
+                "stageOutcomes": {}, "censoredAtStage": None, "failedStage": None,
+                "operational": None, "recordOutcome": None}
+    if not isinstance(record, dict):
+        raise QualificationError(f"{context} must be an object")
+    if record.get("schema") != ATTEMPT_RECORD_SCHEMA:
+        raise QualificationError(f"{context} schema {record.get('schema')!r} is not {ATTEMPT_RECORD_SCHEMA}")
+    funnel = record.get("funnel")
+    if not isinstance(funnel, dict):
+        raise QualificationError(f"{context} carries no funnel")
+    unknown = sorted(set(funnel) - set(FUNNEL_STAGES))
+    if unknown:
+        raise QualificationError(f"{context} funnel names unknown stages: {', '.join(unknown)}")
+    reached = [stage for stage in FUNNEL_STAGES if funnel.get(stage) is True]
+    outcomes = {}
+    for row in record.get("stages") or []:
+        if not isinstance(row, dict):
+            raise QualificationError(f"{context} stage ledger rows must be objects")
+        name = STAGE_ALIASES.get(row.get("name"), row.get("name"))
+        if name not in STAGES:
+            raise QualificationError(
+                f"{context} ledger names stage {row.get('name')!r}, which is not a pipeline stage")
+        status = row.get("status")
+        if status not in STAGE_OUTCOMES:
+            raise QualificationError(
+                f"{context} stage {name} reports outcome {status!r}, which is not a stage outcome")
+        outcomes[name] = status
+    outcome = record.get("outcome") if isinstance(record.get("outcome"), dict) else {}
+    return {
+        "attemptRecord": ATTEMPT_RECORD_SCHEMA,
+        "funnel": {stage: funnel.get(stage) is True for stage in FUNNEL_STAGES},
+        "furthestStage": reached[-1] if reached else None,
+        "stageOutcomes": outcomes,
+        "censoredAtStage": outcome.get("censoredAtStage"),
+        "failedStage": outcome.get("failedStage"),
+        "operational": outcome.get("operational"),
+        "recordOutcome": outcome.get("kind"),
+    }
+
+
+def decision_document(product=None, judge=None, context="attempt"):
+    """The document whose acceptance decision governs one attempt.
+
+    `75-product.json` is the deliverable decision: it rations presentation to the
+    job's `topK`, folds in the deterministic defect codes that rejected cells before
+    any reviewer saw them, and names the attempt whose render was promoted.
+    `70-judge.json` is consulted only when no product decision exists, and then only
+    as current-contract source evidence -- never as an acceptance of its own.
+    """
+    for name, document, schema in (("75-product.json", product, PRODUCT_SCHEMA),
+                                   ("70-judge.json", judge, None)):
+        if document is None:
+            continue
+        if not isinstance(document, dict):
+            raise QualificationError(f"{context} {name} must be an object")
+        if schema is not None and document.get("schema") != schema:
+            raise QualificationError(f"{context} {name} schema {document.get('schema')!r} is not {schema}")
+        assert_current_contract(document.get("contract"), f"{context} {name}")
+        return name, document
+    return None, None
+
+
+def _decided_rows(document):
+    """Rows the contract actually decided, in the document's own ranking order."""
+    return [row for row in (document or {}).get("cells") or []
+            if isinstance(row, dict) and all(field in row for field in DECISION_FIELDS)]
+
+
+def _decisive_row(rows):
+    """The row an attempt is judged on: the cell it shipped, else its best verdict.
+
+    Each row's decision is internally consistent because the contract derived it; a
+    union across cells would not be, so the attempt is judged on one row and the
+    other rows' codes travel beside it as evidence.
+    """
+    for field in ("presentationAccepted", "semanticAccepted"):
+        for row in rows:
+            if row.get(field) is True:
+                return row
+    return rows[0]
+
+
+def _evidence_codes(document, rows, context):
+    codes = {code for row in rows for code in row.get("defectCodes") or []}
+    codes.update(document.get("defectCodes") or [])
+    unplaceable = sorted(code for code in codes if not contract.is_contract_code(code))
+    if unplaceable:
+        raise QualificationError(
+            f"{context} carries defect codes the contract cannot place: {', '.join(unplaceable)}")
+    return sorted(codes)
+
+
+def attempt_outcome(attempt, product=None, judge=None, record=None):
     """Classify one campaign attempt into exactly one qualification outcome.
 
-    Operational failures (infrastructure, gateway, crash) are never a semantic
-    verdict, so they stay out of the yield denominator and are counted on their
-    own.  An unsupported attempt is a representability result, not a defect.
+    Evidence authority is the pipeline's own.  `75-product.json` is the deliverable
+    decision and outranks everything; `70-judge.json` is source evidence when no
+    product decision was written; `95-benchmark.json` supplies the stage and funnel
+    facts.  Operational failures (infrastructure, gateway, crash) are never a
+    semantic verdict, so they stay out of the yield denominator and are counted on
+    their own.  An unsupported attempt is a representability result, not a defect,
+    and carries no manufactured defect code.
     """
     if not isinstance(attempt, dict):
         raise QualificationError("attempt must be an object")
     number = attempt.get("number")
     if not isinstance(number, int) or isinstance(number, bool) or number < 1:
         raise QualificationError("attempt.number must be a positive integer")
+    context = f"attempt {number}"
+    row = {"number": number, "jobId": attempt.get("jobId"), "outcome": None, "decision": None,
+           "unsupportedReason": None, "evidence": None, "acceptedAttempt": None, "renderDir": None,
+           "videoSha256": attempt.get("videoSha256"), "defectCodes": [],
+           **attempt_record_facts(record, f"{context} record")}
     reason = attempt.get("unsupportedReason")
     if isinstance(reason, str) and reason.strip():
-        return {"number": number, "outcome": "unsupported", "decision": normalize_decision({
-            "semanticAccepted": False, "presentationAccepted": False,
-            "defectCodes": ["unsupported"], "unsupportedReason": reason,
-        }), "videoSha256": None}
-    if attempt.get("status") != "complete":
-        return {"number": number, "outcome": "operational-failure", "decision": None, "videoSha256": None}
-    rows = [row for row in (judge or {}).get("cells", []) if row.get("status") == "complete"]
-    review = next((row.get("threeDReview") for row in rows
-                   if isinstance(row.get("threeDReview"), dict)
-                   and row["threeDReview"].get("version") == REVIEW_VERSION), None)
-    if review is None:
-        return {"number": number, "outcome": "operational-failure", "decision": None, "videoSha256": None}
-    decision = decision_from_review(review)
-    return {
-        "number": number,
-        "outcome": "semantic-accepted" if decision["semanticAccepted"] else "semantic-rejected",
-        "decision": decision,
-        "videoSha256": attempt.get("videoSha256"),
-    }
+        return {**row, "outcome": "unsupported", "unsupportedReason": reason.strip()}
+    if (attempt.get("status") != "complete" or row["operational"] is not None
+            or row["censoredAtStage"] is not None):
+        return {**row, "outcome": "operational-failure"}
+    name, document = decision_document(product, judge, context)
+    rows = _decided_rows(document)
+    if not rows:
+        # No cell reached a verdict under this contract, so the attempt spent its
+        # renders without producing reviewable evidence. That is an operational
+        # outcome and never a statement about the requested scenario.
+        return {**row, "outcome": "operational-failure", "evidence": name}
+    decisive = _decisive_row(rows)
+    decision = decision_of(decisive, f"{context} {name} cell {decisive.get('cellId')}")
+    outcome = ("unsupported" if decision["unsupportedReason"] is not None
+               else "semantic-accepted" if decision["semanticAccepted"] else "semantic-rejected")
+    return {**row, "outcome": outcome, "decision": decision, "evidence": name,
+            "unsupportedReason": decision["unsupportedReason"],
+            "defectCodes": _evidence_codes(document, rows, f"{context} {name}"),
+            "acceptedAttempt": document.get("acceptedAttempt"),
+            "renderDir": decisive.get("renderDir")}
 
 
 def summarize_case(case_id, attempts_per_case, outcomes):
     counted = [item for item in outcomes if item["outcome"] != "operational-failure"]
     accepted = [item for item in counted if item["outcome"] == "semantic-accepted"]
+    furthest = {}
+    for item in outcomes:
+        stage = item.get("furthestStage")
+        if stage is not None:
+            furthest[stage] = furthest.get(stage, 0) + 1
     return {
         "caseId": case_id,
         "attemptsPlanned": attempts_per_case,
@@ -612,6 +885,11 @@ def summarize_case(case_id, attempts_per_case, outcomes):
         "semanticRejected": sum(1 for item in counted if item["outcome"] == "semantic-rejected"),
         "countedAttempts": len(counted),
         "semanticYield": _rate(len(accepted), len(counted)),
+        # Stage facts come from the attempt records, so a run can be read for where
+        # it stopped and not only for whether it was accepted.
+        "attemptRecords": sum(1 for item in outcomes if item.get("attemptRecord")),
+        "furthestStages": {stage: furthest[stage] for stage in FUNNEL_STAGES if stage in furthest},
+        "productDecisions": sum(1 for item in outcomes if item.get("evidence") == "75-product.json"),
         "outcomes": outcomes,
     }
 
@@ -621,8 +899,7 @@ def evaluate_exit(config, calibration, case_outcomes):
     criteria = config["exit"]
     if calibration.get("schema") != CALIBRATION_SCHEMA:
         raise QualificationError(f"calibration schema {calibration.get('schema')!r} is not {CALIBRATION_SCHEMA}")
-    if calibration.get("reviewVersion") != REVIEW_VERSION:
-        raise QualificationError("calibration was produced by a different reviewer version")
+    assert_current_contract(calibration.get("reviewContract"), "calibration reviewContract")
     if calibration.get("repetitions") != criteria["reviewRepetitions"]:
         raise QualificationError(
             f"calibration used {calibration.get('repetitions')} repetitions but the config requires "
@@ -680,6 +957,7 @@ def evaluate_exit(config, calibration, case_outcomes):
     verdict = {
         "schema": VERDICT_SCHEMA,
         "qualificationId": config.get("id"),
+        "reviewContract": contract_binding(),
         "reviewVersion": REVIEW_VERSION,
         "goldSha256": calibration["goldSha256"],
         "qualified": qualified,
@@ -693,6 +971,8 @@ def evaluate_exit(config, calibration, case_outcomes):
             "semanticAccepted": sum(case["semanticAccepted"] for case in cases),
             "unsupported": sum(case["unsupported"] for case in cases),
             "operationalFailures": operational,
+            "attemptRecords": sum(case["attemptRecords"] for case in cases),
+            "productDecisions": sum(case["productDecisions"] for case in cases),
         },
     }
     return verdict

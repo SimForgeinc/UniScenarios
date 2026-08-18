@@ -223,6 +223,56 @@ def _human_label(semantic_accepted, presentation_accepted=True, codes=(), reason
             "defectCodes": list(codes), "unsupportedReason": reason}
 
 
+def _emission(**overrides):
+    """A canonical `stages.py review3d` emission under the contract in force."""
+    answered = {"mechanismFidelity": "yes", "visualGrounding": "pass", "actorFidelity": "pass",
+                "eventSequence": "pass", "plausible": True, "realism": 8.0, "confidence": 0.9,
+                "defects": [],
+                "explanation": "The requested mechanism happens on camera on solid ground."}
+    answered.update(overrides)
+    verdict = review.evaluate({"tier": review.FULL_TIER, **answered})
+    return {"cellId": "cell-a", "version": review.REVIEW_VERSION, "contract": review.contract_identity(),
+            "model": "gpt-5.6-sol", "effort": "medium", "visionAsserted": True,
+            "tier": review.FULL_TIER, **answered, **review.acceptance_fields(verdict),
+            "acceptance": {"tier": verdict["tier"], "axes": verdict["axes"],
+                           "defects": verdict["defects"], "contract": review.contract_identity()},
+            "rawResponseSha256": "0" * 64}
+
+
+def _judged_cell(cell_id, emission, **overrides):
+    """One judge or product row, exactly as `applyProductDecision` writes it."""
+    verdict = review.evaluate(emission)
+    return {"cellId": cell_id, "status": "complete", "threeDReview": emission,
+            **review.acceptance_fields(verdict),
+            "acceptance": {"tier": verdict["tier"], "axes": verdict["axes"],
+                           "defects": verdict["defects"], "contract": review.contract_identity(),
+                           "gatePassed": True, "cappedByTopK": False},
+            **overrides}
+
+
+def _judge_document(cells, **overrides):
+    return {"status": "complete", "contract": review.contract_identity(), "cells": cells, **overrides}
+
+
+def _product_document(cells, **overrides):
+    rows = [{"renderDir": f"65-render3d/{row['cellId']}", **row} for row in cells]
+    return {"schema": qual.PRODUCT_SCHEMA, "status": "complete", "contract": review.contract_identity(),
+            "acceptedAttempt": None, "acceptedCells": sum(1 for row in rows if row["presentationAccepted"]),
+            "defectCodes": sorted({code for row in rows for code in row["defectCodes"]}),
+            "cells": rows, **overrides}
+
+
+def _attempt_record(furthest="presentation", stages=(), **overrides):
+    """An attempt record whose funnel is reached up to and including `furthest`."""
+    limit = qual.FUNNEL_STAGES.index(furthest)
+    return {"schema": qual.ATTEMPT_RECORD_SCHEMA,
+            "funnel": {stage: index <= limit for index, stage in enumerate(qual.FUNNEL_STAGES)},
+            "stages": [{"name": name, "status": status} for name, status in stages],
+            "outcome": {"kind": "accepted", "censoredAtStage": None, "failedStage": None,
+                        "operational": None},
+            **overrides}
+
+
 def _write_evidence(root, evidence_id, payload):
     video = root / "videos" / f"{evidence_id}.mp4"
     frame = root / "videos" / f"{evidence_id}-frame-000.png"
@@ -240,12 +290,9 @@ def _write_evidence(root, evidence_id, payload):
             "label": None}
 
 
-def _seal(root, entries):
+def _seal(root, entries, contract_block=None):
     manifest = {"schema": qual.GOLD_SCHEMA, "id": "test-gold", "labelProvenance": "human",
-                "reviewContract": {"fields": list(qual.DECISION_FIELDS),
-                                   "defectCodes": list(qual.DEFECT_CODES),
-                                   "reviewVersion": qual.REVIEW_VERSION,
-                                   "realismMin": qual.REALISM_MIN},
+                "reviewContract": contract_block or qual.gold_contract_block(),
                 "entries": entries}
     manifest["manifestSha256"] = qual.gold_seal(manifest)
     path = root / "gold.json"
@@ -254,27 +301,147 @@ def _seal(root, entries):
 
 
 class DecisionContractTest(unittest.TestCase):
-    def test_reviewer_output_splits_into_semantic_and_presentation(self):
-        review = {"version": qual.REVIEW_VERSION, "mechanismFidelity": "yes", "visualGrounding": "pass",
-                  "actorFidelity": "pass", "eventSequence": "pass", "plausible": True,
-                  "realism": 8.0, "defects": []}
-        self.assertEqual(qual.decision_from_review(review),
-                         {"semanticAccepted": True, "presentationAccepted": True,
-                          "defectCodes": [], "unsupportedReason": None})
-        review["mechanismFidelity"] = "partial"
-        review["realism"] = 4.0
-        degraded = qual.decision_from_review(review)
-        self.assertFalse(degraded["semanticAccepted"])
-        self.assertFalse(degraded["presentationAccepted"])
-        self.assertEqual(degraded["defectCodes"], ["low-realism", "mechanism-mismatch"])
+    """The review contract is the only predicate; this module may only project it."""
 
-    def test_unsupported_decisions_cannot_also_accept(self):
-        with self.assertRaises(qual.QualificationError):
+    def test_decision_is_exactly_the_contract_evaluator_output(self):
+        for emission in (_emission(),
+                         _emission(mechanismFidelity="partial"),
+                         _emission(visualGrounding="fail"),
+                         _emission(defects=[{"code": "render.camera.framing", "text": "event is cropped"}]),
+                         _emission(realism=2.0),
+                         _emission(confidence=0.1)):
+            expected = review.acceptance_fields(review.evaluate(emission))
+            expected["defectCodes"] = sorted(expected["defectCodes"])
+            self.assertEqual(qual.decision_from_review(emission), expected)
+
+    def test_vocabulary_and_thresholds_are_the_contracts_own(self):
+        self.assertEqual(qual.DEFECT_CODES, tuple(review.CODES))
+        self.assertEqual(qual.REVIEW_VERSION, review.REVIEW_VERSION)
+        self.assertEqual(qual.CONTRACT_SHA256, review.CONTRACT_SHA256)
+        self.assertEqual(qual.CONTRACT_VERSION, review.CONTRACT_VERSION)
+        self.assertEqual((qual.REALISM_MIN, qual.CONFIDENCE_MIN),
+                         (review.REALISM_MIN, review.CONFIDENCE_MIN))
+        self.assertEqual(qual.contract_binding(),
+                         {"version": review.CONTRACT_VERSION, "sha256": review.CONTRACT_SHA256,
+                          "reviewVersion": review.REVIEW_VERSION})
+
+    def test_a_reviewer_cannot_declare_an_acceptance_the_contract_denies(self):
+        emission = {**_emission(mechanismFidelity="no"), "semanticAccepted": True,
+                    "presentationAccepted": True, "defectCodes": [], "unsupportedReason": None}
+        with self.assertRaisesRegex(qual.QualificationError, "the contract derives"):
+            qual.decision_from_review(emission)
+
+    def test_decisions_that_contradict_the_contract_are_refused(self):
+        with self.assertRaisesRegex(qual.QualificationError, "cannot also be accepted"):
             qual.normalize_decision({"semanticAccepted": True, "presentationAccepted": False,
-                                     "defectCodes": ["unsupported"], "unsupportedReason": "no crossing primitive"})
-        with self.assertRaises(qual.QualificationError):
+                                     "defectCodes": ["judge.uncertain"],
+                                     "unsupportedReason": "no crossing primitive"})
+        with self.assertRaisesRegex(qual.QualificationError, "outside the contract namespaces"):
             qual.normalize_decision({"semanticAccepted": False, "presentationAccepted": False,
-                                     "defectCodes": ["invented-code"], "unsupportedReason": None})
+                                     "defectCodes": ["mechanism-mismatch"], "unsupportedReason": None})
+        with self.assertRaisesRegex(qual.QualificationError, "blocking defect code"):
+            qual.normalize_decision({"semanticAccepted": True, "presentationAccepted": False,
+                                     "defectCodes": ["scenario.mechanism"], "unsupportedReason": None})
+        with self.assertRaisesRegex(qual.QualificationError, "scenario itself was rejected"):
+            qual.normalize_decision({"semanticAccepted": False, "presentationAccepted": True,
+                                     "defectCodes": [], "unsupportedReason": None})
+
+    def test_deterministic_stage_codes_are_contract_evidence(self):
+        # The deterministic stages extend the contract's namespaces; those codes are
+        # evidence, and only a code outside every namespace is refused.
+        for code in ("simulation.collision.contract_violation", "render.camera.composition_failed",
+                     "scenario.no_eligible_simulation", "scenario.gate"):
+            self.assertTrue(review.is_contract_code(code), code)
+            self.assertEqual(qual.normalize_decision(
+                {"semanticAccepted": False, "presentationAccepted": False,
+                 "defectCodes": [code], "unsupportedReason": None})["defectCodes"], [code])
+        self.assertFalse(review.is_contract_code("legacy.collision"))
+        self.assertFalse(review.is_contract_code("scenario."))
+
+
+class StaleContractTest(unittest.TestCase):
+    """A superseded contract can never be read as a current verdict."""
+
+    V4 = {"cellId": "cell-a", "version": "showcase-3d-product-review-v4", "mechanismFidelity": "yes",
+          "visualGrounding": "pass", "actorFidelity": "pass", "eventSequence": "pass",
+          "plausible": True, "realism": 8.0, "confidence": 0.9, "defects": [],
+          "explanation": "the requested mechanism happens on camera"}
+
+    def test_v4_reviewer_emission_is_refused(self):
+        with self.assertRaisesRegex(qual.QualificationError, "showcase-3d-product-review-v4"):
+            qual.decision_from_review(self.V4)
+
+    def test_an_emission_without_contract_identity_is_refused(self):
+        anonymous = {key: value for key, value in self.V4.items() if key != "version"}
+        with self.assertRaisesRegex(qual.QualificationError, "no review contract identity"):
+            qual.decision_from_review(anonymous)
+
+    def test_a_judge_document_from_a_superseded_contract_is_refused(self):
+        superseded = _judge_document([_judged_cell("cell-a", _emission())],
+                                     contract={**review.contract_identity(), "sha256": "0" * 64})
+        with self.assertRaisesRegex(qual.QualificationError, "names review contract hash"):
+            qual.attempt_outcome({"number": 1, "status": "complete"}, judge=superseded)
+
+    def test_a_product_decision_from_a_superseded_contract_is_refused(self):
+        stale = _product_document([_judged_cell("cell-a", _emission())],
+                                  contract={"version": "showcase-acceptance-contract-v0",
+                                            "sha256": "0" * 64,
+                                            "reviewVersion": "showcase-3d-product-review-v4"})
+        with self.assertRaisesRegex(qual.QualificationError, "showcase-3d-product-review-v4"):
+            qual.attempt_outcome({"number": 1, "status": "complete"}, product=stale)
+
+    def test_a_gold_manifest_bound_to_v4_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entry = _write_evidence(root, "cell-a", b"footage-a")
+            v4 = {"fields": list(qual.DECISION_FIELDS),
+                  "defectCodes": ["actor-mismatch", "grounding-failure", "implausible", "low-realism",
+                                  "mechanism-mismatch", "sequence-mismatch", "unsupported",
+                                  "visible-defect"],
+                  "reviewVersion": "showcase-3d-product-review-v4", "realismMin": 6.0}
+            with self.assertRaisesRegex(qual.QualificationError, "showcase-3d-product-review-v4"):
+                qual.load_gold(_seal(root, [entry], v4), root)
+
+    def test_a_manifest_missing_the_contract_hash_is_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entry = _write_evidence(root, "cell-a", b"footage-a")
+            unbound = {key: value for key, value in qual.gold_contract_block().items() if key != "sha256"}
+            with self.assertRaisesRegex(qual.QualificationError, "names review contract hash"):
+                qual.load_gold(_seal(root, [entry], unbound), root)
+
+    def test_labels_survive_a_reseal_without_being_re_expressed(self):
+        # Resealing binds new contract metadata; it must not invent, translate, or
+        # drop a human decision.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            labelled = {**_write_evidence(root, "cell-a", b"footage-a"),
+                        "label": _human_label(True, True)}
+            unlabelled = _write_evidence(root, "cell-b", b"footage-b")
+            path = _seal(root, [labelled, unlabelled])
+            carried = qual.carried_gold_labels(path)
+            self.assertEqual(carried[labelled["video"]["sha256"]]["label"],
+                             {"labeler": "hana.ito", "labeledAt": "2026-08-18T09:00:00Z",
+                              "semanticAccepted": True, "presentationAccepted": True,
+                              "defectCodes": [], "unsupportedReason": None})
+            self.assertIsNone(carried[unlabelled["video"]["sha256"]]["label"])
+            manifest = json.loads(path.read_text())
+            manifest["reviewContract"] = {**qual.gold_contract_block(), "sha256": "0" * 64}
+            manifest["manifestSha256"] = qual.gold_seal(manifest)
+            resealed = root / "resealed.json"
+            qual.dump_json(resealed, manifest)
+            # The predecessor is readable for its labels even though it is not current.
+            self.assertEqual(qual.carried_gold_labels(resealed), carried)
+            with self.assertRaisesRegex(qual.QualificationError, "names review contract hash"):
+                qual.load_gold(resealed, root)
+
+    def test_a_label_in_a_superseded_vocabulary_is_refused_not_translated(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            entry = {**_write_evidence(root, "cell-a", b"footage-a"),
+                     "label": _human_label(False, False, ["mechanism-mismatch"])}
+            with self.assertRaisesRegex(qual.QualificationError, "outside the contract namespaces"):
+                qual.carried_gold_labels(_seal(root, [entry]))
 
 
 class GoldManifestTest(unittest.TestCase):
@@ -305,12 +472,14 @@ class GoldManifestTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             entry = _write_evidence(root, "cell-a", b"footage-a")
-            inferred = {**_human_label(True), "model": "gpt-5.6-sol", "confidence": 0.9}
-            with self.assertRaisesRegex(qual.QualificationError, "model provenance"):
-                qual.load_gold(_seal(root, [{**entry, "label": inferred}]), root)
-            named = {**_human_label(True), "labeler": "gpt-5.6-sol"}
-            with self.assertRaisesRegex(qual.QualificationError, "names a model"):
-                qual.load_gold(_seal(root, [{**entry, "label": named}]), root)
+            for inferred, message in (
+                ({**_human_label(True), "model": "gpt-5.6-sol", "confidence": 0.9}, "model provenance"),
+                ({**_human_label(True), "contract": review.contract_identity()}, "model provenance"),
+                ({**_human_label(True), "acceptance": {"tier": "3d"}}, "model provenance"),
+                ({**_human_label(True), "labeler": "gpt-5.6-sol"}, "names a model"),
+            ):
+                with self.assertRaisesRegex(qual.QualificationError, message):
+                    qual.load_gold(_seal(root, [{**entry, "label": inferred}]), root)
             manifest = json.loads(_seal(root, [{**entry, "label": _human_label(True)}]).read_text())
             manifest["labelProvenance"] = "model"
             path = root / "inferred.json"
@@ -323,18 +492,39 @@ class GoldManifestTest(unittest.TestCase):
             root = Path(tmp)
             supported = {**_write_evidence(root, "cell-a", b"footage-a"), "label": _human_label(True)}
             unsupported = {**_write_evidence(root, "cell-b", b"footage-b"),
-                           "label": _human_label(False, False, ["unsupported"], "no reversible-lane primitive")}
+                           "label": _human_label(False, False, ["judge.uncertain"],
+                                                 "no reversible-lane primitive")}
             manifest = qual.load_gold(_seal(root, [supported, unsupported]), root)
             self.assertEqual(sorted(entry["evidenceId"] for entry in manifest["entries"]), ["cell-a", "cell-b"])
             self.assertEqual([entry["evidenceId"] for entry in qual.eligible_gold(manifest).values()], ["cell-a"])
+            with self.assertRaisesRegex(qual.QualificationError, "human labels"):
+                qual.build_calibration({**manifest, "labelProvenance": "model"}, [], 3)
 
 
 class CalibrationTest(unittest.TestCase):
     @staticmethod
     def _review(digest, repetition, semantic_accepted, realism, presentation=True):
         return {"videoSha256": digest, "repetition": repetition, "reviewVersion": qual.REVIEW_VERSION,
+                "contractVersion": qual.CONTRACT_VERSION, "contractSha256": qual.CONTRACT_SHA256,
                 "realism": realism, "semanticAccepted": semantic_accepted,
-                "presentationAccepted": presentation, "defectCodes": [], "unsupportedReason": None}
+                "presentationAccepted": semantic_accepted and presentation,
+                "defectCodes": [] if semantic_accepted else ["scenario.mechanism"],
+                "unsupportedReason": None}
+
+    def test_repeated_rows_project_the_canonical_evaluator_output(self):
+        emission = _emission(defects=[{"code": "render.camera.framing", "text": "event is cropped"}])
+        row = qual.review_row(emission, gold_sha256="f" * 64, evidence_id="cell-a",
+                              video_sha256="a" * 64, repetition=2)
+        self.assertEqual(row["contractSha256"], review.CONTRACT_SHA256)
+        self.assertEqual(row["contractVersion"], review.CONTRACT_VERSION)
+        self.assertEqual(row["reviewVersion"], review.REVIEW_VERSION)
+        self.assertEqual(row["realism"], 8.0)
+        self.assertEqual(row["defectCodes"], ["render.camera.framing"])
+        self.assertEqual({field: row[field] for field in qual.DECISION_FIELDS},
+                         qual.decision_from_review(emission))
+        # Semantics survive a presentation defect; the contract decides both separately.
+        self.assertTrue(row["semanticAccepted"])
+        self.assertFalse(row["presentationAccepted"])
 
     def test_repetitions_group_by_evidence_digest_not_by_name(self):
         digest_a, digest_b = "a" * 64, "b" * 64
@@ -346,9 +536,20 @@ class CalibrationTest(unittest.TestCase):
         with self.assertRaisesRegex(qual.QualificationError, "exactly 3"):
             qual.group_reviews_by_evidence(reviews[:-1], 3)
 
+    def test_mixed_contract_hashes_are_refused(self):
+        digest = "a" * 64
+        reviews = [self._review(digest, n, True, 8.0) for n in (1, 2, 3)]
+        reviews[2] = {**reviews[2], "contractSha256": "0" * 64}
+        with self.assertRaisesRegex(qual.QualificationError, "names review contract hash"):
+            qual.group_reviews_by_evidence(reviews, 3)
+        reviews[2] = {**reviews[2], "contractSha256": qual.CONTRACT_SHA256,
+                      "reviewVersion": "showcase-3d-product-review-v4"}
+        with self.assertRaisesRegex(qual.QualificationError, "showcase-3d-product-review-v4"):
+            qual.group_reviews_by_evidence(reviews, 3)
+
     def test_confusion_flip_and_realism_spread(self):
         digest_a, digest_b = "a" * 64, "b" * 64
-        gold = {digest_a: {"label": _human_label(True)}, digest_b: {"label": _human_label(False)}}
+        gold = {digest_a: {"label": _human_label(True)}, digest_b: {"label": _human_label(False, False)}}
         groups = qual.group_reviews_by_evidence(
             [self._review(digest_a, 1, True, 8.0), self._review(digest_a, 2, True, 8.0),
              self._review(digest_a, 3, False, 5.0),
@@ -362,11 +563,56 @@ class CalibrationTest(unittest.TestCase):
         flips = qual.flip_rates(groups)
         self.assertEqual(flips["rate"], 0.5)
         self.assertEqual(flips["byField"]["semanticAccepted"]["flipped"], 1)
-        self.assertEqual(flips["byField"]["presentationAccepted"]["flipped"], 0)
+        self.assertEqual(flips["byField"]["presentationAccepted"]["flipped"], 1)
         realism = qual.realism_dispersion(groups)
         self.assertEqual(realism["byEvidence"][digest_b], 0.0)
         self.assertGreater(realism["byEvidence"][digest_a], 0.0)
         self.assertEqual(realism["maxSd"], realism["byEvidence"][digest_a])
+
+
+class StageListTest(unittest.TestCase):
+    """The stage lists must name the artifacts the integrated pipeline writes."""
+
+    def test_stage_list_is_the_integrated_pipeline(self):
+        self.assertEqual(qual.STAGES, (
+            "00-brief", "10-route", "15-precheck", "20-author", "30-sites", "40-cells", "50-gate",
+            "55-eligibility", "60-render2d", "65-render3d", "70-judge", "75-product",
+            "80-presentation-retry", "80-reauthor-01", "90-gallery", "95-benchmark"))
+        self.assertNotIn("80-repair", qual.STAGES)
+        self.assertEqual(qual.OPTIONAL_STAGES, ("80-presentation-retry", "80-reauthor-01"))
+        self.assertEqual(qual.REQUIRED_STAGES,
+                         tuple(stage for stage in qual.STAGES if stage not in qual.OPTIONAL_STAGES))
+        self.assertEqual(qual.STAGE_OUTCOMES,
+                         ("pending", "running", "reused", "complete", "skipped", "failed", "error"))
+
+    def test_committed_breadth_config_declares_those_exact_stages(self):
+        config = json.loads((REPO / "apps/showcase/campaigns/breadth.json").read_text())
+        self.assertEqual(config["stages"], list(qual.STAGES))
+        self.assertEqual(config["requiredStages"], list(qual.REQUIRED_STAGES))
+        self.assertEqual(config["stageOutcomeVocabulary"], list(qual.STAGE_OUTCOMES))
+        for override, message in (({"requiredStages": list(qual.STAGES)}, "optional retry branches"),
+                                  ({"stages": list(qual.STAGES)[:-1]}, "exact showcase pipeline stages"),
+                                  ({"stageOutcomeVocabulary": ["pending"]}, "stageOutcomeVocabulary")):
+            with tempfile.TemporaryDirectory() as tmp:
+                path = Path(tmp) / "breadth.json"
+                path.write_text(json.dumps({**config, **override}))
+                with self.assertRaisesRegex(qual.QualificationError, message):
+                    qual.load_breadth(path)
+
+    def test_attempt_records_report_stages_in_the_current_vocabulary(self):
+        facts = qual.attempt_record_facts(_attempt_record(
+            stages=(("55-eligibility", "complete"), ("70-judge", "reused"),
+                    ("80-reauthor", "failed"), ("75-product", "complete"))))
+        self.assertEqual(facts["stageOutcomes"], {"55-eligibility": "complete", "70-judge": "reused",
+                                                 "80-reauthor-01": "failed", "75-product": "complete"})
+        self.assertEqual(facts["furthestStage"], "presentation")
+        self.assertEqual(facts["attemptRecord"], qual.ATTEMPT_RECORD_SCHEMA)
+        with self.assertRaisesRegex(qual.QualificationError, "not a stage outcome"):
+            qual.attempt_record_facts(_attempt_record(stages=(("70-judge", "cached"),)))
+        with self.assertRaisesRegex(qual.QualificationError, "not a pipeline stage"):
+            qual.attempt_record_facts(_attempt_record(stages=(("80-repair", "complete"),)))
+        with self.assertRaisesRegex(qual.QualificationError, "is not showcase-benchmark-attempt"):
+            qual.attempt_record_facts({"schema": "showcase-benchmark-attempt/v0", "funnel": {}})
 
 
 class BreadthAndQualificationConfigTest(unittest.TestCase):
@@ -377,6 +623,7 @@ class BreadthAndQualificationConfigTest(unittest.TestCase):
         self.assertEqual(len(expected), 67)
         self.assertEqual(breadth["caseIds"], expected)
         self.assertEqual(breadth["caseCount"], 67)
+        self.assertEqual(len(set(breadth["caseIds"])), 67)
         for case in breadth["cases"]:
             self.assertEqual(sorted(case["stageOutcomes"]), sorted(qual.STAGES))
             self.assertEqual(set(case["stageOutcomes"].values()), {"pending"})
@@ -389,8 +636,20 @@ class BreadthAndQualificationConfigTest(unittest.TestCase):
         self.assertEqual(config["exit"], {"semanticYieldMin": 0.3, "casesMeetingYieldMin": 2,
                                           "reviewerFlipRateMax": 0.15, "maxOperationalFailures": 0,
                                           "reviewRepetitions": 3, "minimumGoldLabels": 12})
+        self.assertEqual(config["reviewContract"], qual.contract_binding())
         for case in config["cases"]:
             self.assertIn(case["breadthCaseId"], breadth["caseIds"])
+
+    def test_qualification_config_bound_to_a_superseded_contract_fails_closed(self):
+        breadth = qual.load_breadth(REPO / "apps/showcase/campaigns/breadth.json")
+        config = json.loads((REPO / "apps/showcase/campaigns/qualification.json").read_text())
+        config["reviewContract"] = {"version": "showcase-acceptance-contract-v1", "sha256": "0" * 64,
+                                    "reviewVersion": "showcase-3d-product-review-v4"}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "qualification.json"
+            path.write_text(json.dumps(config))
+            with self.assertRaisesRegex(qual.QualificationError, "showcase-3d-product-review-v4"):
+                qual.load_qualification(path, breadth)
 
     def test_qualification_case_outside_the_breadth_set_fails_closed(self):
         breadth = qual.load_breadth(REPO / "apps/showcase/campaigns/breadth.json")
@@ -406,12 +665,101 @@ class BreadthAndQualificationConfigTest(unittest.TestCase):
         manifest = qual.load_gold(REPO / "apps/showcase/campaigns/reviewer-gold.json", REPO)
         self.assertEqual(len(manifest["entries"]), 24)
         self.assertTrue(all(entry["video"]["file"].endswith("rollout.mp4") for entry in manifest["entries"]))
+        self.assertEqual(manifest["reviewContract"], qual.gold_contract_block())
+        # Nothing in this cutover invented a human label.
+        self.assertEqual([entry["evidenceId"] for entry in manifest["entries"] if entry["label"]], [])
+
+
+class ProductAuthorityTest(unittest.TestCase):
+    """`75-product.json` is the deliverable decision; nothing outranks it."""
+
+    ATTEMPT = {"number": 1, "status": "complete", "jobId": "job-1"}
+
+    def test_product_decision_outranks_the_judge_verdict(self):
+        accepted = _judged_cell("cell-a", _emission())
+        # The gate rejected this cell before any reviewer saw it, and topK rationed the
+        # presentation: neither fact is expressible in the judge's own row.
+        product = _product_document([{**accepted, "semanticAccepted": False,
+                                      "presentationAccepted": False,
+                                      "defectCodes": ["scenario.gate"]}])
+        row = qual.attempt_outcome(self.ATTEMPT, product=product,
+                                   judge=_judge_document([accepted]),
+                                   record=_attempt_record("3d-ok"))
+        self.assertEqual(row["evidence"], "75-product.json")
+        self.assertEqual(row["outcome"], "semantic-rejected")
+        self.assertEqual(row["defectCodes"], ["scenario.gate"])
+        self.assertFalse(row["decision"]["semanticAccepted"])
+
+    def test_judge_is_read_only_when_no_product_decision_exists(self):
+        row = qual.attempt_outcome(self.ATTEMPT,
+                                   judge=_judge_document([_judged_cell("cell-a", _emission())]),
+                                   record=_attempt_record())
+        self.assertEqual(row["evidence"], "70-judge.json")
+        self.assertEqual(row["outcome"], "semantic-accepted")
+        self.assertTrue(row["decision"]["presentationAccepted"])
+        self.assertEqual(row["furthestStage"], "presentation")
+
+    def test_a_promoted_retry_is_reported_from_the_product_decision(self):
+        cell = _judged_cell("cell-a", _emission())
+        product = _product_document([{**cell, "renderDir": "80-presentation-retry/65-render3d/cell-a"}],
+                                    acceptedAttempt="80-presentation-retry")
+        row = qual.attempt_outcome(self.ATTEMPT, product=product, judge=_judge_document([cell]),
+                                   record=_attempt_record(stages=(("80-presentation-retry", "complete"),
+                                                                  ("75-product", "complete"))))
+        self.assertEqual(row["outcome"], "semantic-accepted")
+        self.assertEqual(row["acceptedAttempt"], "80-presentation-retry")
+        self.assertEqual(row["renderDir"], "80-presentation-retry/65-render3d/cell-a")
+        self.assertEqual(row["stageOutcomes"]["80-presentation-retry"], "complete")
+
+    def test_the_shipped_cell_decides_an_attempt_with_mixed_cells(self):
+        rejected = _judged_cell("cell-a", _emission(mechanismFidelity="no"))
+        accepted = _judged_cell("cell-b", _emission())
+        row = qual.attempt_outcome(self.ATTEMPT, product=_product_document([rejected, accepted]))
+        self.assertEqual(row["outcome"], "semantic-accepted")
+        self.assertEqual(row["renderDir"], "65-render3d/cell-b")
+        # The rejected cell's codes stay visible as evidence beside the decision.
+        self.assertEqual(row["defectCodes"], ["scenario.mechanism"])
+        self.assertEqual(row["decision"]["defectCodes"], [])
+
+    def test_a_skipped_review_is_operational_not_a_rejection(self):
+        skipped = {"status": "skipped", "reason": "OpenAI gateway unavailable at 127.0.0.1:4141",
+                   "contract": review.contract_identity(), "cells": []}
+        row = qual.attempt_outcome(self.ATTEMPT, judge=skipped, record=_attempt_record("3d-ok"))
+        self.assertEqual(row["outcome"], "operational-failure")
+        self.assertIsNone(row["decision"])
+        self.assertEqual(row["evidence"], "70-judge.json")
+
+    def test_a_censored_attempt_record_keeps_the_attempt_out_of_the_yield(self):
+        censored = _attempt_record("3d-ok", outcome={
+            "kind": "operational-failure", "censoredAtStage": "semantic-3d", "failedStage": "70-judge",
+            "operational": {"class": "model-access", "detail": "HTTP 429: rate_limit_error"}})
+        row = qual.attempt_outcome(self.ATTEMPT, record=censored,
+                                   product=_product_document([_judged_cell("cell-a", _emission())]))
+        self.assertEqual(row["outcome"], "operational-failure")
+        self.assertEqual(row["censoredAtStage"], "semantic-3d")
+        self.assertIsNone(row["decision"])
+
+    def test_unsupported_attempts_carry_no_manufactured_defect_code(self):
+        row = qual.attempt_outcome({"number": 1, "status": "complete",
+                                    "unsupportedReason": "no reversible-lane primitive"})
+        self.assertEqual(row["outcome"], "unsupported")
+        self.assertEqual(row["unsupportedReason"], "no reversible-lane primitive")
+        self.assertIsNone(row["decision"])
+        self.assertEqual(row["defectCodes"], [])
+
+    def test_contract_reported_unsupported_evidence_is_representability_too(self):
+        blind = _judged_cell("cell-a", _emission(confidence=0.1))
+        row = qual.attempt_outcome(self.ATTEMPT, product=_product_document([blind]))
+        self.assertEqual(row["outcome"], "unsupported")
+        self.assertIsNotNone(row["unsupportedReason"])
+        self.assertEqual(row["decision"]["defectCodes"], ["judge.uncertain"])
 
 
 class ExitEvaluatorTest(unittest.TestCase):
-    CALIBRATION = {"schema": qual.CALIBRATION_SCHEMA, "reviewVersion": qual.REVIEW_VERSION,
-                   "goldSha256": "0" * 64, "repetitions": 3, "labelledEvidence": 12,
-                   "flip": {"rate": 0.08, "byField": {}}, "realism": {"meanSd": 0.4}}
+    CALIBRATION = {"schema": qual.CALIBRATION_SCHEMA, "reviewContract": qual.contract_binding(),
+                   "reviewVersion": qual.REVIEW_VERSION, "goldSha256": "0" * 64, "repetitions": 3,
+                   "labelledEvidence": 12, "flip": {"rate": 0.08, "byField": {}},
+                   "realism": {"meanSd": 0.4}}
 
     def _config(self):
         breadth = qual.load_breadth(REPO / "apps/showcase/campaigns/breadth.json")
@@ -424,14 +772,14 @@ class ExitEvaluatorTest(unittest.TestCase):
             if number <= operational:
                 rows.append(qual.attempt_outcome({"number": number, "status": "failed"}))
                 continue
-            realism = 8.0 if number <= operational + accepted else 3.0
+            good = number <= operational + accepted
+            cell = _judged_cell("cell-a", _emission(mechanismFidelity="yes" if good else "no",
+                                                    realism=8.0 if good else 3.0))
             rows.append(qual.attempt_outcome(
                 {"number": number, "status": "complete", "jobId": f"job-{number}"},
-                {"cells": [{"status": "complete", "threeDReview": {
-                    "version": qual.REVIEW_VERSION,
-                    "mechanismFidelity": "yes" if number <= operational + accepted else "no",
-                    "visualGrounding": "pass", "actorFidelity": "pass", "eventSequence": "pass",
-                    "plausible": True, "realism": realism, "defects": []}}]}))
+                product=_product_document([cell]),
+                record=_attempt_record("presentation" if good else "3d-ok",
+                                       stages=(("75-product", "complete"),))))
         return rows
 
     def test_operational_failures_are_not_semantic_verdicts(self):
@@ -441,12 +789,10 @@ class ExitEvaluatorTest(unittest.TestCase):
         self.assertEqual(summary["countedAttempts"], 8)
         self.assertEqual(summary["semanticAccepted"], 3)
         self.assertEqual(summary["semanticYield"], 0.375)
-
-    def test_unsupported_attempts_are_counted_as_representability(self):
-        row = qual.attempt_outcome({"number": 1, "status": "complete",
-                                    "unsupportedReason": "no reversible-lane primitive"})
-        self.assertEqual(row["outcome"], "unsupported")
-        self.assertEqual(row["decision"]["defectCodes"], ["unsupported"])
+        # The stage facts come from the attempt records, not from the decision.
+        self.assertEqual(summary["attemptRecords"], 8)
+        self.assertEqual(summary["productDecisions"], 8)
+        self.assertEqual(summary["furthestStages"], {"3d-ok": 5, "presentation": 3})
 
     def test_two_of_three_cases_at_thirty_percent_qualifies(self):
         config = self._config()
@@ -458,6 +804,8 @@ class ExitEvaluatorTest(unittest.TestCase):
         self.assertTrue(verdict["qualified"])
         self.assertEqual(verdict["exitCode"], 0)
         self.assertEqual(verdict["blockers"], [])
+        self.assertEqual(verdict["reviewContract"], qual.contract_binding())
+        self.assertEqual(verdict["totals"]["productDecisions"], 30)
 
     def test_one_case_at_yield_blocks_the_restart(self):
         config = self._config()
@@ -495,6 +843,13 @@ class ExitEvaluatorTest(unittest.TestCase):
         config = self._config()
         with self.assertRaisesRegex(qual.QualificationError, "repetitions"):
             qual.evaluate_exit(config, {**self.CALIBRATION, "repetitions": 2},
+                               {case: self._outcomes(accepted=5) for case in config["caseIds"]})
+
+    def test_calibration_from_a_superseded_contract_is_refused(self):
+        config = self._config()
+        stale = {**self.CALIBRATION, "reviewContract": {**qual.contract_binding(), "sha256": "0" * 64}}
+        with self.assertRaisesRegex(qual.QualificationError, "names review contract hash"):
+            qual.evaluate_exit(config, stale,
                                {case: self._outcomes(accepted=5) for case in config["caseIds"]})
 
     def test_a_short_run_is_refused_rather_than_scored(self):

@@ -6,7 +6,11 @@
   "attemptsPerCase": 10,
   "breadthConfig": "apps/showcase/campaigns/breadth.json",
   "goldManifest": "apps/showcase/campaigns/reviewer-gold.json",
-  "reviewVersion": "showcase-3d-product-review-v4",
+  "reviewContract": {
+    "version": "showcase-acceptance-contract-v1",
+    "sha256": "ab1ab5408b022bee6c0fefc66a3cd981c5b58d1318ce88bd698d8c7ad1df5f7f",
+    "reviewVersion": "showcase-3d-review-v5"
+  },
   "cases": [
     {
       "id": "blocked-normal-path",
@@ -36,8 +40,9 @@
     "minimumGoldLabels": 12
   },
   "notes": [
-    "semanticYield counts attempts whose reviewer decision has semanticAccepted true, over attempts that reached a decision. Operational failures are never a semantic verdict and stay out of the denominator; they are gated separately by maxOperationalFailures.",
+    "semanticYield counts attempts whose contract decision has semanticAccepted true, over attempts that reached a decision. Operational failures are never a semantic verdict and stay out of the denominator; they are gated separately by maxOperationalFailures.",
+    "Attempt evidence authority follows the pipeline: 75-product.json is the deliverable decision, 70-judge.json is the current-contract source evidence consulted only when no product decision was written, and 95-benchmark.json supplies the stage and funnel facts.",
     "crossing-VRU keeps the qualification-facing name while breadthCaseId names the lowercase campaign slug that a runner submits.",
-    "The exit evaluator refuses to run against calibration produced from a different gold manifest, a different reviewer version, or a different repetition count."
+    "The exit evaluator refuses to run against calibration produced from a different gold manifest, a superseded review contract hash, or a different repetition count."
   ]
 }

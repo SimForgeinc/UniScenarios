@@ -13,11 +13,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Unprotected left turn across dense traffic"
     },
@@ -32,11 +36,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Four-way stops with hesitant or aggressive drivers"
     },
@@ -51,11 +59,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Drivers waving you through against right-of-way"
     },
@@ -70,11 +82,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Pedestrian will-they-won't-they crossing mid-block"
     },
@@ -89,11 +105,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Double-parked vehicles forcing informal lane negotiation"
     },
@@ -108,11 +128,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Narrow residential streets with parked cars on both sides"
     },
@@ -127,11 +151,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Highway zipper merge where drivers refuse to cooperate"
     },
@@ -146,11 +174,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "School bus loading or unloading with unpredictable kids"
     },
@@ -165,11 +197,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Driver backing out of driveway without clear visibility"
     },
@@ -184,11 +220,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Funeral processions or police escorts ignoring normal rules"
     },
@@ -203,11 +243,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Large SUV blocking view of crosswalk"
     },
@@ -222,11 +266,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Box truck blocking right turn sight line"
     },
@@ -241,11 +289,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Blind crest of hill with stopped traffic beyond"
     },
@@ -260,11 +312,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Construction barriers creating visual tunnels"
     },
@@ -279,11 +335,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Parked cars hiding a running child"
     },
@@ -298,11 +358,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Dense rain fog or glare at sunset"
     },
@@ -317,11 +381,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Snowbanks narrowing the roadway"
     },
@@ -336,11 +404,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Flashing emergency lights overwhelming camera exposure"
     },
@@ -355,11 +427,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Police manually directing traffic against a signal"
     },
@@ -374,11 +450,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Construction worker using hand signals"
     },
@@ -393,11 +473,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Flashing yellow arrows changing turn logic"
     },
@@ -412,11 +496,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Reversible commuter lanes"
     },
@@ -431,11 +519,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Detours with unclear signage"
     },
@@ -450,11 +542,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Stoplight blackout becoming an implicit four-way stop"
     },
@@ -469,11 +565,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Snow-covered lane markings"
     },
@@ -488,11 +588,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Gas stations with cars moving in all directions"
     },
@@ -507,11 +611,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Drive-thru lanes crossing pedestrian walkways"
     },
@@ -526,11 +634,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Drop-off zones at airports"
     },
@@ -545,11 +657,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "RV campgrounds"
     },
@@ -564,11 +680,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Private roads with non-standard markings"
     },
@@ -583,11 +703,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Dirt or gravel lots with no lane markings"
     },
@@ -602,11 +726,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Event overflow parking on grass fields"
     },
@@ -621,11 +749,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Tire debris in lane"
     },
@@ -640,11 +772,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Mattress or ladder falling off a truck"
     },
@@ -659,11 +795,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Animal darting into the freeway"
     },
@@ -678,11 +818,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Person chasing a dog into the road"
     },
@@ -697,11 +841,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Car doing an illegal U-turn in an intersection"
     },
@@ -716,11 +864,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Driver reversing on a freeway shoulder"
     },
@@ -735,11 +887,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Rolling runaway shopping cart"
     },
@@ -754,11 +910,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Motorcycle lane splitting at high speed"
     },
@@ -773,11 +933,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Driver exiting a vehicle into a traffic lane"
     },
@@ -792,11 +956,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Aggressive tailgating"
     },
@@ -811,11 +979,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Road rage behavior"
     },
@@ -830,11 +1002,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Driver drifting across a lane while texting"
     },
@@ -849,11 +1025,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Cyclist swerving unpredictably"
     },
@@ -868,11 +1048,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Scooter weaving between cars"
     },
@@ -887,11 +1071,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Pedestrian walking while staring at a phone"
     },
@@ -906,11 +1094,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Elderly pedestrian moving slowly mid-intersection"
     },
@@ -925,11 +1117,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Newly painted lanes not reflected in the HD map"
     },
@@ -944,11 +1140,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Temporary road widening"
     },
@@ -963,11 +1163,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Faded lane markings"
     },
@@ -982,11 +1186,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Misaligned lane reflectors"
     },
@@ -1001,11 +1209,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Private driveway mistaken for a road"
     },
@@ -1020,11 +1232,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Human drivers testing an AV by cutting in aggressively"
     },
@@ -1039,11 +1255,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Other AVs behaving hyper-cautiously"
     },
@@ -1058,11 +1278,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Human intentionally confusing an AV"
     },
@@ -1077,11 +1301,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Ride-share curb chaos"
     },
@@ -1096,11 +1324,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Robot delivery carts crossing the street"
     },
@@ -1115,11 +1347,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Hydroplaning onset"
     },
@@ -1134,11 +1370,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Black ice"
     },
@@ -1153,11 +1393,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Sudden crosswinds"
     },
@@ -1172,11 +1416,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Flash flooding"
     },
@@ -1191,11 +1439,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Snow accumulation altering road geometry"
     },
@@ -1210,11 +1462,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Fog causing sensor disagreement"
     },
@@ -1229,11 +1485,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "School arrival and departure areas"
     },
@@ -1248,11 +1508,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Parking lot navigation with heavy traffic"
     },
@@ -1267,11 +1531,15 @@
         "30-sites": "pending",
         "40-cells": "pending",
         "50-gate": "pending",
+        "55-eligibility": "pending",
         "60-render2d": "pending",
         "65-render3d": "pending",
         "70-judge": "pending",
-        "80-repair": "pending",
-        "90-gallery": "pending"
+        "75-product": "pending",
+        "80-presentation-retry": "pending",
+        "80-reauthor-01": "pending",
+        "90-gallery": "pending",
+        "95-benchmark": "pending"
       },
       "title": "Accident or construction blocking normal path"
     }
@@ -1285,20 +1553,25 @@
     "30-sites",
     "40-cells",
     "50-gate",
+    "55-eligibility",
     "60-render2d",
     "65-render3d",
     "70-judge",
-    "90-gallery"
+    "75-product",
+    "90-gallery",
+    "95-benchmark"
   ],
   "schema": "uniscenarios.showcase-breadth.v1",
   "source": "apps/showcase/campaigns/edge-cases.json",
-  "sourceSha256": "c2ef31a60e1737227270d81ce7c0e0b49f07106124597b91b88cc8f2df4713a5",
+  "sourceSha256": "cff90373d43a4518e80c5ea48165adfaf8c38f81b5756289150b06382fce4387",
   "stageOutcomeVocabulary": [
     "pending",
     "running",
+    "reused",
     "complete",
     "skipped",
-    "failed"
+    "failed",
+    "error"
   ],
   "stages": [
     "00-brief",
@@ -1308,10 +1581,14 @@
     "30-sites",
     "40-cells",
     "50-gate",
+    "55-eligibility",
     "60-render2d",
     "65-render3d",
     "70-judge",
-    "80-repair",
-    "90-gallery"
+    "75-product",
+    "80-presentation-retry",
+    "80-reauthor-01",
+    "90-gallery",
+    "95-benchmark"
   ]
 }

@@ -5,7 +5,9 @@
 review prompt, the acceptance predicates, the defect taxonomy, and the retry
 policy.  `apps/showcase/server/review-contract.mjs` is the JavaScript mirror of
 this module: both hash the same canonical body and must agree on every
-conformance vector the contract carries.
+conformance vector the contract carries.  `decision_contradictions` and
+`is_contract_code` are Python-side only because only Python reads decisions it did
+not derive -- the human gold labels the qualification workflow calibrates against.
 
 Semantic acceptance answers "does this render show the requested scenario".
 Presentation acceptance additionally answers "is this footage usable".  Every
@@ -70,17 +72,82 @@ _RETRY = CONTRACT['retry']
 
 FALLBACK_CODE = _DEFECTS['fallbackCode']
 CODES = tuple(_DEFECTS['codes'])
+PREFIXES = tuple(_DEFECTS['prefixes'])
 AXIS_CODES = _DEFECTS['axisCodes']
 MAX_DEFECTS = _DEFECTS['maxDefects']
 MAX_TEXT = _DEFECTS['maxTextLength']
 FULL_TIER = '3d'
+# The acceptance thresholds, published so a consumer binds the contract's own
+# numbers instead of restating them.
+REALISM_MIN = _SEMANTIC['realismMin']
+CONFIDENCE_MIN = _SEMANTIC['confidenceMin']
+PRESENTATION_REQUIRES_SEMANTIC = bool(_PRESENTATION['requiresSemantic'])
 _TIER_AXES = tuple(_SEMANTIC['axes'])
 _RULES = tuple((rule['code'], re.compile(rule['pattern'], re.IGNORECASE)) for rule in _DEFECTS['rules'])
+
+
+def _blocked(codes, prefixes):
+    """Whether any defect code falls in a namespace the predicate rejects on."""
+    return any(str(code).startswith(prefix) for code in codes for prefix in prefixes)
+
+
+def is_contract_code(code):
+    """Whether a defect code belongs to this contract at all.
+
+    `CODES` is the vocabulary a *reviewer* may attribute to.  The deterministic
+    stages extend the same namespaces with more specific codes
+    (`simulation.collision.contract_violation`, `render.camera.composition_failed`),
+    and every predicate here reads namespaces rather than exact codes, so a
+    namespaced extension is contract evidence too.
+    """
+    if not isinstance(code, str) or not code:
+        return False
+    return code in CODES or any(code.startswith(prefix) and len(code) > len(prefix) for prefix in PREFIXES)
 
 
 def contract_identity():
     return {'version': CONTRACT_VERSION, 'sha256': CONTRACT_SHA256,
             'reviewVersion': REVIEW_VERSION, 'promptSha256': PROMPT_SHA256}
+
+
+def is_current_acceptance(document):
+    """Whether an artifact's acceptance was decided under the contract in force.
+
+    The frozen body hash is the only currency test: a version string can be
+    reused, but a superseded predicate cannot reproduce this digest.
+    """
+    identity = (document or {}).get('contract') if isinstance(document, dict) else None
+    return isinstance(identity, dict) and identity.get('sha256') == CONTRACT_SHA256
+
+
+def decision_contradictions(fields):
+    """Contract violations in a decision that arrives already decided.
+
+    `evaluate` derives verdicts from review evidence.  Human gold labels and
+    stored artifact rows instead arrive as the four shared fields, so this is the
+    contract's own answer to "could I have produced this decision" and no caller
+    has to restate the acceptance formula to find out.
+    """
+    codes = [code for code in (fields.get('defectCodes') or []) if isinstance(code, str)]
+    semantic = bool(fields.get('semanticAccepted'))
+    presentation = bool(fields.get('presentationAccepted'))
+    reason = fields.get('unsupportedReason')
+    problems = []
+    unknown = sorted({code for code in codes if not is_contract_code(code)})
+    if unknown:
+        problems.append('defect codes outside the contract namespaces: %s' % ', '.join(unknown))
+    if semantic and _blocked(codes, _SEMANTIC['blockingPrefixes']):
+        problems.append('semantic acceptance with a blocking defect code: %s' % ', '.join(sorted(codes)))
+    if presentation and _blocked(codes, _PRESENTATION['blockingPrefixes']):
+        problems.append('presentation acceptance with a blocking defect code: %s' % ', '.join(sorted(codes)))
+    if presentation and not semantic and PRESENTATION_REQUIRES_SEMANTIC:
+        problems.append('presentation accepted while the scenario itself was rejected')
+    if reason is not None:
+        if semantic or presentation:
+            problems.append('unsupported evidence cannot also be accepted')
+        if not codes:
+            problems.append('unsupported evidence carries no attributable defect code')
+    return problems
 
 
 def classify_text(text):
@@ -239,12 +306,10 @@ def evaluate(review, tier=None):
     result['defectCodes'] = sorted(codes)
     result['unsupportedReason'] = reasons[0] if reasons else None
     if not reasons and result['tier'] == FULL_TIER:
-        result['semanticAccepted'] = not any(
-            code.startswith(prefix) for code in codes for prefix in _SEMANTIC['blockingPrefixes'])
+        result['semanticAccepted'] = not _blocked(codes, _SEMANTIC['blockingPrefixes'])
         result['presentationAccepted'] = (
-            (result['semanticAccepted'] or not _PRESENTATION['requiresSemantic'])
-            and not any(code.startswith(prefix) for code in codes
-                        for prefix in _PRESENTATION['blockingPrefixes']))
+            (result['semanticAccepted'] or not PRESENTATION_REQUIRES_SEMANTIC)
+            and not _blocked(codes, _PRESENTATION['blockingPrefixes']))
     return result
 
 

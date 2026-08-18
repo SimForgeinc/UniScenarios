@@ -3,9 +3,15 @@
 
     qualify.py breadth        refresh the 67-case breadth config from the campaign
     qualify.py gold-template  seal a hash-bound gold manifest for humans to label
-    qualify.py review         review each identical video N times with the frozen reviewer
+    qualify.py review         review each identical video N times under the current contract
     qualify.py calibrate      confusion matrix, FPR/FNR, field flip rate, realism SD
     qualify.py evaluate       machine exit evaluator over a qualification run
+
+Every command binds `config/showcase-review-contract.json` and refuses evidence
+from a superseded contract.  `evaluate` reads each attempt the way the pipeline
+decides it: `75-product.json` is the deliverable decision, `70-judge.json` is the
+current-contract source evidence behind it, and `95-benchmark.json` supplies the
+stage and funnel facts.
 
 Exit codes follow the repository convention: 0 qualified, 1 fail-closed refusal
 or operational error, 2 the run completed but did not meet the exit criteria.
@@ -115,16 +121,15 @@ def gold_template(args):
     out = Path(args.out)
     entries = _discover_evidence(args.root, args.evidence)
     if out.is_file():
-        previous = q.load_gold(out, args.root)
-        by_video = {entry["video"]["sha256"]: entry for entry in previous["entries"]}
+        carried = q.carried_gold_labels(out)
         for entry in entries:
-            carried = by_video.get(entry["video"]["sha256"])
-            if carried is not None and carried.get("label") is not None:
-                entry["label"] = carried["label"]
-                entry["caseId"] = carried["caseId"]
-        dropped = sorted(digest for digest, entry in by_video.items()
-                         if entry.get("label") is not None
-                         and digest not in {item["video"]["sha256"] for item in entries})
+            previous = carried.get(entry["video"]["sha256"])
+            if previous is not None and previous["label"] is not None:
+                entry["label"] = previous["label"]
+                entry["caseId"] = previous["caseId"]
+        discoverable = {item["video"]["sha256"] for item in entries}
+        dropped = sorted(digest for digest, previous in carried.items()
+                         if previous["label"] is not None and digest not in discoverable)
         if dropped:
             raise q.QualificationError(
                 "refusing to drop labelled gold evidence that is no longer discoverable: "
@@ -137,14 +142,10 @@ def gold_template(args):
             "Human reviewers only. Watch the exact video referenced by its sha256, then set "
             "semanticAccepted (the scene implements the requested mechanism, actors, and event order) "
             "and presentationAccepted (grounded, plausible, defect-free render). Use defectCodes from "
-            "the vocabulary below and leave unsupportedReason null unless the stack cannot represent "
-            "the request at all. Any model-produced field makes the entry unusable for calibration."),
-        "reviewContract": {
-            "fields": list(q.DECISION_FIELDS),
-            "defectCodes": list(q.DEFECT_CODES),
-            "reviewVersion": q.REVIEW_VERSION,
-            "realismMin": q.REALISM_MIN,
-        },
+            "the review contract's vocabulary below and leave unsupportedReason null unless the stack "
+            "cannot represent the request at all. Any model-produced field makes the entry unusable "
+            "for calibration."),
+        "reviewContract": q.gold_contract_block(),
         "entries": entries,
     }
     manifest["manifestSha256"] = q.gold_seal(manifest)
@@ -222,18 +223,9 @@ def review(args):
                 print(f"cached {entry['evidenceId']} #{repetition}", flush=True)
                 continue
             raw = _run_reviewer(entry, args.root, args.model, args.effort)
-            record = {
-                "goldSha256": manifest["manifestSha256"],
-                "evidenceId": entry["evidenceId"],
-                "videoSha256": digest,
-                "repetition": repetition,
-                "reviewVersion": q.REVIEW_VERSION,
-                "model": raw.get("model"),
-                "effort": raw.get("effort"),
-                "realism": float(raw.get("realism", 0.0)),
-                "rawResponseSha256": raw.get("rawResponseSha256"),
-                **q.decision_from_review(raw),
-            }
+            record = q.review_row(raw, gold_sha256=manifest["manifestSha256"],
+                                  evidence_id=entry["evidenceId"], video_sha256=digest,
+                                  repetition=repetition)
             with out.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(record, sort_keys=True) + "\n")
             written += 1
@@ -268,6 +260,22 @@ def calibrate(args):
 
 # ------------------------------------------------------------ exit evaluation
 
+def _attempt_evidence(attempt, data_root):
+    """The three artifacts one attempt is classified from, or None where absent.
+
+    `75-product.json` is the deliverable decision, `70-judge.json` is the source
+    evidence behind it, and `95-benchmark.json` is the attempt record. A job that
+    crashed before writing one of them is honestly missing it rather than defaulted.
+    """
+    job_id = attempt.get("jobId")
+    if not isinstance(job_id, str) or not job_id:
+        return {}
+    job_dir = Path(data_root) / "jobs" / job_id
+    names = {"product": "75-product.json", "judge": "70-judge.json", "record": "95-benchmark.json"}
+    return {key: q.load_json(job_dir / name) for key, name in names.items()
+            if (job_dir / name).is_file()}
+
+
 def _case_attempts(config, state, data_root):
     """Collect one classified outcome per attempt, keyed by qualification case."""
     by_id = {case.get("id"): case for case in state.get("cases", []) if isinstance(case, dict)}
@@ -279,13 +287,7 @@ def _case_attempts(config, state, data_root):
                 f"the run has no case named {case['id']} or {case['breadthCaseId']}")
         outcomes = []
         for attempt in sorted(run_case.get("attempts", []), key=lambda item: item.get("number", 0)):
-            judge = None
-            job_id = attempt.get("jobId")
-            if isinstance(job_id, str) and job_id:
-                judge_path = Path(data_root) / "jobs" / job_id / "70-judge.json"
-                if judge_path.is_file():
-                    judge = q.load_json(judge_path)
-            outcomes.append(q.attempt_outcome(attempt, judge))
+            outcomes.append(q.attempt_outcome(attempt, **_attempt_evidence(attempt, data_root)))
         collected[case["id"]] = outcomes
     return collected
 
@@ -320,9 +322,9 @@ def main():
     cmd.add_argument("--out", default=str(ROOT / "apps/showcase/campaigns/breadth.json"))
     cmd.add_argument("--id", default="breadth-67")
     cmd.add_argument("--attempts", type=int, default=10)
-    cmd.add_argument("--required-stages", nargs="+",
-                     default=["00-brief", "10-route", "15-precheck", "20-author", "30-sites",
-                              "40-cells", "50-gate", "60-render2d", "65-render3d", "70-judge", "90-gallery"])
+    cmd.add_argument("--required-stages", nargs="+", default=list(q.REQUIRED_STAGES),
+                     help="stages every healthy attempt must reach; defaults to every stage "
+                          "except the optional retry branches")
     cmd.set_defaults(func=breadth)
 
     cmd = sub.add_parser("gold-template")

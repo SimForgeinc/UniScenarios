@@ -866,19 +866,37 @@
     }
   ],
   "id": "reviewer-gold-v1",
-  "labelInstructions": "Human reviewers only. Watch the exact video referenced by its sha256, then set semanticAccepted (the scene implements the requested mechanism, actors, and event order) and presentationAccepted (grounded, plausible, defect-free render). Use defectCodes from the vocabulary below and leave unsupportedReason null unless the stack cannot represent the request at all. Any model-produced field makes the entry unusable for calibration.",
+  "labelInstructions": "Human reviewers only. Watch the exact video referenced by its sha256, then set semanticAccepted (the scene implements the requested mechanism, actors, and event order) and presentationAccepted (grounded, plausible, defect-free render). Use defectCodes from the review contract's vocabulary below and leave unsupportedReason null unless the stack cannot represent the request at all. Any model-produced field makes the entry unusable for calibration.",
   "labelProvenance": "human",
-  "manifestSha256": "1734bfe41365a83554e61a6a94f5ede0ea700bd5c4c4ea89c1f41cfaae470502",
+  "manifestSha256": "5fde2011a99880ad24d7ef466c721a76a13d23b9643347c695274bad3604e978",
   "reviewContract": {
+    "confidenceMin": 0.6,
     "defectCodes": [
-      "actor-mismatch",
-      "grounding-failure",
-      "implausible",
-      "low-realism",
-      "mechanism-mismatch",
-      "sequence-mismatch",
-      "unsupported",
-      "visible-defect"
+      "capture.empty",
+      "capture.encoding",
+      "capture.duration",
+      "capture.frame",
+      "render.camera.motion",
+      "render.camera.exposure",
+      "render.camera.occlusion",
+      "render.camera.framing",
+      "render.asset.missing",
+      "render.asset.grounding",
+      "render.asset.geometry",
+      "render.asset.material",
+      "render.asset.lod",
+      "simulation.collision",
+      "simulation.kinematics",
+      "simulation.pose",
+      "simulation.trajectory",
+      "scenario.mechanism",
+      "scenario.actors",
+      "scenario.sequence",
+      "scenario.trigger",
+      "scenario.plausibility",
+      "scenario.realism",
+      "scenario.gate",
+      "judge.uncertain"
     ],
     "fields": [
       "semanticAccepted",
@@ -886,8 +904,10 @@
       "defectCodes",
       "unsupportedReason"
     ],
-    "realismMin": 6.0,
-    "reviewVersion": "showcase-3d-product-review-v4"
+    "realismMin": 6,
+    "reviewVersion": "showcase-3d-review-v5",
+    "sha256": "ab1ab5408b022bee6c0fefc66a3cd981c5b58d1318ce88bd698d8c7ad1df5f7f",
+    "version": "showcase-acceptance-contract-v1"
   },
   "schema": "uniscenarios.showcase-reviewer-gold.v1"
 }
