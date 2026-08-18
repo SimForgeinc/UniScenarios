@@ -11,7 +11,7 @@
     "loadPausePerCpu": 1.25
   },
   "cases": [
-    {"id":"unprotected-left-dense","title":"Unprotected left turn across dense traffic"},
+    {"id":"unprotected-left-dense","title":"Unprotected left turn across dense traffic","priority":90},
     {"id":"four-way-stop-behavior","title":"Four-way stops with hesitant or aggressive drivers"},
     {"id":"wave-through","title":"Drivers waving you through against right-of-way"},
     {"id":"midblock-will-they","title":"Pedestrian will-they-won't-they crossing mid-block"},
@@ -77,6 +77,6 @@
     {"id":"fog-sensor-disagreement","title":"Fog causing sensor disagreement"},
     {"id":"school-arrival","title":"School arrival and departure areas"},
     {"id":"busy-parking-lot","title":"Parking lot navigation with heavy traffic"},
-    {"id":"blocked-normal-path","title":"Accident or construction blocking normal path"}
+    {"id":"blocked-normal-path","title":"Accident or construction blocking normal path","priority":100}
   ]
 }

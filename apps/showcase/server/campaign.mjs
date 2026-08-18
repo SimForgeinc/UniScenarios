@@ -253,6 +253,7 @@ async function loadState() {
     id: item.id,
     title: item.title,
     index,
+    priority: Number.isInteger(item.priority) ? item.priority : 0,
     attempts: normalizeAttempts(byId.get(item.id)?.attempts ?? []),
     validVideos: (byId.get(item.id)?.validVideos ?? []).slice(0, config.targetValidVideos),
   }));
@@ -605,16 +606,22 @@ async function refreshAttempts() {
 function activeCount() {
   return state.cases.flatMap((item) => item.attempts).filter(isActive).length;
 }
+
 function nextCase() {
+  const eligible = state.cases.filter((item) =>
+    item.validVideos.length < state.targetValidVideos && !item.attempts.some(isActive));
+  if (eligible.length === 0) return null;
+  const highestPriority = Math.max(...eligible.map((item) => item.priority));
   for (let offset = 0; offset < state.cases.length; offset += 1) {
     const index = (state.nextCaseIndex + offset) % state.cases.length;
     const item = state.cases[index];
-    if (item.validVideos.length >= state.targetValidVideos || item.attempts.some(isActive)) continue;
+    if (!eligible.includes(item) || item.priority !== highestPriority) continue;
     state.nextCaseIndex = (index + 1) % state.cases.length;
     return item;
   }
   return null;
 }
+
 function attemptSeed(item, number) {
   return Number.parseInt(sha256(`${item.id}:${number}`).slice(0, 8), 16) & 0x7fffffff;
 }
