@@ -583,6 +583,8 @@ function attemptSeed(item, number) {
 async function submit(item) {
   const number = Math.max(0, ...item.attempts.map((attempt) => Number(attempt.number) || 0)) + 1;
   const seed = attemptSeed(item, number);
+  const remaining = Math.max(1, state.targetValidVideos - item.validVideos.length);
+  const topK = Math.max(1, Math.min(3, Math.ceil((remaining + 1) / 3)));
   const attempt = { number, seed, status: 'submitting', submissionStartedAt: now(), submittedAt: null };
   item.attempts.push(attempt);
   await checkpoint();
@@ -598,6 +600,7 @@ async function submit(item) {
         campaignId: config.id,
         campaignCaseId: item.id,
         campaignAttempt: number,
+        topK,
       }),
     });
     if (!response.ok) throw new Error(`submit ${item.id} failed ${response.status}: ${(await response.text()).slice(0, 500)}`);
