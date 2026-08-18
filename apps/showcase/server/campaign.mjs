@@ -7,14 +7,20 @@ import { availableParallelism, freemem, hostname, loadavg, totalmem } from 'node
 import { basename, dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
+import {
+  acceptsCampaignVideo,
+  campaignVideoRow,
+  CONTRACT_SHA256,
+  CONTRACT_VERSION,
+  REVIEW_VERSION,
+} from './review-contract.mjs';
 
-import { classifyFailure, normalizeDefectCodes, normalizeUnsupportedReason, OPERATIONAL_FAILURE_KINDS, truncateDetail } from './failures.mjs';
+import { classifyFailure, normalizeUnsupportedReason, OPERATIONAL_FAILURE_KINDS, truncateDetail } from './failures.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const execFileAsync = promisify(execFile);
 
 export const CAMPAIGN_STATE_VERSION = 3;
-export const PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v4';
 /** Cross-stream review contract the campaign consumes for acceptance decisions. */
 export const CANONICAL_REVIEW_FIELDS = Object.freeze(['semanticAccepted', 'presentationAccepted', 'defectCodes', 'unsupportedReason']);
 export const CIRCUIT_STATES = Object.freeze(['closed', 'open', 'probe']);
@@ -148,29 +154,6 @@ export function recordOperationalFailure(ledger, entry, recentLimit = 8) {
   });
   if (ledger.recent.length > recentLimit) ledger.recent.splice(0, ledger.recent.length - recentLimit);
   return ledger;
-}
-
-/**
- * Read the canonical review contract off a judge row.
- *
- * Persisted `showcase-3d-product-review-v4` evidence predates the split verdict, so a row
- * without the canonical booleans is mapped from `productAccepted` plus the frozen review
- * version. That mapping is exactly the historical acceptance predicate, which is what keeps
- * already-accepted video hashes accepted across this upgrade.
- */
-export function reviewVerdict(row) {
-  const legacyAccepted = row?.productAccepted === true && row?.threeDReview?.version === PRODUCT_REVIEW_VERSION;
-  return {
-    semanticAccepted: typeof row?.semanticAccepted === 'boolean' ? row.semanticAccepted : legacyAccepted,
-    presentationAccepted: typeof row?.presentationAccepted === 'boolean' ? row.presentationAccepted : legacyAccepted,
-    defectCodes: normalizeDefectCodes(row),
-    unsupportedReason: normalizeUnsupportedReason(row?.unsupportedReason),
-  };
-}
-
-export function campaignAccepted(row) {
-  const verdict = reviewVerdict(row);
-  return verdict.semanticAccepted === true && verdict.presentationAccepted === true;
 }
 
 export const isOperationalAttempt = (attempt) => attempt?.failureClass === 'operational';
@@ -955,11 +938,16 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
       runner: runnerStatus(),
       totals,
       validityContract: {
-        productAccepted: true,
+        semanticAcceptedRequired: true,
+        presentationAcceptedRequired: true,
         frozenGateRequired: true,
         briefAware3dReviewRequired: true,
         uniqueVideoSha256Required: true,
         durableCampaignCopyRequired: true,
+        currentReviewContractRequired: true,
+        reviewContractVersion: CONTRACT_VERSION,
+        reviewContractSha256: CONTRACT_SHA256,
+        reviewVersion: REVIEW_VERSION,
         minimumPerCase: state.targetValidVideos,
         canonicalReviewFields: CANONICAL_REVIEW_FIELDS,
         maxGenerationAttempts: reliability.maxGenerationAttempts,
@@ -1003,7 +991,7 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
     try { indexedCells = (await readJson(join(jobDir, '40-cells', 'index.json'))).cells ?? []; } catch { /* map id remains unknown */ }
     const known = new Set(item.validVideos.map((video) => video.sha256));
     for (const row of judge.cells ?? []) {
-      if (!campaignAccepted(row) || item.validVideos.length >= state.targetValidVideos) continue;
+      if (!acceptsCampaignVideo(judge, row) || item.validVideos.length >= state.targetValidVideos) continue;
       const cellId = safeCellId(row.cellId);
       if (!cellId) continue;
       const candidates = [
@@ -1020,7 +1008,6 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
       const relativeVideo = join('videos', item.id, `${digest}.mp4`);
       await durableCopy(videoPath, join(campaignDir, relativeVideo), digest);
       const indexedCell = indexedCells.find((cell) => cell.cellId === cellId);
-      const verdict = reviewVerdict(row);
       item.validVideos.push({
         sha256: digest,
         jobId: attempt.jobId,
@@ -1028,12 +1015,13 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         source: relative(jobDir, videoPath).split('\\').join('/'),
         url: `/artifacts/campaigns/${config.id}/${relativeVideo.split('\\').join('/')}`,
         mapId: indexedCell?.mapId ?? ((gallery.maps ?? []).length === 1 ? gallery.maps[0] : null),
-        realism: row.threeDReview?.realism ?? row.realism ?? null,
+        realism: row.acceptance?.axes?.realism ?? row.threeDReview?.realism ?? row.realism ?? null,
         dynamism: row.dynamism ?? null,
-        semanticAccepted: verdict.semanticAccepted,
-        presentationAccepted: verdict.presentationAccepted,
-        defectCodes: verdict.defectCodes,
-        productReviewVersion: row.threeDReview?.version ?? null,
+        semanticAccepted: true,
+        presentationAccepted: true,
+        reviewContractVersion: judge.contract?.version ?? CONTRACT_VERSION,
+        reviewContractSha256: judge.contract?.sha256 ?? CONTRACT_SHA256,
+        reviewVersion: judge.contract?.reviewVersion ?? REVIEW_VERSION,
         acceptedAt: now(),
       });
       known.add(digest);
@@ -1054,7 +1042,8 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
         if (accepted) {
           try { judge = await readJson(join(jobsDir, attempt.jobId, '70-judge.json')); } catch { accepted = false; }
         }
-        if (accepted && !(judge.cells ?? []).some((row) => row.cellId === video.cellId && campaignAccepted(row))) accepted = false;
+        if (accepted && !campaignVideoRow(judge, video.cellId)) accepted = false;
+        if (accepted && video.reviewContractSha256 !== CONTRACT_SHA256) accepted = false;
         const target = accepted ? videoTarget(item, video.sha256) : null;
         if (accepted && (!(await nonemptyFile(target)) || await fileSha256(target) !== video.sha256)) accepted = false;
         if (!accepted) {

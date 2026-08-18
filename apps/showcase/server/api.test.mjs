@@ -5,8 +5,9 @@ import { join } from 'node:path';
 import test from 'node:test';
 
 import { createShowcaseServer, resolveSchedulerSettings } from './index.mjs';
-import { atomicJson, rankCandidates, retryKind } from './pipeline.mjs';
+import { atomicJson, rankCandidates } from './pipeline.mjs';
 import { classifyFailure } from './failures.mjs';
+import { CONTRACT_SHA256 } from './review-contract.mjs';
 
 const TOKEN = 'test-showcase-token';
 
@@ -110,14 +111,6 @@ test('candidate ranking prefers judged quality while preserving site diversity',
   assert.deepEqual(rankCandidates(cells, quality).map((cell) => cell.cellId), ['a-0', 'b-0', 'a-1']);
 });
 
-
-test('production retry policy escalates compiler failures to the visual author', () => {
-  const production = { render3d: true, judge: true, fallbackToVisual: true };
-  assert.equal(retryKind({ engine: 'compiler' }, production, { acceptedCells: 0 }), 'visual-fallback');
-  assert.equal(retryKind({ engine: 'vista2' }, production, { acceptedCells: 0 }), 'visual-repair');
-  assert.equal(retryKind({ engine: 'compiler' }, { ...production, _fallbackDepth: 1 }, { acceptedCells: 0 }), null);
-  assert.equal(retryKind({ engine: 'compiler' }, production, { acceptedCells: 1 }), null);
-});
 async function fixture(t) {
   const dataDir = await mkdtemp(join(tmpdir(), 'showcase-server-test-'));
   const webDir = join(dataDir, 'web');
@@ -471,12 +464,20 @@ test('campaign endpoint publishes the strict accepted-video report', async (t) =
     targetValidVideos: 5,
     cases: [{ id: 'case-1', title: 'Case one', attempts: [], validVideos: [] }],
     totals: { validVideos: 0, targetVideos: 335 },
-    validityContract: { productAccepted: true, uniqueVideoSha256Required: true },
+    validityContract: {
+      semanticAcceptedRequired: true,
+      presentationAcceptedRequired: true,
+      currentReviewContractRequired: true,
+      uniqueVideoSha256Required: true,
+      reviewContractSha256: CONTRACT_SHA256,
+    },
   });
   const response = await fetch(`${base}/api/campaigns/edge-cases-67x5?token=${TOKEN}`);
   assert.equal(response.status, 200);
   const report = await response.json();
   assert.equal(report.campaignId, 'edge-cases-67x5');
-  assert.equal(report.validityContract.productAccepted, true);
+  assert.equal(report.validityContract.semanticAcceptedRequired, true);
+  assert.equal(report.validityContract.presentationAcceptedRequired, true);
+  assert.equal(report.validityContract.reviewContractSha256, CONTRACT_SHA256);
   assert.equal((await fetch(`${base}/api/campaigns/missing?token=${TOKEN}`)).status, 404);
 });

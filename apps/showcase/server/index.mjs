@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { atomicJson, exists, MAPS, ShowcasePipeline } from './pipeline.mjs';
 import { classifyFailure } from './failures.mjs';
+import { normalizeJudgeDocument } from './review-contract.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const MIME = {
@@ -332,6 +333,10 @@ async function directoryIndex(root, current = root) {
       if (entry.name.endsWith('.json') && info.size <= 2_000_000) {
         try {
           item.json = JSON.parse(await readFile(path, 'utf8'));
+          // Historical normalization at the read boundary: a judgement written before the
+          // semantic/presentation split is re-derived so every client sees the current fields,
+          // while the artifact on disk stays untouched evidence.
+          if (item.path.endsWith('70-judge.json')) item.json = normalizeJudgeDocument(item.json);
         } catch {
           item.jsonError = true;
         }

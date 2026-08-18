@@ -28,7 +28,7 @@ export function cells(job: JobIndex | null): CellVerdict[] {
 export function threeDVideos(job: JobIndex | null): Array<{ cell: CellVerdict; artifact: Artifact }> {
   if (job?.status !== 'complete') return [];
   return cells(job).flatMap((cell) => {
-    if (cell.judge?.productAccepted !== true) return [];
+    if (cell.judge?.presentationAccepted !== true) return [];
     const candidates = (cell.artifacts ?? []).filter((artifact) => {
       const path = artifact.path ?? artifact.url ?? '';
       return path.includes('/65-render3d/') && artifactKind(artifact) === 'video';

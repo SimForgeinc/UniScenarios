@@ -19,6 +19,18 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import { gunzipSync } from 'node:zlib';
 import { operationalFailure } from './failures.mjs';
+import {
+  acceptanceCache,
+  acceptanceFields,
+  contractIdentity,
+  evaluateReview,
+  GATE_DEFECT_CODE,
+  judgeAcceptanceSummary,
+  retryRequiresAuthor,
+  reviewCodeDigest,
+  rowReview,
+  sha256Text,
+} from './review-contract.mjs';
 
 const execFileAsync = promisify(execFile);
 
@@ -109,11 +121,25 @@ function artifactPath(jobDir, path) {
   return relative(jobDir, path).split('\\').join('/');
 }
 
-async function stage(context, name, artifacts, action) {
+export async function stage(context, name, artifacts, action, { cacheKey } = {}) {
   const present = await Promise.all(artifacts.map((path) => exists(path)));
+  const single = artifacts.length === 1 && artifacts[0].endsWith('.json') ? artifacts[0] : null;
   if (present.every(Boolean)) {
-    context.emit({ stage: name, status: 'complete', artifacts: artifacts.map((p) => artifactPath(context.jobDir, p)) });
-    return artifacts.length === 1 && artifacts[0].endsWith('.json') ? readJson(artifacts[0]) : undefined;
+    const cached = single ? await readJson(single) : undefined;
+    if (!cacheKey || cached?.cache?.key === cacheKey) {
+      context.emit({ stage: name, status: 'complete', artifacts: artifacts.map((p) => artifactPath(context.jobDir, p)) });
+      return cached;
+    }
+    // A verdict cached under a different contract, prompt, or review implementation is evidence
+    // about a contract that no longer exists. Retire it instead of letting it read as current.
+    const retired = join(dirname(single), '.stale', `${basename(single)}.${String(cached?.cache?.key ?? 'unkeyed').slice(0, 12)}`);
+    await mkdir(dirname(retired), { recursive: true });
+    await rename(single, retired);
+    context.staleArtifacts[name] = {
+      previousKey: cached?.cache?.key ?? null,
+      artifact: artifactPath(context.jobDir, retired),
+      retiredAt: new Date().toISOString(),
+    };
   }
   context.emit({ stage: name, status: 'running', artifacts: [] });
   const started = Date.now();
@@ -211,7 +237,12 @@ export function rankCandidates(cells, qualityRows) {
 }
 
 export function retryKind(route, job, judge) {
-  if (!job.render3d || !job.judge || (judge.acceptedCells ?? 0) > 0) return null;
+  if (!job.render3d || !job.judge || judge?.status !== 'complete') return null;
+  const summary = judgeAcceptanceSummary(judge);
+  if (summary.presentationAcceptedCells > 0) return null;
+  // Presentation-only defects must never burn an authoring cycle: the scenario is already right,
+  // and reauthoring would throw away a semantically accepted scene to fix a camera or an asset.
+  if (!retryRequiresAuthor(summary.retry)) return null;
   if (route.engine === 'compiler' && job.fallbackToVisual === true && Number(job._fallbackDepth ?? 0) < 1) {
     return 'visual-fallback';
   }
@@ -400,6 +431,7 @@ export class ShowcasePipeline {
       python: this.python,
       cli: this.cli,
       timings: {},
+      staleArtifacts: {},
       scheduler: {
         ...(job.scheduler ?? this.schedulerSettings),
         effectiveBatchConcurrency,
@@ -702,14 +734,28 @@ export class ShowcasePipeline {
     });
     if (Array.isArray(render3d)) render3d = { status: 'complete', cells: render3d };
 
+    const judgeModel = job.judgeModel ?? 'gpt-5.6-sol';
+    const judgeEffort = job.judgeEffort ?? 'medium';
+    const judgeCache = acceptanceCache({
+      codeSha256: await reviewCodeDigest(this.root),
+      requestSha256: sha256Text(String(job.requestedBrief ?? job.brief ?? '')),
+      model: judgeModel,
+      effort: judgeEffort,
+      flags: {
+        judge: job.judge === true,
+        render3d: job.render3d === true,
+        topK: Number(job.topK ?? 0),
+      },
+    });
+    const gateRows = new Map((gate.cells ?? []).map((row) => [row.cellId, row]));
     const judge = await stage(context, '70-judge', [judgePath], async () => {
       if (!job.judge) {
-        const value = { status: 'skipped', reason: 'judge disabled', cells: [] };
+        const value = { status: 'skipped', reason: 'judge disabled', cells: [], contract: contractIdentity(), cache: judgeCache };
         await atomicJson(judgePath, value);
         return { value, status: 'skipped' };
       }
       if (!(await gatewayAvailable())) {
-        const value = { status: 'skipped', reason: 'OpenAI gateway unavailable at 127.0.0.1:4141', cells: [] };
+        const value = { status: 'skipped', reason: 'OpenAI gateway unavailable at 127.0.0.1:4141', cells: [], contract: contractIdentity(), cache: judgeCache };
         await atomicJson(judgePath, value);
         return { value, status: 'skipped' };
       }
@@ -722,8 +768,8 @@ export class ShowcasePipeline {
             this.bridge, 'review3d', '--brief', briefPath,
             '--render', join(render3dDir, item.cellId), '--cell-id', item.cellId,
             '--request-text', job.requestedBrief ?? job.brief,
-            '--model', job.judgeModel ?? 'gpt-5.6-sol',
-            '--effort', job.judgeEffort ?? 'medium',
+            '--model', judgeModel,
+            '--effort', judgeEffort,
           ], {
             cwd: this.root,
             timeout: 600_000,
@@ -732,7 +778,7 @@ export class ShowcasePipeline {
           });
           return {
             cellId: item.cellId,
-            review: lastJsonLine(result.stdout) ?? { accepted: false, error: result.stderr.slice(-1000) },
+            review: lastJsonLine(result.stdout) ?? { tier: '3d', error: result.stderr.slice(-1000) },
           };
         }),
       );
@@ -746,30 +792,65 @@ export class ShowcasePipeline {
         if (!existing) rows.push(row);
         row.threeDReview = item.review;
       }
-      for (const row of rows) {
-        const blindPass = row.status === 'complete' && row.plausible === true
-          && Number(row.realism ?? 0) >= 6 && (row.defects ?? []).length === 0;
-        row.productAccepted = passing.has(row.cellId)
-          && (job.render3d ? row.threeDReview?.accepted === true : blindPass);
+      for (const item of render3d?.cells ?? []) {
+        if (item.status !== 'error') continue;
+        const existing = rows.find((row) => row.cellId === item.cellId);
+        const row = existing ?? { cellId: item.cellId, status: 'unavailable' };
+        if (!existing) rows.push(row);
+        row.renderError = String(item.error ?? 'render failed');
       }
-      let acceptedCount = 0;
-      for (const row of rows) {
-        if (!row.productAccepted) continue;
-        acceptedCount += 1;
-        if (acceptedCount > job.topK) row.productAccepted = false;
+      // One shared predicate decides both verdicts. The pipeline only contributes the evidence the
+      // reviewer cannot see: the frozen gate verdict and hard 3D render failures.
+      const evaluated = rows.map((row) => {
+        const evidence = rowReview(row);
+        const injected = [];
+        if (!passing.has(row.cellId)) {
+          injected.push({
+            code: GATE_DEFECT_CODE,
+            text: `frozen gate first failure ${gateRows.get(row.cellId)?.firstFailure ?? 'NOGATE'}`,
+          });
+        }
+        if (row.renderError) injected.push({ text: row.renderError });
+        if (injected.length) {
+          evidence.defects = [...(Array.isArray(evidence.defects) ? evidence.defects : []), ...injected];
+        }
+        return { row, result: evaluateReview(evidence) };
+      });
+      // Presentation acceptance is the deliverable quota, so topK caps it; semantic truth about the
+      // scenario is never rationed and stays attributable on every row.
+      const overflow = new Set(evaluated
+        .filter(({ result }) => result.presentationAccepted)
+        .sort((left, right) => Number(right.result.axes.realism ?? 0) - Number(left.result.axes.realism ?? 0)
+          || Number(right.result.axes.confidence ?? 0) - Number(left.result.axes.confidence ?? 0)
+          || String(left.row.cellId).localeCompare(String(right.row.cellId)))
+        .slice(Math.max(0, Number(job.topK ?? 0)))
+        .map(({ row }) => row.cellId));
+      for (const { row, result } of evaluated) {
+        const cappedByTopK = overflow.has(row.cellId);
+        Object.assign(row, acceptanceFields(result));
+        if (cappedByTopK) row.presentationAccepted = false;
+        row.acceptance = {
+          tier: result.tier,
+          axes: result.axes,
+          defects: result.defects,
+          contract: contractIdentity(),
+          gatePassed: passing.has(row.cellId),
+          cappedByTopK,
+        };
       }
       const value = {
         status: 'complete',
-        model: job.judgeModel ?? 'gpt-5.6-sol',
-        effort: job.judgeEffort ?? 'medium',
+        model: judgeModel,
+        effort: judgeEffort,
         strategy: job.judgeStrategy ?? 'spread8',
-        productReviewVersion: 'showcase-3d-product-review-v4',
-        acceptedCells: rows.filter((row) => row.productAccepted).length,
+        contract: contractIdentity(),
+        cache: { ...judgeCache, retired: context.staleArtifacts['70-judge'] ?? null },
+        ...judgeAcceptanceSummary({ contract: contractIdentity(), cells: rows }),
         cells: rows,
       };
       await atomicJson(judgePath, value);
       return value;
-    });
+    }, { cacheKey: judgeCache.key });
 
     const retry = retryKind(route, job, judge);
     const visualFallback = retry === 'visual-fallback';
@@ -777,16 +858,12 @@ export class ShowcasePipeline {
     if (retry) {
       const attemptName = visualFallback ? '80-visual-fallback' : '80-repair-01';
       const repairDir = join(context.jobDir, attemptName);
-      const defects = (judge.cells ?? []).flatMap((row) => [
-        ...(row.defects ?? []),
-        ...(row.explanation ? [row.explanation] : []),
-        ...(row.threeDReview?.defects ?? []),
+      // Repair feedback is now attributable: every line names the defect code it must fix.
+      const repairFeedback = (judge.cells ?? []).flatMap((row) => [
+        ...(row.acceptance?.defects ?? []).map((defect) => `${defect.code}: ${defect.text}`),
+        ...(row.unsupportedReason ? [`${row.acceptance?.tier ?? 'unknown'} review unsupported: ${row.unsupportedReason}`] : []),
         ...(row.threeDReview?.explanation ? [row.threeDReview.explanation] : []),
-      ]).slice(0, 24);
-      const renderErrors = (render3d?.cells ?? [])
-        .filter((row) => row.status === 'error')
-        .map((row) => row.error);
-      const repairFeedback = [...defects, ...renderErrors].filter(Boolean);
+      ]).filter(Boolean).slice(0, 24);
       const repairJob = {
         ...job,
         briefId: `${job.briefId}-${visualFallback ? 'visual-fallback' : 'repair-01'}`,
@@ -863,15 +940,18 @@ export class ShowcasePipeline {
     }
 
     await stage(context, '90-gallery', [galleryPath], async () => {
-      const judgeRows = judge.cells?.filter((row) => row.status === 'complete') ?? [];
-      const accepted = new Set(judgeRows.filter((row) => row.productAccepted).map((row) => row.cellId));
+      const judgeRows = judge.cells ?? [];
+      const summary = judgeAcceptanceSummary(judge);
+      const accepted = new Set(judgeRows
+        .filter((row) => row.presentationAccepted === true)
+        .map((row) => row.cellId));
       const accepted3d = (render3d?.cells ?? []).find((row) => row.status === 'complete' && accepted.has(row.cellId));
       const accepted2d = render2d.find((row) => row.status === 'complete' && accepted.has(row.cellId));
       const fallback2d = render2d.find((row) => row.status === 'complete' && passing.has(row.cellId))
         ?? render2d.find((row) => row.status === 'complete');
-      const scoredRows = judgeRows.filter((row) => row.productAccepted);
+      const scoredRows = judgeRows.filter((row) => row.presentationAccepted === true);
       const average = (key) => scoredRows.length
-        ? Number((scoredRows.reduce((sum, row) => sum + Number(row[key] ?? 0), 0) / scoredRows.length).toFixed(2))
+        ? Number((scoredRows.reduce((sum, row) => sum + Number(row.acceptance?.axes?.[key] ?? row[key] ?? 0), 0) / scoredRows.length).toFixed(2))
         : null;
       const headline = accepted3d
         ? `/artifacts/jobs/${job.jobId}/65-render3d/${accepted3d.cellId}/rollout.mp4`
@@ -890,8 +970,18 @@ export class ShowcasePipeline {
         ambient: job.ambient,
         admitted: passing.size > 0,
         accepted: accepted.size > 0,
+        semanticAccepted: summary.semanticAcceptedCells > 0,
         gate: { passed: passing.size, cells: gate.cells?.length ?? 0 },
         quality: { accepted: accepted.size, reviewed: judgeRows.length },
+        acceptance: {
+          contract: contractIdentity(),
+          semanticCells: summary.semanticAcceptedCells,
+          presentationCells: summary.presentationAcceptedCells,
+          unsupportedCells: summary.unsupportedCells,
+          reviewed: summary.reviewed,
+          defectCodes: summary.defectCodeCounts,
+          retry: summary.retry,
+        },
         scores: { realism: average('realism'), dynamism: average('dynamism') },
         headline,
         render3d: job.render3d,

@@ -24,31 +24,8 @@ GATES = ROOT / 'tools' / 'gates'
 VISTA2 = ROOT / 'tools' / 'research' / 'vista2'
 FOOTAGE = ROOT / 'tools' / 'research' / 'footage'
 sys.path.insert(0, str(GATES))
+import review_contract as review
 import semantic_contract as semantic
-
-PRODUCT_REVIEW_VERSION = 'showcase-3d-product-review-v4'
-PRODUCT_REVIEW_PROMPT = """You are the final acceptance reviewer for a generated autonomous-driving scenario.
-You receive the user's exact requested edge case followed by time-ordered frames from the REAL 3D render.
-Reject aggressively: this is training-data QA, not a creativity exercise.
-
-Check all of the following independently:
-1. mechanismFidelity: Does the visible scene implement the exact requested causal mechanism, actors, road
-   structure, and event sequence? A generic near-miss or route-around is "no", even if physically critical.
-2. visualGrounding: Are every vehicle and actor correctly resting on the visible road/ground, without
-   sinking, floating, clipping through geometry, or occupying an impossible surface?
-3. actorFidelity: Are the requested actor types visibly present (for example motorcycle vs car, SUV vs sedan)?
-4. eventSequence: Across the frames, does the requested event onset (or reveal when requested), conflict,
-   and reaction actually occur in order?
-5. realism/plausibility: Could this exact scene exist and behave this way in real traffic?
-
-The frames use an external incident camera, not the ego driver's eye point. A target visible to this
-camera can still be occluded from the ego. Use the supplied trace-grounded ego line-of-sight facts
-to interpret that distinction, but never let metadata excuse a visibly impossible scene.
-
-Answer STRICT JSON only:
-{"mechanismFidelity":"yes|partial|no","visualGrounding":"pass|fail",
-"actorFidelity":"pass|fail","eventSequence":"pass|fail","plausible":true,
-"realism":0,"defects":["short visible defect"],"confidence":0.0,"explanation":"2-5 sentences"}"""
 
 
 def emit(value):
@@ -355,7 +332,28 @@ def judge(args):
         os.symlink(render, staged / 'render', target_is_directory=True)
         result = module.judge_cell(str(staged), args.model, args.effort, args.strategy,
                                    require_redacted=True)
+    # The blind judge never sees the brief, so its verdict is presentation-tier evidence only.
+    result['tier'] = '2d'
     emit(result)
+
+def raw_defects(value):
+    """Preserve the reviewer's defect evidence verbatim: text, declared code, confidence."""
+    if not isinstance(value, list):
+        return []
+    records = []
+    for item in value[:review.MAX_DEFECTS]:
+        if not isinstance(item, dict):
+            records.append(str(item)[:review.MAX_TEXT])
+            continue
+        record = {'text': str(item.get('text') or item.get('defect')
+                              or item.get('description') or '')[:review.MAX_TEXT]}
+        if isinstance(item.get('code'), str):
+            record['code'] = item['code'].strip()
+        if item.get('confidence') is not None:
+            record['confidence'] = review.clamp_number(item['confidence'], 0.0, 1.0)
+        records.append(record)
+    return records
+
 
 def review_3d(args):
     sys.path.insert(0, str(FOOTAGE))
@@ -444,7 +442,7 @@ def review_3d(args):
         'traceFacts': trace_context,
     }
     request_text = args.request_text or brief['brief']
-    prompt = (f'{PRODUCT_REVIEW_PROMPT}\n\nUSER REQUEST:\n{request_text}'
+    prompt = (f'{review.PROMPT}\n\nUSER REQUEST:\n{request_text}'
               f'\n\nGROUND-TRUTH EVIDENCE:\n{json.dumps(evidence, separators=(",", ":"))}')
     content = [{'type': 'input_text', 'text': prompt}]
     content.extend({'type': 'input_image', 'image_url': futil.png_data_url(str(frame))}
@@ -457,35 +455,37 @@ def review_3d(args):
     }
     response, raw, wall = futil.responses_call(body, timeout=420)
     parsed = futil.parse_json_block(futil.output_text(response))
-    mechanism = str(parsed.get('mechanismFidelity', 'no')).lower()
-    grounding = str(parsed.get('visualGrounding', 'fail')).lower()
-    actors = str(parsed.get('actorFidelity', 'fail')).lower()
-    sequence = str(parsed.get('eventSequence', 'fail')).lower()
-    realism = max(0.0, min(10.0, float(parsed.get('realism', 0))))
-    confidence = max(0.0, min(1.0, float(parsed.get('confidence', 0))))
-    defects = [str(value)[:240] for value in parsed.get('defects', [])][:16]
-    accepted = (
-        mechanism == 'yes' and grounding == 'pass' and actors == 'pass'
-        and sequence == 'pass' and bool(parsed.get('plausible'))
-        and realism >= 6 and confidence >= 0.6 and not defects
-    )
+    # Only pass through what the reviewer actually answered: an omitted axis is unsupported
+    # evidence, never a silent 'no'.
+    emission = {'tier': review.FULL_TIER}
+    for axis in ('mechanismFidelity', 'visualGrounding', 'actorFidelity', 'eventSequence'):
+        if axis in parsed:
+            emission[axis] = str(parsed.get(axis) or '').strip().lower()
+    if 'plausible' in parsed:
+        emission['plausible'] = bool(parsed['plausible'])
+    if 'realism' in parsed:
+        emission['realism'] = review.clamp_number(parsed['realism'], 0.0, 10.0)
+    if 'confidence' in parsed:
+        emission['confidence'] = review.clamp_number(parsed['confidence'], 0.0, 1.0)
+    emission['defects'] = raw_defects(parsed.get('defects'))
+    emission['explanation'] = str(parsed.get('explanation', ''))[:3000]
+    verdict = review.evaluate(emission)
     usage = response.get('usage') or {}
     emit({
         'cellId': args.cell_id,
-        'version': PRODUCT_REVIEW_VERSION,
+        'version': review.REVIEW_VERSION,
+        'contract': review.contract_identity(),
         'model': args.model,
         'effort': args.effort,
         'visionAsserted': True,
-        'mechanismFidelity': mechanism,
-        'visualGrounding': grounding,
-        'actorFidelity': actors,
-        'eventSequence': sequence,
-        'plausible': bool(parsed.get('plausible')),
-        'realism': realism,
-        'defects': defects,
-        'confidence': confidence,
-        'explanation': str(parsed.get('explanation', ''))[:3000],
-        'accepted': accepted,
+        **emission,
+        **review.acceptance_fields(verdict),
+        'acceptance': {
+            'tier': verdict['tier'],
+            'axes': verdict['axes'],
+            'defects': verdict['defects'],
+            'contract': review.contract_identity(),
+        },
         'framesUsed': [str(frame.relative_to(render)) for frame in frames],
         'latencyS': round(wall, 2),
         'tokens': {

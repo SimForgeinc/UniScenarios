@@ -4,23 +4,28 @@ import test from 'node:test';
 
 import {
   backoffDelayMs,
-  campaignAccepted,
   campaignSettled,
   CAMPAIGN_STATE_VERSION,
   caseStatus,
   DEFAULT_RELIABILITY,
   generationAttempts,
   migrateCampaignState,
-  PRODUCT_REVIEW_VERSION,
   ProviderCircuit,
   recordOperationalFailure,
   resolveCampaignRuntime,
-  reviewVerdict,
   submissionOrder,
   unproductiveStreak,
   validateCampaignConfig,
 } from './campaign.mjs';
 import { classifyFailure } from './failures.mjs';
+import {
+  acceptsCampaignVideo,
+  campaignVideoRow,
+  CONTRACT_SHA256,
+  CONTRACT_VERSION,
+  normalizeJudgeDocument,
+  REVIEW_VERSION,
+} from './review-contract.mjs';
 
 const CAMPAIGN_ID = 'edge-cases-67x5';
 const STAMP = '2026-08-18T00:00:00.000Z';
@@ -263,7 +268,9 @@ test('state migration preserves accepted hashes and refunds legacy operational f
       jobId: 'job-1',
       cellId: 'yale-street-site-0-0',
       url: `/artifacts/campaigns/${CAMPAIGN_ID}/videos/case-01/${'a'.repeat(64)}.mp4`,
-      productReviewVersion: PRODUCT_REVIEW_VERSION,
+      semanticAccepted: true,
+      presentationAccepted: true,
+      reviewContractSha256: CONTRACT_SHA256,
       acceptedAt: STAMP,
     },
     {
@@ -271,7 +278,9 @@ test('state migration preserves accepted hashes and refunds legacy operational f
       jobId: 'job-1',
       cellId: 'yale-street-site-0-1',
       url: `/artifacts/campaigns/${CAMPAIGN_ID}/videos/case-01/${'b'.repeat(64)}.mp4`,
-      productReviewVersion: PRODUCT_REVIEW_VERSION,
+      semanticAccepted: true,
+      presentationAccepted: true,
+      reviewContractSha256: CONTRACT_SHA256,
       acceptedAt: STAMP,
     },
   ];
@@ -347,19 +356,48 @@ test('state migration preserves accepted hashes and refunds legacy operational f
   assert.deepEqual(otherCampaign.cases.map((item) => item.validVideos.length), [0, 0, 0], 'state from another campaign is never adopted');
 });
 
-test('campaign acceptance reads the canonical verdict and keeps accepting legacy product evidence', () => {
-  const legacy = { cellId: 'cell-1', productAccepted: true, threeDReview: { version: PRODUCT_REVIEW_VERSION, accepted: true, realism: 8 } };
-  assert.equal(campaignAccepted(legacy), true);
-  assert.equal(campaignAccepted({ ...legacy, threeDReview: { version: 'showcase-3d-product-review-v3', accepted: true } }), false);
-  assert.equal(campaignAccepted({ cellId: 'cell-2', semanticAccepted: true, presentationAccepted: true }), true);
-  assert.equal(campaignAccepted({ cellId: 'cell-3', semanticAccepted: true, presentationAccepted: false, ...legacy }), false);
-  assert.equal(campaignAccepted({ cellId: 'cell-4', semanticAccepted: false, presentationAccepted: true, ...legacy }), false);
-  assert.deepEqual(reviewVerdict({ cellId: 'cell-5', defects: ['frozen_actor', 'frozen_actor', ''], unsupportedReason: '  no reversible lane  ' }), {
-    semanticAccepted: false,
-    presentationAccepted: false,
-    defectCodes: ['frozen_actor'],
-    unsupportedReason: 'no reversible lane',
+test('campaign collection requires both verdicts under the current review contract', () => {
+  const judge = {
+    contract: { version: CONTRACT_VERSION, sha256: CONTRACT_SHA256, reviewVersion: REVIEW_VERSION },
+    cells: [
+      {
+        cellId: 'cell-1',
+        semanticAccepted: true,
+        presentationAccepted: true,
+        defectCodes: [],
+        unsupportedReason: null,
+        acceptance: { tier: '3d', axes: { realism: 8 } },
+      },
+      {
+        cellId: 'cell-2',
+        semanticAccepted: true,
+        presentationAccepted: false,
+        defectCodes: ['render.camera.framing'],
+        unsupportedReason: null,
+        acceptance: { tier: '3d', axes: { realism: 8 } },
+      },
+    ],
+  };
+  assert.equal(acceptsCampaignVideo(judge, judge.cells[0]), true);
+  assert.equal(acceptsCampaignVideo(judge, judge.cells[1]), false, 'a presentation rejection yields no deliverable video');
+  assert.equal(campaignVideoRow(judge, 'cell-1').cellId, 'cell-1');
+
+  const superseded = { ...judge, contract: { ...judge.contract, sha256: 'f'.repeat(64) } };
+  assert.equal(campaignVideoRow(superseded, 'cell-1'), null, 'a verdict from a superseded contract is not a result');
+
+  // Pre-split product-review evidence is exactly what the campaign used to collect. It normalizes
+  // onto the current fields with a null contract identity, so it can never be collected again.
+  const historical = normalizeJudgeDocument({
+    productReviewVersion: 'showcase-3d-product-review-v4',
+    cells: [{
+      cellId: 'cell-1',
+      productAccepted: true,
+      threeDReview: { version: 'showcase-3d-product-review-v4', accepted: true, realism: 8 },
+    }],
   });
+  assert.equal(historical.cells[0].productAccepted, undefined, 'the legacy flag is dropped on read');
+  assert.equal(historical.contract.sha256, null);
+  assert.equal(campaignVideoRow(historical, 'cell-1'), null, 'a historical video without the current contract hash is never accepted');
 });
 
 test('an unsupported case is retired instead of retried', () => {

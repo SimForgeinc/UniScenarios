@@ -76,16 +76,16 @@ function StageCard({ event, index }: { event: StageEvent; index: number }) {
 function verdict(value?: boolean) { return value == null ? '—' : value ? 'PASS' : 'FAIL'; }
 function CellGrid({ job }: { job: JobIndex | null }) {
   const rows = cells(job); if (!rows.length) return <div class="empty small">Cells appear after simulation.</div>;
-  return <div class="cell-grid">{rows.map((cell) => { const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted; const judge = cell.judge; return <details class="cell" key={cell.cellId ?? cell.id}><summary><div><small>{cell.map ? mapLabel(cell.map) : 'map'}</small><b>{cell.cellId ?? cell.id}</b></div><Chip tone={gate === true ? 'pass' : gate === false ? 'fail' : ''}>{verdict(gate)}</Chip></summary><div class="cell-body"><div class="chip-row"><Score label="Realism" value={judge?.realism} /><Score label="Dynamism" value={judge?.dynamism} />{judge?.plausible != null && <Chip tone={judge.plausible ? 'pass' : 'fail'}>{judge.plausible ? 'plausible' : 'implausible'}</Chip>}</div>{typeof cell.gate === 'object' && cell.gate.firstFailure && <p class="failure">First failure: {cell.gate.firstFailure}</p>}<div class="artifacts">{artifacts(cell).map((item, i) => <ArtifactView key={i} artifact={item} />)}</div><pre>{JSON.stringify(cell, null, 2)}</pre></div></details>; })}</div>;
+  return <div class="cell-grid">{rows.map((cell) => { const gate = typeof cell.gate === 'boolean' ? cell.gate : cell.gate?.pass ?? cell.gate?.admitted; const judge = cell.judge; return <details class="cell" key={cell.cellId ?? cell.id}><summary><div><small>{cell.map ? mapLabel(cell.map) : 'map'}</small><b>{cell.cellId ?? cell.id}</b></div><Chip tone={gate === true ? 'pass' : gate === false ? 'fail' : ''}>{verdict(gate)}</Chip></summary><div class="cell-body"><div class="chip-row"><Score label="Realism" value={judge?.realism} /><Score label="Dynamism" value={judge?.dynamism} />{judge?.plausible != null && <Chip tone={judge.plausible ? 'pass' : 'fail'}>{judge.plausible ? 'plausible' : 'implausible'}</Chip>}</div>{judge && (judge.semanticAccepted != null || judge.presentationAccepted != null) && <div class="chip-row"><Chip tone={judge.semanticAccepted ? 'pass' : 'fail'}>scenario {judge.semanticAccepted ? 'accepted' : 'rejected'}</Chip><Chip tone={judge.presentationAccepted ? 'pass' : 'fail'}>presentation {judge.presentationAccepted ? 'accepted' : 'rejected'}</Chip>{judge.defectCodes?.map((code) => <Chip tone="fail" key={code}>{code}</Chip>)}</div>}{judge?.unsupportedReason && <p class="failure">Unsupported: {judge.unsupportedReason}</p>}{typeof cell.gate === 'object' && cell.gate.firstFailure && <p class="failure">First failure: {cell.gate.firstFailure}</p>}<div class="artifacts">{artifacts(cell).map((item, i) => <ArtifactView key={i} artifact={item} />)}</div><pre>{JSON.stringify(cell, null, 2)}</pre></div></details>; })}</div>;
 }
 
 function ThreeDGallery({ job, status }: { job: JobIndex | null; status: string }) {
   const videos = threeDVideos(job);
   if (!videos.length) {
     const message = status === 'running'
-      ? 'Candidate renders stay hidden until simulation, rendering, and brief-aware 3D acceptance review all complete.'
+      ? 'Candidate renders stay hidden until simulation, rendering, and the split scenario/presentation acceptance review all complete.'
       : status === 'complete'
-        ? 'No 3D candidate passed the requested-mechanism and visual-grounding review. Inspect Pipeline details for the rejected evidence.'
+        ? 'No 3D candidate cleared both verdicts: the render must show the requested scenario and be usable footage. Inspect Pipeline details for the attributed defect codes.'
         : 'Accepted 3D videos will appear after gate-passing scenarios finish rendering and review.';
     return <div class="empty video-empty"><div class="render-pulse" /><h2>Accepted 3D videos</h2><p>{message}</p></div>;
   }
@@ -95,7 +95,7 @@ function ThreeDGallery({ job, status }: { job: JobIndex | null; status: string }
     return <article class="job-video-card" key={id}>
       <video src={artifactUrl(source)} aria-label={`Accepted 3D rollout for ${id}`} muted autoPlay loop playsInline controls preload="metadata" />
       <div class="job-video-meta"><div><small>{cell.map ? mapLabel(cell.map) : '3D scenario'}</small><h2>{id}</h2></div><div class="chip-row">
-        <Chip tone="pass">3D review passed</Chip>
+        <Chip tone="pass">scenario + presentation accepted</Chip>
         <Score label="Realism" value={cell.judge?.realism} /><Score label="Dynamism" value={cell.judge?.dynamism} />
       </div></div>
     </article>;
@@ -215,9 +215,11 @@ function CampaignCaseRow({ item, target }: { item: CampaignCase; target: number 
 }
 
 const CONTRACT_LABELS: Record<string, string> = {
-  productAccepted: 'judge productAccepted: true',
+  semanticAcceptedRequired: 'scenario fidelity accepted',
+  presentationAcceptedRequired: 'presentation accepted',
   frozenGateRequired: 'frozen C1–C6 gate',
   briefAware3dReviewRequired: 'brief-aware 3D review',
+  currentReviewContractRequired: 'current review contract',
   uniqueVideoSha256Required: 'unique MP4 SHA-256',
 };
 const CASE_FILTERS = [['all', 'All cases'], ['open', 'In progress'], ['complete', 'Complete']] as const;
@@ -256,7 +258,7 @@ function Campaign({ id }: { id: string }) {
       <div>
         <p class="eyebrow">STRICT-ACCEPTANCE CAMPAIGN</p>
         <h1>{totals ? `${totals.cases} edge cases, ${target} accepted videos each.` : 'Edge-case campaign progress.'}</h1>
-        <p>A render counts only when the frozen gate passes, brief-aware 3D product review marks it <span class="mono">productAccepted</span>, and its MP4 hash is new within the case. Everything else stays an attempt—never a result.</p>
+        <p>A render counts only when the frozen gate passes, the 3D review marks it <span class="mono">semanticAccepted</span> and <span class="mono">presentationAccepted</span> under the current review contract, and its MP4 hash is new within the case. Everything else stays an attempt—never a result.</p>
       </div>
       <div class="campaign-sync">
         <Chip tone={error ? 'fail' : 'live'}><span class="live-dot" />{error ? 'refresh failing' : 'auto-refresh 30s'}</Chip>

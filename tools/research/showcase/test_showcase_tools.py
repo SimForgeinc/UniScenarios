@@ -20,6 +20,13 @@ def load(name):
 author = load("author_one")
 gallery = load("preseed_gallery")
 semantic = load("semantic_contract")
+review = load("review_contract")
+stages = load("stages")
+
+FULL_REVIEW = {"tier": "3d", "mechanismFidelity": "yes", "visualGrounding": "pass",
+               "actorFidelity": "pass", "eventSequence": "pass", "plausible": True,
+               "realism": 7, "confidence": 0.8, "defects": [],
+               "explanation": "The requested mechanism happens on camera on solid ground."}
 
 
 def candidate(root, cell, story, gate, realism, dynamism):
@@ -113,6 +120,77 @@ class SemanticContractTest(unittest.TestCase):
         self.assertEqual(roles["occluding_suv"]["tFrac"], 0.3)
         self.assertEqual(semantic.validate_template(template, contract), [])
 
+
+
+class ReviewContractTest(unittest.TestCase):
+    """The acceptance contract is shared with JavaScript, so hash and verdicts are both frozen."""
+
+    def test_declared_hash_matches_the_canonical_body(self):
+        body = {key: value for key, value in review.CONTRACT.items() if key != "sha256"}
+        self.assertEqual(review.CONTRACT_SHA256, review.sha256_text(review.canonical_json(body)))
+        # Integral floats serialise as '1.0' here and '1' in JavaScript, which would fork the hash.
+        self.assertEqual(review._integral_floats(body), [])
+
+    def test_every_conformance_vector_agrees_with_the_predicates(self):
+        self.assertGreaterEqual(len(review.CONTRACT["conformance"]), 10)
+        for vector in review.CONTRACT["conformance"]:
+            with self.subTest(vector["name"]):
+                got = review.evaluate(vector["review"])
+                self.assertEqual(
+                    {"semanticAccepted": got["semanticAccepted"],
+                     "presentationAccepted": got["presentationAccepted"],
+                     "defectCodes": got["defectCodes"],
+                     "unsupported": got["unsupportedReason"] is not None},
+                    {"semanticAccepted": vector["expect"]["semanticAccepted"],
+                     "presentationAccepted": vector["expect"]["presentationAccepted"],
+                     "defectCodes": vector["expect"]["defectCodes"],
+                     "unsupported": vector["expect"]["unsupported"]})
+
+    def test_presentation_defects_never_reject_a_correct_scenario(self):
+        got = review.evaluate({**FULL_REVIEW, "visualGrounding": "fail", "defects": [
+            {"code": "render.camera.framing", "text": "the conflict is cropped at the right edge"},
+            {"code": "render.asset.grounding", "text": "the sedan hovers above the lane",
+             "confidence": 0.7}]})
+        self.assertTrue(got["semanticAccepted"])
+        self.assertFalse(got["presentationAccepted"])
+        self.assertIsNone(got["unsupportedReason"])
+        self.assertEqual(got["defectCodes"], ["render.asset.grounding", "render.camera.framing"])
+        preserved = [(item["text"], item["confidence"]) for item in got["defects"]
+                     if item["source"] == "model"]
+        self.assertEqual(preserved, [("the conflict is cropped at the right edge", 0.8),
+                                     ("the sedan hovers above the lane", 0.7)])
+
+    def test_scenario_defects_and_silent_reviews_fail_both_verdicts(self):
+        sequence = review.evaluate({**FULL_REVIEW, "eventSequence": "fail"})
+        self.assertEqual((sequence["semanticAccepted"], sequence["presentationAccepted"]), (False, False))
+        self.assertEqual(sequence["defectCodes"], ["scenario.sequence"])
+        silent = review.evaluate({**FULL_REVIEW, "explanation": "  "})
+        self.assertEqual((silent["semanticAccepted"], silent["presentationAccepted"]), (False, False))
+        self.assertEqual(silent["defectCodes"], ["judge.uncertain"])
+        self.assertIn("no explanatory text", silent["unsupportedReason"])
+
+    def test_retry_recommendation_and_historical_normalization(self):
+        self.assertEqual(review.retry_recommendation(["render.camera.framing", "scenario.gate"], 2),
+                         {"action": "reauthor", "codes": ["scenario.gate"],
+                          "reason": "dominant defect prefix scenario."})
+        self.assertEqual(review.retry_recommendation(["render.asset.lod"], 2)["action"], "recompose")
+        self.assertIsNone(review.retry_recommendation([], 2))
+        self.assertEqual(review.retry_recommendation([], 0)["action"], "reauthor")
+        legacy = review.normalize_historical(
+            {**FULL_REVIEW, "version": "showcase-3d-product-review-v4", "accepted": True})
+        self.assertTrue(legacy["semanticAccepted"])
+        self.assertTrue(legacy["presentationAccepted"])
+        self.assertIsNone(legacy["contract"], "a normalized verdict can never claim the current contract")
+        self.assertEqual(legacy["normalizedFrom"], "showcase-3d-product-review-v4")
+
+    def test_review_emission_preserves_raw_defect_evidence(self):
+        self.assertEqual(
+            stages.raw_defects([{"code": " render.camera.framing ", "text": "cropped", "confidence": 2},
+                                "frozen_actor", {"description": "no text key"}]),
+            [{"text": "cropped", "code": "render.camera.framing", "confidence": 1.0},
+             "frozen_actor",
+             {"text": "no text key"}])
+        self.assertEqual(stages.raw_defects(None), [])
 
 
 class GallerySelectionTest(unittest.TestCase):

@@ -38,14 +38,14 @@ describe('showcase contract adapters', () => {
       { path: '65-render3d/cell-1/video.mp4', size: 13 },
       { path: '65-render3d/cell-1/rollout.mp4', size: 14 },
       { path: '60-render2d/cell-2/rollout.mp4', size: 15 },
-      { path: '70-judge.json', json: { cells: [{ cellId: 'cell-1', productAccepted: true }] } },
+      { path: '70-judge.json', json: { cells: [{ cellId: 'cell-1', semanticAccepted: true, presentationAccepted: true }] } },
       { path: '90-gallery.json', json: { accepted: true } },
     ] });
     const videos = threeDVideos(job);
     expect(videos[0].cell.cellId).toBe('cell-1');
     expect(videos[0].artifact.path).toBe('jobs/abc/65-render3d/cell-1/rollout.mp4');
     expect(threeDVideos({ ...job, status: 'running' })).toHaveLength(0);
-    expect(threeDVideos({ ...job, cells: [{ ...cells(job)[0], judge: { productAccepted: false } }] })).toHaveLength(0);
+    expect(threeDVideos({ ...job, cells: [{ ...cells(job)[0], judge: { semanticAccepted: true, presentationAccepted: false } }] })).toHaveLength(0);
   });
   it('normalizes nested gallery metrics and SSE paths from the real server', () => {
     const [card] = normalizeGallery([{ jobId: 'abc', headline: '/artifacts/jobs/abc/movie.mp4', gate: { passed: 2, cells: 3 }, scores: { realism: 8.2, dynamism: 7.4 } }]);
@@ -71,7 +71,10 @@ describe('campaign report contract', () => {
       { id: 'wave-through', title: 'Drivers waving you through against right-of-way',
         attempts: [{ number: 1, jobId: 'job-3', status: 'failed', error: 'render crashed' }], validVideos: [] },
     ],
-    validityContract: { productAccepted: true, minimumPerCase: 5 },
+    validityContract: {
+      semanticAcceptedRequired: true, presentationAcceptedRequired: true,
+      currentReviewContractRequired: true, minimumPerCase: 5,
+    },
   };
   const report = normalizeCampaign(rawCampaign as Partial<CampaignReport>);
 
