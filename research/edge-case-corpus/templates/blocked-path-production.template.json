@@ -19,6 +19,7 @@
       "throughLanesSameDir": { "value": [2, 8], "essentiality": "required" },
       "runwayDownstreamM": { "value": [120, null], "essentiality": "required" },
       "throughLanesOpposing": { "value": [1, 8], "essentiality": "required" },
+      "laneChangeLegal": { "value": { "side": "right", "sRange": [40, 120] }, "essentiality": "required" },
       "requiresAdjacent": { "value": ["sidewalk"], "essentiality": "preferred", "weight": 3 }
     },
     "features": [],
@@ -31,7 +32,7 @@
       "label": "vehicle under test",
       "actor": { "class": "car", "catalogId": "vehicle.sedan" },
       "essentiality": "required",
-      "pose": { "laneOffset": 0, "s": 40, "tFrac": 0, "headingOffsetRad": 0 },
+      "pose": { "laneOffset": 0, "s": 0, "tFrac": 0, "headingOffsetRad": 0 },
       "initialSpeedKph": "clamp(0.8 * lane.speedLimitKph, 25, 50)"
     },
     {
@@ -41,11 +42,11 @@
       "label": "pickup stopped at closure",
       "essentiality": "required",
       "actor": { "class": "car", "catalogId": "vehicle.pickup" },
-      "dsM": 55,
+      "dsM": 35,
       "dLane": 0,
       "headingOffsetRad": 0,
       "tFrac": 0,
-      "initialSpeedKph": 35
+      "initialSpeedKph": 20
     }
   ],
   "props": [
@@ -229,7 +230,7 @@
         "actor": "lead_pickup",
         "trigger": { "kind": "at", "t": 0 },
         "verb": "speed",
-        "target": { "mode": "absolute", "valueKph": 35 },
+        "target": { "mode": "absolute", "valueKph": 20 },
         "dynamics": { "shape": "linear", "constraint": "rate", "value": 2 }
       },
       {
@@ -244,9 +245,15 @@
         "id": "ego-reroutes",
         "actor": "ego",
         "trigger": { "kind": "at", "t": 5 },
-        "verb": "changeLane",
-        "target": { "mode": "relative", "dk": -1 },
-        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 6 }
+        "verb": "route",
+        "target": {
+          "mode": "polyline",
+          "points": [
+            { "laneOffset": 0, "s": 55, "tFrac": 0, "headingOffsetRad": 0 },
+            { "laneOffset": -1, "s": 80, "tFrac": 0, "headingOffsetRad": 0 },
+            { "laneOffset": -1, "s": 125, "tFrac": 0, "headingOffsetRad": 0 }
+          ]
+        }
       }
     ]
   },
