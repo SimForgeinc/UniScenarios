@@ -165,6 +165,51 @@
       "pose": { "laneOffset": 0, "s": 150, "headingOffsetRad": 0, "lateralM": 0, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
+    },
+    {
+      "id": "type-three-barricade",
+      "catalogId": "construction.barricade_type3",
+      "label": "striped lane closure barricade",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 136, "headingOffsetRad": 1.5707963267948966, "lateralM": 0, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 1.5707963267948966,
+      "scale": 1
+    },
+    {
+      "id": "work-spoil-pile",
+      "catalogId": "construction.spoil_pile",
+      "label": "excavated material inside work area",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 143, "headingOffsetRad": 0, "lateralM": 0.8, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-pipe",
+      "catalogId": "construction.long_pipe",
+      "label": "utility pipe inside work area",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 146, "headingOffsetRad": 0, "lateralM": -0.8, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-flagger",
+      "catalogId": "construction.flagger",
+      "label": "work-zone flagger",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 128, "headingOffsetRad": 0, "lateralM": -1.2, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "portable-work-signal",
+      "catalogId": "construction.portable_signal",
+      "label": "portable work-zone signal",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 130, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
     }
   ],
   "choreography": {
@@ -201,7 +246,7 @@
         "trigger": { "kind": "at", "t": 3.5 },
         "verb": "changeLane",
         "target": { "mode": "relative", "dk": -1 },
-        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 4 }
+        "dynamics": { "shape": "sinusoidal", "constraint": "time", "value": 5 }
       }
     ]
   },

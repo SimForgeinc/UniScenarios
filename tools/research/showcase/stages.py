@@ -199,8 +199,7 @@ def vista_author(args):
     failures = []
     final_row = None
     final_template = None
-    proven = (semantic.build_proven_product_variant(author_contract, original_brief, ROOT)
-              if 'POST-RENDER REPAIR FEEDBACK' not in original_brief.get('brief', '') else None)
+    proven = semantic.build_proven_product_variant(author_contract, original_brief, ROOT)
     proven_failures = semantic.validate_template(proven, author_contract) if proven else []
     if proven and not proven_failures:
         final_template = out / 'proven-product.template.json'
