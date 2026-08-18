@@ -1,0 +1,43 @@
+{
+  "schema": "uniscenarios.showcase-qualification.v1",
+  "id": "qualification-3x10",
+  "title": "Pre-restart qualification: three cases, ten attempts each",
+  "methodology": "production",
+  "attemptsPerCase": 10,
+  "breadthConfig": "apps/showcase/campaigns/breadth.json",
+  "goldManifest": "apps/showcase/campaigns/reviewer-gold.json",
+  "reviewVersion": "showcase-3d-product-review-v4",
+  "cases": [
+    {
+      "id": "blocked-normal-path",
+      "breadthCaseId": "blocked-normal-path",
+      "family": "workzone",
+      "title": "Accident or construction blocking normal path"
+    },
+    {
+      "id": "unprotected-left-dense",
+      "breadthCaseId": "unprotected-left-dense",
+      "family": "junction_conflict",
+      "title": "Unprotected left turn across dense traffic"
+    },
+    {
+      "id": "crossing-VRU",
+      "breadthCaseId": "midblock-will-they",
+      "family": "crossing_vru",
+      "title": "Pedestrian will-they-won't-they crossing mid-block"
+    }
+  ],
+  "exit": {
+    "semanticYieldMin": 0.3,
+    "casesMeetingYieldMin": 2,
+    "reviewerFlipRateMax": 0.15,
+    "maxOperationalFailures": 0,
+    "reviewRepetitions": 3,
+    "minimumGoldLabels": 12
+  },
+  "notes": [
+    "semanticYield counts attempts whose reviewer decision has semanticAccepted true, over attempts that reached a decision. Operational failures are never a semantic verdict and stay out of the denominator; they are gated separately by maxOperationalFailures.",
+    "crossing-VRU keeps the qualification-facing name while breadthCaseId names the lowercase campaign slug that a runner submits.",
+    "The exit evaluator refuses to run against calibration produced from a different gold manifest, a different reviewer version, or a different repetition count."
+  ]
+}

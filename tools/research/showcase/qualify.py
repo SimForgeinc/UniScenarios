@@ -1,0 +1,368 @@
+#!/usr/bin/env python3
+"""Qualification and reviewer-calibration workflow for the production restart.
+
+    qualify.py breadth        refresh the 67-case breadth config from the campaign
+    qualify.py gold-template  seal a hash-bound gold manifest for humans to label
+    qualify.py review         review each identical video N times with the frozen reviewer
+    qualify.py calibrate      confusion matrix, FPR/FNR, field flip rate, realism SD
+    qualify.py evaluate       machine exit evaluator over a qualification run
+
+Exit codes follow the repository convention: 0 qualified, 1 fail-closed refusal
+or operational error, 2 the run completed but did not meet the exit criteria.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+
+HERE = Path(__file__).resolve().parent
+ROOT = HERE.parents[2]
+sys.path.insert(0, str(HERE))
+import qualification as q  # noqa: E402
+
+STAGES_CLI = HERE / "stages.py"
+
+
+def _relative(path, root):
+    return str(Path(path).resolve().relative_to(Path(root).resolve())).replace(os.sep, "/")
+
+
+def _artifact(path, root):
+    return {"file": _relative(path, root), "sha256": q.sha256_file(path)}
+
+
+def _emit(value):
+    print(json.dumps(value, indent=2, sort_keys=True))
+
+
+# ------------------------------------------------------------------- breadth
+
+def breadth(args):
+    """Project the campaign case list onto a breadth config with stage outcomes."""
+    source = Path(args.source)
+    campaign = q.load_json(source)
+    cases = campaign.get("cases")
+    if not isinstance(cases, list) or not cases:
+        raise q.QualificationError(f"{source} carries no cases")
+    config = {
+        "schema": q.BREADTH_SCHEMA,
+        "id": args.id,
+        "source": _relative(source, ROOT),
+        "sourceSha256": q.sha256_file(source),
+        "attemptsPerCase": args.attempts,
+        "caseCount": len(cases),
+        "stages": list(q.STAGES),
+        "requiredStages": list(args.required_stages),
+        "stageOutcomeVocabulary": list(q.STAGE_OUTCOMES),
+        "cases": [{
+            "id": case["id"],
+            "title": case["title"],
+            "priority": case.get("priority", 0),
+            "stageOutcomes": {stage: "pending" for stage in q.STAGES},
+        } for case in cases],
+    }
+    q.dump_json(args.out, config)
+    loaded = q.load_breadth(args.out)
+    _emit({"breadth": str(args.out), "caseCount": loaded["caseCount"],
+           "requiredStages": loaded["requiredStages"]})
+
+
+# ------------------------------------------------------------- gold manifest
+
+def _discover_evidence(root, evidence_root):
+    """Pair every committed 2D render with the contract cell it was rendered from."""
+    found = []
+    for gallery in sorted(Path(evidence_root).glob("*/90-gallery.json")):
+        card = q.load_json(gallery)
+        seed = gallery.parent
+        cell_id = card.get("cellId")
+        if not isinstance(cell_id, str) or not cell_id:
+            raise q.QualificationError(f"{gallery} has no cellId")
+        cell = seed / "40-cells" / cell_id
+        render = seed / "60-render2d" / cell_id
+        video = render / "rollout.mp4"
+        instance = cell / "instance.json"
+        trace = cell / "trace.json.gz"
+        frames = sorted(render.glob("frames/frame-*.png"))
+        missing = [str(path) for path in (video, instance, trace) if not path.is_file()]
+        if missing or not frames:
+            raise q.QualificationError(f"{seed}: incomplete evidence ({', '.join(missing) or 'no frames'})")
+        request = card.get("brief")
+        if not isinstance(request, str) or not request.strip():
+            raise q.QualificationError(f"{gallery} has no brief to reproduce the review request")
+        found.append({
+            "evidenceId": cell_id,
+            "caseId": None,
+            "requestText": request.strip(),
+            "video": _artifact(video, root),
+            "frames": [_artifact(frame, root) for frame in frames],
+            "instance": _artifact(instance, root),
+            "trace": _artifact(trace, root),
+            "label": None,
+        })
+    if not found:
+        raise q.QualificationError(f"no committed showcase evidence under {evidence_root}")
+    return sorted(found, key=lambda entry: entry["evidenceId"])
+
+
+def gold_template(args):
+    """Seal a manifest over real bytes.  Existing human labels are never lost."""
+    out = Path(args.out)
+    entries = _discover_evidence(args.root, args.evidence)
+    if out.is_file():
+        previous = q.load_gold(out, args.root)
+        by_video = {entry["video"]["sha256"]: entry for entry in previous["entries"]}
+        for entry in entries:
+            carried = by_video.get(entry["video"]["sha256"])
+            if carried is not None and carried.get("label") is not None:
+                entry["label"] = carried["label"]
+                entry["caseId"] = carried["caseId"]
+        dropped = sorted(digest for digest, entry in by_video.items()
+                         if entry.get("label") is not None
+                         and digest not in {item["video"]["sha256"] for item in entries})
+        if dropped:
+            raise q.QualificationError(
+                "refusing to drop labelled gold evidence that is no longer discoverable: "
+                + ", ".join(item[:12] for item in dropped))
+    manifest = {
+        "schema": q.GOLD_SCHEMA,
+        "id": args.id,
+        "labelProvenance": "human",
+        "labelInstructions": (
+            "Human reviewers only. Watch the exact video referenced by its sha256, then set "
+            "semanticAccepted (the scene implements the requested mechanism, actors, and event order) "
+            "and presentationAccepted (grounded, plausible, defect-free render). Use defectCodes from "
+            "the vocabulary below and leave unsupportedReason null unless the stack cannot represent "
+            "the request at all. Any model-produced field makes the entry unusable for calibration."),
+        "reviewContract": {
+            "fields": list(q.DECISION_FIELDS),
+            "defectCodes": list(q.DEFECT_CODES),
+            "reviewVersion": q.REVIEW_VERSION,
+            "realismMin": q.REALISM_MIN,
+        },
+        "entries": entries,
+    }
+    manifest["manifestSha256"] = q.gold_seal(manifest)
+    q.dump_json(out, manifest)
+    loaded = q.load_gold(out, args.root)
+    _emit({
+        "gold": str(out),
+        "manifestSha256": loaded["manifestSha256"],
+        "entries": len(loaded["entries"]),
+        "labelled": sum(1 for entry in loaded["entries"] if entry["label"] is not None),
+        "eligible": len(q.eligible_gold(loaded)),
+    })
+
+
+# --------------------------------------------------- repeated identical review
+
+def _stage_render(entry, root, staged):
+    """Reproduce the reviewer's render layout from hash-verified evidence."""
+    render = (Path(root) / entry["video"]["file"]).parent
+    (staged / "frames").mkdir(parents=True)
+    (staged / "source").mkdir(parents=True)
+    os.symlink(render / "manifest.json", staged / "manifest.json")
+    for frame in entry["frames"]:
+        source = Path(root) / frame["file"]
+        os.symlink(source, staged / "frames" / source.name)
+    os.symlink(Path(root) / entry["instance"]["file"], staged / "source" / "instance.json")
+    os.symlink(Path(root) / entry["trace"]["file"], staged / "source" / "trace.json.gz")
+    brief = staged / "brief.json"
+    brief.write_text(json.dumps({"id": entry["evidenceId"], "brief": entry["requestText"]}), encoding="utf-8")
+    return brief
+
+
+def _run_reviewer(entry, root, model, effort):
+    with tempfile.TemporaryDirectory(prefix="showcase-qualify-") as tmp:
+        staged = Path(tmp) / "render"
+        brief = _stage_render(entry, root, staged)
+        result = subprocess.run(
+            [sys.executable, str(STAGES_CLI), "review3d",
+             "--brief", str(brief), "--render", str(staged),
+             "--cell-id", entry["evidenceId"],
+             "--request-text", entry["requestText"],
+             "--model", model, "--effort", effort],
+            cwd=str(root), check=True, capture_output=True, text=True)
+    lines = [line for line in result.stdout.splitlines() if line.strip().startswith("{")]
+    if not lines:
+        raise q.QualificationError(f"reviewer produced no JSON for {entry['evidenceId']}: {result.stdout[-500:]}")
+    return json.loads(lines[-1])
+
+
+def review(args):
+    """Review each identical video --repetitions times; resumable, append-only."""
+    manifest = q.load_gold(args.gold, args.root)
+    eligible = q.eligible_gold(manifest)
+    if not eligible:
+        raise q.QualificationError("no labelled, supported gold entries to review")
+    out = Path(args.out)
+    done = set()
+    if out.is_file():
+        for line in out.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            record = json.loads(line)
+            if record.get("goldSha256") != manifest["manifestSha256"]:
+                raise q.QualificationError(f"{out} was produced against a different gold manifest")
+            done.add((record["videoSha256"], record["repetition"]))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    written = 0
+    for digest in sorted(eligible):
+        entry = eligible[digest]
+        observed = q.sha256_file(Path(args.root) / entry["video"]["file"])
+        if observed != digest:
+            raise q.QualificationError(f"{entry['evidenceId']} footage changed on disk since the manifest was sealed")
+        for repetition in range(1, args.repetitions + 1):
+            if (digest, repetition) in done:
+                print(f"cached {entry['evidenceId']} #{repetition}", flush=True)
+                continue
+            raw = _run_reviewer(entry, args.root, args.model, args.effort)
+            record = {
+                "goldSha256": manifest["manifestSha256"],
+                "evidenceId": entry["evidenceId"],
+                "videoSha256": digest,
+                "repetition": repetition,
+                "reviewVersion": q.REVIEW_VERSION,
+                "model": raw.get("model"),
+                "effort": raw.get("effort"),
+                "realism": float(raw.get("realism", 0.0)),
+                "rawResponseSha256": raw.get("rawResponseSha256"),
+                **q.decision_from_review(raw),
+            }
+            with out.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps(record, sort_keys=True) + "\n")
+            written += 1
+            print(f"reviewed {entry['evidenceId']} #{repetition} "
+                  f"semantic={record['semanticAccepted']} realism={record['realism']}", flush=True)
+    _emit({"reviews": str(out), "evidence": len(eligible), "repetitions": args.repetitions,
+           "written": written, "cached": len(done)})
+
+
+def _read_reviews(path, gold_sha256):
+    records = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        if record.get("goldSha256") != gold_sha256:
+            raise q.QualificationError(f"{path} mixes reviews from a different gold manifest")
+        records.append(record)
+    if not records:
+        raise q.QualificationError(f"{path} contains no reviews")
+    return records
+
+
+def calibrate(args):
+    manifest = q.load_gold(args.gold, args.root)
+    reviews = _read_reviews(args.reviews, manifest["manifestSha256"])
+    report = q.build_calibration(manifest, reviews, args.repetitions)
+    q.dump_json(args.out, report)
+    _emit({key: value for key, value in report.items() if key != "realism"}
+          | {"realism": {key: value for key, value in report["realism"].items() if key != "byEvidence"}})
+
+
+# ------------------------------------------------------------ exit evaluation
+
+def _case_attempts(config, state, data_root):
+    """Collect one classified outcome per attempt, keyed by qualification case."""
+    by_id = {case.get("id"): case for case in state.get("cases", []) if isinstance(case, dict)}
+    collected = {}
+    for case in config["cases"]:
+        run_case = by_id.get(case["id"]) or by_id.get(case["breadthCaseId"])
+        if run_case is None:
+            raise q.QualificationError(
+                f"the run has no case named {case['id']} or {case['breadthCaseId']}")
+        outcomes = []
+        for attempt in sorted(run_case.get("attempts", []), key=lambda item: item.get("number", 0)):
+            judge = None
+            job_id = attempt.get("jobId")
+            if isinstance(job_id, str) and job_id:
+                judge_path = Path(data_root) / "jobs" / job_id / "70-judge.json"
+                if judge_path.is_file():
+                    judge = q.load_json(judge_path)
+            outcomes.append(q.attempt_outcome(attempt, judge))
+        collected[case["id"]] = outcomes
+    return collected
+
+
+def evaluate(args):
+    breadth_config = q.load_breadth(args.breadth)
+    config = q.load_qualification(args.config, breadth_config)
+    manifest = q.load_gold(args.gold, args.root)
+    calibration = q.load_json(args.calibration)
+    if calibration.get("goldSha256") != manifest["manifestSha256"]:
+        raise q.QualificationError("the calibration report was produced against a different gold manifest")
+    state = q.load_json(args.state)
+    verdict = q.evaluate_exit(config, calibration, _case_attempts(config, state, args.data))
+    if args.out:
+        q.dump_json(args.out, verdict)
+    _emit({key: value for key, value in verdict.items() if key != "cases"}
+          | {"cases": [{key: value for key, value in case.items() if key != "outcomes"}
+                       for case in verdict["cases"]]})
+    return verdict["exitCode"]
+
+
+# ------------------------------------------------------------------------ cli
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__,
+                                     formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--root", default=str(ROOT), help="repository root used to resolve evidence")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    cmd = sub.add_parser("breadth")
+    cmd.add_argument("--source", default=str(ROOT / "apps/showcase/campaigns/edge-cases.json"))
+    cmd.add_argument("--out", default=str(ROOT / "apps/showcase/campaigns/breadth.json"))
+    cmd.add_argument("--id", default="breadth-67")
+    cmd.add_argument("--attempts", type=int, default=10)
+    cmd.add_argument("--required-stages", nargs="+",
+                     default=["00-brief", "10-route", "15-precheck", "20-author", "30-sites",
+                              "40-cells", "50-gate", "60-render2d", "65-render3d", "70-judge", "90-gallery"])
+    cmd.set_defaults(func=breadth)
+
+    cmd = sub.add_parser("gold-template")
+    cmd.add_argument("--evidence", default=str(ROOT / "showcase-data/gallery-seed"))
+    cmd.add_argument("--out", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
+    cmd.add_argument("--id", default="reviewer-gold-v1")
+    cmd.set_defaults(func=gold_template)
+
+    cmd = sub.add_parser("review")
+    cmd.add_argument("--gold", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
+    cmd.add_argument("--out", required=True)
+    cmd.add_argument("--repetitions", type=int, default=3)
+    cmd.add_argument("--model", default="gpt-5.6-sol")
+    cmd.add_argument("--effort", default="medium")
+    cmd.set_defaults(func=review)
+
+    cmd = sub.add_parser("calibrate")
+    cmd.add_argument("--gold", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
+    cmd.add_argument("--reviews", required=True)
+    cmd.add_argument("--out", required=True)
+    cmd.add_argument("--repetitions", type=int, default=3)
+    cmd.set_defaults(func=calibrate)
+
+    cmd = sub.add_parser("evaluate")
+    cmd.add_argument("--config", default=str(ROOT / "apps/showcase/campaigns/qualification.json"))
+    cmd.add_argument("--breadth", default=str(ROOT / "apps/showcase/campaigns/breadth.json"))
+    cmd.add_argument("--gold", default=str(ROOT / "apps/showcase/campaigns/reviewer-gold.json"))
+    cmd.add_argument("--calibration", required=True)
+    cmd.add_argument("--state", required=True)
+    cmd.add_argument("--data", default=str(ROOT / "showcase-data"))
+    cmd.add_argument("--out")
+    cmd.set_defaults(func=evaluate)
+
+    args = parser.parse_args()
+    try:
+        return args.func(args) or 0
+    except q.QualificationError as error:
+        print(f"fail-closed: {error}", file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
