@@ -233,7 +233,7 @@ async function normalizeRender(outDir, redact) {
   }
 }
 
-async function renderCell(context, cell, outDir, { redact = false, tier = '2d' } = {}) {
+async function renderCell(context, cell, outDir, { redact = false, tier = '2d', composition = 'incident' } = {}) {
   await mkdir(outDir, { recursive: true });
   const cliArgs = [
     context.cli,
@@ -253,7 +253,7 @@ async function renderCell(context, cell, outDir, { redact = false, tier = '2d' }
     '12',
     '--full-clip',
     '--composition',
-    'incident',
+    composition,
   ];
   if (redact) cliArgs.push('--redact');
   const builtIn = await command('node', cliArgs, { cwd: context.root, allowFailure: true, timeout: tier === '3d' ? 900_000 : 180_000 });
@@ -508,6 +508,11 @@ export class ShowcasePipeline {
       template.anchor.id = `showcase-${seedIdentity}`;
       await atomicJson(templatePath, template);
     });
+    const authoredTemplate = await readJson(templatePath);
+    context.renderComposition = (authoredTemplate.props ?? [])
+      .some((prop) => prop.essentiality === 'required') ? 'all-authored' : 'incident';
+    route.methodology.renderComposition = context.renderComposition;
+    await atomicJson(routePath, route);
 
     const sites = await stage(context, '30-sites', [sitesPath], async () => {
       const args = [this.cli, 'sites', 'match', templatePath];
@@ -577,11 +582,15 @@ export class ShowcasePipeline {
         async (cell) => {
           const out = join(render2dDir, cell.cellId);
           try {
-            await this.render2d.run(() => renderCell(context, cell, out, { tier: '2d' }));
+            await this.render2d.run(() => renderCell(context, cell, out, {
+              tier: '2d', composition: context.renderComposition,
+            }));
             let redacted = null;
             if (job.judge) {
               redacted = join(out, 'redacted');
-              await this.render2d.run(() => renderCell(context, cell, redacted, { tier: '2d', redact: true }));
+              await this.render2d.run(() => renderCell(context, cell, redacted, {
+                tier: '2d', redact: true, composition: context.renderComposition,
+              }));
             }
             return { cellId: cell.cellId, status: 'complete', video: `${cell.cellId}/rollout.mp4`, redacted: redacted ? `${cell.cellId}/redacted` : null };
           } catch (error) {
@@ -648,7 +657,9 @@ export class ShowcasePipeline {
           for (let attempt = 1; attempt <= 2; attempt += 1) {
             try {
               await this.render3d.run(() =>
-                renderCell(context, cell, join(render3dDir, cell.cellId), { tier: '3d' }));
+                renderCell(context, cell, join(render3dDir, cell.cellId), {
+                  tier: '3d', composition: context.renderComposition,
+                }));
               return { cellId: cell.cellId, status: 'complete', attempts: attempt };
             } catch (error) {
               lastError = error;
