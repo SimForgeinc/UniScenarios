@@ -105,6 +105,51 @@
       "scale": 1
     },
     {
+      "id": "taper-cone-7",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 83, "headingOffsetRad": 0, "lateralM": 1.35, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-8",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 89, "headingOffsetRad": 0, "lateralM": 1.05, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-9",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 95, "headingOffsetRad": 0, "lateralM": 0.75, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-10",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 101, "headingOffsetRad": 0, "lateralM": 0.45, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "taper-cone-11",
+      "catalogId": "construction.traffic_cone",
+      "label": "closure taper cone",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 107, "headingOffsetRad": 0, "lateralM": 0.15, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
       "id": "closure-drum-left",
       "catalogId": "construction.channelizer_drum",
       "label": "lane closure drum",
@@ -128,6 +173,42 @@
       "label": "lane closure drum",
       "essentiality": "required",
       "pose": { "laneOffset": 0, "s": 120, "headingOffsetRad": 0, "lateralM": 1, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-drum-1",
+      "catalogId": "construction.channelizer_drum",
+      "label": "work area channelizer",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 126, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-drum-2",
+      "catalogId": "construction.channelizer_drum",
+      "label": "work area channelizer",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 132, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-drum-3",
+      "catalogId": "construction.channelizer_drum",
+      "label": "work area channelizer",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 138, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
+      "headingOffsetRad": 0,
+      "scale": 1
+    },
+    {
+      "id": "work-drum-4",
+      "catalogId": "construction.channelizer_drum",
+      "label": "work area channelizer",
+      "essentiality": "required",
+      "pose": { "laneOffset": 0, "s": 144, "headingOffsetRad": 0, "lateralM": 1.2, "lateralRef": "lane_centre" },
       "headingOffsetRad": 0,
       "scale": 1
     },
