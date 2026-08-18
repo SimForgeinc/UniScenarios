@@ -271,6 +271,33 @@ async function loadState() {
 }
 let state = await loadState();
 let capacity = null;
+let gatewayStatus = { available: null, checkedAt: null, error: null };
+
+async function gatewaySnapshot() {
+  if (initializeOnly) return gatewayStatus;
+  const checkedMs = gatewayStatus.checkedAt ? Date.parse(gatewayStatus.checkedAt) : 0;
+  const maxAgeMs = gatewayStatus.available ? 30 * 60_000 : 60_000;
+  if (Number.isFinite(checkedMs) && Date.now() - checkedMs < maxAgeMs) return gatewayStatus;
+  try {
+    await execFileAsync(join(ROOT, '.venv/bin/python'), [join(ROOT, 'tools/gates/assert_vision.py')], {
+      cwd: ROOT,
+      timeout: 180_000,
+      maxBuffer: 1_000_000,
+      env: {
+        ...process.env,
+        OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1',
+        OPENAI_API_KEY: 'x',
+        VISTA_MODEL: 'gpt-5.6-sol',
+        VISTA_EFFORT: 'low',
+      },
+    });
+    gatewayStatus = { available: true, checkedAt: now(), error: null };
+  } catch (error) {
+    const detail = String(error?.stderr ?? error?.stdout ?? error?.message ?? error).trim().slice(-500);
+    gatewayStatus = { available: false, checkedAt: now(), error: detail };
+  }
+  return gatewayStatus;
+}
 
 async function capacitySnapshot() {
   const load1 = loadavg()[0];
@@ -283,9 +310,13 @@ async function capacitySnapshot() {
     const values = result.stdout.trim().split(/\s+/).map(Number).filter(Number.isFinite);
     if (values.length) gpuFreeGiB = Number((Math.min(...values) / 1024).toFixed(2));
   } catch { /* CPU and memory gates remain available without nvidia-smi */ }
+  const gateway = await gatewaySnapshot();
   let effectiveMaxActiveJobs = maxActive;
   let throttleReason = null;
-  if (memoryAvailableGiB < 8) {
+  if (gateway.available === false) {
+    effectiveMaxActiveJobs = 0;
+    throttleReason = `model gateway preflight failed: ${gateway.error}`;
+  } else if (memoryAvailableGiB < 8) {
     effectiveMaxActiveJobs = 0;
     throttleReason = `available memory ${memoryAvailableGiB} GiB is below 8 GiB`;
   } else if (gpuFreeGiB != null && gpuFreeGiB < 1.5) {
@@ -303,6 +334,7 @@ async function capacitySnapshot() {
     loadPauseThreshold: Number((hardware.logicalCpus * loadPausePerCpu).toFixed(2)),
     memoryAvailableGiB,
     gpuFreeGiB,
+    gateway,
     effectiveMaxActiveJobs,
     throttleReason,
   };
