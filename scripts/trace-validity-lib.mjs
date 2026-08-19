@@ -421,6 +421,10 @@ export function retryForDefectCodes(codes) {
 export function classifyRenderFailure(message) {
   const text = String(message ?? '');
   if (/incident composition failed/i.test(text)) return 'render.camera.composition_failed';
+  // A deterministic evidence refusal is the exporter doing its job, not the
+  // browser failing: classifying it as a transient invited pointless retries
+  // with an identical outcome.
+  if (/evidence integrity failed/i.test(text)) return 'render.asset.scene_mismatch';
   if (/camera intersects actor clearance|clearanceM/i.test(text)) return 'render.camera.clearance_violation';
   if (/map evidence file is missing|topology integrity failed/i.test(text)) return 'render.asset.map_evidence_missing';
   if (/Studio loaded map|renderer is unavailable|render-quality preference|viewer canvas not found/i.test(text)) {

@@ -280,7 +280,17 @@ export function validateScenarioPair(instanceDoc, trace, _traceCanonicalBytes, o
   }
 
   const declaredPair = trace.metrics?.declaredOcclusion?.find((item) => Array.isArray(item?.pair))?.pair;
-  const metricPair = trace.metrics?.revealToConflict?.pair ?? declaredPair ?? trace.metrics?.minTTC?.pair ?? [];
+  // The engine records the conflict pair on whichever criticality channel the
+  // scenario actually exercised: direct TTC for in-lane conflicts, path-TTC and
+  // PET for crossing conflicts (where closing speed is undefined during a
+  // hesitation hold and `minTTC` is legitimately null). Read them in that order;
+  // an unoccluded crossing trace is evidence, not an integrity failure.
+  const metricPair = trace.metrics?.revealToConflict?.pair
+    ?? declaredPair
+    ?? trace.metrics?.minTTC?.pair
+    ?? trace.metrics?.minPathTTC?.pair
+    ?? trace.metrics?.minPET?.pair
+    ?? [];
   if (!Array.isArray(metricPair) || metricPair.length !== 2 || metricPair.some((id) => !inputActorIds.includes(id))) {
     issues.push(`metric pair must name exactly two input actors; got ${metricPair.join?.(',') ?? 'invalid'}`);
   }
