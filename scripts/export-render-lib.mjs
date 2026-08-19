@@ -1408,8 +1408,19 @@ export function resolveRenderGroundHeight(surfaceHeights, fallbackHeight, maxDec
     return fallbackHeight;
   }
   const spread = heights[heights.length - 1] - heights[0];
-  if (spread > maxDeckGapM) {
-    throw new Error(`stacked road surfaces are elevation-ambiguous (${spread.toFixed(3)}m separation)`);
+  if (spread <= maxDeckGapM) return heights[heights.length - 1];
+  // Stacked decks - an overpass crossing a surface street. Taking the highest
+  // surface would float a street-level actor onto the bridge, so this used to
+  // refuse outright. The map's own road overlay reports the drivable surface at
+  // this exact point, and the actor was authored onto a lane of that network, so
+  // it names the deck. Use it only when it agrees with one sampled surface
+  // within the same tolerance; otherwise keep refusing rather than guess.
+  if (Number.isFinite(fallbackHeight)) {
+    const nearest = heights.reduce(
+      (best, height) => (Math.abs(height - fallbackHeight) < Math.abs(best - fallbackHeight) ? height : best),
+      heights[0],
+    );
+    if (Math.abs(nearest - fallbackHeight) <= maxDeckGapM) return nearest;
   }
-  return heights[heights.length - 1];
+  throw new Error(`stacked road surfaces are elevation-ambiguous (${spread.toFixed(3)}m separation)`);
 }

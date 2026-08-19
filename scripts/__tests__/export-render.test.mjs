@@ -45,11 +45,21 @@ function clone(value) {
   return structuredClone(value);
 }
 
-test('fails closed on vertically ambiguous stacked road decks', () => {
+test('resolves a stacked deck by the road overlay, and still fails closed without one', () => {
   assert.equal(resolveRenderGroundHeight([1.0, 1.02], 0), 1.02);
   assert.equal(resolveRenderGroundHeight([], 3.5), 3.5);
+  // The overlay reports the drivable surface at this point, so a street-level
+  // actor under an overpass is placed on the street, not floated onto the deck.
+  assert.equal(resolveRenderGroundHeight([0.1, 4.8], 0.1), 0.1);
+  assert.equal(resolveRenderGroundHeight([0.1, 4.8], 4.79), 4.8);
+  // No overlay height, or one that names neither deck, stays a refusal: placing
+  // an actor on a guessed deck would be silent, unverifiable evidence.
   assert.throws(
-    () => resolveRenderGroundHeight([0.1, 4.8], 0.1),
+    () => resolveRenderGroundHeight([0.1, 4.8], 2.4),
+    /stacked road surfaces are elevation-ambiguous \(4\.700m separation\)/,
+  );
+  assert.throws(
+    () => resolveRenderGroundHeight([0.1, 4.8], Number.NaN),
     /stacked road surfaces are elevation-ambiguous \(4\.700m separation\)/,
   );
 });
