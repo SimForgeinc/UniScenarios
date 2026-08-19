@@ -7,7 +7,7 @@
     "intervalMs": 15000,
     "submissionRecoveryMs": 300000,
     "submissionRampPerHeartbeat": 4,
-    "loadPausePerCpu": 1.25,
+    "loadPausePerCpu": 2.5,
     "maxGenerationAttempts": 2,
     "providerFailureThreshold": 3,
     "retryBackoffMs": 30000,
