@@ -847,6 +847,14 @@ async function renderCell(context, cell, outDir, { redact = false, tier = '2d', 
     '--composition',
     composition,
   ];
+  // The 2D tier draws its lane/junction underlay from the topology index, and
+  // only when it is given the asset root. Without it the evidence video is
+  // labelled boxes on a blank grid - `trace-render`'s own comment calls that
+  // out as poisoning a vision verdict, and it did: the semantic oracle judges
+  // this footage, so context-dependent mechanisms (stop signs, lane geometry,
+  // a double-parked obstruction) were unprovable no matter how correct the
+  // simulation was.
+  if (tier === '2d') cliArgs.push('--dev-assets', join(context.root, 'dev-assets'));
   if (redact) cliArgs.push('--redact');
   const builtIn = await command('node', cliArgs, { cwd: context.root, allowFailure: true, timeout: tier === '3d' ? 900_000 : 180_000 });
   if (builtIn.code !== 0 && tier === '2d') {
