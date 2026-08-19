@@ -480,15 +480,27 @@ export function incidentWindow(trace) {
   const dt = Number.isFinite(trace.header?.dt) && trace.header.dt > 0
     ? trace.header.dt
     : (times.length > 1 ? times[1] - times[0] : 0.02);
+  const namesPair = (entry) => entry != null
+    && Array.isArray(entry.pair) && entry.pair.length === 2 && Number.isFinite(entry.t);
   const minTTC = trace.metrics?.minTTC ?? null;
   const minPathTTC = trace.metrics?.minPathTTC ?? null;
-  const criticality = minPathTTC && Number.isFinite(minPathTTC.value) && (
+  const ttc = minPathTTC && Number.isFinite(minPathTTC.value) && (
     !minTTC
     || !Number.isFinite(minTTC.value)
     || minPathTTC.value < minTTC.value
     || (minPathTTC.value === minTTC.value && minPathTTC.t < minTTC.t)
   ) ? minPathTTC : minTTC;
-  if (!criticality || !Array.isArray(criticality.pair) || criticality.pair.length !== 2) {
+  // A hesitation hold, a full stop, or any crossing the ego yields to leaves no
+  // closing speed, so neither TTC channel exists at all. The engine still
+  // records post-encroachment time and the closest-approach sample, and both
+  // name the same conflict pair - framing their instant is the shot the TTC
+  // path would have chosen. Refusing here rendered nothing for exactly the
+  // scenarios whose mechanism is "the ego waited".
+  const encroachment = namesPair(ttc)
+    ? null
+    : ([trace.metrics?.minPET ?? null, ...(trace.metrics?.minDistance ?? [])].find(namesPair) ?? null);
+  const criticality = namesPair(ttc) ? ttc : encroachment;
+  if (!namesPair(criticality)) {
     throw new Error('trace carries neither revealToConflict nor a criticality pair to frame');
   }
   const pair = [...criticality.pair];
@@ -496,7 +508,9 @@ export function incidentWindow(trace) {
   const closest = (trace.metrics?.minDistance ?? []).find(
     (entry) => Array.isArray(entry?.pair) && [...entry.pair].sort().join('\u0000') === key,
   );
-  const predictedConflictT = Number.isFinite(criticality.value)
+  // An encroachment sample already *is* the conflict instant; only a TTC value
+  // is a countdown that has to be added to its own timestamp.
+  const predictedConflictT = encroachment === null && Number.isFinite(criticality.value)
     ? criticality.t + criticality.value
     : criticality.t;
   // A non-colliding pair can keep converging until the clip boundary after its
