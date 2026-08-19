@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
-
 import type { AsamConstructCapabilityEntry } from '@uniscenarios/cli/asam/types';
 import { operationalConditionsSchema, type OperationalConditions, type SimEvent, type SimTrace } from '@uniscenarios/sim-engine';
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
+
+import { readXml, XmlReadError, type XmlElement } from './replay/xml.js';
 
 type XmlNode = Record<string, unknown>;
 type ParsedXml = readonly XmlNode[];
@@ -10,6 +9,13 @@ type ParsedXml = readonly XmlNode[];
 /** Separate from the deliberately small interactive-import limit: execution
  * packages contain one vertex per actor per fixed tick. */
 export const MAX_OPENSCENARIO_EXECUTION_PLAN_BYTES = 64 * 1024 * 1024;
+export interface OpenScenarioExecutionPlanOptions {
+  /**
+   * Evidence supplied by the caller that verified the source bytes. A decoder
+   * must not recompute and thereby self-attest the digest of bytes it was handed.
+   */
+  readonly sourceSha256: string;
+}
 
 export interface OpenScenarioPlanSample {
   readonly t: number;
@@ -130,16 +136,6 @@ export class OpenScenarioExecutionPlanError extends Error {
   }
 }
 
-const parser = new XMLParser({
-  preserveOrder: true,
-  ignoreAttributes: false,
-  attributeNamePrefix: '@_',
-  processEntities: false,
-  htmlEntities: false,
-  parseAttributeValue: false,
-  parseTagValue: false,
-  trimValues: false,
-});
 
 function nodeName(node: XmlNode): string | null {
   return Object.keys(node).find((key) => key !== ':@' && key !== '#text' && key !== '?xml') ?? null;
@@ -175,6 +171,113 @@ function finite(raw: string | undefined, path: string): number {
   return value;
 }
 
+function preserveOrderElement(element: XmlElement): XmlNode {
+  const content: XmlNode[] = element.children.map(preserveOrderElement);
+  if (element.text !== '') content.push({ '#text': element.text });
+  return {
+    [element.name]: content,
+    ...(Object.keys(element.attributes).length > 0
+      ? { ':@': Object.fromEntries(Object.entries(element.attributes).map(([name, value]) => [`@_${name}`, value])) }
+      : {}),
+  };
+}
+
+const TRAJECTORY_REPLAY_ELEMENTS: Readonly<Record<string, true>> = Object.fromEntries([
+  'OpenSCENARIO', 'FileHeader', 'Properties', 'Property', 'ParameterDeclarations', 'CatalogLocations',
+  'RoadNetwork', 'LogicFile', 'Entities', 'ScenarioObject', 'Vehicle', 'Pedestrian', 'MiscObject',
+  'BoundingBox', 'Center', 'Dimensions', 'Performance', 'Axles', 'FrontAxle', 'RearAxle',
+  'Storyboard', 'Init', 'Actions', 'GlobalAction', 'EnvironmentAction', 'Environment', 'TimeOfDay',
+  'Weather', 'Sun', 'Fog', 'Precipitation', 'RoadCondition', 'InfrastructureAction',
+  'TrafficSignalAction', 'TrafficSignalStateAction', 'Private', 'PrivateAction', 'TeleportAction',
+  'Position', 'WorldPosition', 'RoutingAction', 'FollowTrajectoryAction', 'TimeReference', 'Timing',
+  'TrajectoryFollowingMode', 'TrajectoryRef', 'Trajectory', 'Shape', 'Polyline', 'Vertex', 'Motion',
+  'Interpolation', 'Story', 'Act', 'ManeuverGroup', 'Actors', 'EntityRef', 'Maneuver', 'Event',
+  'Action', 'StartTrigger', 'ConditionGroup', 'Condition', 'ByValueCondition',
+  'SimulationTimeCondition', 'EntityAction', 'DeleteEntityAction', 'AppearanceAction',
+  'LightStateAction', 'LightType', 'VehicleLight', 'LightState', 'AnimationAction', 'AnimationType',
+  'ComponentAnimation', 'VehicleComponent', 'AnimationState', 'UserDefinedAnimation', 'StopTrigger',
+].map((name) => [name, true]));
+function elementDescendants(node: XmlElement, name: string): XmlElement[] {
+  return [
+    ...(node.name === name ? [node] : []),
+    ...node.children.flatMap((child) => elementDescendants(child, name)),
+  ];
+}
+
+function profileError(code: string, node: XmlElement, message: string): never {
+  throw new OpenScenarioExecutionPlanError(code, node.name, message);
+}
+
+function onlyElementChildren(node: XmlElement, allowed: readonly string[], code: string): void {
+  const names = new Set(allowed);
+  if (node.text.trim() !== '' || node.children.some((child) => !names.has(child.name))) {
+    profileError(code, node, `<${node.name}> contains content outside the trajectory-replay profile`);
+  }
+}
+
+function singleElementChild(node: XmlElement, name: string, code: string): XmlElement {
+  const matches = node.children.filter((child) => child.name === name);
+  if (matches.length !== 1) profileError(code, node, `<${node.name}> must contain exactly one <${name}>`);
+  return matches[0]!;
+}
+
+function validateReplayTrigger(trigger: XmlElement): void {
+  onlyElementChildren(trigger, ['ConditionGroup'], 'unsupported_trigger');
+  const group = singleElementChild(trigger, 'ConditionGroup', 'unsupported_trigger');
+  onlyElementChildren(group, ['Condition'], 'unsupported_trigger');
+  const condition = singleElementChild(group, 'Condition', 'unsupported_trigger');
+  if (condition.attributes.delay !== '0' || condition.attributes.conditionEdge !== 'none') {
+    profileError('unsupported_trigger', condition, 'trajectory-replay triggers require delay=0 and conditionEdge=none');
+  }
+  onlyElementChildren(condition, ['ByValueCondition'], 'unsupported_trigger');
+  const byValue = singleElementChild(condition, 'ByValueCondition', 'unsupported_trigger');
+  onlyElementChildren(byValue, ['SimulationTimeCondition'], 'unsupported_trigger');
+  const time = singleElementChild(byValue, 'SimulationTimeCondition', 'unsupported_trigger');
+  if (time.attributes.rule !== 'greaterOrEqual') {
+    profileError('unsupported_trigger', time, 'trajectory-replay time triggers require greaterOrEqual');
+  }
+}
+
+function validateEventAction(action: XmlElement): void {
+  onlyElementChildren(action, ['GlobalAction', 'PrivateAction'], 'unsupported_action');
+  if (action.children.length !== 1) profileError('unsupported_action', action, 'event Action must contain exactly one profile action');
+  const wrapper = action.children[0]!;
+  if (wrapper.name === 'GlobalAction') {
+    onlyElementChildren(wrapper, ['InfrastructureAction', 'EntityAction'], 'unsupported_action');
+    if (wrapper.children.length !== 1) profileError('unsupported_action', wrapper, 'GlobalAction must contain exactly one profile action');
+    const global = wrapper.children[0]!;
+    if (global.name === 'InfrastructureAction') {
+      onlyElementChildren(global, ['TrafficSignalAction'], 'unsupported_action');
+      const traffic = singleElementChild(global, 'TrafficSignalAction', 'unsupported_action');
+      onlyElementChildren(traffic, ['TrafficSignalStateAction'], 'unsupported_action');
+      singleElementChild(traffic, 'TrafficSignalStateAction', 'unsupported_action');
+      return;
+    }
+    onlyElementChildren(global, ['DeleteEntityAction'], 'unsupported_action');
+    singleElementChild(global, 'DeleteEntityAction', 'unsupported_action');
+    return;
+  }
+  onlyElementChildren(wrapper, ['AppearanceAction'], 'unsupported_action');
+  const appearance = singleElementChild(wrapper, 'AppearanceAction', 'unsupported_action');
+  onlyElementChildren(appearance, ['LightStateAction', 'AnimationAction'], 'unsupported_action');
+  if (appearance.children.length !== 1) profileError('unsupported_action', appearance, 'AppearanceAction must contain exactly one profile action');
+}
+
+function validateTrajectoryReplayProfile(root: XmlElement): void {
+  for (const action of elementDescendants(root, 'Action')) validateEventAction(action);
+  for (const trigger of [...elementDescendants(root, 'StartTrigger'), ...elementDescendants(root, 'StopTrigger')]) {
+    validateReplayTrigger(trigger);
+  }
+  const pending = [root];
+  while (pending.length > 0) {
+    const node = pending.pop()!;
+    if (TRAJECTORY_REPLAY_ELEMENTS[node.name] !== true) {
+      profileError('unsupported_element', node, `<${node.name}> is not defined by the trajectory-replay profile`);
+    }
+    pending.push(...node.children);
+  }
+}
+
 function parseDocument(content: string): ParsedXml {
   const bytes = new TextEncoder().encode(content);
   if (bytes.byteLength === 0 || bytes.byteLength > MAX_OPENSCENARIO_EXECUTION_PLAN_BYTES) {
@@ -183,12 +286,20 @@ function parseDocument(content: string): ParsedXml {
   if (/<!DOCTYPE\b/i.test(content) || /<!ENTITY\b/i.test(content)) {
     throw new OpenScenarioExecutionPlanError('xml_declarations_forbidden', 'document', 'DTD and entity declarations are forbidden');
   }
-  const validation = XMLValidator.validate(content, { allowBooleanAttributes: false });
-  if (validation !== true) throw new OpenScenarioExecutionPlanError('malformed_xml', 'document', validation.err.msg);
-  const parsed = parser.parse(content) as ParsedXml;
-  const root = parsed.find((node) => nodeName(node) === 'OpenSCENARIO');
-  if (!root) throw new OpenScenarioExecutionPlanError('not_openscenario', 'document', 'OpenSCENARIO root is missing');
-  return [root];
+  let document: XmlElement;
+  try {
+    document = readXml(content);
+  } catch (cause) {
+    if (cause instanceof XmlReadError) {
+      throw new OpenScenarioExecutionPlanError('malformed_xml', 'document', cause.message);
+    }
+    throw cause;
+  }
+  if (document.name !== 'OpenSCENARIO') {
+    throw new OpenScenarioExecutionPlanError('not_openscenario', 'document', 'OpenSCENARIO root is missing');
+  }
+  validateTrajectoryReplayProfile(document);
+  return [preserveOrderElement(document)];
 }
 
 function properties(nodes: ParsedXml): Map<string, string> {
@@ -458,7 +569,13 @@ function validateCapabilities(
   if (missing.length > 0) throw new OpenScenarioExecutionPlanError('missing_capability_disposition', 'FileHeader.Properties.uniscenarios.export.constructCapabilities.v1', `missing dispositions for ${missing.join(', ')}`);
 }
 
-export function extractOpenScenarioExecutionPlan(content: string): OpenScenarioExecutionPlan {
+export function extractOpenScenarioExecutionPlan(
+  content: string,
+  options: OpenScenarioExecutionPlanOptions,
+): OpenScenarioExecutionPlan {
+  if (!/^[a-f0-9]{64}$/i.test(options.sourceSha256)) {
+    throw new OpenScenarioExecutionPlanError('invalid_source_digest', 'sourceSha256', 'sourceSha256 must be a 64-character hexadecimal SHA-256 digest');
+  }
   const xml = parseDocument(content);
   const header = first(xml, 'FileHeader');
   const headerAttrs = header ? attrs(header) : {};
@@ -468,6 +585,12 @@ export function extractOpenScenarioExecutionPlan(content: string): OpenScenarioE
   const values = properties(header ? children(header) : []);
   if (requiredProperty(values, 'uniscenarios.executionMode') !== 'trajectory-replay') {
     throw new OpenScenarioExecutionPlanError('unsupported_execution_mode', 'FileHeader.Properties.uniscenarios.executionMode', 'execution-plan extraction requires trajectory-replay mode');
+  }
+  if (
+    requiredProperty(values, 'uniscenarios.export.profile') !== 'xml-1.4-trajectory-replay'
+    || requiredProperty(values, 'uniscenarios.export.intent') !== 'trajectory-replay'
+  ) {
+    throw new OpenScenarioExecutionPlanError('unknown_profile', 'FileHeader.Properties', 'unrecognized UniScenarios trajectory-replay profile markers');
   }
   const actorIds = jsonProperty<string[]>(values, 'uniscenarios.trajectoryReplay.actorIds.v1');
   const authoredActorIds = jsonProperty<string[]>(values, 'uniscenarios.trajectoryReplay.authoredActorIds.v1');
@@ -556,6 +679,9 @@ export function extractOpenScenarioExecutionPlan(content: string): OpenScenarioE
     const privateNode = privateByEntity.get(entityName);
     if (!privateNode) throw new OpenScenarioExecutionPlanError('missing_actor_init', `Storyboard.Init.${entityName}`, 'trace actor has no private initialization');
     const dynamicSamples = trajectorySamples(privateNode, `actors.${id}`);
+    if (actorMetadata[id]?.static === false && !dynamicSamples) {
+      throw new OpenScenarioExecutionPlanError('missing_trajectory', `actors.${id}`, `dynamic actor ${id} has no trajectory`);
+    }
     const init = first(children(privateNode), 'TeleportAction');
     const initWorld = init ? first(children(init), 'WorldPosition') : null;
     if (!initWorld) throw new OpenScenarioExecutionPlanError('missing_actor_pose', `Storyboard.Init.${entityName}`, 'trace actor requires an initial WorldPosition');
@@ -626,7 +752,7 @@ export function extractOpenScenarioExecutionPlan(content: string): OpenScenarioE
 
   return {
     version: 1,
-    sourceSha256: createHash('sha256').update(content).digest('hex'),
+    sourceSha256: options.sourceSha256,
     standard: 'ASAM OpenSCENARIO XML 1.4.0',
     executionMode: 'trajectory-replay',
     inputHash,

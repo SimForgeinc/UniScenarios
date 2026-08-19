@@ -47,6 +47,20 @@ export function defaultCatalogIdForActorKind(kind: SimActor['kind']): CatalogId 
   return KIND_DEFAULTS[kind];
 }
 
+/** Resolve the render catalog identity shared by native traces and replay adapters. */
+export function resolvePlaybackCatalogId(
+  kind: SimActor['kind'],
+  explicit?: string | null,
+): { readonly catalogId: CatalogId; readonly modelBasis: PlaybackActor['modelBasis'] } | null {
+  const candidate = explicit ?? defaultCatalogIdForActorKind(kind);
+  if (!isCatalogId(candidate)) return null;
+  getEntry(candidate);
+  return {
+    catalogId: candidate,
+    modelBasis: explicit ? 'input-tag' : 'kind-default',
+  };
+}
+
 export interface PlaybackSource {
   readonly instanceName: string;
   readonly traceName: string;
@@ -69,6 +83,8 @@ export interface ConcreteInstance {
 
 export interface PlaybackActor {
   readonly id: string;
+  /** Original OpenSCENARIO entity identity, when playback came from XOSC evidence. */
+  readonly entityName?: string;
   readonly kind: SimActor['kind'];
   readonly static: boolean;
   readonly tags: readonly string[];
@@ -126,7 +142,9 @@ export interface CanonicalPreviewIdentity {
 
 export function canonicalPreviewIdentity(bundle: Pick<PlaybackBundle, 'instance' | 'trace'>): CanonicalPreviewIdentity {
   const endTimeS = bundle.trace.ticks.t.at(-1) ?? 0;
-  const inputHash = contentHash(bundle.instance.input);
+  const inputHash = bundle.trace.header.source === 'openscenario-replay'
+    ? bundle.trace.header.inputHash
+    : contentHash(bundle.instance.input);
   return {
     contractVersion: 1,
     inputHash,
@@ -682,21 +700,18 @@ function mapPlaybackActors(
       issues.push(`${name}: actor ${actor.id} has invalid Studio body color ${display(bodyColor)}`);
       continue;
     }
-    const catalogId = explicit ?? defaultCatalogIdForActorKind(actor.kind);
-    if (!isCatalogId(catalogId)) {
-      issues.push(`${name}: actor ${actor.id} requests unknown Studio catalog model ${display(catalogId)}`);
+    const visual = resolvePlaybackCatalogId(actor.kind, explicit);
+    if (!visual) {
+      issues.push(`${name}: actor ${actor.id} requests unknown Studio catalog model ${display(explicit)}`);
       continue;
     }
-    // Buildability and dimensions are checked by prop-catalog itself; calling
-    // getEntry here turns a stale registry id into an import diagnostic.
-    getEntry(catalogId);
     actors.push({
       id: actor.id,
       kind: actor.kind,
       static: actor.static,
       tags: [...actor.tags],
-      catalogId,
-      modelBasis: explicit ? 'input-tag' : 'kind-default',
+      catalogId: visual.catalogId,
+      modelBasis: visual.modelBasis,
       ...(bodyColor ? { bodyColor: bodyColor.toLowerCase() } : {}),
       dims: { l: actor.dims.l, w: actor.dims.w, h: actor.dims.h },
       initial: {

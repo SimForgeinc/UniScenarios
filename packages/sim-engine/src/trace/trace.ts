@@ -285,6 +285,10 @@ export interface TraceHeader {
   readonly engineVersion: string;
   /** `sha256(canonicalJson(parsedInput))`. */
   readonly inputHash: string;
+  /** Origin of an adapted immutable trace. Absent on native sim-engine traces for hash stability. */
+  readonly source?: 'sim-engine' | 'openscenario-replay';
+  /** Exact XOSC bytes decoded into this trace, when `source` is `openscenario-replay`. */
+  readonly sourceXoscSha256?: string;
   /** Exact canonical materialized-traffic bytes merged into browser/worker evidence. */
   readonly materializedTrafficDigest?: string;
   readonly seed: number | string;

@@ -30,6 +30,7 @@ export {
   extractOpenScenarioExecutionPlan,
   type OpenScenarioEnvironmentPlan,
   type OpenScenarioExecutionPlan,
+  type OpenScenarioExecutionPlanOptions,
   type OpenScenarioPlanActor,
   type OpenScenarioPlanDifference,
   type OpenScenarioPlanSample,
