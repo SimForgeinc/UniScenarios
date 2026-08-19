@@ -15,6 +15,7 @@ import {
   type SensorMount,
   type SensorRigMount,
   type VehicleAnchor,
+  type VehicleAnchorMount,
 } from './sensors.js';
 import {
   ActorClassSchema,
@@ -400,6 +401,101 @@ export function resolveSensorRigMount(
       z: rounded(base.z + mount.offset.z),
     },
     rotation: mount.rotation,
+  });
+}
+
+export type SensorMountPreset = {
+  id: string;
+  label: string;
+  mount: VehicleAnchorMount;
+};
+
+/** Physical mounting choices scale with the carrier instead of one catalog model. */
+export const SENSOR_MOUNT_PRESETS: readonly SensorMountPreset[] = Object.freeze([
+  {
+    id: 'roof-centre',
+    label: 'Roof',
+    mount: {
+      anchor: { longitudinal: 'center', vertical: 'top', lateral: 'center' },
+      offset: { x: 0, y: 0.15, z: 0 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+  {
+    id: 'windscreen',
+    label: 'Windscreen',
+    mount: {
+      anchor: { longitudinal: 'front', vertical: 'top', lateral: 'center' },
+      offset: { x: -0.35, y: -0.25, z: 0 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+  {
+    id: 'front-bumper',
+    label: 'Front bumper',
+    mount: {
+      anchor: { longitudinal: 'front', vertical: 'bottom', lateral: 'center' },
+      offset: { x: 0, y: 0.5, z: 0 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+  {
+    id: 'rear-bumper',
+    label: 'Rear bumper',
+    mount: {
+      anchor: { longitudinal: 'rear', vertical: 'bottom', lateral: 'center' },
+      offset: { x: 0, y: 0.5, z: 0 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+  {
+    id: 'left-mirror',
+    label: 'Left mirror',
+    mount: {
+      anchor: { longitudinal: 'front', vertical: 'top', lateral: 'left' },
+      offset: { x: -0.6, y: -0.35, z: 0.08 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+  {
+    id: 'right-mirror',
+    label: 'Right mirror',
+    mount: {
+      anchor: { longitudinal: 'front', vertical: 'top', lateral: 'right' },
+      offset: { x: -0.6, y: -0.35, z: -0.08 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  },
+]);
+
+const SENSOR_MOUNT_PRESETS_BY_ID: Readonly<Record<string, SensorMountPreset>> =
+  Object.fromEntries(SENSOR_MOUNT_PRESETS.map((preset) => [preset.id, preset]));
+
+/** Resolve one author-facing mounting choice against the carrier's dimensions. */
+export function resolveSensorMountPreset(
+  presetOrId: SensorMountPreset | string,
+  actor: SensorRigActor,
+): SensorMount {
+  const preset = typeof presetOrId === 'string'
+    ? SENSOR_MOUNT_PRESETS_BY_ID[presetOrId]
+    : presetOrId;
+  if (!preset) throw new Error(`unknown sensor mount preset "${presetOrId}"`);
+  return resolveSensorRigMount(preset.mount, actor);
+}
+
+/**
+ * Rotation is deliberately absent from matching: mounting position and aim are
+ * independent authoring choices, and changing one must not clear the other.
+ */
+export function matchSensorMountPreset(
+  mount: SensorMount,
+  actor: SensorRigActor,
+): SensorMountPreset | undefined {
+  return SENSOR_MOUNT_PRESETS.find((preset) => {
+    const resolved = resolveSensorMountPreset(preset, actor);
+    return rounded(resolved.position.x - mount.position.x) === 0
+      && rounded(resolved.position.y - mount.position.y) === 0
+      && rounded(resolved.position.z - mount.position.z) === 0;
   });
 }
 

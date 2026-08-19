@@ -377,14 +377,18 @@ export function supportsDashCamera(actor: Pick<ActorForDashCamera, 'class'>): bo
 }
 
 /** Stable, schema-legal sensor id. It is generated once when the sensor is added. */
-export function newSensorId(): string {
+export function newSensorId(type: ActorSensor['type']): string {
   const time = Date.now().toString(36);
   const random = Math.random().toString(36).slice(2, 10);
-  return `dash-camera-${time}-${random}`.slice(0, 64);
+  const prefix = type === 'dash_camera' ? 'dash-camera' : type;
+  return `${prefix}-${time}-${random}`.slice(0, 64);
 }
 
 /** A forward-facing windscreen/dash mount scaled to the actor's authored box. */
-export function defaultDashCamera(actor: ActorForDashCamera, id: string = newSensorId()): DashCameraSensor {
+export function defaultDashCamera(
+  actor: ActorForDashCamera,
+  id: string = newSensorId('dash_camera'),
+): DashCameraSensor {
   if (!supportsDashCamera(actor)) {
     throw new Error(`dash cameras are not supported on actor class "${actor.class}"`);
   }
@@ -411,4 +415,46 @@ export function defaultDashCamera(actor: ActorForDashCamera, id: string = newSen
     },
     detection: DetectionModelSchema.parse({}),
   };
+}
+
+/**
+ * Active sensors need no windscreen, so ActorSpec intentionally permits this
+ * mount on every class; authored dimensions win over the legacy reference box.
+ */
+export function defaultLidar(
+  actor: ActorForDashCamera,
+  id: string = newSensorId('lidar'),
+): LidarSensor {
+  return LidarSensorSchema.parse({
+    id,
+    type: 'lidar',
+    enabled: true,
+    mount: {
+      position: { x: 0, y: actor.dims?.height ?? 1.5, z: 0 },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+    field: { horizontalFovDeg: 360 },
+  });
+}
+
+/** A forward active sensor placed above road spray and below the windscreen. */
+export function defaultRadar(
+  actor: ActorForDashCamera,
+  id: string = newSensorId('radar'),
+): RadarSensor {
+  const length = actor.dims?.length ?? 4.8;
+  const height = actor.dims?.height ?? 1.5;
+  return RadarSensorSchema.parse({
+    id,
+    type: 'radar',
+    enabled: true,
+    mount: {
+      position: {
+        x: length / 2,
+        y: Math.max(0.4, height * 0.3),
+        z: 0,
+      },
+      rotation: { yawRad: 0, pitchRad: 0, rollRad: 0 },
+    },
+  });
 }

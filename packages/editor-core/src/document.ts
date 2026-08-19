@@ -45,6 +45,11 @@ import { editorMapVersionId, editorSourceMapId, type MapEntry } from './map';
 import { defaultSpeedKph, isActionCompatible } from './timeline-actions';
 import { routePlaceholderOnActor } from './route-placeholder';
 
+/** Resolve sensor-derived subject identity in canonical authoring order. */
+export function sensorSubjectRole(template: Pick<ScenarioTemplateV2, 'roles'>): string | undefined {
+  return template.roles.find((role) => role.actor.sensors.length > 0)?.id;
+}
+
 /** Where an actor is stored. */
 export type ActorSource = 'role' | 'prop';
 
@@ -746,6 +751,7 @@ export class EditorDocument {
         ...current,
         actor: { ...current.actor, sensors: [...sensors] },
       });
+      this.#reconcileSensorSubject(actorId);
     });
   }
 
@@ -906,7 +912,11 @@ export class EditorDocument {
     this.#transaction(() => { this.#doc.removeInteraction(id); });
   }
 
-  /** Designate the ego role. Trace annotations belong only to the active ego. */
+  /**
+   * Change the metric subject and discard trace annotations owned by any
+   * previous subject. Sensor commands call the underlying document operation
+   * directly so removing hardware can never erase authored trace work.
+   */
   setMetricSubject(roleId: string | null): void {
     this.#transaction(() => {
       for (const segment of this.#doc.data.reasoningTrace) {
@@ -1000,7 +1010,10 @@ export class EditorDocument {
   /** Add one validated actor-attached sensor as an undoable/autosaved gesture. */
   addActorSensor(actorId: string, sensor: ActorSensor): string {
     let id = sensor.id;
-    this.#transaction(() => { id = this.#doc.addActorSensor(actorId, sensor); });
+    this.#transaction(() => {
+      id = this.#doc.addActorSensor(actorId, sensor);
+      this.#reconcileSensorSubject(actorId);
+    });
     return id;
   }
 
@@ -1012,7 +1025,26 @@ export class EditorDocument {
 
   /** Remove one actor-attached sensor. */
   removeActorSensor(actorId: string, sensorId: string): void {
-    this.#transaction(() => { this.#doc.removeActorSensor(actorId, sensorId); });
+    this.#transaction(() => {
+      this.#doc.removeActorSensor(actorId, sensorId);
+      this.#reconcileSensorSubject(actorId);
+    });
+  }
+
+  #reconcileSensorSubject(actorId: string): void {
+    const sensors = this.#doc.role(actorId)?.actor.sensors ?? [];
+    if (sensors.length > 0) {
+      if (this.#doc.data.metricSubject === undefined) {
+        this.#doc.setMetricSubject(sensorSubjectRole(this.#doc.data) ?? null);
+      }
+      return;
+    }
+    if (
+      this.#doc.data.metricSubject === actorId
+      && !this.#doc.data.reasoningTrace.some((segment) => segment.actor === actorId)
+    ) {
+      this.#doc.setMetricSubject(null);
+    }
   }
 
   /** Set recorded/warm-up duration as one editor gesture. */

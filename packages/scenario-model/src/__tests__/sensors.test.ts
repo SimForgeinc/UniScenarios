@@ -4,9 +4,13 @@ import { ScenarioOperationError, ScenarioValidationError } from '../errors.js';
 import { parseTemplate, serializeTemplate } from '../serialize.js';
 import { TemplateDocument } from '../template-document.js';
 import {
+  ActorSensorSchema,
   dashCameras,
   defaultDashCamera,
+  defaultLidar,
+  defaultRadar,
   firstEnabledDashCamera,
+  newSensorId,
   sensorAperture,
   supportsDashCamera,
 } from '../schema/v2/sensors.js';
@@ -31,6 +35,30 @@ describe('actor-attached sensors', () => {
     const second = parseTemplate(JSON.parse(serializeTemplate(first)));
     expect(second.roles[0]?.actor.sensors).toEqual(first.roles[0]?.actor.sensors);
     expect(firstEnabledDashCamera(second.roles[0]!.actor)?.id).toBe('front-dash-camera');
+  });
+
+  it('builds active sensors against the authored dimensions of a non-reference vehicle', () => {
+    const bus = { class: 'bus', dims: { length: 12.4, width: 2.55, height: 3.3 } };
+    const lidar = ActorSensorSchema.parse(defaultLidar(bus, 'bus-roof-lidar'));
+    const radar = ActorSensorSchema.parse(defaultRadar(bus, 'bus-front-radar'));
+
+    expect(lidar).toMatchObject({
+      type: 'lidar',
+      mount: { position: { x: 0, y: 3.3, z: 0 } },
+      field: { horizontalFovDeg: 360 },
+    });
+    expect(radar).toMatchObject({
+      type: 'radar',
+      mount: { position: { x: 6.2, z: 0 } },
+      field: { horizontalFovDeg: 40, verticalFovDeg: 20 },
+    });
+    expect(radar.mount.position.y).toBeCloseTo(0.99);
+  });
+
+  it('mints ids that identify the sensor modality', () => {
+    expect(newSensorId('dash_camera')).toMatch(/^dash-camera-/);
+    expect(newSensorId('lidar')).toMatch(/^lidar-/);
+    expect(newSensorId('radar')).toMatch(/^radar-/);
   });
 
   it('rejects duplicate sensor ids and unsupported actor mounts clearly', () => {

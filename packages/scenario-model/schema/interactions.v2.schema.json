@@ -1279,12 +1279,20 @@
                       "$ref": "#/$defs/__schema10"
                     },
                     "approach": {
-                      "type": "string",
-                      "enum": [
-                        "ego",
-                        "opposing",
-                        "left",
-                        "right"
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "subject",
+                            "opposing",
+                            "left",
+                            "right"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "const": "ego"
+                        }
                       ]
                     }
                   },

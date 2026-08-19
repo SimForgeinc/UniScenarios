@@ -2497,10 +2497,12 @@ class Materializer {
     const ids = new Set<string>();
     for (const interaction of this.template.choreography.interactions) {
       if (interaction.actor !== '@world' || interaction.verb !== 'set') continue;
-      const semantic = /^signal:feature:([A-Za-z][A-Za-z0-9_-]{0,63}):(ego|opposing|left|right)\.phase$/.exec(interaction.target.key);
+      // `ego` remains in this reader only for already-persisted semantic signal keys.
+      const semantic = /^signal:feature:([A-Za-z][A-Za-z0-9_-]{0,63}):(subject|ego|opposing|left|right)\.phase$/.exec(interaction.target.key);
       if (semantic) {
+        const approach = semantic[2] === 'ego' ? 'subject' : semantic[2] as 'subject' | 'opposing' | 'left' | 'right';
         const id = resolveSiteSignalProgram(this.bundle, this.site, this.signalPlan!, {
-          featureId: semantic[1]!, approach: semantic[2]!,
+          featureId: semantic[1]!, approach,
         });
         if (id) ids.add(id);
         continue;
@@ -2798,10 +2800,12 @@ class Materializer {
           }
           return parseInteraction({ ...base, verb: 'set', target: { key: `signal:control:${id}.phase`, value: it.target.value } });
         }
-        const semanticSignalKey = /^signal:feature:([A-Za-z][A-Za-z0-9_-]{0,63}):(ego|opposing|left|right)\.(phase|program)$/.exec(it.target.key);
+        // `ego` remains in this reader only for already-persisted semantic signal keys.
+        const semanticSignalKey = /^signal:feature:([A-Za-z][A-Za-z0-9_-]{0,63}):(subject|ego|opposing|left|right)\.(phase|program)$/.exec(it.target.key);
         const signalKey = semanticSignalKey ? null : /^signal:(.+)\.phase$/.exec(it.target.key);
+        const semanticApproach = semanticSignalKey?.[2] === 'ego' ? 'subject' : semanticSignalKey?.[2];
         const signalProgram = semanticSignalKey
-            ? this.resolveSignalProgram({ feature: semanticSignalKey[1]!, approach: semanticSignalKey[2] as 'ego' | 'opposing' | 'left' | 'right' }, `${path}.target`)
+            ? this.resolveSignalProgram({ feature: semanticSignalKey[1]!, approach: semanticApproach as 'subject' | 'opposing' | 'left' | 'right' }, `${path}.target`)
           : signalKey
             ? this.resolveSignalProgram({ handle: signalKey[1]! }, `${path}.target`)
           : null;

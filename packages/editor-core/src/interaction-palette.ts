@@ -95,7 +95,7 @@ export const TARGET_VARIANTS = {
 
 /** Replace human wildcard markers with stable concrete ids suitable for a document draft. */
 export function concreteSetKey(declaration: SetKeyDecl): string {
-  return declaration.key.replace('<handle>', 'signal_1').replace('<id>', 'control_1').replace('<feature>', FEATURE).replace('<approach>', 'ego');
+  return declaration.key.replace('<handle>', 'signal_1').replace('<id>', 'control_1').replace('<feature>', FEATURE).replace('<approach>', 'subject');
 }
 
 /** A legal value-bearing default for each declared set key. */

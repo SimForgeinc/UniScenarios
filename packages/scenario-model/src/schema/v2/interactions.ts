@@ -70,9 +70,14 @@ export const SIGNAL_PHASES = [
 export const SignalPhaseSchema = z.enum(SIGNAL_PHASES);
 
 /** Reference to a traffic signal: a map handle, or a junction feature + approach. */
+const SignalApproachSchema = z.union([
+  z.enum(['subject', 'opposing', 'left', 'right']),
+  // Already-persisted documents used `ego`; accept it only at the read boundary.
+  z.literal('ego').transform(() => 'subject' as const),
+]);
 export const SignalRefSchema = z.union([
   z.strictObject({ handle: z.string().min(1).max(200) }),
-  z.strictObject({ feature: FeatureRefSchema, approach: z.enum(['ego', 'opposing', 'left', 'right']) }),
+  z.strictObject({ feature: FeatureRefSchema, approach: SignalApproachSchema }),
   z.strictObject({ control: z.string().min(1).max(128) }),
 ]);
 
