@@ -953,11 +953,11 @@ export class ShowcasePipeline {
     this.cli = cli ?? join(this.root, 'packages', 'cli', 'bin', 'uniscenarios.js');
     this.bridge = join(this.root, 'tools', 'research', 'showcase', 'stages.py');
     this.schedulerSettings = Object.freeze({
-      jobConcurrency: concurrencySetting(jobConcurrency, 4, 'jobConcurrency', 8),
-      batchConcurrency: concurrencySetting(batchConcurrency, 3, 'batchConcurrency', 12),
-      render2dConcurrency: concurrencySetting(render2dConcurrency, 4, 'render2dConcurrency', 8),
-      render3dConcurrency: concurrencySetting(render3dConcurrency, 2, 'render3dConcurrency', 4),
-      reviewConcurrency: concurrencySetting(reviewConcurrency, 4, 'reviewConcurrency', 8),
+      jobConcurrency: concurrencySetting(jobConcurrency, 4, 'jobConcurrency', 32),
+      batchConcurrency: concurrencySetting(batchConcurrency, 3, 'batchConcurrency', 16),
+      render2dConcurrency: concurrencySetting(render2dConcurrency, 4, 'render2dConcurrency', 12),
+      render3dConcurrency: concurrencySetting(render3dConcurrency, 2, 'render3dConcurrency', 6),
+      reviewConcurrency: concurrencySetting(reviewConcurrency, 4, 'reviewConcurrency', 16),
     });
     this.batchConcurrency = this.schedulerSettings.batchConcurrency;
     this.render2d = new Semaphore(this.schedulerSettings.render2dConcurrency);
