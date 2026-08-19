@@ -894,8 +894,12 @@ function concurrencySetting(value, fallback, name, max) {
 
 function batchConcurrencyForHost(configured) {
   const load1 = loadavg()[0];
+  // 2.5x logical cores, not 1.25x: this host is multi-tenant (CARLA, perception
+  // stacks, sibling builds), and 1-minute load routinely sits above 1.25x from
+  // neighbours alone, which pinned every batch to one worker regardless of our
+  // own footprint. The fixed semaphores above remain the real ceiling.
   return {
-    concurrency: load1 > availableParallelism() * 1.25 ? 1 : configured,
+    concurrency: load1 > availableParallelism() * 2.5 ? 1 : configured,
     load1: Number(load1.toFixed(2)),
   };
 }
