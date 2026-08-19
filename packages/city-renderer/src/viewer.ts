@@ -38,6 +38,12 @@ import { UltraLowMaterialCache, type UltraLowLayer } from './ultra-low-materials
 import { ShadowAtlas } from './shadow-atlas';
 import { allowsSourceAssetFallback, isCityAssetVariantManifest, resolveSnowCoverVariant, selectAssetVariant, type CityAssetVariantManifest } from './asset-variants';
 import {
+  applyStaticSemantics,
+  parseStaticSemantics,
+  staticSemanticsCapabilities,
+  type StaticSemantics,
+} from './static-semantics';
+import {
   TileStreamLayer,
   boxOf,
   type EvictionCandidate,
@@ -234,6 +240,8 @@ export class CityViewer {
 
   private manifest: CityManifest | null = null;
   private variantManifest: CityAssetVariantManifest | null = null;
+  private staticSemantics: StaticSemantics | null = null;
+  private capabilities: readonly string[] = [];
   private assetBase = '';
   private atlas: ShadowAtlas | null = null;
   private cityLayer: TileStreamLayer | null = null;
@@ -431,6 +439,10 @@ export class CityViewer {
     return load;
   }
 
+  getCapabilities(): readonly string[] {
+    return this.capabilities;
+  }
+
   private async loadMapInner(manifestUrl: string): Promise<void> {
     const url = this.options.baseUrl ? resolveUrl(this.options.baseUrl, manifestUrl) : manifestUrl;
     this.assetBase = url.replace(/[^/]*$/, '');
@@ -440,6 +452,9 @@ export class CityViewer {
     })) as CityManifest;
     if (this.disposed) return;
     this.manifest = manifest;
+    this.staticSemantics = await this.loadStaticSemantics(manifest);
+    this.capabilities = staticSemanticsCapabilities(this.staticSemantics);
+    if (this.disposed) return;
     this.variantManifest = await this.loadVariantManifest();
     if (this.disposed) return;
 
@@ -647,6 +662,25 @@ export class CityViewer {
     }
   }
 
+  private async loadStaticSemantics(manifest: CityManifest): Promise<StaticSemantics | null> {
+    const reference = manifest.staticSemantics;
+    if (!reference) return null;
+    try {
+      if (typeof reference.file !== 'string' || reference.file.length === 0) {
+        throw new Error('Static semantics manifest reference requires a non-empty file');
+      }
+      const response = await fetch(resolveUrl(this.assetBase, reference.file), {
+        signal: this.abort.signal,
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return parseStaticSemantics(await response.json());
+    } catch (error) {
+      if ((error as { name?: string } | null)?.name === 'AbortError') throw error;
+      console.warn('[CityViewer] Static semantics unavailable:', error);
+      return null;
+    }
+  }
+
   /** Parse an optimized local derivative, then retry source unless Ultra Low forbids textures. */
   private async parseAsset(sourceFile: string, signal: AbortSignal, sourceBytes?: number | null) {
     const declaredKtxPath = this.variantManifest?.variants.ktx2?.runtime?.ktx2TranscoderPath ?? '';
@@ -792,6 +826,7 @@ export class CityViewer {
           ? await this.parseResolvedAsset(lod.file, signal, 'geometry-only', lod.fileSize)
           : await this.parseAsset(road.file, signal, road.fileSize);
         const root = gltf.scene;
+        applyStaticSemantics(root, this.staticSemantics);
         root.name = tileDef.id;
         this.prepareTree(root);
         const box = new Box3().setFromObject(root);
@@ -842,6 +877,7 @@ export class CityViewer {
       build: async (def, lod, signal) => {
         const gltf = await this.parseAsset(lod.file, signal, lod.fileSize);
         const root = gltf.scene;
+        applyStaticSemantics(root, this.staticSemantics);
         root.name = `${def.id}.lod${lod.level}`;
         this.prepareTree(root);
         const box = new Box3().setFromObject(root);
@@ -915,6 +951,7 @@ export class CityViewer {
         const gltf = await this.parseAsset(lod.file, signal, lod.fileSize);
         this.prepareTree(gltf.scene);
         const built = buildVegetation(gltf.scene, data, VEG_BAND_KEEP_ROW);
+        applyStaticSemantics(built.object, this.staticSemantics);
         built.object.name = `${def.id}.lod${lod.level}`;
         built.object.userData.prototypes = built.prototypes;
         if (this.visualResourcesStarted && !this.ultraLowFidelity) patchTree(built.object, this.shadowOptions(def.box, 6, 14));
@@ -1776,6 +1813,8 @@ export class CityViewer {
     this.vegetationData.clear();
     this.manifest = null;
     this.variantManifest = null;
+    this.staticSemantics = null;
+    this.capabilities = [];
     this.cameraGroundIndex = null;
     this.localEnvelopeBounds = null;
     this.lastStreamUpdate = 0;

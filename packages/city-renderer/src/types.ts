@@ -64,6 +64,10 @@ export interface ManifestScene {
   coordinateSystem: string;
 }
 
+export interface StaticSemanticsReference {
+  file: string;
+}
+
 export interface CityManifest {
   version: string;
   scene: ManifestScene;
@@ -77,6 +81,8 @@ export interface CityManifest {
     method?: string;
   };
   actorCounts?: Record<string, number>;
+  /** Optional static semantic metadata for browser sensor passes. */
+  staticSemantics?: StaticSemanticsReference;
 }
 
 /**
