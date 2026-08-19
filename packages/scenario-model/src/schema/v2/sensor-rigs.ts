@@ -73,6 +73,14 @@ export type SensorRigRadarTemplate = z.infer<typeof SensorRigRadarTemplateSchema
 export type SensorRigSensorTemplate = z.infer<typeof SensorRigSensorTemplateSchema>;
 export type SensorRigPreset = z.infer<typeof SensorRigPresetSchema>;
 export type SensorRigActor = Pick<ActorSpec, 'class' | 'dims'>;
+/**
+ * Anything a mount can be resolved against.
+ *
+ * Deliberately looser than `SensorRigActor`: placing a sensor only needs a box
+ * and a class name, and callers outside the document layer (recording stores,
+ * import adapters) legitimately hold a plain string class.
+ */
+export type SensorMountActor = { class: string; dims?: ActorSpec['dims'] };
 export type SensorRigIdFactory = (
   template: SensorRigSensorTemplate,
   index: number,
@@ -394,11 +402,12 @@ export function sensorRigPreset(id: string): SensorRigPreset | undefined {
 /** Resolve a fixed or vehicle-anchored preset mount to an actor-local numeric mount. */
 export function resolveSensorRigMount(
   mount: SensorRigMount,
-  actor: SensorRigActor,
+  actor: SensorMountActor,
 ): SensorMount {
   if ('position' in mount) return SensorMountSchema.parse(mount);
 
-  const dims = actor.dims ?? DEFAULT_ACTOR_DIMS[actor.class];
+  // An unrecognised class still gets a plausible box rather than undefined dims.
+  const dims = actor.dims ?? DEFAULT_ACTOR_DIMS[actor.class as ActorSpec['class']] ?? DEFAULT_ACTOR_DIMS.car;
   const base = anchorPosition(mount.anchor, dims);
   return SensorMountSchema.parse({
     position: {
@@ -480,7 +489,7 @@ const SENSOR_MOUNT_PRESETS_BY_ID: Readonly<Record<string, SensorMountPreset>> =
 /** Resolve one author-facing mounting choice against the carrier's dimensions. */
 export function resolveSensorMountPreset(
   presetOrId: SensorMountPreset | string,
-  actor: SensorRigActor,
+  actor: SensorMountActor,
 ): SensorMount {
   const preset = typeof presetOrId === 'string'
     ? SENSOR_MOUNT_PRESETS_BY_ID[presetOrId]
@@ -495,7 +504,7 @@ export function resolveSensorMountPreset(
  */
 export function matchSensorMountPreset(
   mount: SensorMount,
-  actor: SensorRigActor,
+  actor: SensorMountActor,
 ): SensorMountPreset | undefined {
   return SENSOR_MOUNT_PRESETS.find((preset) => {
     const resolved = resolveSensorMountPreset(preset, actor);
@@ -553,7 +562,7 @@ export function instantiateSensorRig(
 
 /** A forward-facing windscreen mount scaled to the actor's authored box. */
 export function defaultDashCamera(
-  actor: SensorRigActor & Pick<ActorForDashCamera, 'class'>,
+  actor: SensorMountActor,
   id: string = newSensorId('dash_camera'),
 ): DashCameraSensor {
   if (!supportsDashCamera(actor)) {
@@ -572,7 +581,7 @@ export function defaultDashCamera(
  * mount on every class; authored dimensions win over the reference box.
  */
 export function defaultLidar(
-  actor: SensorRigActor,
+  actor: SensorMountActor,
   id: string = newSensorId('lidar'),
 ): LidarSensor {
   return LidarSensorSchema.parse({
@@ -586,7 +595,7 @@ export function defaultLidar(
 
 /** A forward active sensor above road spray and below the windscreen. */
 export function defaultRadar(
-  actor: SensorRigActor,
+  actor: SensorMountActor,
   id: string = newSensorId('radar'),
 ): RadarSensor {
   return RadarSensorSchema.parse({
