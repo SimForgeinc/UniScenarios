@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/openscenario",
-  "version": "0.1.0-rc.31",
+  "version": "0.1.0-rc.32",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
@@ -25,7 +25,11 @@
       "default": "./dist/import.js"
     },
     "./conformance/*": "./conformance/*",
-    "./schema/*": "./schema/*"
+    "./schema/*": "./schema/*",
+    "./execution-plan": {
+      "types": "./dist/execution-plan.d.ts",
+      "default": "./dist/execution-plan.js"
+    }
   },
   "files": [
     "dist",
@@ -44,7 +48,7 @@
     "vitest": "^3.0.0"
   },
   "scripts": {
-    "build": "tsup src/index.ts src/import.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "build": "tsup src/index.ts src/import.ts src/execution-plan.ts --format esm --dts --sourcemap --clean --out-dir dist",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   }
