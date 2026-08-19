@@ -11,7 +11,13 @@ import {
   RadarSensorSchema,
   SensorMountSchema,
   SensorRigMountSchema,
+  newSensorId,
+  supportsDashCamera,
+  type ActorForDashCamera,
   type ActorSensor,
+  type DashCameraSensor,
+  type LidarSensor,
+  type RadarSensor,
   type SensorMount,
   type SensorRigMount,
   type VehicleAnchor,
@@ -535,5 +541,58 @@ export function instantiateSensorRig(
       id,
       mount: resolveSensorRigMount(mount, actor),
     });
+  });
+}
+
+/**
+ * Sensor constructors, defined here rather than beside their schemas because
+ * every default lands on a named mount: adding a sensor and then reading its
+ * position back must show "Roof", not "Custom", or the named vocabulary is a
+ * lie the first time an author uses it.
+ */
+
+/** A forward-facing windscreen mount scaled to the actor's authored box. */
+export function defaultDashCamera(
+  actor: SensorRigActor & Pick<ActorForDashCamera, 'class'>,
+  id: string = newSensorId('dash_camera'),
+): DashCameraSensor {
+  if (!supportsDashCamera(actor)) {
+    throw new Error(`dash cameras are not supported on actor class "${actor.class}"`);
+  }
+  return DashCameraSensorSchema.parse({
+    id,
+    type: 'dash_camera',
+    enabled: true,
+    mount: resolveSensorMountPreset('windscreen', actor),
+  });
+}
+
+/**
+ * Active sensors need no windscreen, so ActorSpec intentionally permits this
+ * mount on every class; authored dimensions win over the reference box.
+ */
+export function defaultLidar(
+  actor: SensorRigActor,
+  id: string = newSensorId('lidar'),
+): LidarSensor {
+  return LidarSensorSchema.parse({
+    id,
+    type: 'lidar',
+    enabled: true,
+    mount: resolveSensorMountPreset('roof-centre', actor),
+    field: { horizontalFovDeg: 360 },
+  });
+}
+
+/** A forward active sensor above road spray and below the windscreen. */
+export function defaultRadar(
+  actor: SensorRigActor,
+  id: string = newSensorId('radar'),
+): RadarSensor {
+  return RadarSensorSchema.parse({
+    id,
+    type: 'radar',
+    enabled: true,
+    mount: resolveSensorMountPreset('front-bumper', actor),
   });
 }

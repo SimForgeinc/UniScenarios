@@ -6,14 +6,17 @@ import { TemplateDocument } from '../template-document.js';
 import {
   ActorSensorSchema,
   dashCameras,
-  defaultDashCamera,
-  defaultLidar,
-  defaultRadar,
   firstEnabledDashCamera,
   newSensorId,
   sensorAperture,
   supportsDashCamera,
 } from '../schema/v2/sensors.js';
+import {
+  defaultDashCamera,
+  defaultLidar,
+  defaultRadar,
+  matchSensorMountPreset,
+} from '../schema/v2/sensor-rigs.js';
 import { ltapTemplateInput } from './v2-fixtures.js';
 
 describe('actor-attached sensors', () => {
@@ -38,21 +41,24 @@ describe('actor-attached sensors', () => {
   });
 
   it('builds active sensors against the authored dimensions of a non-reference vehicle', () => {
-    const bus = { class: 'bus', dims: { length: 12.4, width: 2.55, height: 3.3 } };
+    const bus = { class: 'bus', dims: { length: 12.4, width: 2.55, height: 3.3 } } as const;
     const lidar = ActorSensorSchema.parse(defaultLidar(bus, 'bus-roof-lidar'));
     const radar = ActorSensorSchema.parse(defaultRadar(bus, 'bus-front-radar'));
 
+    // Every default lands on a named mount, so these are the resolved
+    // `roof-centre` and `front-bumper` positions for this box, not free numbers.
     expect(lidar).toMatchObject({
       type: 'lidar',
-      mount: { position: { x: 0, y: 3.3, z: 0 } },
+      mount: { position: { x: 0, y: 3.45, z: 0 } },
       field: { horizontalFovDeg: 360 },
     });
+    expect(matchSensorMountPreset(lidar.mount, bus)?.id).toBe('roof-centre');
     expect(radar).toMatchObject({
       type: 'radar',
-      mount: { position: { x: 6.2, z: 0 } },
+      mount: { position: { x: 6.2, y: 0.5, z: 0 } },
       field: { horizontalFovDeg: 40, verticalFovDeg: 20 },
     });
-    expect(radar.mount.position.y).toBeCloseTo(0.99);
+    expect(matchSensorMountPreset(radar.mount, bus)?.id).toBe('front-bumper');
   });
 
   it('mints ids that identify the sensor modality', () => {
