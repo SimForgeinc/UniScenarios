@@ -1649,6 +1649,9 @@ export class ShowcasePipeline {
         defects: row.defects ?? [],
         explanation: row.explanation ?? '',
       }));
+    // What each earlier repair round broke, fed forward so the next mutation
+    // does not trade the semantic defect for a criticality one.
+    const repairHistory = [];
     const bestSemanticCell = () => {
       const byConfidence = [...semanticRows]
         .filter((row) => row.status === 'complete')
@@ -1665,7 +1668,11 @@ export class ShowcasePipeline {
         await mkdir(roundDir, { recursive: true });
         const feedback = semanticFeedback();
         const feedbackPath = join(roundDir, 'feedback.json');
-        await atomicJson(feedbackPath, { brief: job.requestedBrief ?? job.brief, cells: feedback });
+        await atomicJson(feedbackPath, {
+          brief: job.requestedBrief ?? job.brief,
+          cells: feedback,
+          priorRepairFailures: repairHistory,
+        });
         const roundTemplatePath = join(roundDir, 'template.json');
         const made = await makeTemplate(roundDir, feedbackPath, roundTemplatePath);
         if (!made.ok) {
@@ -1747,7 +1754,27 @@ export class ShowcasePipeline {
         await atomicJson(roundIndex, value);
         return { value, status: value.matched > 0 ? 'complete' : 'failed' };
       });
-      if (!round || round.status === 'failed' || !Array.isArray(round.cells)) return round ?? null;
+      if (!round || round.status === 'failed' || !Array.isArray(round.cells)) {
+        if (round) {
+          repairHistory.push({ round: roundName, outcome: 'failed', reason: round.reason ?? null });
+        }
+        return round ?? null;
+      }
+      if ((round.matched ?? 0) === 0) {
+        const firstFailures = [...new Set((round.gate?.cells ?? [])
+          .filter((row) => !row.pass).map((row) => row.firstFailure).filter(Boolean))];
+        repairHistory.push({
+          round: roundName,
+          outcome: 'no-semantic-match',
+          gateFirstFailures: firstFailures,
+          eligibleCells: (round.eligibility?.cells ?? []).filter((row) => row.admitted && row.eligible).length,
+          semanticDefects: [...new Set((round.semantic ?? []).flatMap((row) => (row.defects ?? [])
+            .map((defect) => defect?.code).filter(Boolean)))],
+          note: firstFailures.length
+            ? `the repaired template lost frozen-gate criticality (first failures: ${firstFailures.join(', ')}); the repair must keep a genuine imminent conflict that forces real ego braking`
+            : null,
+        });
+      }
       // Adopt the round's world into the job-wide evidence maps so every
       // downstream stage sees the repaired cells beside the originals.
       const roundCells = round.cells.map((cell) => ({

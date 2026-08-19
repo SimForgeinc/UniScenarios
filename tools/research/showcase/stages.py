@@ -484,6 +484,10 @@ user's request. This is a surgical edit, not a rewrite:
 - Change only actor placement/speeds, choreography interactions (triggers, verbs, targets,
   dynamics, timing), params, and props when they are the reason the semantics failed.
 - The requested onset must visibly precede the reaction inside the clip window.
+- The scenario must STAY critical: the ego must still face a genuine imminent conflict that
+  forces real braking or steering. A repair that makes everything slow, distant, or gentle
+  will be rejected by the frozen criticality gate. `priorRepairFailures` in the feedback
+  lists exactly how earlier repairs of this template failed; do not repeat them.
 - Every reviewer defect below must be addressed by a concrete field change.
 Return ONLY the complete corrected template JSON."""
 
