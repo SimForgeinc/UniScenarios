@@ -969,6 +969,7 @@ export class ShowcasePipeline {
       reviewConcurrency: concurrencySetting(reviewConcurrency, 4, 'reviewConcurrency', 16),
     });
     this.batchConcurrency = this.schedulerSettings.batchConcurrency;
+    this.batch = new Semaphore(this.schedulerSettings.batchConcurrency);
     this.render2d = new Semaphore(this.schedulerSettings.render2dConcurrency);
     this.render3d = new Semaphore(this.schedulerSettings.render3dConcurrency);
     this.review = new Semaphore(this.schedulerSettings.reviewConcurrency);
@@ -1294,6 +1295,11 @@ export class ShowcasePipeline {
     let cells = await stage(context, '40-cells', [cellsIndex], async () => {
       const batchDir = join(context.jobDir, '.batch');
       await rm(batchDir, { recursive: true, force: true });
+      // Simulation is ~95% of non-LLM time and the only stage with no gate of
+      // its own: every admitted job used to shell out to `batch` the moment it
+      // reached this line, so `batchConcurrency` bounded nothing and 16 jobs
+      // could run 16 simulations at once. The semaphore makes the queue width
+      // real, and `workers` divides the cores among exactly that many slots.
       const simulationBatch = batchConcurrencyForHost(this.batchConcurrency);
       context.scheduler.effectiveBatchConcurrency = simulationBatch.concurrency;
       context.scheduler.batchWorkers = simulationBatch.workers;
@@ -1304,7 +1310,7 @@ export class ShowcasePipeline {
       if (job.maps.length === MAPS.length) args.push('--all-maps');
       else args.push('--maps', job.maps.join(','));
       if (job.ambient !== 'off') args.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
-      const result = await command('node', args, { cwd: this.root, allowFailure: true, timeout: 1_800_000 });
+      const result = await this.batch.run(() => command('node', args, { cwd: this.root, allowFailure: true, timeout: 1_800_000 }));
       const summaryPath = join(batchDir, 'batch-summary.json');
       if (!(await exists(summaryPath))) throw new Error(`batch wrote no summary (${result.code}): ${result.stderr.slice(-1500)}`);
       const summary = await readJson(summaryPath);
@@ -1587,7 +1593,7 @@ export class ShowcasePipeline {
           '--concurrency', String(context.scheduler.batchWorkers ?? 1),
           '--maps', anchor?.mapId ?? job.maps[0]];
         if (job.ambient !== 'off') batchArgs.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
-        const batchResult = await command('node', batchArgs, { cwd: this.root, allowFailure: true, timeout: 1_800_000 });
+        const batchResult = await this.batch.run(() => command('node', batchArgs, { cwd: this.root, allowFailure: true, timeout: 1_800_000 }));
         const summaryPath = join(batchDir, 'batch-summary.json');
         if (!(await exists(summaryPath))) {
           const value = { status: 'failed', reason: `repair batch wrote no summary (${batchResult.code})`, cells: [], matched: 0 };
