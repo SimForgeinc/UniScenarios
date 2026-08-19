@@ -499,7 +499,7 @@ export function resolveCampaignRuntime({ config, args = new Map(), env = {}, har
   const runtimeConfig = config.runtime ?? {};
   const requestedConcurrency = boundedInteger(
     args.get('concurrency') ?? env.SHOWCASE_CAMPAIGN_CONCURRENCY ?? runtimeConfig.maxActiveJobs,
-    4, 1, 8, 'campaign concurrency',
+    4, 1, 32, 'campaign concurrency',
   );
   const loadPausePerCpu = Number(env.SHOWCASE_CAMPAIGN_LOAD_PAUSE_PER_CPU ?? runtimeConfig.loadPausePerCpu ?? 1.25);
   if (!Number.isFinite(loadPausePerCpu) || loadPausePerCpu < 0.5 || loadPausePerCpu > 4) {
