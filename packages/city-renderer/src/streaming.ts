@@ -387,6 +387,19 @@ export class TileStreamLayer {
     asset.object.updateMatrixWorld(true);
     this.compiling.set(asset, { id: `${entry.def.id}#lod${index}`, startedMs: performance.now() });
     this.pending += asset.bytes;
+    // compileAsync has no AbortSignal and its completion poll can spin forever
+    // on a program object that will never report done - measured on this host
+    // when the GL context dies (or the GPU is starved) mid-compile: one tile
+    // then pins `uploading` at 1 and capture readiness is unreachable for the
+    // rest of the session. The layer owns the remedy: after 30 s the asset is
+    // evicted and `entry.preparing` cleared, so the streamer re-requests the
+    // tile through the normal fetch path with a fresh material.
+    const compileDeadline = setTimeout(() => {
+      if (!this.compiling.delete(asset)) return;
+      this.pending -= asset.bytes;
+      if (entry.preparing === index) entry.preparing = null;
+      console.error(`[city-renderer] ${entry.def.id}#lod${index} shader compile exceeded 30s; discarded for refetch`);
+    }, 30_000);
     const job = this.opts.renderer
       .compileAsync(asset.object, camera, this.opts.scene)
       .catch((error: unknown) => {
@@ -396,7 +409,14 @@ export class TileStreamLayer {
         if (!this.disposed) console.error(`[city-renderer] ${entry.def.id} shader compilation failed`, error);
       })
       .then((): void => {
-        this.compiling.delete(asset);
+        clearTimeout(compileDeadline);
+        if (!this.compiling.delete(asset)) {
+          // The deadline already evicted this asset; the settle arrives late,
+          // so the GPU-side resources are released here, exactly once.
+          asset.dispose?.();
+          disposeResources(asset.resources);
+          return;
+        }
         this.pending -= asset.bytes;
         if (entry.preparing === index) entry.preparing = null;
         if (this.disposed) {
