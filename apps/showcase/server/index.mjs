@@ -75,11 +75,11 @@ function optionalInteger(value, fallback, name, min, max) {
 }
 
 const SCHEDULER_BOUNDS = Object.freeze({
-  jobConcurrency: [1, 8],
-  batchConcurrency: [1, 12],
-  render2dConcurrency: [1, 8],
-  render3dConcurrency: [1, 4],
-  reviewConcurrency: [1, 8],
+  jobConcurrency: [1, 32],
+  batchConcurrency: [1, 16],
+  render2dConcurrency: [1, 12],
+  render3dConcurrency: [1, 6],
+  reviewConcurrency: [1, 16],
 });
 
 function boundedSetting(value, fallback, name) {

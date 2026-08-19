@@ -550,7 +550,7 @@ test('scheduler configuration uses bounded production defaults and rejects overs
   assert.equal(configured.reviewConcurrency, 7);
   assert.throws(
     () => resolveSchedulerSettings({ env: { SHOWCASE_JOB_CONCURRENCY: '999999' } }),
-    /jobConcurrency must be an integer from 1 to 8/,
+    /jobConcurrency must be an integer from 1 to 32/,
   );
   assert.throws(
     () => resolveSchedulerSettings({ render3dConcurrency: Number.POSITIVE_INFINITY, env: {} }),

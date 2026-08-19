@@ -3,10 +3,10 @@
   "targetValidVideos": 1,
   "methodology": "production",
   "runtime": {
-    "maxActiveJobs": 4,
-    "intervalMs": 30000,
+    "maxActiveJobs": 16,
+    "intervalMs": 15000,
     "submissionRecoveryMs": 300000,
-    "submissionRampPerHeartbeat": 1,
+    "submissionRampPerHeartbeat": 4,
     "loadPausePerCpu": 1.25,
     "maxGenerationAttempts": 2,
     "providerFailureThreshold": 3,
