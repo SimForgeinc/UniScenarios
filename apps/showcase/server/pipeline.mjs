@@ -894,12 +894,17 @@ function concurrencySetting(value, fallback, name, max) {
 
 function batchConcurrencyForHost(configured) {
   const load1 = loadavg()[0];
-  // 2.5x logical cores, not 1.25x: this host is multi-tenant (CARLA, perception
-  // stacks, sibling builds), and 1-minute load routinely sits above 1.25x from
-  // neighbours alone, which pinned every batch to one worker regardless of our
-  // own footprint. The fixed semaphores above remain the real ceiling.
+  const cores = availableParallelism();
+  // Two different numbers that used to be one. `configured` is how many jobs may
+  // simulate at once (a queue width); `workers` is how many engine threads each
+  // of those jobs may use (a CPU share). Passing the queue width as the worker
+  // count meant 8 concurrent jobs each spawned 8 workers - 64 threads on 24
+  // cores - and oversubscription costs throughput rather than adding it.
+  // Total engine threads now land at ~cores regardless of queue width.
+  const overloaded = load1 > cores * 2.5;
   return {
-    concurrency: load1 > availableParallelism() * 2.5 ? 1 : configured,
+    concurrency: overloaded ? 1 : configured,
+    workers: overloaded ? 1 : Math.max(1, Math.floor(cores / Math.max(1, configured))),
     load1: Number(load1.toFixed(2)),
   };
 }
@@ -987,6 +992,7 @@ export class ShowcasePipeline {
       scheduler: {
         ...(job.scheduler ?? this.schedulerSettings),
         effectiveBatchConcurrency: initialBatch.concurrency,
+        batchWorkers: initialBatch.workers,
         load1AtStart: initialBatch.load1,
       },
     };
@@ -1200,7 +1206,7 @@ export class ShowcasePipeline {
         // branch left to disable: `vista-author` always runs a real authoring episode.
         if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
         if (subcommand === 'author') {
-          args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', String(context.scheduler.effectiveBatchConcurrency));
+          args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', String(context.scheduler.batchWorkers ?? 1));
         }
         await command(this.python, args, {
           cwd: this.root,
@@ -1290,10 +1296,11 @@ export class ShowcasePipeline {
       await rm(batchDir, { recursive: true, force: true });
       const simulationBatch = batchConcurrencyForHost(this.batchConcurrency);
       context.scheduler.effectiveBatchConcurrency = simulationBatch.concurrency;
+      context.scheduler.batchWorkers = simulationBatch.workers;
       context.scheduler.load1AtSimulation = simulationBatch.load1;
       route.scheduler = context.scheduler;
       await atomicJson(routePath, route);
-      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', String(simulationBatch.concurrency)];
+      const args = [this.cli, 'batch', templatePath, '--out', batchDir, '--draws', String(job.nScenarios), '--max-sites', String(job.maxSitesPerMap), '--concurrency', String(simulationBatch.workers)];
       if (job.maps.length === MAPS.length) args.push('--all-maps');
       else args.push('--maps', job.maps.join(','));
       if (job.ambient !== 'off') args.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
@@ -1577,7 +1584,7 @@ export class ShowcasePipeline {
         await rm(batchDir, { recursive: true, force: true });
         const batchArgs = [this.cli, 'batch', roundTemplatePath, '--out', batchDir,
           '--draws', String(job.nScenarios), '--max-sites', '1',
-          '--concurrency', String(context.scheduler.effectiveBatchConcurrency),
+          '--concurrency', String(context.scheduler.batchWorkers ?? 1),
           '--maps', anchor?.mapId ?? job.maps[0]];
         if (job.ambient !== 'off') batchArgs.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
         const batchResult = await command('node', batchArgs, { cwd: this.root, allowFailure: true, timeout: 1_800_000 });
