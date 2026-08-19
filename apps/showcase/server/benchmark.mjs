@@ -20,11 +20,11 @@ export const ACCEPTANCE_SPLIT_SCHEMA = 'showcase-acceptance-split/v1';
 export const TRAJECTORY_FINGERPRINT_VERSION = 'showcase-trajectory-fingerprint/v1';
 
 /**
- * The generation funnel, in order. `phase: 'generator'` stages end at
- * trace + gate + deterministic eligibility; `phase: 'product'` stages add
- * render and review and end at the deterministic product decision. Throughput
- * is reported separately for the two phases because they consume different
- * hardware and fail for different reasons.
+ * The generation funnel, in order. `phase: 'generator'` stages end at the 2D
+ * semantic oracle: trace + gate + deterministic eligibility + brief-aware 2D
+ * semantic match. `phase: 'product'` stages add the 3D render and product
+ * review. Throughput is reported separately for the two phases because they
+ * consume different hardware and fail for different reasons.
  */
 export const FUNNEL_STAGES = Object.freeze([
   { id: 'submitted', label: 'attempt submitted', phase: 'generator', evidence: '00-brief.json' },
@@ -33,8 +33,9 @@ export const FUNNEL_STAGES = Object.freeze([
   { id: 'cells-ok', label: 'simulation produced at least one trace', phase: 'generator', evidence: '40-cells/index.json' },
   { id: 'gate-pass', label: 'frozen gate admitted at least one cell', phase: 'generator', evidence: '50-gate.json' },
   { id: 'eligible', label: 'deterministic trace validity admitted at least one cell', phase: 'generator', evidence: '55-eligibility.json' },
-  { id: '2d-ok', label: '2D render completed', phase: 'product', evidence: '60-render2d/index.json' },
-  { id: 'semantic-reviewed', label: 'blind 2D semantic review returned a verdict', phase: 'product', evidence: '60-render2d/quality.json' },
+  { id: '2d-ok', label: '2D render completed', phase: 'generator', evidence: '60-render2d/index.json' },
+  { id: 'semantic-reviewed', label: 'blind 2D semantic review returned a verdict', phase: 'generator', evidence: '60-render2d/quality.json' },
+  { id: 'semantic-2d', label: '2D schematic footage shows the requested semantics', phase: 'generator', evidence: '62-semantic2d.json' },
   { id: '3d-ok', label: '3D render completed', phase: 'product', evidence: '65-render3d/index.json' },
   { id: 'semantic-3d', label: '3D footage shows the requested semantics', phase: 'product', evidence: '70-judge.json' },
   { id: 'presentation', label: 'footage accepted for presentation', phase: 'product', evidence: '75-product.json' },
@@ -44,10 +45,11 @@ export const FUNNEL_STAGE_IDS = Object.freeze(FUNNEL_STAGES.map((entry) => entry
 
 /**
  * Last generator stage: generator throughput is measured up to and including
- * this. Eligibility is deterministic and runs before any render is spent, so it
- * is the last stage a generation attempt can fail on its own merits.
+ * this. The brief-aware 2D semantic verdict is the generation oracle -- it is
+ * the last stage a generation attempt can fail on its own merits, and it is
+ * decided before any 3D render is spent.
  */
-export const GENERATOR_TERMINAL_STAGE = 'eligible';
+export const GENERATOR_TERMINAL_STAGE = 'semantic-2d';
 
 const STAGE_INDEX = new Map(FUNNEL_STAGES.map((entry, index) => [entry.id, index]));
 const GENERATOR_TERMINAL_INDEX = STAGE_INDEX.get(GENERATOR_TERMINAL_STAGE);
@@ -59,14 +61,17 @@ const GENERATOR_TERMINAL_INDEX = STAGE_INDEX.get(GENERATOR_TERMINAL_STAGE);
  */
 export const PIPELINE_STAGES = Object.freeze([
   '00-brief', '10-route', '15-precheck', '20-author', '30-sites', '40-cells',
-  '50-gate', '55-eligibility', '60-render2d', '65-render3d', '70-judge',
+  '50-gate', '55-eligibility', '60-render2d', '62-semantic2d',
+  '62-mutation-01', '62-mutation-02', '62-fallback-author',
+  '65-render3d', '70-judge',
   '80-presentation-retry', '80-reauthor', '75-product', '90-gallery',
 ]);
 
 /** Pipeline stages whose wall time is attributed to the generator phase. */
 export const GENERATOR_PIPELINE_STAGES = Object.freeze([
   '00-brief', '10-route', '15-precheck', '20-author', '30-sites', '40-cells',
-  '50-gate', '55-eligibility',
+  '50-gate', '55-eligibility', '60-render2d', '62-semantic2d',
+  '62-mutation-01', '62-mutation-02', '62-fallback-author',
 ]);
 
 /**
@@ -75,7 +80,7 @@ export const GENERATOR_PIPELINE_STAGES = Object.freeze([
  * because it exists only to ration renders and reviews.
  */
 export const PRODUCT_PIPELINE_STAGES = Object.freeze([
-  '60-render2d', '65-render3d', '70-judge',
+  '65-render3d', '70-judge',
   '80-presentation-retry', '80-reauthor', '75-product', '90-gallery',
 ]);
 
@@ -633,6 +638,7 @@ export function buildThroughput(records, { elapsedHours = null } = {}) {
   const product = productAttempts(records);
   const gatePassed = generator.filter((record) => reachedStage(record, 'gate-pass'));
   const eligible = generator.filter((record) => reachedStage(record, 'eligible'));
+  const semantic2d = generator.filter((record) => reachedStage(record, 'semantic-2d'));
   const presented = product.filter((record) => reachedStage(record, 'presentation'));
   const semantic3d = product.filter((record) => reachedStage(record, 'semantic-3d'));
   const generatorWall = generator
@@ -648,14 +654,16 @@ export function buildThroughput(records, { elapsedHours = null } = {}) {
   return {
     elapsedHours: Number.isFinite(Number(elapsedHours)) ? round(Number(elapsedHours), 4) : null,
     generator: {
-      boundary: `stages 00-brief through 55-eligibility, ending at funnel stage ${GENERATOR_TERMINAL_STAGE} `
-        + '(trace + frozen gate + deterministic trace validity)',
+      boundary: `stages 00-brief through the 62-* semantic loop, ending at funnel stage ${GENERATOR_TERMINAL_STAGE} `
+        + '(trace + frozen gate + deterministic trace validity + brief-aware 2D semantic match)',
       attempts: generator.length,
       gatePassedAttempts: gatePassed.length,
       gatePassedCells: gateCells,
       eligibleAttempts: eligible.length,
       eligibleCells,
-      yield: ratio(eligible.length, generator.length),
+      semantic2dAttempts: semantic2d.length,
+      yield: ratio(semantic2d.length, generator.length),
+      eligibleYield: ratio(eligible.length, generator.length),
       gateYield: ratio(gatePassed.length, generator.length),
       wallS: summarize(generatorWall),
       stageWallS: stageWallSummary(generator, GENERATOR_PIPELINE_STAGES),
@@ -663,12 +671,16 @@ export function buildThroughput(records, { elapsedHours = null } = {}) {
       gatePassedAttemptsPerHour: perHour(gatePassed.length, elapsedHours),
       eligibleAttemptsPerHour: perHour(eligible.length, elapsedHours),
       eligibleCellsPerHour: perHour(eligibleCells, elapsedHours),
+      semantic2dAttemptsPerHour: perHour(semantic2d.length, elapsedHours),
+      tokensPerSemanticAttempt: semantic2d.length
+        ? Math.round((tokenTotal(generator, 'inputTokens') + tokenTotal(generator, 'outputTokens')) / semantic2d.length)
+        : null,
       tokensPerEligibleAttempt: eligible.length
         ? Math.round((tokenTotal(generator, 'inputTokens') + tokenTotal(generator, 'outputTokens')) / eligible.length)
         : null,
     },
     product: {
-      boundary: 'all generator stages plus 60-render2d, 65-render3d, 70-judge, the stage-local 80-* retry, '
+      boundary: 'all generator stages plus 65-render3d, 70-judge, the stage-local 80-* retry, '
         + 'and the deterministic 75-product decision',
       attempts: product.length,
       semantic3dAttempts: semantic3d.length,
@@ -685,9 +697,9 @@ export function buildThroughput(records, { elapsedHours = null } = {}) {
         ? Math.round((tokenTotal(product, 'inputTokens') + tokenTotal(product, 'outputTokens')) / acceptedCells)
         : null,
     },
-    note: 'Generator throughput ends at deterministic eligibility, the last verdict reached before a render '
-      + 'is spent. Product throughput adds render, review, and the product decision, so its denominator is '
-      + 'smaller whenever renderer or provider infrastructure censored an attempt.',
+    note: 'Generator throughput ends at the brief-aware 2D semantic verdict, the last verdict reached before '
+      + 'a 3D render is spent. Product throughput adds the 3D render, product review, and the product decision, '
+      + 'so its denominator is smaller whenever renderer or provider infrastructure censored an attempt.',
   };
 }
 

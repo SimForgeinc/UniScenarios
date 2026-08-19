@@ -94,6 +94,10 @@ STAGES = (
     "50-gate",
     "55-eligibility",
     "60-render2d",
+    "62-semantic2d",
+    "62-mutation-01",
+    "62-mutation-02",
+    "62-fallback-author",
     "65-render3d",
     "70-judge",
     "75-product",
@@ -102,9 +106,12 @@ STAGES = (
     "90-gallery",
     "95-benchmark",
 )
-# The two stage-local retry branches are mutually exclusive and only a rejected
-# attempt reaches either, so neither may be required of a healthy attempt.
-OPTIONAL_STAGES = ("80-presentation-retry", "80-reauthor-01")
+# Repair branches are bounded and only a rejected attempt reaches any of them,
+# so none may be required of a healthy attempt: the two 62-mutation rounds plus
+# the action-capped fallback author repair semantics before 3D, and the two
+# 80-* branches repair presentation or (ungated) semantics after 3D.
+OPTIONAL_STAGES = ("62-mutation-01", "62-mutation-02", "62-fallback-author",
+                   "80-presentation-retry", "80-reauthor-01")
 REQUIRED_STAGES = tuple(stage for stage in STAGES if stage not in OPTIONAL_STAGES)
 # The attempt record's stage ledger names the reauthor branch by the control it
 # ran; the branch's artifacts live in the numbered directory the ledger above

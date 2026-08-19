@@ -379,7 +379,9 @@ test('generator and product throughput are reported against separate boundaries'
     record({ furthest: '3d-ok', censoredAtStage: 'semantic-3d' }),
   ];
   const throughput = buildThroughput(records, { elapsedHours: 2 });
-  assert.match(throughput.generator.boundary, /eligible/);
+  assert.match(throughput.generator.boundary, /semantic-2d/);
+  assert.equal(throughput.generator.semantic2dAttempts, 2);
+  assert.equal(throughput.generator.eligibleYield.value, 0.666667);
   assert.match(throughput.product.boundary, /75-product/);
   assert.equal(throughput.generator.attempts, 3);
   assert.equal(throughput.generator.gatePassedAttempts, 3);

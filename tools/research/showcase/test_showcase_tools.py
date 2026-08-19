@@ -580,10 +580,14 @@ class StageListTest(unittest.TestCase):
     def test_stage_list_is_the_integrated_pipeline(self):
         self.assertEqual(qual.STAGES, (
             "00-brief", "10-route", "15-precheck", "20-author", "30-sites", "40-cells", "50-gate",
-            "55-eligibility", "60-render2d", "65-render3d", "70-judge", "75-product",
+            "55-eligibility", "60-render2d", "62-semantic2d",
+            "62-mutation-01", "62-mutation-02", "62-fallback-author",
+            "65-render3d", "70-judge", "75-product",
             "80-presentation-retry", "80-reauthor-01", "90-gallery", "95-benchmark"))
         self.assertNotIn("80-repair", qual.STAGES)
-        self.assertEqual(qual.OPTIONAL_STAGES, ("80-presentation-retry", "80-reauthor-01"))
+        self.assertEqual(qual.OPTIONAL_STAGES, (
+            "62-mutation-01", "62-mutation-02", "62-fallback-author",
+            "80-presentation-retry", "80-reauthor-01"))
         self.assertEqual(qual.REQUIRED_STAGES,
                          tuple(stage for stage in qual.STAGES if stage not in qual.OPTIONAL_STAGES))
         self.assertEqual(qual.STAGE_OUTCOMES,

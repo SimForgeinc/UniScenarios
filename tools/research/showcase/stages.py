@@ -177,7 +177,10 @@ def vista_author(args):
     failures = []
     final_row = None
     final_template = None
-    proven = semantic.build_proven_product_variant(author_contract, original_brief, ROOT)
+    # Recipe substitution is showcase-only: a benchmark attempt must measure the
+    # authoring system, so `--no-proven` forces a real authoring episode.
+    proven = None if args.no_proven else semantic.build_proven_product_variant(
+        author_contract, original_brief, ROOT)
     proven_failures = semantic.validate_template(proven, author_contract) if proven else []
     if proven and not proven_failures:
         final_template = out / 'proven-product.template.json'
@@ -258,7 +261,8 @@ def vista_author(args):
             break
 
     if final_template is None:
-        fallback = semantic.build_proven_ltap_variant(author_contract, original_brief, ROOT)
+        fallback = None if args.no_proven else semantic.build_proven_ltap_variant(
+            author_contract, original_brief, ROOT)
         fallback_failures = semantic.validate_template(fallback, author_contract) if fallback else failures
         if fallback and not fallback_failures:
             final_template = out / 'proven-ltap-fallback.template.json'
@@ -335,6 +339,201 @@ def judge(args):
     # The blind judge never sees the brief, so its verdict is presentation-tier evidence only.
     result['tier'] = '2d'
     emit(result)
+
+
+# Loop-control oracle for the generation benchmark: brief-aware review of the
+# cheap 2D schematic footage. Deliberately NOT the hashed acceptance contract --
+# schematic footage has no assets, camera, or lighting, so realism and every
+# presentation axis are out of scope here. `semanticMatch` gates 3D spend and
+# drives template mutation; contract acceptance still happens at 70-judge.
+SEMANTIC2D_PROMPT = """You are reviewing a top-down SCHEMATIC 2D rendering of a simulated traffic scenario.
+The rendering is deliberately abstract: boxes for vehicles, dots for pedestrians, plain road geometry.
+Never judge visual quality, detail, lighting, or realism of the drawing itself.
+
+Judge ONLY what the traffic does, against the user's exact request:
+1. mechanismFidelity: Does the visible motion implement the exact requested causal mechanism
+   (yes|partial|no)? A generic near-miss or route-around that ignores the requested cause is "no".
+2. actorFidelity: Are the requested actor types present and behaving as the request needs (pass|fail)?
+3. eventSequence: Do the requested onset, conflict, and reaction happen in that order (pass|fail)?
+4. plausible: Could real traffic move this way (true|false)?
+
+Report only defects about the traffic behaviour, each with one code:
+  scenario.mechanism      requested causal mechanism absent, replaced, or routed around
+  scenario.actors         wrong, missing, or substituted requested actor type
+  scenario.sequence       onset, conflict, or reaction out of order or absent
+  scenario.trigger        a scripted reaction never happens
+  scenario.plausibility   behaviour that could not happen in real traffic
+
+Answer STRICT JSON only:
+{"mechanismFidelity":"yes|partial|no","actorFidelity":"pass|fail","eventSequence":"pass|fail",
+"plausible":true,"confidence":0.0,
+"defects":[{"code":"scenario.…","text":"short observed behaviour defect"}],
+"explanation":"2-4 sentences on what the traffic visibly does versus what was requested"}"""
+
+SEMANTIC2D_CONFIDENCE_MIN = 0.6
+
+
+def semantic2d_verdict(emission):
+    """Deterministic loop-control verdict over a semantic 2D emission."""
+    codes = sorted({item.get('code') for item in emission.get('defects', [])
+                    if isinstance(item, dict) and isinstance(item.get('code'), str)
+                    and item['code'].startswith('scenario.')})
+    match = (emission.get('mechanismFidelity') == 'yes'
+             and emission.get('actorFidelity') == 'pass'
+             and emission.get('eventSequence') == 'pass'
+             and emission.get('plausible') is True
+             and (emission.get('confidence') or 0.0) >= SEMANTIC2D_CONFIDENCE_MIN
+             and not codes)
+    return {'semanticMatch': bool(match), 'scenarioDefectCodes': codes}
+
+
+def _select_review_frames(frames_dir, count=8):
+    """Evenly spaced PNG keyframes across the full clip, first and last included."""
+    frames = sorted(frames_dir.glob('frame-*.png'))
+    if len(frames) <= count:
+        return frames
+    last = len(frames) - 1
+    return [frames[round(last * index / (count - 1))] for index in range(count)]
+
+
+def _authored_scene_evidence(instance_path, trace_path):
+    instance = load(instance_path)
+    authored = [actor for actor in instance.get('input', {}).get('actors', [])
+                if not str(actor.get('id', '')).startswith('ambient:')]
+    authored_ids = {actor['id'] for actor in authored}
+    evidence = {
+        'authoredActors': [
+            {'id': actor['id'], 'kind': actor.get('kind'), 'catalogId': actor.get('catalogId')}
+            for actor in authored
+        ],
+    }
+    if trace_path and os.path.isfile(trace_path):
+        with gzip.open(trace_path, 'rt', encoding='utf-8') as handle:
+            trace = json.load(handle)
+        evidence['traceFacts'] = {
+            'collisions': trace.get('metrics', {}).get('collisions', []),
+            'events': [
+                event for event in trace.get('events', [])
+                if event.get('actorId') in authored_ids and event.get('kind') in
+                ('trigger_fired', 'trigger_skipped', 'released')
+            ],
+        }
+    return evidence
+
+
+def semantic_2d(args):
+    sys.path.insert(0, str(FOOTAGE))
+    import futil
+
+    futil.assert_vision_session(args.model)
+    brief = load(args.brief)
+    render = pathlib.Path(args.render)
+    frames = [frame for frame in _select_review_frames(render / 'frames') if frame.is_file()]
+    if not frames:
+        raise RuntimeError(f'no 2D review frames in {render}')
+    cell = pathlib.Path(args.cell)
+    evidence = _authored_scene_evidence(cell / 'instance.json', cell / 'trace.json.gz')
+    request_text = args.request_text or brief['brief']
+    prompt = (f'{SEMANTIC2D_PROMPT}\n\nUSER REQUEST:\n{request_text}'
+              f'\n\nGROUND-TRUTH EVIDENCE:\n{json.dumps(evidence, separators=(",", ":"))}')
+    content = [{'type': 'input_text', 'text': prompt}]
+    content.extend({'type': 'input_image', 'image_url': futil.png_data_url(str(frame))}
+                   for frame in frames)
+    body = {
+        'model': args.model,
+        'reasoning': {'effort': args.effort},
+        'max_output_tokens': 3000,
+        'input': [{'role': 'user', 'content': content}],
+    }
+    response, raw, wall = futil.responses_call(body, timeout=420)
+    parsed = futil.parse_json_block(futil.output_text(response))
+    emission = {'tier': '2d-semantic'}
+    for axis in ('mechanismFidelity', 'actorFidelity', 'eventSequence'):
+        if axis in parsed:
+            emission[axis] = str(parsed.get(axis) or '').strip().lower()
+    if 'plausible' in parsed:
+        emission['plausible'] = bool(parsed['plausible'])
+    if 'confidence' in parsed:
+        emission['confidence'] = review.clamp_number(parsed['confidence'], 0.0, 1.0)
+    emission['defects'] = raw_defects(parsed.get('defects'))
+    emission['explanation'] = str(parsed.get('explanation', ''))[:2000]
+    usage = response.get('usage') or {}
+    emit({
+        'cellId': args.cell_id,
+        'model': args.model,
+        'effort': args.effort,
+        'visionAsserted': True,
+        **emission,
+        **semantic2d_verdict(emission),
+        'framesUsed': [str(frame.relative_to(render)) for frame in frames],
+        'latencyS': round(wall, 2),
+        'tokens': {
+            'in': usage.get('input_tokens'),
+            'out': usage.get('output_tokens'),
+            'reasoning': (usage.get('output_tokens_details') or {}).get('reasoning_tokens'),
+        },
+        'rawResponseSha256': futil.sha256_text(raw),
+    })
+
+
+MUTATE_PROMPT = """You are repairing an executable autonomous-driving scenario template.
+A brief-aware reviewer watched the simulated footage of this exact template and found the
+scenario semantics wrong. Repair the TEMPLATE so the simulated traffic visibly enacts the
+user's request. This is a surgical edit, not a rewrite:
+- Keep the same JSON schema, top-level keys, anchor, roles, and site constraints.
+- Change only actor placement/speeds, choreography interactions (triggers, verbs, targets,
+  dynamics, timing), params, and props when they are the reason the semantics failed.
+- The requested onset must visibly precede the reaction inside the clip window.
+- Every reviewer defect below must be addressed by a concrete field change.
+Return ONLY the complete corrected template JSON."""
+
+
+def mutate(args):
+    sys.path.insert(0, str(FOOTAGE))
+    import futil
+
+    original = load(args.template)
+    author_contract = load(args.contract)
+    brief = load(args.brief)
+    feedback = load(args.feedback)
+    out = pathlib.Path(args.out)
+    prompt = (
+        f'{MUTATE_PROMPT}\n\nUSER REQUEST:\n{brief["brief"]}'
+        f'\n\nEXECUTABLE SEMANTIC CONTRACT (must stay satisfied):\n'
+        f'{json.dumps(author_contract, separators=(",", ":"))}'
+        f'\n\nREVIEWER FEEDBACK ON THE SIMULATED FOOTAGE:\n'
+        f'{json.dumps(feedback, separators=(",", ":"))}'
+        f'\n\nCURRENT TEMPLATE:\n{json.dumps(original, separators=(",", ":"))}'
+    )
+    body = {
+        'model': args.model,
+        'reasoning': {'effort': args.effort},
+        'max_output_tokens': 16000,
+        'input': [{'role': 'user', 'content': [{'type': 'input_text', 'text': prompt}]}],
+    }
+    response, raw, wall = futil.responses_call(body, timeout=420)
+    parsed = futil.parse_json_block(futil.output_text(response))
+    if not isinstance(parsed, dict) or 'choreography' not in parsed:
+        raise RuntimeError('mutation returned no template JSON')
+    template, _ = semantic.complete_template(parsed)
+    atomic_json(out, template)
+    enforce_minimum_clip(out)
+    failures = semantic.validate_template(load(out), author_contract)
+    usage = response.get('usage') or {}
+    emit({
+        'template': str(out),
+        'valid': not failures,
+        'failures': failures,
+        'latencyS': round(wall, 2),
+        'usage': {
+            'calls': 1,
+            'input_tokens': usage.get('input_tokens') or 0,
+            'output_tokens': usage.get('output_tokens') or 0,
+            'reasoning_tokens': (usage.get('output_tokens_details') or {}).get('reasoning_tokens') or 0,
+            'wallS': round(wall, 3),
+        },
+    })
+
 
 def raw_defects(value):
     """Preserve the reviewer's defect evidence verbatim: text, declared code, confidence."""
@@ -552,6 +751,8 @@ def main():
     cmd.add_argument('--effort', default='medium')
     cmd.add_argument('--budget', type=int, default=40)
     cmd.add_argument('--wall-cap', type=int, default=2400)
+    cmd.add_argument('--no-proven', action='store_true',
+                     help='benchmark mode: never substitute a frozen-gate-proven recipe')
     cmd.set_defaults(func=vista_author)
 
     cmd = sub.add_parser('gate')
@@ -565,6 +766,26 @@ def main():
     cmd.add_argument('--effort', default='medium')
     cmd.add_argument('--strategy', default='spread8')
     cmd.set_defaults(func=judge)
+
+    cmd = sub.add_parser('semantic2d')
+    cmd.add_argument('--brief', required=True)
+    cmd.add_argument('--render', required=True)
+    cmd.add_argument('--cell', required=True)
+    cmd.add_argument('--cell-id', required=True)
+    cmd.add_argument('--request-text')
+    cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--effort', default='medium')
+    cmd.set_defaults(func=semantic_2d)
+
+    cmd = sub.add_parser('mutate')
+    cmd.add_argument('--brief', required=True)
+    cmd.add_argument('--contract', required=True)
+    cmd.add_argument('--template', required=True)
+    cmd.add_argument('--feedback', required=True)
+    cmd.add_argument('--out', required=True)
+    cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--effort', default='medium')
+    cmd.set_defaults(func=mutate)
 
     cmd = sub.add_parser('review3d')
     cmd.add_argument('--brief', required=True)

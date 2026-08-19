@@ -210,6 +210,7 @@ export async function collectJobUsage(jobDir) {
   const byStage = {
     '20-author': emptyUsage(),
     '60-render2d': emptyUsage(),
+    '62-semantic2d': emptyUsage(),
     '70-judge': emptyUsage(),
   };
   const files = await walkFiles(jobDir);
@@ -229,10 +230,20 @@ export async function collectJobUsage(jobDir) {
     try { authorUsageInto(JSON.parse(bytes), byStage['20-author']); } catch { /* malformed evidence is not billable */ }
   }
   const seenVision = new Set();
-  const visionPaths = files.filter((value) => ['70-judge.json', 'quality.json'].includes(basename(value)));
+  const visionPaths = files.filter((value) => ['70-judge.json', 'quality.json', '62-semantic2d.json'].includes(basename(value)));
   for (const path of visionPaths.sort()) {
     let document;
     try { document = await readJson(path); } catch { continue; }
+    if (basename(path) === '62-semantic2d.json') {
+      for (const row of document.cells ?? []) {
+        const key = `sem:${row?.rawResponseSha256 ?? row?.cellId ?? ''}`;
+        if (row?.tokens && !seenVision.has(key)) {
+          seenVision.add(key);
+          addUsage(byStage['62-semantic2d'], row.tokens, row.latencyS);
+        }
+      }
+      continue;
+    }
     for (const row of document.cells ?? []) {
       const twoDKey = `2d:${row?._meta?.promptSha256 ?? ''}:${row?.rawResponseSha256 ?? row?.cellId ?? ''}`;
       if (row?._meta?.tokens && !seenVision.has(twoDKey)) {
@@ -829,7 +840,7 @@ export function applyProductDecision(rows, { job, passing, gateRows, validityByC
  * actually run, plus the one escalation the deterministic draws force -- re-running an identical
  * simulation repairs nothing, so a simulation blocker is a defect of the template.
  */
-export function planRetry(route, job, judge) {
+export function planRetry(route, job, judge, { semanticGated = false } = {}) {
   const document = normalizeJudgeDocument(judge);
   const rows = document?.cells ?? [];
   const none = (reason) => ({
@@ -865,6 +876,13 @@ export function planRetry(route, job, judge) {
     retry, kind, defectCodes, cellIds: retry === 'reauthor' ? [] : cellIds, reason, recommendation,
   });
   if (retryRequiresAuthor(recommendation)) {
+    if (semanticGated) {
+      // Generation was already accepted (or exhausted its repair budget) at the
+      // 2D semantic oracle. A 3D scenario disagreement is observability
+      // telemetry for a person, never another authoring episode.
+      return plan('manual-review', 'semantic-gated',
+        'the 2D semantic oracle owns the authoring budget; a 3D scenario disagreement stops for a person');
+    }
     if (route.engine === 'compiler' && job.fallbackToVisual === true && Number(job._fallbackDepth ?? 0) < 1) {
       return plan('reauthor', 'compiler-to-visual-fallback',
         'compiler output produced no presentable scenario; visual authoring is the declared fallback');
@@ -1290,7 +1308,9 @@ export class ShowcasePipeline {
           '--model', job.authorModel ?? 'gpt-5.6-sol',
           '--effort', job.authorEffort ?? 'medium',
         ];
-        if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2');
+        // Every pipeline attempt is a measured attempt: a frozen recipe substituted
+        // for the authoring system would benchmark nothing, so it is banned here.
+        if (subcommand === 'vista-author') args.push('--contract', contractPath, '--retries', '2', '--no-proven');
         if (subcommand === 'author') {
           args.push('--draws', '1', '--probe-draws', '1', '--max-sites', String(Math.min(job.maxSitesPerMap, 3)), '--concurrency', String(context.scheduler.effectiveBatchConcurrency));
         }
@@ -1565,6 +1585,285 @@ export class ShowcasePipeline {
     }
     context.benchmark.counts.semanticReviewed = qualityRows.filter((row) => row.status === 'complete').length;
     if (context.benchmark.counts.semanticReviewed > 0) context.benchmark.funnel['semantic-reviewed'] = true;
+
+    // ---- 62-semantic2d: the generation oracle -------------------------------
+    // Brief-aware semantic review of the cheap 2D schematic footage. This is
+    // where generation is accepted: 3D render spend and template repair both
+    // key off this verdict, never off presentation review.
+    const semanticGateActive = job.judge === true && job.semantic2d !== false;
+    const semantic2dPath = join(context.jobDir, '62-semantic2d.json');
+    const extraGateCells = [];
+    let semanticRows = [];
+    let adoptedRound = null;
+    const semanticTargets = (candidateCells, eligibleSet, renderRoot) => candidateCells
+      .filter((cell) => eligibleSet.has(cell.cellId) && cell.traceFile && cell.instanceFile)
+      .map((cell) => ({ cell, renderDir: join(renderRoot, cell.cellId) }));
+    let semantic2d = await stage(context, '62-semantic2d', [semantic2dPath], async () => {
+      if (!semanticGateActive) {
+        const value = { status: 'skipped', reason: 'semantic 2D gate disabled', cells: [] };
+        await atomicJson(semantic2dPath, value);
+        return { value, status: 'skipped' };
+      }
+      if (!(await gatewayAvailable())) {
+        const value = { status: 'skipped', reason: 'OpenAI gateway unavailable at 127.0.0.1:4141', cells: [] };
+        await atomicJson(semantic2dPath, value);
+        return { value, status: 'skipped' };
+      }
+      const completed2d = new Set(render2d.filter((row) => row.status === 'complete').map((row) => row.cellId));
+      const targets = semanticTargets(cells, eligible, render2dDir)
+        .filter((item) => completed2d.has(item.cell.cellId));
+      const rows = await this.reviewSemantic2d(context, job, briefPath, targets);
+      const value = {
+        status: 'complete',
+        cells: rows,
+        reviewed: rows.filter((row) => row.status === 'complete').length,
+        matched: rows.filter((row) => row.semanticMatch === true).length,
+      };
+      await atomicJson(semantic2dPath, value);
+      return value;
+    });
+    if (Array.isArray(semantic2d)) semantic2d = { status: 'complete', cells: semantic2d };
+    const semanticAccessFailure = (semantic2d.cells ?? []).find(operationalFailure);
+    if (semanticAccessFailure) {
+      throw new Error(`model access unavailable during semantic 2D review: ${JSON.stringify(semanticAccessFailure).slice(-1000)}`);
+    }
+    semanticRows = semantic2d.cells ?? [];
+    const matchedIds = () => new Set(semanticRows.filter((row) => row.semanticMatch === true).map((row) => row.cellId));
+    let matchedCells = cells.filter((cell) => matchedIds().has(cell.cellId));
+
+    // ---- bounded semantic repair: mutate the template, never re-run the world.
+    // Two single-call mutations of the existing template, then one action-capped
+    // fresh authoring episode. Each round re-simulates the best map only and is
+    // screened by the same 2D semantic oracle. The recursive full-pipeline
+    // repair path is unreachable while this gate is active.
+    const semanticFeedback = () => semanticRows
+      .filter((row) => row.status === 'complete' && row.semanticMatch !== true)
+      .sort((a, b) => Number(b.confidence ?? 0) - Number(a.confidence ?? 0))
+      .slice(0, 3)
+      .map((row) => ({
+        cellId: row.cellId,
+        mechanismFidelity: row.mechanismFidelity ?? null,
+        actorFidelity: row.actorFidelity ?? null,
+        eventSequence: row.eventSequence ?? null,
+        plausible: row.plausible ?? null,
+        defects: row.defects ?? [],
+        explanation: row.explanation ?? '',
+      }));
+    const bestSemanticCell = () => {
+      const byConfidence = [...semanticRows]
+        .filter((row) => row.status === 'complete')
+        .sort((a, b) => Number(b.confidence ?? 0) - Number(a.confidence ?? 0));
+      const preferred = byConfidence[0]?.cellId;
+      return cells.find((cell) => cell.cellId === preferred)
+        ?? cells.find((cell) => eligible.has(cell.cellId))
+        ?? cells[0];
+    };
+    const runSemanticRound = async (roundName, makeTemplate) => {
+      const roundDir = join(context.jobDir, roundName);
+      const roundIndex = join(roundDir, 'index.json');
+      const round = await stage(context, roundName, [roundIndex], async () => {
+        await mkdir(roundDir, { recursive: true });
+        const feedback = semanticFeedback();
+        const feedbackPath = join(roundDir, 'feedback.json');
+        await atomicJson(feedbackPath, { brief: job.requestedBrief ?? job.brief, cells: feedback });
+        const roundTemplatePath = join(roundDir, 'template.json');
+        const made = await makeTemplate(roundDir, feedbackPath, roundTemplatePath);
+        if (!made.ok) {
+          const value = { status: 'failed', reason: made.reason, cells: [], matched: 0 };
+          await atomicJson(roundIndex, value);
+          return { value, status: 'failed' };
+        }
+        const roundTemplate = await readJson(roundTemplatePath);
+        roundTemplate.anchor.id = `showcase-${context.benchmark.seeds.seedIdentity}-${roundName.slice(3)}`;
+        await atomicJson(roundTemplatePath, roundTemplate);
+        const anchor = bestSemanticCell();
+        const batchDir = join(roundDir, '.batch');
+        await rm(batchDir, { recursive: true, force: true });
+        const batchArgs = [this.cli, 'batch', roundTemplatePath, '--out', batchDir,
+          '--draws', String(job.nScenarios), '--max-sites', '1',
+          '--concurrency', String(context.scheduler.effectiveBatchConcurrency),
+          '--maps', anchor?.mapId ?? job.maps[0]];
+        if (job.ambient !== 'off') batchArgs.push('--ambient', job.ambient, '--ambient-seed', String(job.seed));
+        const batchResult = await command('node', batchArgs, { cwd: this.root, allowFailure: true, timeout: 1_800_000 });
+        const summaryPath = join(batchDir, 'batch-summary.json');
+        if (!(await exists(summaryPath))) {
+          const value = { status: 'failed', reason: `repair batch wrote no summary (${batchResult.code})`, cells: [], matched: 0 };
+          await atomicJson(roundIndex, value);
+          return { value, status: 'failed' };
+        }
+        const roundSummary = await readJson(summaryPath);
+        // A repaired template re-simulates the same map sites, so its draws live
+        // in their own index space: without the offset a round cell would collide
+        // with the original cell simulated at the same site and draw.
+        const drawOffset = { '62-mutation-01': 100, '62-mutation-02': 200, '62-fallback-author': 300 }[roundName] ?? 900;
+        for (const result of roundSummary.results ?? []) {
+          result.drawIndex = drawOffset + (Number(result.drawIndex) || 0);
+        }
+        const roundCells = await copyCells(roundSummary, join(roundDir, '40-cells'), job);
+        await rm(batchDir, { recursive: true, force: true });
+        const gateRequestPath = join(roundDir, '.gate-request.json');
+        await atomicJson(gateRequestPath, {
+          brief: job.requestedBrief ?? job.brief,
+          cells: roundCells.map((cell) => ({
+            cellId: cell.cellId, traceFile: cell.traceFile, verdict: cell.verdict,
+            band: cell.band, mapId: cell.mapId, siteId: cell.siteId, drawIndex: cell.drawIndex,
+          })),
+        });
+        const gateResult = await command(this.python, [this.bridge, 'gate', '--request', gateRequestPath], { cwd: this.root, timeout: 600_000 });
+        await rm(gateRequestPath, { force: true });
+        const roundGate = lastJsonLine(gateResult.stdout);
+        if (!roundGate) throw new Error(`repair gate returned no JSON: ${gateResult.stdout.slice(-1000)}`);
+        const roundPassing = new Set((roundGate.cells ?? []).filter((row) => row.pass).map((row) => row.cellId));
+        const roundEligibility = await evaluateCellEligibility(roundCells, {
+          passing: roundPassing, gateCells: roundGate.cells ?? [], collisionPolicy,
+        });
+        const roundEligible = new Set((roundEligibility.cells ?? [])
+          .filter((row) => row.admitted && row.eligible).map((row) => row.cellId));
+        const renderRoot = join(roundDir, '60-render2d');
+        const renderTargets = semanticTargets(roundCells, roundEligible, renderRoot);
+        const rendered = [];
+        for (const item of renderTargets) {
+          try {
+            await this.render2d.run(() => renderCell(context, item.cell, item.renderDir, {
+              tier: '2d', composition: context.renderComposition,
+            }));
+            rendered.push(item);
+          } catch { /* an unrenderable round cell simply cannot be screened */ }
+        }
+        const rows = await this.reviewSemantic2d(context, job, briefPath, rendered);
+        // Named artifact so collectJobUsage bills this round's review tokens.
+        await atomicJson(join(roundDir, '62-semantic2d.json'), { status: 'complete', cells: rows });
+        const value = {
+          status: 'complete',
+          template: 'template.json',
+          repair: made.meta ?? null,
+          gate: roundGate,
+          eligibility: roundEligibility,
+          cells: roundCells.map(({ cellDir: _cellDir, ...cell }) => cell),
+          semantic: rows,
+          reviewed: rows.filter((row) => row.status === 'complete').length,
+          matched: rows.filter((row) => row.semanticMatch === true).length,
+        };
+        await atomicJson(roundIndex, value);
+        return { value, status: value.matched > 0 ? 'complete' : 'failed' };
+      });
+      if (!round || round.status === 'failed' || !Array.isArray(round.cells)) return round ?? null;
+      // Adopt the round's world into the job-wide evidence maps so every
+      // downstream stage sees the repaired cells beside the originals.
+      const roundCells = round.cells.map((cell) => ({
+        ...cell,
+        cellDir: join(roundDir, '40-cells', cell.cellId),
+        traceFile: cell.traceFile ? join(roundDir, '40-cells', cell.traceFile) : null,
+        instanceFile: cell.instanceFile ? join(roundDir, '40-cells', cell.instanceFile) : null,
+      }));
+      const roundCellPaths = new Map(roundCells.map((cell) => [cell.cellId, cell]));
+      for (const cell of roundCells) cells.push(cell);
+      for (const row of round.gate?.cells ?? []) {
+        extraGateCells.push(row);
+        if (row.pass) passing.add(row.cellId);
+      }
+      for (const row of round.eligibility?.cells ?? []) {
+        eligibilityByCell.set(row.cellId, row);
+        if (row.admitted && row.eligible) eligible.add(row.cellId);
+      }
+      for (const cell of round.cells) {
+        context.benchmark.cells.push({
+          cellId: cell.cellId,
+          mapId: cell.mapId ?? null,
+          siteId: cell.siteId ?? null,
+          drawIndex: cell.drawIndex ?? null,
+          paramSeed: cell.paramSeed ?? null,
+          batchVerdict: cell.verdict ?? null,
+          band: cell.band ?? null,
+          inputHash: cell.inputHash ?? null,
+          traceSha256: cell.traceSha256 ?? null,
+          trajectoryFingerprint: cell.trajectoryFingerprint ?? null,
+          trajectoryFeatures: cell.trajectoryFeatures ?? null,
+          gatePass: (round.gate?.cells ?? []).find((row) => row.cellId === cell.cellId)?.pass === true,
+          gateFirstFailure: (round.gate?.cells ?? []).find((row) => row.cellId === cell.cellId)?.firstFailure ?? null,
+          render2d: null,
+          render3d: null,
+          semanticAccepted: null,
+          presentationAccepted: null,
+          defectCodes: [],
+          repairRound: roundName,
+        });
+      }
+      semanticRows = [...semanticRows, ...(round.semantic ?? [])];
+      if ((round.matched ?? 0) > 0) {
+        adoptedRound = roundName;
+        matchedCells = (round.semantic ?? [])
+          .filter((row) => row.semanticMatch === true)
+          .map((row) => roundCellPaths.get(row.cellId))
+          .filter(Boolean);
+      }
+      return round;
+    };
+    let currentTemplatePath = templatePath;
+    if (semanticGateActive && semantic2d.status === 'complete'
+      && matchedCells.length === 0 && semanticFeedback().length > 0) {
+      for (const roundName of ['62-mutation-01', '62-mutation-02']) {
+        const round = await runSemanticRound(roundName, async (roundDir, feedbackPath, roundTemplatePath) => {
+          const result = await command(this.python, [
+            this.bridge, 'mutate', '--brief', briefPath, '--contract', contractPath,
+            '--template', currentTemplatePath, '--feedback', feedbackPath,
+            '--out', roundTemplatePath,
+            '--model', job.authorModel ?? 'gpt-5.6-sol', '--effort', job.authorEffort ?? 'medium',
+          ], {
+            cwd: this.root,
+            timeout: 600_000,
+            allowFailure: true,
+            env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+          });
+          const verdict = lastJsonLine(result.stdout);
+          if (!verdict) return { ok: false, reason: `mutation returned no JSON: ${result.stderr.slice(-500)}` };
+          if (verdict.usage) await atomicJson(join(roundDir, 'transcript.json'), { usage: verdict.usage });
+          if (verdict.valid !== true) return { ok: false, reason: `mutated template violated the semantic contract: ${JSON.stringify(verdict.failures ?? []).slice(0, 500)}` };
+          return { ok: true, meta: { kind: 'template-mutation', latencyS: verdict.latencyS ?? null } };
+        });
+        if (round?.status !== 'failed' && await exists(join(context.jobDir, roundName, 'template.json'))) {
+          currentTemplatePath = join(context.jobDir, roundName, 'template.json');
+        }
+        if (matchedCells.length > 0) break;
+      }
+      if (matchedCells.length === 0) {
+        await runSemanticRound('62-fallback-author', async (roundDir, feedbackPath, roundTemplatePath) => {
+          const feedback = await readJson(feedbackPath);
+          const fallbackBriefPath = join(roundDir, '00-brief.json');
+          await atomicJson(fallbackBriefPath, {
+            id: `${job.briefId}-semantic-fallback`,
+            brief: `${job.brief}\n\nSEMANTIC FEEDBACK FROM SIMULATED FOOTAGE OF THE REJECTED TEMPLATE:\n${(feedback.cells ?? []).map((row) => `- ${row.explanation}`).join('\n')}\nAuthor a scenario whose simulated motion visibly enacts the request.`,
+          });
+          const authorDirRound = join(roundDir, 'author');
+          const result = await command(this.python, [
+            this.bridge, 'vista-author', '--brief', fallbackBriefPath, '--out', authorDirRound,
+            '--model', job.authorModel ?? 'gpt-5.6-sol', '--effort', job.authorEffort ?? 'medium',
+            '--contract', contractPath, '--retries', '0', '--budget', '20', '--no-proven',
+          ], {
+            cwd: this.root,
+            timeout: 1_500_000,
+            allowFailure: true,
+            env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+          });
+          if (!(await exists(join(authorDirRound, 'template.json')))) {
+            return { ok: false, reason: `fallback author emitted no template: ${result.stderr.slice(-500)}` };
+          }
+          await copyFile(join(authorDirRound, 'template.json'), roundTemplatePath);
+          return { ok: true, meta: { kind: 'fallback-author', actions: 20 } };
+        });
+      }
+    }
+    context.benchmark.counts.semantic2dReviewed = semanticRows.filter((row) => row.status === 'complete').length;
+    context.benchmark.counts.semantic2dMatched = semanticRows.filter((row) => row.semanticMatch === true).length;
+    if (context.benchmark.counts.semantic2dMatched > 0) context.benchmark.funnel['semantic-2d'] = true;
+    for (const row of semanticRows) {
+      const benchCell = context.benchmark.cells.find((cell) => cell.cellId === row.cellId);
+      if (benchCell) benchCell.semantic2dMatch = row.semanticMatch === true;
+    }
+    context.benchmark.execution.semanticRepair = adoptedRound
+      ?? (semanticGateActive && semantic2d.status === 'complete' && matchedCells.length === 0
+        && semanticRows.length > 0 ? 'exhausted' : null);
+
     let render3d = await stage(context, '65-render3d', [render3dIndex], async () => {
       await mkdir(render3dDir, { recursive: true });
       if (!job.render3d) {
@@ -1572,10 +1871,25 @@ export class ShowcasePipeline {
         await atomicJson(render3dIndex, value);
         return { value, status: 'skipped' };
       }
-      const candidates = rankCandidates(
-        cells.filter((candidate) => eligible.has(candidate.cellId)),
-        qualityRows,
-      ).slice(0, job.topK * 3);
+      if (semanticGateActive && semantic2d.status === 'complete' && matchedCells.length === 0) {
+        const value = { status: 'skipped', reason: 'no 2D semantic match; 3D spend is gated on the semantic oracle', cells: [] };
+        await atomicJson(render3dIndex, value);
+        return { value, status: 'skipped' };
+      }
+      // Semantic gating rations 3D to the single best-matching cell; the legacy
+      // rank-and-render-topK path survives only for ungated jobs.
+      const semanticConfidence = new Map(semanticRows
+        .filter((row) => row.semanticMatch === true)
+        .map((row) => [row.cellId, Number(row.confidence ?? 0)]));
+      const candidates = semanticGateActive && semantic2d.status === 'complete'
+        ? [...matchedCells]
+          .sort((a, b) => (semanticConfidence.get(b.cellId) ?? 0) - (semanticConfidence.get(a.cellId) ?? 0)
+            || String(a.cellId).localeCompare(String(b.cellId)))
+          .slice(0, 1)
+        : rankCandidates(
+          cells.filter((candidate) => eligible.has(candidate.cellId)),
+          qualityRows,
+        ).slice(0, job.topK * 3);
       const rows = await mapConcurrent(
         candidates,
         this.schedulerSettings.render3dConcurrency,
@@ -1607,9 +1921,10 @@ export class ShowcasePipeline {
         judge: job.judge === true,
         render3d: job.render3d === true,
         topK: Number(job.topK ?? 0),
+        semantic2d: semanticGateActive,
       },
     });
-    const gateRows = new Map((gate.cells ?? []).map((row) => [row.cellId, row]));
+    const gateRows = new Map([...(gate.cells ?? []), ...extraGateCells].map((row) => [row.cellId, row]));
     const judge = await stage(context, '70-judge', [judgePath], async () => {
       if (!job.judge) {
         const value = { status: 'skipped', reason: 'judge disabled', cells: [], contract: contractIdentity(), cache: judgeCache };
@@ -1624,6 +1939,20 @@ export class ShowcasePipeline {
       const rows = qualityRows.map((row) => ({ ...row }));
       const reviews = await this.review3dRenders(context, job, briefPath, render3dDir,
         (render3d?.cells ?? []).filter((row) => row.status === 'complete'));
+      // A capture fault is not a verdict: a render whose frames could not be
+      // reviewed gets exactly one recapture before its failure becomes evidence.
+      for (let index = 0; index < reviews.length; index += 1) {
+        const item = reviews[index];
+        const captureFault = /no (?:2D|3D) review frames|renderer captured an empty scene/i
+          .test(String(item?.review?.error ?? ''));
+        if (!captureFault) continue;
+        const cell = cells.find((candidate) => candidate.cellId === item.cellId);
+        if (!cell) continue;
+        const recaptured = await this.render3dCell(context, cell, join(render3dDir, cell.cellId));
+        if (recaptured.status !== 'complete') continue;
+        const retried = await this.review3dRenders(context, job, briefPath, render3dDir, [recaptured]);
+        if (retried[0]?.review) reviews[index] = retried[0];
+      }
       const reviewAccessFailure = reviews.find(operationalFailure);
       if (reviewAccessFailure) {
         throw new Error(`model access unavailable during 3D review: ${JSON.stringify(reviewAccessFailure).slice(-1000)}`);
@@ -1671,7 +2000,12 @@ export class ShowcasePipeline {
     // One deterministic control per rejected job, chosen from the defect codes
     // the stages recorded. Presentation faults are repaired where they happened;
     // only a scenario defect is allowed to spend an authoring pass.
-    const plan = planRetry(route, job, judge);
+    const plan = planRetry(route, job, judge, {
+      // The oracle owns the authoring budget only when it actually reviewed
+      // footage: a job whose cells were never screenable keeps the legacy
+      // bounded reauthor.
+      semanticGated: semanticGateActive && semantic2d.status === 'complete' && semanticRows.length > 0,
+    });
     // `renderDir` is where this cell's own 3D render was written. A 2D-only job
     // has none, and its accepted headline resolves from the 2D index instead.
     let productRows = (judge.cells ?? []).map((row) => ({
@@ -1960,6 +2294,33 @@ export class ShowcasePipeline {
       error: message.slice(-1000),
       defectCodes: [classifyRenderFailure(message)],
     };
+  }
+
+  /**
+   * Brief-aware semantic review of already rendered 2D schematic footage.
+   * `items` pair a simulated cell with the exact render directory reviewed, so
+   * repair rounds screen their own footage without touching the originals.
+   */
+  async reviewSemantic2d(context, job, briefPath, items) {
+    return mapConcurrent(items, this.schedulerSettings.judgeConcurrency, async (item) => this.judge.run(async () => {
+      const result = await command(this.python, [
+        this.bridge, 'semantic2d', '--brief', briefPath,
+        '--render', item.renderDir, '--cell', item.cell.cellDir,
+        '--cell-id', item.cell.cellId,
+        '--request-text', job.requestedBrief ?? job.brief,
+        '--model', job.judgeModel ?? 'gpt-5.6-sol',
+        '--effort', job.judgeEffort ?? 'medium',
+      ], {
+        cwd: this.root,
+        timeout: 600_000,
+        env: { ...process.env, OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1', OPENAI_API_KEY: 'x' },
+        allowFailure: true,
+      });
+      const verdict = lastJsonLine(result.stdout);
+      return verdict
+        ? { status: 'complete', ...verdict }
+        : { cellId: item.cell.cellId, status: 'error', semanticMatch: false, error: result.stderr.slice(-1000) };
+    }));
   }
 
   /** Brief-aware 3D product review of already rendered cells. */

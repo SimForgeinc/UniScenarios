@@ -20,6 +20,7 @@ FUNNEL_STAGES = (
     ("eligible", "55-eligibility.json"),
     ("2d-ok", "60-render2d/index.json"),
     ("semantic-reviewed", "60-render2d/quality.json"),
+    ("semantic-2d", "62-semantic2d.json"),
     ("3d-ok", "65-render3d/index.json"),
     ("semantic-3d", "70-judge.json"),
     ("presentation", "75-product.json"),
@@ -179,7 +180,7 @@ def verify(block, expect_entries=None):
     expected_stage_ids = [stage_id for stage_id, _evidence in FUNNEL_STAGES]
     if stage_ids != expected_stage_ids:
         violations.append(
-            f"funnel stages must be the eleven canonical ids in order; got {stage_ids!r}"
+            f"funnel stages must be the twelve canonical ids in order; got {stage_ids!r}"
         )
     stage_by_id = {
         stage.get("id"): stage for stage in stages if isinstance(stage, dict) and stage.get("id") is not None

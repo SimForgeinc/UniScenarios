@@ -100,6 +100,42 @@ else if (command === 'author' || command === 'vista-author') {
     explanation: 'The requested mechanism happens on camera and every actor sits on the road.',
     ...verdict,
   });
+} else if (command === 'semantic2d') {
+  const cellId = flag('cell-id');
+  const render = flag('render');
+  const attempt = render.includes('62-mutation-01') ? 'mutation-01'
+    : render.includes('62-mutation-02') ? 'mutation-02'
+      : render.includes('62-fallback-author') ? 'fallback' : 'first';
+  const verdict = plan.semantic2d?.[attempt]?.[cellId] ?? plan.semantic2d?.[attempt]?.['*'] ?? {};
+  // A canonical semantic 2D emission: brief-aware traffic-behaviour axes only.
+  emit({
+    cellId,
+    tier: '2d-semantic',
+    visionAsserted: true,
+    mechanismFidelity: 'yes',
+    actorFidelity: 'pass',
+    eventSequence: 'pass',
+    plausible: true,
+    confidence: 0.9,
+    defects: [],
+    explanation: 'The schematic traffic enacts the requested mechanism in order.',
+    semanticMatch: true,
+    scenarioDefectCodes: [],
+    tokens: { in: 100, out: 20, reasoning: 5 },
+    rawResponseSha256: 'sem-' + attempt + '-' + cellId,
+    ...verdict,
+  });
+} else if (command === 'mutate') {
+  const template = JSON.parse(await readFile(flag('template'), 'utf8'));
+  template.mutated = (template.mutated ?? 0) + 1;
+  await writeFile(flag('out'), JSON.stringify(template));
+  emit({
+    template: flag('out'),
+    valid: plan.mutateInvalid !== true,
+    failures: plan.mutateInvalid === true ? [{ kind: 'smoke', reason: 'planned invalid mutation' }] : [],
+    latencyS: 1.5,
+    usage: { calls: 1, input_tokens: 1500, output_tokens: 400, reasoning_tokens: 50, wallS: 1.5 },
+  });
 } else {
   process.stderr.write('unsupported subcommand ' + command + '\\n');
   process.exit(2);
@@ -124,7 +160,8 @@ if (command === 'sites' && sub === 'match') {
 } else if (command === 'batch') {
   const out = flag('out');
   const results = [];
-  for (const cell of plan.cells) {
+  const repairRound = out.includes('62-mutation') || out.includes('62-fallback-author');
+  for (const cell of (repairRound ? plan.mutationCells ?? plan.cells : plan.cells)) {
     const dir = join(out, cell.cellId);
     await mkdir(dir, { recursive: true });
     await copyFile(cell.trace, join(dir, 'trace.json.gz'));
@@ -426,4 +463,106 @@ test('a gate-rejected cell is reported, never re-decided, and never rendered', a
   assert.equal(eligibility.eligibleCells, 1);
   assert.equal(await exists(join(jobDir, '65-render3d', 'yale-street-site-b-0')), false);
   assert.equal(await exists(join(jobDir, '60-render2d', 'yale-street-site-b-0')), false);
+});
+
+test('a semantic mismatch mutates the template once and 3D renders only the matched cell', async (t) => {
+  const { jobDir, events, read } = await harness(t, {
+    contract: SEMANTIC_CONTRACT,
+    cells: CELLS,
+    mutationCells: [
+      { cellId: 'mutated-src', mapId: 'yale-street', siteId: 'site-m', drawIndex: 0, trace: CLEAN_TRACE },
+    ],
+    gateRejects: [],
+    renderFails: { first: {}, retry: {} },
+    review: { first: {}, retry: {} },
+    semantic2d: {
+      first: {
+        '*': {
+          mechanismFidelity: 'no',
+          semanticMatch: false,
+          defects: [{ code: 'scenario.mechanism', text: 'the ego never reroutes around the closure' }],
+          explanation: 'The ego drives straight past; the requested reroute never happens.',
+        },
+      },
+      'mutation-01': { '*': {} },
+    },
+  });
+
+  // The oracle rejected the original footage and the first mutation round fixed it.
+  const semantic = await read('62-semantic2d.json');
+  assert.equal(semantic.matched, 0);
+  const round = await read('62-mutation-01/index.json');
+  assert.equal(round.matched, 1);
+  assert.equal(round.repair.kind, 'template-mutation');
+  const matchedCellId = round.semantic.find((row) => row.semanticMatch === true).cellId;
+  assert.notEqual(matchedCellId, 'yale-street-site-a-0');
+  // The mutated template is a surgical edit of the authored one, not a new episode.
+  const mutatedTemplate = await read('62-mutation-01/template.json');
+  assert.equal(mutatedTemplate.mutated, 1);
+  assert.equal(await exists(join(jobDir, '62-mutation-02')), false);
+  assert.equal(await exists(join(jobDir, '62-fallback-author')), false);
+
+  // Exactly one 3D render was spent, on the matched repaired cell only.
+  const render3d = await read('65-render3d/index.json');
+  assert.equal(render3d.cells.length, 1);
+  assert.equal(render3d.cells[0].cellId, matchedCellId);
+  assert.equal(render3d.cells[0].status, 'complete');
+  assert.equal(await exists(join(jobDir, '65-render3d', 'yale-street-site-a-0')), false);
+
+  const product = await read('75-product.json');
+  assert.equal(product.retry.kind, 'none');
+  assert.equal(product.acceptedCells, 1);
+  const acceptedRow = product.cells.find((row) => row.presentationAccepted === true);
+  assert.equal(acceptedRow.cellId, matchedCellId);
+
+  // No recursive authoring episode ran: one 20-author pass, no 80-* attempt.
+  assert.equal(events.filter((event) => event.stage === '20-author' && event.status === 'running').length, 1);
+  assert.equal(await exists(join(jobDir, '80-reauthor-01')), false);
+  assert.equal(await exists(join(jobDir, '80-visual-fallback')), false);
+
+  const benchmark = await read('95-benchmark.json');
+  assert.equal(benchmark.funnel['semantic-2d'], true);
+  assert.equal(benchmark.counts.semantic2dMatched, 1);
+  assert.equal(benchmark.execution.semanticRepair, '62-mutation-01');
+  const repairedRow = benchmark.cells.find((cell) => cell.cellId === matchedCellId);
+  assert.equal(repairedRow.repairRound, '62-mutation-01');
+  assert.equal(repairedRow.semantic2dMatch, true);
+});
+
+test('an exhausted semantic loop stops for a person instead of reauthoring', async (t) => {
+  const mismatch = {
+    '*': {
+      mechanismFidelity: 'no',
+      semanticMatch: false,
+      defects: [{ code: 'scenario.mechanism', text: 'requested mechanism absent' }],
+      explanation: 'The requested mechanism never appears.',
+    },
+  };
+  const { jobDir, read } = await harness(t, {
+    contract: SEMANTIC_CONTRACT,
+    cells: CELLS,
+    mutationCells: [
+      { cellId: 'mutated-src', mapId: 'yale-street', siteId: 'site-m', drawIndex: 0, trace: CLEAN_TRACE },
+    ],
+    gateRejects: [],
+    renderFails: { first: {}, retry: {} },
+    review: { first: {}, retry: {} },
+    semantic2d: {
+      first: mismatch, 'mutation-01': mismatch, 'mutation-02': mismatch, fallback: mismatch,
+    },
+  });
+
+  // Both mutation rounds and the capped fallback episode ran, then the loop stopped.
+  assert.ok(await exists(join(jobDir, '62-mutation-01', 'index.json')));
+  assert.ok(await exists(join(jobDir, '62-mutation-02', 'index.json')));
+  assert.ok(await exists(join(jobDir, '62-fallback-author', 'index.json')));
+  // 3D was never spent and no recursive full-pipeline repair ran.
+  assert.equal((await read('65-render3d/index.json')).status, 'skipped');
+  assert.equal(await exists(join(jobDir, '80-reauthor-01')), false);
+  const product = await read('75-product.json');
+  assert.equal(product.retry.kind, 'manual-review');
+  assert.equal(product.acceptedCells, 0);
+  const benchmark = await read('95-benchmark.json');
+  assert.equal(benchmark.funnel['semantic-2d'] === true, false);
+  assert.equal(benchmark.execution.semanticRepair, 'exhausted');
 });

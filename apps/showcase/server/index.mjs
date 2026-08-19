@@ -223,6 +223,10 @@ export class JobRunner {
         ['50-gate', ['50-gate.json']],
         ['55-eligibility', ['55-eligibility.json']],
         ['60-render2d', ['60-render2d/index.json']],
+        ['62-semantic2d', ['62-semantic2d.json']],
+        ['62-mutation-01', ['62-mutation-01/index.json']],
+        ['62-mutation-02', ['62-mutation-02/index.json']],
+        ['62-fallback-author', ['62-fallback-author/index.json']],
         ['65-render3d', ['65-render3d/index.json']],
         ['70-judge', ['70-judge.json']],
         ['75-product', ['75-product.json']],
@@ -232,7 +236,7 @@ export class JobRunner {
       for (const [stage, artifacts] of savedStages) {
         if ((await Promise.all(artifacts.map((artifact) => exists(join(jobDir, artifact))))).every(Boolean)) {
           let status = 'complete';
-          if (stage === '65-render3d' || stage === '70-judge') {
+          if (stage === '65-render3d' || stage === '70-judge' || stage === '62-semantic2d') {
             const saved = JSON.parse(await readFile(join(jobDir, artifacts[0]), 'utf8'));
             if (saved.status === 'skipped') status = 'skipped';
           }
