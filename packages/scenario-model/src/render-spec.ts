@@ -592,6 +592,23 @@ export const VerifiedPlaybackEvidenceSchema = z.strictObject({
   }),
 });
 
+/**
+ * Which input the captured frames were rendered from. A browser capture either replays the
+ * immutable OpenSCENARIO execution package the managed renderer also consumes, or the live editor
+ * simulation when no package exists yet. The distinction is evidence, not decoration: only a
+ * package-sourced recording can claim to be the same scenario bytes CARLA rendered, so it must
+ * name the package and XOSC digests it verified.
+ */
+export const CaptureSourceProvenanceSchema = z.union([
+  z.strictObject({ kind: z.literal('live-editor') }),
+  z.strictObject({
+    kind: z.literal('execution-package'),
+    executionPackageId: z.string().min(1).max(200),
+    executionPackageSha256: Sha256Schema,
+    xoscSha256: Sha256Schema,
+  }),
+]);
+
 export const ResolvedCaptureManifestSchema = z.strictObject({
   schema: z.literal(RESOLVED_CAPTURE_MANIFEST_V1_SCHEMA),
   createdAt: z.iso.datetime({ offset: true }),
@@ -600,6 +617,7 @@ export const ResolvedCaptureManifestSchema = z.strictObject({
     contentSha256: Sha256Schema,
   }),
   playbackEvidence: VerifiedPlaybackEvidenceSchema,
+  captureSource: CaptureSourceProvenanceSchema.optional(),
   mapEvidence: z.strictObject({
     mapId: z.string().min(1).max(200),
     xodrSha256: Sha256Schema.optional(),
@@ -886,6 +904,7 @@ export type EnvironmentStateChange = z.infer<typeof EnvironmentStateChangeSchema
 export type ResolvedEnvironmentProvenance = z.infer<typeof ResolvedEnvironmentProvenanceSchema>;
 type MutableResolvedCaptureManifest = z.infer<typeof ResolvedCaptureManifestSchema>;
 export type ResolvedCaptureManifest = DeepReadonly<MutableResolvedCaptureManifest>;
+export type CaptureSourceProvenance = z.infer<typeof CaptureSourceProvenanceSchema>;
 
 export interface CaptureActorSensors {
   readonly id: string;
@@ -919,6 +938,8 @@ export interface ResolveCaptureManifestContext {
   readonly createdAt: string;
   readonly scenarioRevision: MutableResolvedCaptureManifest['scenarioRevision'];
   readonly playbackEvidence: MutableResolvedCaptureManifest['playbackEvidence'];
+  /** Omitted by adapters that only ever capture live authoring playback. */
+  readonly captureSource?: MutableResolvedCaptureManifest['captureSource'];
   readonly mapEvidence: MutableResolvedCaptureManifest['mapEvidence'];
   readonly renderer: MutableResolvedCaptureManifest['renderer'];
   readonly revisionEnvironment: RevisionEnvironmentContext;
@@ -1151,6 +1172,7 @@ export function resolveCaptureManifest(
     createdAt: context.createdAt,
     scenarioRevision: context.scenarioRevision,
     playbackEvidence,
+    ...(context.captureSource ? { captureSource: context.captureSource } : {}),
     mapEvidence: context.mapEvidence,
     renderer: context.renderer,
     renderSpec,

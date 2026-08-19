@@ -313,6 +313,12 @@ describe('multi-source resolved capture manifest', () => {
         },
       },
       actors: [{ id: 'ego', sensors: [camera, lidar] }],
+      captureSource: {
+        kind: 'execution-package',
+        executionPackageId: 'usepkg_1',
+        executionPackageSha256: 'd'.repeat(64),
+        xoscSha256: 'e'.repeat(64),
+      },
     });
     expect(manifest.renderSpec.schema).toBe(RENDER_SPEC_V3_SCHEMA);
     expect(manifest.resolvedSources).toHaveLength(2);
@@ -327,6 +333,14 @@ describe('multi-source resolved capture manifest', () => {
       { sensorId: 'lidar', outputName: 'lidar-points', modality: 'lidar', transform, sensorType: 'lidar' },
     ]);
     expect(Object.isFrozen(manifest.resolvedSources[0])).toBe(true);
+    // A package-sourced capture must name the immutable bytes it replayed; that claim is the only
+    // thing that distinguishes it from a recording of the live editor simulation.
+    expect(manifest.captureSource).toEqual({
+      kind: 'execution-package',
+      executionPackageId: 'usepkg_1',
+      executionPackageSha256: 'd'.repeat(64),
+      xoscSha256: 'e'.repeat(64),
+    });
   });
 
   it('preserves the legacy single-source v2 manifest shape', () => {
