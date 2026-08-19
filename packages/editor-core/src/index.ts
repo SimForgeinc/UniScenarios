@@ -1,4 +1,5 @@
 export * from "./actorRenderer";
+export * from "./externalModel";
 export * from "./controller";
 export * from "./document";
 export * from "./keyboard";

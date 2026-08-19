@@ -1,4 +1,13 @@
-import type { CatalogActorClass, CatalogEntry, PropClass, PropTag } from './types';
+import type {
+  CatalogActorClass,
+  CatalogEntry,
+  ExternalModelBinding,
+  PropClass,
+  PropTag,
+} from './types';
+export const EXTERNAL_CATALOG_PREFIX = 'gallery.';
+export type ExternalCatalogEntry = CatalogEntry & { readonly model: ExternalModelBinding };
+
 
 /**
  * The catalog is the contract: other packages address props by `id` and select
@@ -987,7 +996,7 @@ export const AUTHORING_CATALOG = CATALOG.filter(
 ) as readonly CatalogEntry[];
 
 export function isCatalogId(id: string): id is CatalogId {
-  return BY_ID.has(id);
+  return BY_ID.has(id) || EXTERNAL_BY_ID.has(id);
 }
 
 /**
@@ -1039,20 +1048,79 @@ export const CATALOG_ALIASES: Readonly<Record<string, CatalogId>> = {
   'animal.stray_dog': 'animal.dog',
 } as const;
 
+const EXTERNAL_BY_ID = new Map<string, ExternalCatalogEntry>();
+const EXTERNAL_CHANGE_LISTENERS = new Set<() => void>();
+
+function emitExternalCatalogChange(): void {
+  for (const listener of EXTERNAL_CHANGE_LISTENERS) listener();
+}
+
+/** Register or replace a runtime-backed gallery entry. */
+export function registerExternalCatalogEntry(entry: ExternalCatalogEntry): boolean {
+  if (BY_ID.has(entry.id) || Object.hasOwn(CATALOG_ALIASES, entry.id)) {
+    throw new Error(`External catalog id shadows a bundled id or alias: ${entry.id}`);
+  }
+  if (!entry.id.startsWith(EXTERNAL_CATALOG_PREFIX)) {
+    throw new Error(
+      `External catalog id must start with "${EXTERNAL_CATALOG_PREFIX}": ${entry.id}`,
+    );
+  }
+
+  const current = EXTERNAL_BY_ID.get(entry.id);
+  if (current?.model.contentHash === entry.model.contentHash) return false;
+  EXTERNAL_BY_ID.set(entry.id, entry);
+  emitExternalCatalogChange();
+  return true;
+}
+
+export function unregisterExternalCatalogEntry(id: string): boolean {
+  if (!EXTERNAL_BY_ID.delete(id)) return false;
+  emitExternalCatalogChange();
+  return true;
+}
+
+export function clearExternalCatalogEntries(): void {
+  if (EXTERNAL_BY_ID.size === 0) return;
+  EXTERNAL_BY_ID.clear();
+  emitExternalCatalogChange();
+}
+
+export function listExternalCatalogEntries(): readonly ExternalCatalogEntry[] {
+  return [...EXTERNAL_BY_ID.values()];
+}
+
+export function isExternalCatalogId(id: string): boolean {
+  return id.startsWith(EXTERNAL_CATALOG_PREFIX);
+}
+
+export function externalModelBinding(id: string): ExternalModelBinding | null {
+  return EXTERNAL_BY_ID.get(id)?.model ?? null;
+}
+
+export function onExternalCatalogChange(listener: () => void): () => void {
+  EXTERNAL_CHANGE_LISTENERS.add(listener);
+  return () => {
+    EXTERNAL_CHANGE_LISTENERS.delete(listener);
+  };
+}
+
+
 /**
  * Canonical id for anything an author might write, or `null` if there is no
  * such prop. Callers that resolve assets at author time should treat `null` as
  * an error rather than substituting a default — that substitution is the defect
  * this function exists to prevent.
  */
-export function resolveCatalogId(id: string): CatalogId | null {
-  if (BY_ID.has(id)) return id as CatalogId;
-  return CATALOG_ALIASES[id] ?? null;
+export function resolveCatalogId(id: string): string | null {
+  if (BY_ID.has(id)) return id;
+  const alias = CATALOG_ALIASES[id];
+  if (alias) return alias;
+  return EXTERNAL_BY_ID.has(id) ? id : null;
 }
 
 /** Look up an entry, throwing on an unknown id (ids are a hard contract). */
-export function getEntry(id: CatalogId): CatalogEntry {
-  const entry = BY_ID.get(id);
+export function getEntry(id: string): CatalogEntry {
+  const entry = BY_ID.get(id) ?? EXTERNAL_BY_ID.get(id);
   if (!entry) throw new Error(`Unknown catalog id: ${id}`);
   return entry;
 }
