@@ -17,7 +17,7 @@ import {
 } from '../catalog.js';
 import { buildProp } from '../registry.js';
 
-const ENTRY: ExternalCatalogEntry = {
+const ENTRY = {
   id: 'gallery.asset-1.v1',
   label: 'Gallery delivery robot',
   class: 'sidewalk_robot',
@@ -31,6 +31,13 @@ const ENTRY: ExternalCatalogEntry = {
     url: 'https://assets.example.test/asset-1.glb',
     contentHash: 'a'.repeat(64),
   },
+} satisfies ExternalCatalogEntry;
+
+const PROXY_ENTRY: ExternalCatalogEntry = {
+  ...ENTRY,
+  id: 'carla.static.prop.trafficcone01',
+  label: 'CARLA traffic cone',
+  model: { kind: 'proxy', tint: '#e87822' },
 };
 
 const authoringIds = AUTHORING_CATALOG.map((entry) => entry.id);
@@ -56,9 +63,13 @@ describe('external catalog entries', () => {
     expect(externalModelBinding(ENTRY.id)).toBeNull();
   });
 
-  it('rejects ids outside the gallery namespace and ids that shadow bundled vocabulary', () => {
-    expect(() => registerExternalCatalogEntry({ ...ENTRY, id: 'external.asset-1' })).toThrow(
-      /must start with "gallery\."/,
+  it('accepts every external namespace while rejecting bare and shadowing ids', () => {
+    expect(registerExternalCatalogEntry(PROXY_ENTRY)).toBe(true);
+    expect(isExternalCatalogId(PROXY_ENTRY.id)).toBe(true);
+    expect(resolveCatalogId(PROXY_ENTRY.id)).toBe(PROXY_ENTRY.id);
+    expect(externalModelBinding(PROXY_ENTRY.id)).toBe(PROXY_ENTRY.model);
+    expect(() => registerExternalCatalogEntry({ ...ENTRY, id: 'foo.asset-1' })).toThrow(
+      /must start with one of "gallery\.", "carla\."/,
     );
     expect(() => registerExternalCatalogEntry({ ...ENTRY, id: 'vehicle.sedan' })).toThrow(
       /shadows a bundled id or alias/,
@@ -99,7 +110,11 @@ describe('external catalog entries', () => {
     registerExternalCatalogEntry(ENTRY);
     registerExternalCatalogEntry({
       ...ENTRY,
-      model: { ...ENTRY.model, contentHash: 'b'.repeat(64) },
+      model: {
+        kind: 'glb',
+        url: ENTRY.model.url,
+        contentHash: 'b'.repeat(64),
+      },
     });
     unregisterExternalCatalogEntry(ENTRY.id);
     expect(listener).toHaveBeenCalledTimes(3);

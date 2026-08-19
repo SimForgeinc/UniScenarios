@@ -36,7 +36,7 @@ export {
   CATALOG_ALIASES,
   CATALOG_IDS,
   AUTHORING_CATALOG,
-  EXTERNAL_CATALOG_PREFIX,
+  EXTERNAL_CATALOG_PREFIXES,
   actorClassForCatalogEntry,
   actorClassesForCatalogEntry,
   clearExternalCatalogEntries,

@@ -28,8 +28,10 @@ interface PendingExternalModel {
 
 type ExternalModelRecord = LoadedExternalModel | PendingExternalModel;
 
+type ExternalGlbModelBinding = Extract<ExternalModelBinding, { readonly kind: 'glb' }>;
+
 interface QueuedLoad {
-  binding: ExternalModelBinding;
+  binding: ExternalGlbModelBinding;
   generation: number;
 }
 
@@ -48,6 +50,7 @@ export function externalModelState(contentHash: string): ExternalModelState {
 }
 
 export function requestExternalModel(binding: ExternalModelBinding): void {
+  if (binding.kind === 'proxy') return;
   if (records.has(binding.contentHash)) return;
   records.set(binding.contentHash, { state: 'loading' });
   queue.push({ binding, generation });

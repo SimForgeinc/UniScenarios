@@ -43,6 +43,17 @@ afterEach(() => {
 });
 
 describe('external GLB model cache', () => {
+  it('ignores proxy bindings without fetching or leaving idle state', async () => {
+    const loader = vi.fn(async () => model().gltf);
+    setExternalModelLoader(loader);
+
+    requestExternalModel({ kind: 'proxy', tint: '#e87822' });
+    await Promise.resolve();
+
+    expect(loader).not.toHaveBeenCalled();
+    expect(externalModelState('proxy')).toBe('idle');
+  });
+
   it('normalises once, transitions idle to loading to ready, and dedupes listeners and loads', async () => {
     const hash = 'a'.repeat(64);
     const loaded = model();

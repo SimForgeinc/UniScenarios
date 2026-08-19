@@ -1,12 +1,15 @@
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   AnimationClip,
+  Box3,
   BoxGeometry,
   Group,
   Mesh,
   MeshStandardMaterial,
+  InstancedMesh,
   Object3D,
   VectorKeyframeTrack,
+  Vector3,
 } from 'three';
 import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
@@ -14,7 +17,7 @@ import {
   registerExternalCatalogEntry,
   type ExternalModelBinding,
 } from '@uniscenarios/prop-catalog';
-import { ActorRenderer, type ActorView } from './actorRenderer';
+import { ActorRenderer, disposePropTemplates, type ActorView } from './actorRenderer';
 import {
   disposeExternalModels,
   onExternalModelChange,
@@ -124,6 +127,7 @@ describe('ActorRenderer external animated models', () => {
   afterEach(() => {
     clearExternalCatalogEntries();
     disposeExternalModels();
+    disposePropTemplates();
   });
 
   it('scrubs a clip from absolute animation time rather than frame deltas', async () => {
@@ -167,6 +171,66 @@ describe('ActorRenderer external animated models', () => {
 
     renderer.sync([]);
     expect(() => headOf(renderer, 'gallery-actor-1')).toThrow();
+
+    renderer.dispose();
+  });
+
+  it('renders tinted CARLA proxies as dimensionally correct, shared, pickable instances without fetching', async () => {
+    const tint = '#e87822';
+    const secondCatalogId = 'carla.static.prop.trafficcone02';
+    const dims = { l: 2.4, w: 0.8, h: 1.1 };
+    for (const id of ['carla.static.prop.trafficcone01', secondCatalogId]) {
+      registerExternalCatalogEntry({
+        id,
+        label: 'CARLA proxy',
+        class: 'street',
+        actorClass: 'static_object',
+        description: 'Dimensionally correct CARLA placeholder.',
+        dims,
+        tags: [],
+        defaultParams: {},
+        model: { kind: 'proxy', tint },
+      });
+    }
+    const loader = vi.fn(async () => animatedGltf());
+    setExternalModelLoader(loader);
+    const renderer = new ActorRenderer();
+    renderer.sync([
+      actor({
+        id: 'proxy-1',
+        catalogId: 'carla.static.prop.trafficcone01',
+        dims,
+      }),
+      actor({
+        id: 'proxy-2',
+        catalogId: secondCatalogId,
+        x: 10,
+        dims,
+      }),
+    ]);
+    await Promise.resolve();
+
+    const pickables = renderer.pickables() as InstancedMesh[];
+    const first = pickables.find(
+      (mesh) => mesh.userData.renderIdentity?.catalogId === 'carla.static.prop.trafficcone01',
+    );
+    const second = pickables.find(
+      (mesh) => mesh.userData.renderIdentity?.catalogId === secondCatalogId,
+    );
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    const size = new Box3().setFromObject(first!).getSize(new Vector3());
+    expect(size.x).toBeCloseTo(dims.l);
+    expect(size.y).toBeCloseTo(dims.h);
+    expect(size.z).toBeCloseTo(dims.w);
+    expect(first!.material).toBe(second!.material);
+    expect((first!.material as MeshStandardMaterial).color.getHexString()).toBe('e87822');
+    expect(renderer.actorIdForHit({
+      object: first!,
+      instanceId: 0,
+    } as Parameters<ActorRenderer['actorIdForHit']>[0])).toBe('proxy-1');
+    expect(loader).not.toHaveBeenCalled();
+    expect(renderer.group.getObjectByName('animated-actor.proxy-1')).toBeUndefined();
 
     renderer.dispose();
   });

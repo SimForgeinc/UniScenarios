@@ -121,6 +121,8 @@ interface PropTemplate {
 }
 
 const templates = new Map<string, PropTemplate>();
+const proxyMaterials = new Map<string, MeshStandardMaterial>();
+
 
 const SEMANTIC_TEMPLATE_DIMS = {
   animal: { l: 1.2, w: 0.45, h: 0.9 },
@@ -138,7 +140,31 @@ const SEMANTIC_TEMPLATE_DIMS = {
 export function propTemplate(catalogId: CatalogId): PropTemplate {
   const entry = getEntry(catalogId);
   const binding = entry.model;
-  if (binding) {
+  if (binding?.kind === 'proxy') {
+    const key = `placeholder:${catalogId}`;
+    const cached = templates.get(key);
+    if (cached) return cached;
+    const root = buildProp(catalogId);
+    if (binding.tint) {
+      let material = proxyMaterials.get(binding.tint);
+      if (!material) {
+        material = new MeshStandardMaterial({
+          color: binding.tint,
+          roughness: 0.8,
+          metalness: 0,
+        });
+        proxyMaterials.set(binding.tint, material);
+      }
+      root.traverse((object) => {
+        const mesh = object as Mesh;
+        if (mesh.isMesh) mesh.material = material;
+      });
+    }
+    const template = mergeTemplate(root, entry.dims);
+    templates.set(key, template);
+    return template;
+  }
+  if (binding?.kind === 'glb') {
     const scene = externalModelScene(binding.contentHash);
     if (scene) {
       const key = `external:${binding.contentHash}`;
@@ -344,6 +370,8 @@ function addMesh(
 export function disposePropTemplates(): void {
   for (const template of templates.values()) disposeTemplate(template);
   templates.clear();
+  for (const material of proxyMaterials.values()) material.dispose();
+  proxyMaterials.clear();
 }
 
 function disposeTemplate(template: PropTemplate): void {
@@ -472,7 +500,8 @@ export class ActorRenderer {
         if (!key.startsWith('placeholder:')) continue;
         const catalogId = key.slice('placeholder:'.length);
         try {
-          if (getEntry(catalogId).model?.contentHash === contentHash) {
+          const model = getEntry(catalogId).model;
+          if (model?.kind === 'glb' && model.contentHash === contentHash) {
             const placeholder = templates.get(key);
             if (placeholder) disposeTemplate(placeholder);
             templates.delete(key);
@@ -577,10 +606,10 @@ export class ActorRenderer {
       const binding = group.identity.source === 'catalog'
         ? getEntry(group.identity.catalogId).model
         : undefined;
-      const animatedScene = binding?.animated
+      const animatedScene = binding?.kind === 'glb' && binding.animated
         ? externalModelScene(binding.contentHash)
         : null;
-      if (binding?.animated && animatedScene) {
+      if (binding?.kind === 'glb' && binding.animated && animatedScene) {
         const clips = externalModelClips(binding.contentHash);
         for (const actor of list) {
           activeAnimatedIds.add(actor.id);
@@ -743,7 +772,7 @@ export class ActorRenderer {
 
   private syncAnimatedActor(
     actor: ActorView,
-    binding: ExternalModelBinding,
+    binding: Extract<ExternalModelBinding, { readonly kind: 'glb' }>,
     scene: Group,
     clips: readonly AnimationClip[],
   ): number {

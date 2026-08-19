@@ -5,7 +5,7 @@ import type {
   PropClass,
   PropTag,
 } from './types';
-export const EXTERNAL_CATALOG_PREFIX = 'gallery.';
+export const EXTERNAL_CATALOG_PREFIXES = ['gallery.', 'carla.'] as const;
 export type ExternalCatalogEntry = CatalogEntry & { readonly model: ExternalModelBinding };
 
 
@@ -1055,19 +1055,29 @@ function emitExternalCatalogChange(): void {
   for (const listener of EXTERNAL_CHANGE_LISTENERS) listener();
 }
 
-/** Register or replace a runtime-backed gallery entry. */
+function externalBindingsMatch(
+  current: ExternalModelBinding,
+  next: ExternalModelBinding,
+): boolean {
+  if (current.kind !== next.kind) return false;
+  return current.kind === 'glb' && next.kind === 'glb'
+    ? current.contentHash === next.contentHash
+    : current.kind === 'proxy' && next.kind === 'proxy' && current.tint === next.tint;
+}
+
+/** Register or replace a runtime-backed external entry. */
 export function registerExternalCatalogEntry(entry: ExternalCatalogEntry): boolean {
   if (BY_ID.has(entry.id) || Object.hasOwn(CATALOG_ALIASES, entry.id)) {
     throw new Error(`External catalog id shadows a bundled id or alias: ${entry.id}`);
   }
-  if (!entry.id.startsWith(EXTERNAL_CATALOG_PREFIX)) {
+  if (!isExternalCatalogId(entry.id)) {
     throw new Error(
-      `External catalog id must start with "${EXTERNAL_CATALOG_PREFIX}": ${entry.id}`,
+      `External catalog id must start with one of ${EXTERNAL_CATALOG_PREFIXES.map((prefix) => `"${prefix}"`).join(', ')}: ${entry.id}`,
     );
   }
 
   const current = EXTERNAL_BY_ID.get(entry.id);
-  if (current?.model.contentHash === entry.model.contentHash) return false;
+  if (current && externalBindingsMatch(current.model, entry.model)) return false;
   EXTERNAL_BY_ID.set(entry.id, entry);
   emitExternalCatalogChange();
   return true;
@@ -1090,7 +1100,7 @@ export function listExternalCatalogEntries(): readonly ExternalCatalogEntry[] {
 }
 
 export function isExternalCatalogId(id: string): boolean {
-  return id.startsWith(EXTERNAL_CATALOG_PREFIX);
+  return EXTERNAL_CATALOG_PREFIXES.some((prefix) => id.startsWith(prefix));
 }
 
 export function externalModelBinding(id: string): ExternalModelBinding | null {

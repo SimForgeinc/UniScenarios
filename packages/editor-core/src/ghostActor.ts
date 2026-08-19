@@ -45,7 +45,8 @@ export class GhostActor {
     this.unsubscribeExternalModelChanges = onExternalModelChange((contentHash) => {
       if (!this.catalogId || !externalModelScene(contentHash)) return;
       try {
-        if (getEntry(this.catalogId).model?.contentHash === contentHash) {
+        const model = getEntry(this.catalogId).model;
+        if (model?.kind === 'glb' && model.contentHash === contentHash) {
           this.rebuild(this.catalogId);
         }
       } catch {
