@@ -554,7 +554,7 @@ test('scheduler configuration uses bounded production defaults and rejects overs
   );
   assert.throws(
     () => resolveSchedulerSettings({ render3dConcurrency: Number.POSITIVE_INFINITY, env: {} }),
-    /render3dConcurrency must be an integer from 1 to 4/,
+    /render3dConcurrency must be an integer from 1 to 6/,
   );
 });
 
