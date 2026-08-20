@@ -1392,7 +1392,7 @@ def test_frame_archives_are_reserved_and_reported_per_sensor(monkeypatch):
     assert [item["kind"] for item in result["artifacts"]] == ["trace", "framesArchive:primary:ego:hero:rgb"]
     assert result["artifacts"][1]["mediaType"] == "application/zip"
     assert result["artifacts"][1]["metadata"] == {
-        "role": "primary", "actorId": "ego", "sensorId": "hero",
+        "outputName": "primary", "actorId": "ego", "sensorId": "hero",
         "modality": "rgb", "format": "png",
         "frameCount": 1, "fps": 25.0, "durationS": 0.04,
     }

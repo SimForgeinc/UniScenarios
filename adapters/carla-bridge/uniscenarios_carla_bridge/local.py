@@ -179,7 +179,7 @@ def _render_spec_v3_to_native(value: Any) -> tuple[dict[str, Any], RenderSpec]:
         or float(start) < 0 or float(end) <= float(start)
     ):
         raise ContractError("renderSpec.clip must have endSeconds > startSeconds >= 0")
-    allowed_artifacts = {"video", "manifest", "frames", "sensorArchive", "annotations", "trace"}
+    allowed_artifacts = {"video", "manifest", "frames", "sensorArchive", "annotations", "trace", "diagnostics"}
     if (
         not isinstance(artifacts, list) or not artifacts or len(artifacts) > 8
         or artifacts != list(dict.fromkeys(artifacts))
@@ -329,10 +329,8 @@ def _render_spec_v3_to_native(value: Any) -> tuple[dict[str, Any], RenderSpec]:
             },
             "config": config,
         })
-    if len(camera_fps) > 1 or (camera_fps and next(iter(camera_fps)) != video_fps):
-        raise ContractError("all CARLA sensors and presentation video must share one deterministic fps")
     outputs = [
-        output for output in artifacts if output not in {"sensorArchive"}
+        output for output in artifacts if output not in {"sensorArchive", "diagnostics"}
     ]
     if "sensorArchive" in artifacts and "frames" not in outputs:
         outputs.append("frames")
@@ -531,6 +529,8 @@ def _intent_lease(
     manifest_path.write_bytes(manifest_body)
     uploads: dict[str, dict[str, Any]] = {}
     kinds = {"trace", *(output for output in parsed_spec.outputs if output != "frames")}
+    if "diagnostics" in intent["renderSpec"]["artifacts"]:
+        kinds.add("parity-report")
     if "frames" in parsed_spec.outputs:
         kinds.update(f"framesArchive:{sensor.artifact_name}" for sensor in parsed_spec.sensors)
     for index, kind in enumerate(sorted(kinds)):
@@ -588,6 +588,52 @@ def _intent_lease(
     }
 
 
+def _artifact_manifest_entries(items: Any) -> list[dict[str, Any]]:
+    if not isinstance(items, list):
+        raise RuntimeError("native executor returned invalid artifacts")
+    entries: list[dict[str, Any]] = []
+    identities: set[tuple[str, str | None, str | None, str | None]] = set()
+    for item in items:
+        if not isinstance(item, Mapping):
+            raise RuntimeError("native executor returned an invalid artifact")
+        kind = item.get("kind")
+        metadata = item.get("metadata")
+        metadata = metadata if isinstance(metadata, Mapping) else {}
+        if isinstance(kind, str) and kind.startswith("framesArchive:"):
+            role = "sensorArchive"
+        elif kind == "parity-report":
+            role = "diagnostics"
+        elif kind in {"video", "frames", "manifest", "trace", "annotations"}:
+            role = kind
+        else:
+            raise RuntimeError(f"native executor returned unsupported artifact kind {kind!r}")
+        if role in {"video", "frames", "sensorArchive"}:
+            actor_id = metadata.get("actorId")
+            sensor_id = metadata.get("sensorId")
+            modality = metadata.get("modality")
+            if not all(isinstance(value, str) and value for value in (actor_id, sensor_id, modality)):
+                raise RuntimeError(f"native artifact {kind} has no sensor identity")
+        else:
+            actor_id = sensor_id = modality = None
+        identity = (role, actor_id, sensor_id, modality)
+        if identity in identities:
+            raise RuntimeError(f"native artifact identity is duplicated: {identity}")
+        identities.add(identity)
+        entries.append({
+            "role": role,
+            "actorId": actor_id,
+            "sensorId": sensor_id,
+            "modality": modality,
+            "artifactUrl": item["artifactUrl"],
+            "sha256": item["sha256"],
+            "sizeBytes": item["sizeBytes"],
+            "mediaType": item["mediaType"],
+            **({"metadata": dict(metadata)} if metadata else {}),
+        })
+    return entries
+
+
+
 def _run_intent(args: argparse.Namespace) -> dict[str, object]:
     intent_path, package_path = Path(args.intent), Path(args.package)
     intent = json.loads(intent_path.read_text("utf-8"))
@@ -615,16 +661,17 @@ def _run_intent(args: argparse.Namespace) -> dict[str, object]:
     result = _execute_local_lease(
         lease, asset_paths, output_dir, DEFAULT_XSD, args.host, args.port, progress=emit,
     )
+    manifest_entries = _artifact_manifest_entries(result["artifacts"])
     artifact_manifest = {
         "schema": "uniscenario.render-artifact-manifest/v1",
         "intentId": intent["intentId"], "intentSha256": intent_sha, "engine": "carla",
-        "artifacts": result["artifacts"], "attestation": result["attestation"],
+        "artifacts": manifest_entries, "attestation": result["attestation"],
         "parityEvidence": result["parityEvidence"], "planSha256": result["planSha256"],
     }
     manifest_path = Path(args.manifest)
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text(json.dumps(artifact_manifest, sort_keys=True, separators=(",", ":")) + "\n", "utf-8")
-    emit("completed", {"manifest": str(manifest_path), "artifactCount": len(result["artifacts"])})
+    emit("completed", {"manifest": str(manifest_path), "artifactCount": len(manifest_entries)})
     for internal in (output_dir / ".disabled-materialized-traffic.json", output_dir / ".execution-manifest.json"):
         internal.unlink(missing_ok=True)
     return artifact_manifest

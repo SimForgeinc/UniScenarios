@@ -1309,7 +1309,7 @@ def execute_lease(
                     "application/zip",
                     lease.artifact_uploads.get(upload_kind),
                     {
-                        "role": sensor.role,
+                        "outputName": sensor.role,
                         "actorId": sensor.actor_id,
                         "sensorId": sensor.sensor_id,
                         "modality": sensor.modality,
@@ -1322,15 +1322,14 @@ def execute_lease(
                 ))
         if "video" in lease.render_spec.outputs:
             check_abort("encode_video", len(plan.frames), len(plan.frames))
-            primary_rgb = next(
-                sensor.artifact_name
-                for sensor in lease.render_spec.sensors
+            primary_rgb_sensor = next(
+                sensor for sensor in lease.render_spec.sensors
                 if sensor.modality == "rgb"
             )
             remaining_bytes = min(MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes, artifact_temp_limit)
             body = _encode_video(
                 output_dir,
-                primary_rgb,
+                primary_rgb_sensor.artifact_name,
                 lease.render_spec.fps,
                 Path(directory) / "render.mp4",
                 expected_capture_count,
@@ -1339,7 +1338,21 @@ def execute_lease(
                 absolute_deadline,
             )
             check_abort("encode_video", len(plan.frames), len(plan.frames))
-            add_artifact(make_artifact("video", body, "video/mp4", lease.artifact_uploads.get("video"), {"frameCount": expected_capture_count, "fps": lease.render_spec.fps, "durationS": plan.frames[-1].t}))
+            add_artifact(make_artifact(
+                "video",
+                body,
+                "video/mp4",
+                lease.artifact_uploads.get("video"),
+                {
+                    "actorId": primary_rgb_sensor.actor_id,
+                    "sensorId": primary_rgb_sensor.sensor_id,
+                    "modality": primary_rgb_sensor.modality,
+                    "outputName": primary_rgb_sensor.role,
+                    "frameCount": expected_capture_count,
+                    "fps": lease.render_spec.fps,
+                    "durationS": plan.frames[-1].t,
+                },
+            ))
         if "annotations" in lease.render_spec.outputs:
             annotations_body = _annotations_to_path(plan, readbacks, annotation_schedule, Path(directory) / "annotations.ndjson", min(artifact_temp_limit, MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes), lambda: check_abort("serialize_annotations"))
             add_artifact(make_artifact("annotations", annotations_body, "application/x-ndjson", lease.artifact_uploads.get("annotations"), {"frameCount": len(annotation_schedule), "fps": lease.render_spec.fps, "durationS": plan.frames[-1].t}))
