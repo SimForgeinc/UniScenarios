@@ -426,10 +426,14 @@ def test_carla_spawn_preserves_absolute_xosc_elevation_and_coordinate_sign():
     Carla.Location, Carla.Rotation, Carla.Transform = Location, Rotation, Transform
     class Library:
         def find(self, blueprint_id): return blueprint_id
+    class Actor:
+        id = 1
+        type_id = "vehicle.lincoln.mkz"
+        def destroy(self): return True
     class World:
         def __init__(self): self.transform = None
         def get_blueprint_library(self): return Library()
-        def try_spawn_actor(self, _blueprint, transform): self.transform = transform; return object()
+        def try_spawn_actor(self, _blueprint, transform): self.transform = transform; return Actor()
 
     backend = object.__new__(CarlaBackend)
     backend.carla = Carla

@@ -61,6 +61,17 @@ to cooked OpenDRIVE signal-id map. `UNISCENARIO_SENSOR_WRITER_WORKERS` bounds
 parallel streaming writers. Set `UNISCENARIO_PRESENTATION_VIDEO_ENCODER=nvidia`
 to request `h264_nvenc`; PNG/PLY/CSV sensor frames remain the canonical output.
 
+Managed Pronto execution derives from
+`ghcr.io/simforgeinc/carla-rfs-munich-belmont@sha256:baed0d038437c55efe0abe52a762d352aeb21acdeeff5b11a15f6bd8a648de64`
+(OCI index `sha256:f17c639e5f86fd7458fe1d02d3be1d481deeaa714f3cac30e465187d04ec90e5`).
+All 18 sensors must attach to one host actor whose catalog asset and CARLA
+blueprint are both exactly `vehicle.kia.carnival`. The packaged evidence is
+`CarlaUnreal/Content/Carla/Config/VehicleParameters.json`: Make `Kia`, Model
+`Carnival`, BaseType `van`, class
+`/Game/Carla/Blueprints/Vehicles/KiaCarnival2025/BP_KiaCarnival2025.BP_KiaCarnival2025_C`.
+The runtime rejects mismatched intent identity, catalog binding, spawned actor
+type-id, sensor parent readback, or image-manifest provenance.
+
 ## Develop and verify
 
 ```sh

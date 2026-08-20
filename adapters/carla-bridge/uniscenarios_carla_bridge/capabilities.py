@@ -3,7 +3,11 @@
 from dataclasses import dataclass
 from typing import Literal, Mapping
 
-from .runtime.backend import NATIVE_SENSOR_BLUEPRINTS
+from .runtime.backend import (
+    KIA_CARNIVAL_BLUEPRINT_ID,
+    KIA_CARNIVAL_CATALOG_ID,
+    NATIVE_SENSOR_BLUEPRINTS,
+)
 from .runtime.contract import SENSOR_FORMATS, SENSOR_MODALITIES
 
 Coverage = Literal["exact", "approximate", "unsupported"]
@@ -41,6 +45,12 @@ BRIDGE_CAPABILITIES: dict[str, Capability] = {
         )
         for modality in sorted(SENSOR_MODALITIES)
     },
+    "sensor-host.pronto-kia-carnival": Capability(
+        "exact",
+        "unsupported",
+        f"Pronto 8/6/4 rigs require exact catalog {KIA_CARNIVAL_CATALOG_ID} and "
+        f"runtime type-id readback {KIA_CARNIVAL_BLUEPRINT_ID}.",
+    ),
     "custom.map.opendrive": Capability("exact", "approximate", "Load identical XODR; visual assets need a packaged custom map."),
     "custom.prop.procedural": Capability("unsupported", "unsupported", "Reject until a catalog asset is explicitly bound."),
     "occlusion.metric": Capability("exact", "unsupported", "UniScenarios evaluates the metric; CARLA sensor evidence is supplementary."),

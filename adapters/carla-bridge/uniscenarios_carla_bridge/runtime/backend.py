@@ -103,6 +103,18 @@ NATIVE_SENSOR_BLUEPRINTS: Mapping[str, str] = {
     "radar": "sensor.other.radar",
 }
 
+CARLA_IMAGE_INDEX_DIGEST = "sha256:f17c639e5f86fd7458fe1d02d3be1d481deeaa714f3cac30e465187d04ec90e5"
+CARLA_IMAGE_AMD64_MANIFEST_DIGEST = "sha256:baed0d038437c55efe0abe52a762d352aeb21acdeeff5b11a15f6bd8a648de64"
+KIA_CARNIVAL_CATALOG_ID = "vehicle.kia.carnival"
+KIA_CARNIVAL_BLUEPRINT_ID = "vehicle.kia.carnival"
+KIA_CARNIVAL_CLASS_PATH = (
+    "/Game/Carla/Blueprints/Vehicles/KiaCarnival2025/"
+    "BP_KiaCarnival2025.BP_KiaCarnival2025_C"
+)
+KIA_CARNIVAL_MAKE = "Kia"
+KIA_CARNIVAL_MODEL = "Carnival"
+KIA_CARNIVAL_BASE_TYPE = "van"
+
 ENVIRONMENT_READBACK_TIMEOUT_S = 2.0
 
 
@@ -223,6 +235,8 @@ class CarlaBackend:
         self.sensor_writer_workers = max(
             1, min(32, int(os.environ.get("UNISCENARIO_SENSOR_WRITER_WORKERS", "8"))),
         )
+        self.actor_asset_evidence: dict[str, dict[str, Any]] = {}
+        self.pronto_sensor_host_actor_id: str | None = None
         self.sensor_writer_pool: ThreadPoolExecutor | None = None
         self.map_evidence: dict[str, Any] = {"available": False}
         if not isfinite(self.sensor_timeout_s) or self.sensor_timeout_s <= 0:
@@ -366,6 +380,7 @@ class CarlaBackend:
         self.actor_id_by_runtime_id = getattr(self, "actor_id_by_runtime_id", {})
         self.actor_lifecycle = getattr(self, "actor_lifecycle", {})
         self.collision_sensors = getattr(self, "collision_sensors", [])
+        self.actor_asset_evidence = getattr(self, "actor_asset_evidence", {})
         library = self.world.get_blueprint_library()
         for actor_id, binding in actors.items():
             check()
@@ -388,6 +403,21 @@ class CarlaBackend:
             check()
             if actor is None:
                 raise RuntimeError(f"CARLA failed to spawn {actor_id} as {blueprint_id}")
+            observed_type_id = str(getattr(actor, "type_id", ""))
+            if observed_type_id != blueprint_id:
+                try:
+                    actor.destroy()
+                finally:
+                    raise RuntimeError(
+                        f"CARLA actor {actor_id} spawned as {observed_type_id!r}, "
+                        f"expected exact blueprint {blueprint_id!r}"
+                    )
+            self.actor_asset_evidence[actor_id] = {
+                "catalogId": binding.catalog_name,
+                "requestedBlueprintId": blueprint_id,
+                "observedBlueprintId": observed_type_id,
+                "verification": "runtime-type-id-readback",
+            }
             self.actors[actor_id] = actor
             runtime_id = getattr(actor, "id", None)
             if isinstance(runtime_id, int):
@@ -777,6 +807,32 @@ class CarlaBackend:
         self.max_capture_disk_bytes = max_capture_disk_bytes
         self.sensor_configs = {}
         output_dir.mkdir(parents=True, exist_ok=True)
+        camera_modalities = {"rgb", "depth", "semantic", "instance", "normals"}
+        pronto_counts = (
+            sum(sensor.modality in camera_modalities for sensor in spec.sensors),
+            sum(sensor.modality in {"lidar", "semantic-lidar"} for sensor in spec.sensors),
+            sum(sensor.modality == "radar" for sensor in spec.sensors),
+        )
+        if pronto_counts == (8, 6, 4) and len(spec.sensors) == 18:
+            host_ids = {sensor.actor_id for sensor in spec.sensors}
+            if len(host_ids) != 1 or None in host_ids:
+                raise ContractError("the Pronto 8-camera/6-LiDAR/4-radar rig must attach to one actor")
+            host_actor_id = next(iter(host_ids))
+            host = self.actor_asset_evidence.get(host_actor_id)
+            if (
+                not isinstance(host, Mapping)
+                or host.get("catalogId") != KIA_CARNIVAL_CATALOG_ID
+                or host.get("requestedBlueprintId") != KIA_CARNIVAL_BLUEPRINT_ID
+                or host.get("observedBlueprintId") != KIA_CARNIVAL_BLUEPRINT_ID
+            ):
+                raise ContractError(
+                    "the Pronto sensor host must be exact catalog/blueprint vehicle.kia.carnival"
+                )
+            self.pronto_sensor_host_actor_id = host_actor_id
+        elif len(spec.sensors) == 18:
+            raise ContractError(
+                "an 18-sensor CARLA rig must contain exactly 8 cameras, 6 LiDARs, and 4 radars"
+            )
         library = self.world.get_blueprint_library()
         sensor_blueprints = NATIVE_SENSOR_BLUEPRINTS
         quality_attributes = {
@@ -843,6 +899,26 @@ class CarlaBackend:
             sensor_actor = self.world.spawn_actor(blueprint, transform, attach_to=parent)
             if sensor_actor is None:
                 raise RuntimeError(f"CARLA failed to spawn native sensor {key}")
+            observed_sensor_type = str(getattr(sensor_actor, "type_id", ""))
+            expected_sensor_type = sensor_blueprints[requested.modality]
+            if observed_sensor_type != expected_sensor_type:
+                sensor_actor.destroy()
+                raise RuntimeError(
+                    f"CARLA sensor {key} spawned as {observed_sensor_type!r}, "
+                    f"expected {expected_sensor_type!r}"
+                )
+            if self.pronto_sensor_host_actor_id is not None:
+                observed_parent = getattr(sensor_actor, "parent", None)
+                if (
+                    parent is None
+                    or observed_parent is None
+                    or getattr(observed_parent, "id", None) != getattr(parent, "id", None)
+                    or getattr(observed_parent, "type_id", None) != KIA_CARNIVAL_BLUEPRINT_ID
+                ):
+                    sensor_actor.destroy()
+                    raise RuntimeError(
+                        f"CARLA sensor {key} did not read back exact Kia Carnival parent ownership"
+                    )
             check()
             target_dir = output_dir / key
             target_dir.mkdir(parents=True, exist_ok=False)
@@ -1281,6 +1357,32 @@ class CarlaBackend:
         client_version = getattr(self.client, "get_client_version", lambda: "unavailable")()
         server_version = getattr(self.client, "get_server_version", lambda: "unavailable")()
         check()
+        managed = os.environ.get("SIMFORGE_MANAGED_EXECUTION") == "1"
+        configured_manifest_sha256 = os.environ.get("UNISCENARIOS_CARLA_IMAGE_MANIFEST_SHA256")
+        configured_blueprint = os.environ.get("UNISCENARIOS_CARLA_BLUEPRINT_ID")
+        configured_class = os.environ.get("UNISCENARIOS_CARLA_BLUEPRINT_CLASS")
+        image_exact = (
+            configured_manifest_sha256 == CARLA_IMAGE_AMD64_MANIFEST_DIGEST.removeprefix("sha256:")
+            and configured_blueprint == KIA_CARNIVAL_BLUEPRINT_ID
+            and configured_class == KIA_CARNIVAL_CLASS_PATH
+        )
+        if managed and not image_exact:
+            raise RuntimeError(
+                "managed CARLA execution is not running the pinned Kia image/blueprint identity"
+            )
+        pronto_host = None
+        if self.pronto_sensor_host_actor_id is not None:
+            pronto_host = {
+                "actorId": self.pronto_sensor_host_actor_id,
+                **self.actor_asset_evidence[self.pronto_sensor_host_actor_id],
+                "requiredCatalogId": KIA_CARNIVAL_CATALOG_ID,
+                "requiredBlueprintId": KIA_CARNIVAL_BLUEPRINT_ID,
+                "classPath": KIA_CARNIVAL_CLASS_PATH,
+                "make": KIA_CARNIVAL_MAKE,
+                "model": KIA_CARNIVAL_MODEL,
+                "baseType": KIA_CARNIVAL_BASE_TYPE,
+                "verification": "catalog-binding-and-runtime-type-id-readback",
+            }
         return {
             "schema": "uniscenario.carla-runtime-evidence/v1",
             "available": True,
@@ -1290,6 +1392,21 @@ class CarlaBackend:
             "motionApplication": "native-controls" if self.execution_mode == "native-physics" else "diagnostic-teleport-replay",
             "carlaClientVersion": str(client_version),
             "carlaServerVersion": str(server_version),
+            "runtimeImage": {
+                "repository": "ghcr.io/simforgeinc/carla-rfs-munich-belmont",
+                "indexSha256": CARLA_IMAGE_INDEX_DIGEST.removeprefix("sha256:"),
+                "linuxAmd64ManifestSha256": CARLA_IMAGE_AMD64_MANIFEST_DIGEST.removeprefix("sha256:"),
+                "configuredManifestSha256": configured_manifest_sha256,
+                "configuredBlueprintId": configured_blueprint,
+                "configuredClassPath": configured_class,
+                "managed": managed,
+                "exact": image_exact,
+            },
+            "actorAssets": {
+                actor_id: dict(values)
+                for actor_id, values in sorted(self.actor_asset_evidence.items())
+            },
+            "prontoSensorHost": pronto_host,
             "map": dict(self.map_evidence),
             "environment": dict(self.environment_evidence),
             "lifecycle": dict(sorted(self.actor_lifecycle.items())),

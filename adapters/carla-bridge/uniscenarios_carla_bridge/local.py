@@ -10,8 +10,17 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .capabilities import native_sensor_capabilities
-from .runtime.backend import CarlaBackend
-from .runtime.compiler import compile_xosc14
+from .runtime.backend import (
+    CARLA_IMAGE_AMD64_MANIFEST_DIGEST,
+    CARLA_IMAGE_INDEX_DIGEST,
+    KIA_CARNIVAL_BASE_TYPE,
+    KIA_CARNIVAL_BLUEPRINT_ID,
+    KIA_CARNIVAL_CATALOG_ID,
+    KIA_CARNIVAL_CLASS_PATH,
+    KIA_CARNIVAL_MAKE,
+    KIA_CARNIVAL_MODEL,
+    CarlaBackend,
+)
 from .runtime.contract import (
     ASSET_CATALOG_SCHEMA,
     EMPTY_AMBIENT_CONFIG_SHA256,
@@ -39,6 +48,19 @@ def _probe(host: str, port: int) -> dict[str, object]:
             "serverVersion": str(backend.client.get_server_version()),
             "maxSimultaneousSensors": MAX_SENSOR_COUNT,
             "nativeSensors": native_sensor_capabilities(),
+            "runtimeImage": {
+                "repository": "ghcr.io/simforgeinc/carla-rfs-munich-belmont",
+                "indexDigest": CARLA_IMAGE_INDEX_DIGEST,
+                "linuxAmd64ManifestDigest": CARLA_IMAGE_AMD64_MANIFEST_DIGEST,
+            },
+            "prontoSensorHost": {
+                "catalogId": KIA_CARNIVAL_CATALOG_ID,
+                "blueprintId": KIA_CARNIVAL_BLUEPRINT_ID,
+                "classPath": KIA_CARNIVAL_CLASS_PATH,
+                "make": KIA_CARNIVAL_MAKE,
+                "model": KIA_CARNIVAL_MODEL,
+                "baseType": KIA_CARNIVAL_BASE_TYPE,
+            },
         }
     finally:
         backend.cleanup()
@@ -352,7 +374,7 @@ def _intent_lease(
     inputs: Mapping[str, Path],
     output_dir: Path,
 ) -> tuple[Any, dict[str, Path]]:
-    expected_fields = {"schema", "intentId", "scenarioRevision", "renderSpec", "assets", "seed"}
+    expected_fields = {"schema", "intentId", "scenarioRevision", "renderSpec", "sensorHost", "assets", "seed"}
     if set(intent) != expected_fields or intent.get("schema") != INTENT_SCHEMA:
         raise ContractError(f"render intent must use strict {INTENT_SCHEMA} fields")
     intent_id = intent.get("intentId")
@@ -366,6 +388,51 @@ def _intent_lease(
     if not isinstance(assets, list):
         raise ContractError("render intent assets must be an array")
     native_render_spec, parsed_spec = _render_spec_v3_to_native(intent.get("renderSpec"))
+    sensor_host = intent.get("sensorHost")
+    if not isinstance(sensor_host, Mapping) or set(sensor_host) != {
+        "actorId", "vehicleAsset", "sourceImage", "sensorRig",
+    }:
+        raise ContractError("render intent sensorHost has invalid fields")
+    host_actor_id = sensor_host.get("actorId")
+    vehicle_asset = sensor_host.get("vehicleAsset")
+    source_image = sensor_host.get("sourceImage")
+    sensor_rig = sensor_host.get("sensorRig")
+    if not isinstance(host_actor_id, str) or not host_actor_id:
+        raise ContractError("render intent sensorHost.actorId must be non-empty")
+    if vehicle_asset != {
+        "catalogAssetId": KIA_CARNIVAL_CATALOG_ID,
+        "carlaBlueprintId": KIA_CARNIVAL_BLUEPRINT_ID,
+        "carlaClassPath": KIA_CARNIVAL_CLASS_PATH,
+        "make": KIA_CARNIVAL_MAKE,
+        "model": KIA_CARNIVAL_MODEL,
+        "baseType": KIA_CARNIVAL_BASE_TYPE,
+    }:
+        raise ContractError("render intent sensorHost.vehicleAsset must be the exact Kia Carnival identity")
+    if source_image != {
+        "repository": "ghcr.io/simforgeinc/carla-rfs-munich-belmont",
+        "indexSha256": CARLA_IMAGE_INDEX_DIGEST.removeprefix("sha256:"),
+        "linuxAmd64ManifestSha256": CARLA_IMAGE_AMD64_MANIFEST_DIGEST.removeprefix("sha256:"),
+    }:
+        raise ContractError("render intent sensorHost.sourceImage must identify the pinned Kia image")
+    if sensor_rig != {
+        "rigId": "pronto.8-camera-6-lidar-4-radar",
+        "cameras": 8,
+        "lidars": 6,
+        "radars": 4,
+    }:
+        raise ContractError("render intent sensorHost.sensorRig must identify the exact Pronto 8/6/4 rig")
+    camera_modalities = {"rgb", "depth", "semantic", "instance", "normals"}
+    actual_rig = (
+        sum(sensor.modality in camera_modalities for sensor in parsed_spec.sensors),
+        sum(sensor.modality in {"lidar", "semantic-lidar"} for sensor in parsed_spec.sensors),
+        sum(sensor.modality == "radar" for sensor in parsed_spec.sensors),
+    )
+    if (
+        len(parsed_spec.sensors) != 18
+        or actual_rig != (8, 6, 4)
+        or {sensor.actor_id for sensor in parsed_spec.sensors} != {host_actor_id}
+    ):
+        raise ContractError("all exact Pronto sensors must attach to render intent sensorHost.actorId")
     xosc_path = inputs.get("scenario.xosc")
     if xosc_path is None:
         raise ContractError("input package is missing scenario.xosc")

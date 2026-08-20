@@ -16,7 +16,12 @@ from pathlib import Path
 from typing import Any, Callable, Mapping
 
 from .transport import download, upload
-from .backend import RenderBackend, runtime_asset_bindings
+from .backend import (
+    KIA_CARNIVAL_BLUEPRINT_ID,
+    KIA_CARNIVAL_CATALOG_ID,
+    RenderBackend,
+    runtime_asset_bindings,
+)
 from .compiler import LIFECYCLE_ABSENT, ExecutionPlan, compile_xosc14
 from .contract import (
     CAMERA_MODALITIES,
@@ -447,7 +452,11 @@ def _optional_backend_call(backend: RenderBackend, name: str, *args: object, abo
     return method(*args, abort=abort)
 
 
-def _preflight_asset_semantics(plan: ExecutionPlan, catalog: Mapping[str, Mapping[str, str]]) -> None:
+def _preflight_asset_semantics(
+    lease: Lease,
+    plan: ExecutionPlan,
+    catalog: Mapping[str, Mapping[str, str]],
+) -> None:
     vehicle_kinds = {"vehicle", "car", "truck", "bus", "van", "motorcycle", "bicycle", "scooter"}
     for actor_id, binding in plan.actors.items():
         entry = catalog.get(binding.catalog_name)
@@ -458,6 +467,22 @@ def _preflight_asset_semantics(plan: ExecutionPlan, catalog: Mapping[str, Mappin
             raise ContractError(f"vehicle actor {actor_id} is bound to non-vehicle CARLA blueprint {blueprint}")
         if binding.kind == "pedestrian" and not blueprint.startswith("walker."):
             raise ContractError(f"pedestrian actor {actor_id} is bound to non-walker CARLA blueprint {blueprint}")
+    if len(lease.render_spec.sensors) == 18:
+        host_ids = {sensor.actor_id for sensor in lease.render_spec.sensors}
+        if len(host_ids) != 1 or None in host_ids:
+            raise ContractError("the Pronto rig must bind to exactly one sensor host actor")
+        host_actor_id = next(iter(host_ids))
+        binding = plan.actors.get(host_actor_id)
+        entry = catalog.get(binding.catalog_name) if binding is not None else None
+        if (
+            binding is None
+            or binding.catalog_name != KIA_CARNIVAL_CATALOG_ID
+            or not isinstance(entry, Mapping)
+            or entry.get("blueprintId") != KIA_CARNIVAL_BLUEPRINT_ID
+        ):
+            raise ContractError(
+                "the Pronto sensor host must bind exact catalog/blueprint vehicle.kia.carnival"
+            )
 
 
 def _manifest_to_path(
@@ -633,6 +658,19 @@ def _parity_evidence(
             or runtime_evidence.get("motionApplication") != "native-controls"
         ):
             semantic_failures.append("native-physics-authority")
+        if len(lease.render_spec.sensors) == 18:
+            runtime_image = runtime_evidence.get("runtimeImage")
+            sensor_host = runtime_evidence.get("prontoSensorHost")
+            if not isinstance(runtime_image, Mapping) or runtime_image.get("exact") is not True:
+                semantic_failures.append("pronto-runtime-image-identity")
+            if (
+                not isinstance(sensor_host, Mapping)
+                or sensor_host.get("catalogId") != KIA_CARNIVAL_CATALOG_ID
+                or sensor_host.get("observedBlueprintId") != KIA_CARNIVAL_BLUEPRINT_ID
+                or sensor_host.get("requiredBlueprintId") != KIA_CARNIVAL_BLUEPRINT_ID
+                or sensor_host.get("verification") != "catalog-binding-and-runtime-type-id-readback"
+            ):
+                semantic_failures.append("pronto-kia-sensor-host-readback")
         map_evidence = runtime_evidence.get("map")
         if (
             not isinstance(map_evidence, Mapping)
@@ -1151,7 +1189,7 @@ def execute_lease(
         abort=lambda: check_abort("index_asset_catalog"),
     )
     check_abort("index_asset_catalog")
-    _preflight_asset_semantics(plan, catalog)
+    _preflight_asset_semantics(lease, plan, catalog)
     accumulator = ParityAccumulator(lease.parity_thresholds)
     readbacks: list[Mapping[str, Mapping[str, object]]] = []
     signal_readbacks: list[Mapping[str, str]] = []

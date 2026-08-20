@@ -38,6 +38,19 @@ def test_probe_is_read_only_and_always_cleans_up(monkeypatch: pytest.MonkeyPatch
         "serverVersion": "0.10.0-test",
         "maxSimultaneousSensors": 64,
         "nativeSensors": local.native_sensor_capabilities(),
+        "runtimeImage": {
+            "repository": "ghcr.io/simforgeinc/carla-rfs-munich-belmont",
+            "indexDigest": local.CARLA_IMAGE_INDEX_DIGEST,
+            "linuxAmd64ManifestDigest": local.CARLA_IMAGE_AMD64_MANIFEST_DIGEST,
+        },
+        "prontoSensorHost": {
+            "catalogId": local.KIA_CARNIVAL_CATALOG_ID,
+            "blueprintId": local.KIA_CARNIVAL_BLUEPRINT_ID,
+            "classPath": local.KIA_CARNIVAL_CLASS_PATH,
+            "make": local.KIA_CARNIVAL_MAKE,
+            "model": local.KIA_CARNIVAL_MODEL,
+            "baseType": local.KIA_CARNIVAL_BASE_TYPE,
+        },
     }
     assert calls == [("carla.test", 2000), "server-version", "cleanup"]
 
