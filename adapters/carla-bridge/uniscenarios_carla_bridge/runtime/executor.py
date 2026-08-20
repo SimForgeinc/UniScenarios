@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 import hashlib
 import gzip
 import json
@@ -18,6 +19,7 @@ from .transport import download, upload
 from .backend import RenderBackend, runtime_asset_bindings
 from .compiler import LIFECYCLE_ABSENT, ExecutionPlan, compile_xosc14
 from .contract import (
+    CAMERA_MODALITIES,
     ContractError,
     Lease,
     MAX_ARTIFACT_BYTES,
@@ -31,6 +33,7 @@ from .contract import (
     MAX_XODR_BYTES,
     MAX_XOSC_BYTES,
     SCHEMA,
+    SENSOR_FORMATS,
     reject_unsafe_xml_envelope,
 )
 from .parity import ParityAccumulator
@@ -151,46 +154,73 @@ def _trace_to_path(plan: ExecutionPlan, readbacks: list[Mapping[str, Mapping[str
     return destination
 
 
-def _expected_frame_paths(camera_dir: Path, expected_frame_count: int, abort: Callable[[], None] | None = None) -> list[Path]:
+def _expected_frame_paths(
+    sensor_dir: Path,
+    expected_frame_count: int,
+    extension: str,
+    abort: Callable[[], None] | None = None,
+) -> list[Path]:
     if abort:
         abort()
-    frames = sorted(camera_dir.glob("*.png"))
-    expected = [camera_dir / f"{index:08d}.png" for index in range(expected_frame_count)]
+    frames = sorted(sensor_dir.glob(f"*.{extension}"))
+    expected = [sensor_dir / f"{index:08d}.{extension}" for index in range(expected_frame_count)]
     if abort:
         abort()
     if frames != expected:
-        raise RuntimeError(f"camera {camera_dir.name} produced {len(frames)} of {expected_frame_count} exact frames")
+        raise RuntimeError(
+            f"sensor {sensor_dir.name} produced {len(frames)} of {expected_frame_count} exact {extension} frames"
+        )
     return frames
 
 
 def _archive_frames(
-    camera_dir: Path,
+    sensor_dir: Path,
     destination: Path,
     expected_frame_count: int,
+    extension: str,
     max_bytes: int,
     check_abort: Callable[[str, int, int], None],
 ) -> Path:
-    frames = _expected_frame_paths(camera_dir, expected_frame_count, lambda: check_abort("archive_frames", 0, expected_frame_count))
+    frames = _expected_frame_paths(
+        sensor_dir, expected_frame_count, extension,
+        lambda: check_abort("archive_frames", 0, expected_frame_count),
+    )
     source_bytes = 0
     for index, frame in enumerate(frames):
         check_abort("archive_frames", index, expected_frame_count)
         source_bytes += frame.stat().st_size
-    # A ZIP can be slightly larger than incompressible inputs because of local
-    # and central-directory records. Reject before creating it unless that
-    # conservative upper bound fits the remaining artifact/output budget.
     if source_bytes + len(frames) * 512 + 1024 > max_bytes:
-        raise ContractError(f"frames archive {camera_dir.name} exceeds its pre-allocation budget")
+        raise ContractError(f"frames archive {sensor_dir.name} exceeds its pre-allocation budget")
     with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
         for index, frame in enumerate(frames):
             check_abort("archive_frames", index, expected_frame_count)
-            with frame.open("rb") as source, archive.open(f"{camera_dir.name}/{frame.name}", "w") as target:
+            with frame.open("rb") as source, archive.open(f"{sensor_dir.name}/{frame.name}", "w") as target:
                 while chunk := source.read(1024 * 1024):
                     check_abort("archive_frames", index, expected_frame_count)
                     target.write(chunk)
     if destination.stat().st_size > max_bytes:
-        raise ContractError(f"frames archive {camera_dir.name} exceeds its output budget")
+        raise ContractError(f"frames archive {sensor_dir.name} exceeds its output budget")
     check_abort("archive_frames", expected_frame_count, expected_frame_count)
     return destination
+
+def _archive_and_hash(
+    sensor_dir: Path,
+    destination: Path,
+    expected_frame_count: int,
+    extension: str,
+    max_bytes: int,
+    check_abort: Callable[[str, int, int], None],
+    deadline_monotonic: Callable[[], float],
+) -> tuple[Path, str]:
+    archive = _archive_frames(
+        sensor_dir, destination, expected_frame_count, extension, max_bytes, check_abort,
+    )
+    digest = _body_digest(
+        archive,
+        deadline_monotonic,
+        lambda: check_abort("hash_frames_archive", expected_frame_count, expected_frame_count),
+    )
+    return archive, digest
 
 
 def _encode_video(
@@ -206,18 +236,22 @@ def _encode_video(
     camera_dir = frame_dir / camera_id
     if not camera_dir.is_dir():
         raise RuntimeError("video output requested but the backend produced no camera frames")
-    frames = _expected_frame_paths(camera_dir, expected_frame_count, lambda: check_abort("encode_video", 0, expected_frame_count))
+    frames = _expected_frame_paths(camera_dir, expected_frame_count, "png", lambda: check_abort("encode_video", 0, expected_frame_count))
     source_bytes = 0
     for index, frame in enumerate(frames):
         check_abort("encode_video", index, expected_frame_count)
         source_bytes += frame.stat().st_size
     if source_bytes > max_bytes:
         raise ContractError("video source frames exceed the pre-allocation output budget")
+    encoder = os.environ.get("UNISCENARIO_PRESENTATION_VIDEO_ENCODER", "software")
+    if encoder not in {"software", "nvidia"}:
+        raise RuntimeError("UNISCENARIO_PRESENTATION_VIDEO_ENCODER must be software or nvidia")
+    codec = "h264_nvenc" if encoder == "nvidia" else "libx264"
     result = _run_process([
         "ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps),
         "-start_number", "0", "-i", str(camera_dir / "%08d.png"),
         "-frames:v", str(expected_frame_count),
-        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-fs", str(max_bytes), str(destination),
+        "-c:v", codec, "-pix_fmt", "yuv420p", "-fs", str(max_bytes), str(destination),
     ], "encode_video", check_abort, deadline_monotonic)
     if result.returncode:
         raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')}")
@@ -358,6 +392,17 @@ def _preflight_execution_semantics(lease: Lease, plan: ExecutionPlan) -> None:
             "native physics cannot execute signed reverse motion for non-vehicle actors: "
             + ", ".join(reverse_non_vehicles)
         )
+    downed_actors = sorted({
+        actor_id
+        for frame in plan.frames
+        for actor_id, state in frame.actors.items()
+        if state.downed
+    })
+    if downed_actors:
+        raise ContractError(
+            "native physics cannot execute authored knockdown poses without post-spawn teleport repair: "
+            + ", ".join(downed_actors)
+        )
     unsupported_moving = sorted({
         actor_id
         for frame in plan.frames
@@ -384,10 +429,13 @@ def _preflight_execution_semantics(lease: Lease, plan: ExecutionPlan) -> None:
             + ", ".join(invalid_vehicle_appearance)
         )
     despawned = set(appearance["despawnedActors"])
-    invalid_mounts = sorted({camera.attach_to for camera in lease.render_spec.cameras if camera.attach_to in despawned})
+    invalid_mounts = sorted({
+        sensor.actor_id for sensor in lease.render_spec.sensors
+        if sensor.actor_id in despawned
+    })
     if invalid_mounts:
         raise ContractError(
-            "camera sensors cannot remain frame-closed when their native parent is deleted: "
+            "native sensors cannot remain frame-closed when their attached actor is deleted: "
             + ", ".join(invalid_mounts)
         )
 
@@ -453,13 +501,13 @@ def _manifest_to_path(
         "artifacts": [dict(item) for item in artifacts],
         "sensorFrames": sensor_records,
         "capture": {
-            "frameCount": len(sensor_records) // max(1, len(lease.render_spec.cameras)),
+            "frameCount": len(sensor_records) // max(1, len(lease.render_spec.sensors)),
             "fps": lease.render_spec.fps,
             "durationS": plan.frames[-1].t,
         },
         "capabilities": {
             "execution": lease.render_spec.execution_mode,
-            "sensors": sorted({camera.kind for camera in lease.render_spec.cameras}),
+            "sensors": sorted({sensor.modality for sensor in lease.render_spec.sensors}),
             "fixedTimestepS": plan.fixed_timestep_s,
             "appearance": _appearance_capability(plan, abort),
         },
@@ -585,18 +633,25 @@ def _parity_evidence(
             or runtime_evidence.get("motionApplication") != "native-controls"
         ):
             semantic_failures.append("native-physics-authority")
+        map_evidence = runtime_evidence.get("map")
+        if (
+            not isinstance(map_evidence, Mapping)
+            or map_evidence.get("requestedMapName") != lease.execution_package.xodr.map_name
+            or map_evidence.get("xodrSha256") != lease.execution_package.xodr.sha256
+        ):
+            semantic_failures.append("cooked-map-identity")
         environment = runtime_evidence.get("environment")
         if not _environment_evidence_is_accepted(environment, lease.render_spec.environment):
             semantic_failures.append("environment-readback")
         sensor_evidence = runtime_evidence.get("sensors")
-        expected_sensor_ids = {camera.id for camera in lease.render_spec.cameras}
+        expected_sensor_ids = {sensor.artifact_name for sensor in lease.render_spec.sensors}
         if not isinstance(sensor_evidence, Mapping) or set(sensor_evidence) != expected_sensor_ids:
             semantic_failures.append("sensor-identity-closure")
         else:
-            for camera_id in sorted(expected_sensor_ids):
-                value = sensor_evidence[camera_id]
+            for sensor_id in sorted(expected_sensor_ids):
+                value = sensor_evidence[sensor_id]
                 if not isinstance(value, Mapping) or value.get("capturedFrames") != expected_capture_count:
-                    semantic_failures.append(f"sensor-frame-closure:{camera_id}")
+                    semantic_failures.append(f"sensor-frame-closure:{sensor_id}")
 
     global_failed_actor_ids = list(getattr(parity, "failed_actor_ids", ()))
     violation_counts = dict(getattr(parity, "violation_counts", {}))
@@ -666,7 +721,10 @@ def _parity_evidence(
     expected_kinds: set[str] = set()
     for output in lease.render_spec.outputs:
         if output == "frames":
-            expected_kinds.update(f"framesArchive-{camera.id}" for camera in lease.render_spec.cameras)
+            expected_kinds.update(
+                f"framesArchive:{sensor.artifact_name}"
+                for sensor in lease.render_spec.sensors
+            )
         else:
             expected_kinds.add(output)
     if lease.render_spec.execution_mode == "native-physics":
@@ -855,7 +913,6 @@ def _verify_execution_manifest(lease: Lease, body: bytes) -> Mapping[str, Any]:
         raise ContractError("execution manifest XOSC file does not match the control package")
     return manifest
 
-
 def _verify_xosc_source_input_digest(lease: Lease, xosc: bytes) -> None:
     reject_unsafe_xml_envelope(xosc)
     try:
@@ -877,11 +934,20 @@ def _enforce_render_budgets(lease: Lease, plan: ExecutionPlan, capture_count: in
         raise ContractError(f"scenario duration must be between 0 and {MAX_DURATION_SECONDS:g} seconds")
     if capture_count > MAX_CAPTURE_FRAMES:
         raise ContractError(f"render capture exceeds {MAX_CAPTURE_FRAMES} frames")
-    sensor_pixels = lease.render_spec.width * lease.render_spec.height * len(lease.render_spec.cameras) * capture_count
-    if sensor_pixels > MAX_SENSOR_PIXELS:
+    camera_pixels = sum(
+        int(sensor.config["width"]) * int(sensor.config["height"])
+        for sensor in lease.render_spec.sensors
+        if sensor.modality in CAMERA_MODALITIES
+    ) * capture_count
+    if camera_pixels > MAX_SENSOR_PIXELS:
         raise ContractError(f"render capture exceeds {MAX_SENSOR_PIXELS} sensor pixels")
-    frame_file_count = len(lease.render_spec.cameras) * capture_count
-    if sensor_pixels * 4 + frame_file_count * 4096 > MAX_OUTPUT_BYTES:
+    point_bytes = 0
+    for sensor in lease.render_spec.sensors:
+        if sensor.modality in {"lidar", "semantic-lidar", "radar"}:
+            bytes_per_point = 24 if sensor.modality == "semantic-lidar" else 16
+            point_bytes += int(sensor.config["pointsPerSecond"]) * bytes_per_point * duration
+    frame_file_count = len(lease.render_spec.sensors) * capture_count
+    if camera_pixels * 4 + point_bytes + frame_file_count * 4096 > MAX_OUTPUT_BYTES:
         raise ContractError("projected raw capture exceeds the temporary-disk budget")
 
 
@@ -893,7 +959,9 @@ def _capture_temp_bytes(output_dir: Path, abort: Callable[[], None]) -> int:
     total = 0
     if not output_dir.exists():
         return 0
-    for path in output_dir.rglob("*.png"):
+    for path in output_dir.rglob("*"):
+        if not path.is_file():
+            continue
         abort()
         total += path.stat().st_size + 4096
         if total > MAX_OUTPUT_BYTES:
@@ -939,9 +1007,10 @@ def _artifact(
     authorize_upload: Callable[[str, str, int, str, Mapping[str, Any]], Mapping[str, Any]] | None = None,
     deadline_monotonic: Callable[[], float] | None = None,
     abort: Callable[[], None] | None = None,
+    precomputed_digest: str | None = None,
 ) -> dict[str, object]:
     size = _body_size(body)
-    digest = _body_digest(body, deadline_monotonic, abort)
+    digest = precomputed_digest or _body_digest(body, deadline_monotonic, abort)
     if not reservation:
         raise RuntimeError(f"control plane did not reserve required artifact upload {kind}")
     bound = authorize_upload(kind, digest, size, media_type, reservation) if authorize_upload else reservation
@@ -1064,9 +1133,12 @@ def execute_lease(
     check_abort("compile_xosc")
     _preflight_execution_semantics(lease, plan)
     actor_ids = set(plan.actors)
-    unknown_mounts = sorted({camera.attach_to for camera in lease.render_spec.cameras if camera.attach_to and camera.attach_to not in actor_ids})
+    unknown_mounts = sorted({
+        sensor.actor_id for sensor in lease.render_spec.sensors
+        if sensor.actor_id and sensor.actor_id not in actor_ids
+    })
     if unknown_mounts:
-        raise RuntimeError(f"camera mounts reference unknown actors: {', '.join(unknown_mounts)}")
+        raise RuntimeError(f"sensor mounts reference unknown actors: {', '.join(unknown_mounts)}")
     emit("plan_compiled", {"planSha256": plan.sha256, "frames": len(plan.frames), "fixedTimestepS": plan.fixed_timestep_s})
     try:
         catalog_manifest = json.loads(catalog_bytes)
@@ -1124,8 +1196,8 @@ def execute_lease(
             stability = backend.prepare_scenario(plan.frames[0], abort=lambda: backend_fence("prepare_scenario"))
             check_abort("prepare_scenario")
             if lease.job_mode == "full_render":
-                backend.configure_cameras(lease.render_spec, output_dir, MAX_OUTPUT_BYTES, abort=lambda: backend_fence("configure_cameras"))
-                check_abort("configure_cameras")
+                backend.configure_sensors(lease.render_spec, output_dir, MAX_OUTPUT_BYTES, abort=lambda: backend_fence("configure_sensors"))
+                check_abort("configure_sensors")
             emit("interaction_started" if lease.job_mode == "interaction_2d" else "render_started", {"frames": len(plan.frames), "executionMode": lease.render_spec.execution_mode})
             for frame in plan.frames:
                 check_abort("execute", frame.index, len(plan.frames))
@@ -1180,7 +1252,14 @@ def execute_lease(
             output_bytes += int(item["sizeBytes"])
             artifacts.append(item)
             emit("artifact_uploaded", {"kind": item["kind"], "sha256": item["sha256"], "sizeBytes": item["sizeBytes"]})
-        def make_artifact(kind: str, body: ArtifactBody, media_type: str, reservation: Mapping[str, Any] | None, metadata: Mapping[str, object] | None = None) -> dict[str, object]:
+        def make_artifact(
+            kind: str,
+            body: ArtifactBody,
+            media_type: str,
+            reservation: Mapping[str, Any] | None,
+            metadata: Mapping[str, object] | None = None,
+            precomputed_digest: str | None = None,
+        ) -> dict[str, object]:
             try:
                 if _body_size(body) > artifact_temp_limit:
                     raise ContractError(f"artifact {kind} exceeds the shared temporary-disk budget")
@@ -1190,6 +1269,7 @@ def execute_lease(
                     kind, body, media_type, reservation, uploader, metadata, authorize_upload,
                     deadline_monotonic=absolute_deadline,
                     abort=lambda: check_abort(f"upload_{kind}", len(plan.frames), len(plan.frames)),
+                    precomputed_digest=precomputed_digest,
                 )
             finally:
                 if isinstance(body, Path):
@@ -1198,20 +1278,55 @@ def execute_lease(
             trace_body = _trace_to_path(plan, readbacks, signal_readbacks, collision_readbacks, package.control_sha256, package.source_input_digest, package.materialized_traffic_digest, Path(directory) / "trace.json.gz", min(artifact_temp_limit, MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes), lambda: check_abort("serialize_trace"))
             add_artifact(make_artifact("trace", trace_body, "application/gzip", lease.artifact_uploads.get("trace"), {"format": "json", "contentEncoding": "gzip"}))
         if "frames" in lease.render_spec.outputs:
-            for camera in lease.render_spec.cameras:
-                upload_kind = f"framesArchive-{camera.id}"
-                remaining_bytes = min(MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes, artifact_temp_limit)
-                body = _archive_frames(
-                    output_dir / camera.id,
-                    Path(directory) / f"{camera.id}.zip",
-                    expected_capture_count,
-                    remaining_bytes,
-                    check_abort,
-                )
-                add_artifact(make_artifact(upload_kind, body, "application/zip", lease.artifact_uploads.get(upload_kind), {"sensorId": camera.id, "sensorKind": camera.kind, "format": "png", "frameCount": expected_capture_count, "fps": lease.render_spec.fps, "durationS": plan.frames[-1].t}))
+            archive_limit = min(MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes, artifact_temp_limit)
+            worker_count = max(1, min(8, len(lease.render_spec.sensors)))
+            with ThreadPoolExecutor(max_workers=worker_count, thread_name_prefix="carla-archive") as pool:
+                pending_archives = [
+                    (
+                        sensor,
+                        pool.submit(
+                            _archive_and_hash,
+                            output_dir / sensor.artifact_name,
+                            Path(directory) / f"sensor-{index:02d}.zip",
+                            expected_capture_count,
+                            SENSOR_FORMATS[sensor.modality],
+                            archive_limit,
+                            check_abort,
+                            absolute_deadline,
+                        ),
+                    )
+                    for index, sensor in enumerate(lease.render_spec.sensors)
+                ]
+                archives = [
+                    (sensor, *future.result())
+                    for sensor, future in pending_archives
+                ]
+            for sensor, body, archive_digest in archives:
+                upload_kind = f"framesArchive:{sensor.artifact_name}"
+                add_artifact(make_artifact(
+                    upload_kind,
+                    body,
+                    "application/zip",
+                    lease.artifact_uploads.get(upload_kind),
+                    {
+                        "role": sensor.role,
+                        "actorId": sensor.actor_id,
+                        "sensorId": sensor.sensor_id,
+                        "modality": sensor.modality,
+                        "format": SENSOR_FORMATS[sensor.modality],
+                        "frameCount": expected_capture_count,
+                        "fps": lease.render_spec.fps,
+                        "durationS": plan.frames[-1].t,
+                    },
+                    archive_digest,
+                ))
         if "video" in lease.render_spec.outputs:
             check_abort("encode_video", len(plan.frames), len(plan.frames))
-            primary_rgb = next(camera.id for camera in lease.render_spec.cameras if camera.kind == "rgb")
+            primary_rgb = next(
+                sensor.artifact_name
+                for sensor in lease.render_spec.sensors
+                if sensor.modality == "rgb"
+            )
             remaining_bytes = min(MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes, artifact_temp_limit)
             body = _encode_video(
                 output_dir,

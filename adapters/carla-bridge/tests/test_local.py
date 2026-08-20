@@ -33,9 +33,11 @@ def test_probe_is_read_only_and_always_cleans_up(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(local, "CarlaBackend", Backend)
     assert local._probe("carla.test", 2000) == {
-        "schema": "uniscenarios.carla-probe/v1",
+        "schema": "uniscenarios.carla-probe/v2",
         "clientVersion": "0.10.0-client",
         "serverVersion": "0.10.0-test",
+        "maxSimultaneousSensors": 64,
+        "nativeSensors": local.native_sensor_capabilities(),
     }
     assert calls == [("carla.test", 2000), "server-version", "cleanup"]
 
