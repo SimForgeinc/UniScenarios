@@ -58,6 +58,29 @@ describe('reject filters', () => {
     expect(evaluateMetrics(metrics({ requiredDecelMax: { ego: 7.8 } }), 20).verdict).toBe('accept');
   });
 
+  it('uses grip at the peak-demand tick and audits legacy scene fallback', () => {
+    const localGrip = evaluateMetrics(metrics({
+      requiredDecelMax: { ego: 2, challenger: 1 },
+      requiredDecelContext: {
+        ego: { value: 2, t: 8.5, frictionScale: 0.15 },
+        challenger: { value: 1, t: 8.5, frictionScale: 1 },
+      },
+    }), 20);
+    expect(localGrip.findings.find((finding) => finding.code === 'physically_unavoidable')?.detail)
+      .toMatchObject({
+        actorId: 'ego',
+        frictionScale: 0.15,
+        gripSource: 'per-tick',
+        demandT: 8.5,
+      });
+
+    const legacy = evaluateMetrics(metrics({ requiredDecelMax: { ego: 4, challenger: 1 } }), 20, {
+      fallbackFrictionScale: 0.5,
+    });
+    expect(legacy.summary.requiredDecelGripSource).toBe('scene');
+    expect(legacy.summary.requiredDecelCeiling).toBeCloseTo(0.8 * 9.81 * 0.5);
+  });
+
   it('rejects never-fired triggers, and can scope the check', () => {
     const m = metrics({ triggerNeverFired: ['flavour-chip'] });
     expect(evaluateMetrics(m, 20).verdict).toBe('reject');

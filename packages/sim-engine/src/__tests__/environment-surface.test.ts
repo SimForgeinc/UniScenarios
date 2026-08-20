@@ -67,6 +67,7 @@ function brakingRun(surfacePatches: Patch[], rsl: string = LANE_LEFT) {
     peakDecelMps2: Math.max(...ticks.speedMps
       .slice(brakeIndex, stopIndex < 0 ? undefined : stopIndex)
       .map((v, i, arr) => (i === 0 ? 0 : (arr[i - 1]! - v) / DT))),
+    trace,
   };
 }
 
@@ -80,6 +81,15 @@ describe('localised surface patches', () => {
     // Dry ~41.9 m at a 7.51 m/s^2 peak; iced ~200.7 m at 1.22 m/s^2.
     expect(iced.peakDecelMps2).toBeLessThan(dry.peakDecelMps2 * 0.3);
     expect(iced.stoppingDistanceM).toBeGreaterThan(dry.stoppingDistanceM * 3);
+  });
+
+  it('projects every peak demand context into the frozen numeric metric', () => {
+    const { trace } = brakingRun([{ id: 'black-ice', kind: 'ice' as const, region: PATCH }]);
+    for (const actorId of trace.header.actorIds) {
+      expect(trace.metrics.requiredDecelContext?.[actorId]).toBeDefined();
+      expect(trace.metrics.requiredDecelMax[actorId])
+        .toBe(trace.metrics.requiredDecelContext![actorId]!.value);
+    }
   });
 
   it('leaves grip untouched outside the patch', () => {

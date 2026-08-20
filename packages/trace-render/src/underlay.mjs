@@ -39,12 +39,24 @@ const CROSSWALK_BAND_M = 3.0; // stripe length along the lane direction
 const CROSSWALK_STRIPE_M = 0.6; // stripe width across
 const CROSSWALK_PITCH_M = 1.2; // stripe repeat across
 
+const SURFACE_PATCH_STYLES = {
+  ice: { color: '#7fd4e8', tag: 'ICE' },
+  packed_snow: { color: '#f0f0f0', tag: 'SNOW' },
+  standing_water: { color: '#4a7fc1', tag: 'WATER' },
+  wet_leaves: { color: '#7a8c3f', tag: 'WET LEAVES' },
+  loose_gravel: { color: '#c2a878', tag: 'GRAVEL' },
+  sand: { color: '#e0cfa0', tag: 'SAND' },
+  spilled_oil: { color: '#5a4a7a', tag: 'OIL' },
+  polished_asphalt: { color: '#9a9a9a', tag: 'POLISHED' },
+  grit_treated: { color: '#b08050', tag: 'GRIT' },
+};
+
 /**
  * Normalize a parsed topology-index document into a draw-ready model.
  * Lanes sorted by rsl; each lane carries a bbox padded by its painted
  * half-width so viewport culling is a plain rectangle test.
  */
-export function underlayFromTopology(topology, locationsDoc = null) {
+export function underlayFromTopology(topology, locationsDoc = null, signalsDoc = null) {
   const lanes = [];
   for (const key of Object.keys(topology.lanes ?? {}).sort()) {
     const lane = topology.lanes[key];
@@ -76,6 +88,7 @@ export function underlayFromTopology(topology, locationsDoc = null) {
     mapName: topology.mapName ?? null,
     lanes,
     crosswalks: locationsDoc ? crosswalksFromLocations(locationsDoc) : [],
+    furniture: [...(signalsDoc?.furniture ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id))),
   };
 }
 
@@ -112,6 +125,52 @@ export function viewportBounds({ camera, scale, width, height }, marginM = 2) {
     minY: camera.y - halfH,
     maxY: camera.y + halfH,
   };
+}
+
+/**
+ * Fixed catalog props as deterministic, view-culled OBB polygons. Prop poses
+ * use the scene frame (x, z), so z is inverted into trace/world y. Catalog
+ * dimensions are unscaled; the uniform prop scale is applied exactly once.
+ * A 6 px floor on both axes keeps small props such as traffic cones legible.
+ */
+export function propSvgLayer(props, view, project) {
+  const bounds = viewportBounds(view, 14);
+  const minWorldSize = 6 / view.scale;
+  const layers = [];
+  const sorted = [...(props ?? [])].sort((a, b) => (
+    String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0
+  ));
+
+  for (const prop of sorted) {
+    const center = { x: prop.pose.x, y: -prop.pose.z };
+    const scale = prop.scale ?? 1;
+    const lengthM = Math.max(minWorldSize, prop.dims.l * scale);
+    const widthM = Math.max(minWorldSize, prop.dims.w * scale);
+    const headingRad = prop.pose.headingRad;
+    const f = { x: Math.cos(headingRad), y: Math.sin(headingRad) };
+    const r = { x: -Math.sin(headingRad), y: Math.cos(headingRad) };
+    const corners = [];
+    for (const [sf, sr] of [[1, 1], [1, -1], [-1, -1], [-1, 1]]) {
+      corners.push({
+        x: center.x + f.x * (lengthM / 2) * sf + r.x * (widthM / 2) * sr,
+        y: center.y + f.y * (lengthM / 2) * sf + r.y * (widthM / 2) * sr,
+      });
+    }
+    const minX = Math.min(...corners.map((p) => p.x));
+    const maxX = Math.max(...corners.map((p) => p.x));
+    const minY = Math.min(...corners.map((p) => p.y));
+    const maxY = Math.max(...corners.map((p) => p.y));
+    if (minX > bounds.maxX || maxX < bounds.minX || minY > bounds.maxY || maxY < bounds.minY) continue;
+
+    const points = corners
+      .map(project)
+      .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+      .join(' ');
+    layers.push(
+      `<polygon class="authored-prop" points="${points}" fill="#8a8f98" fill-opacity="0.55" stroke="#5b6068" stroke-width="1"/>`,
+    );
+  }
+  return layers;
 }
 
 function inView(lane, b) {
@@ -174,12 +233,207 @@ function stripeCorners(cw, alongOffsetM) {
   ];
 }
 
+function pointAlongPolyline(pts, targetM) {
+  let walkedM = 0;
+  for (let i = 1; i < pts.length; i += 1) {
+    const a = pts[i - 1];
+    const b = pts[i];
+    const segmentM = Math.hypot(b.x - a.x, b.y - a.y);
+    if (walkedM + segmentM >= targetM) {
+      const f = segmentM > 0 ? (targetM - walkedM) / segmentM : 0;
+      return { point: { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }, segment: i };
+    }
+    walkedM += segmentM;
+  }
+  return { point: pts[pts.length - 1], segment: pts.length - 1 };
+}
+
+function laneWindowPolygon(lane, sMin, sMax) {
+  const lengthM = lane.pts.slice(1).reduce(
+    (sum, point, i) => sum + Math.hypot(point.x - lane.pts[i].x, point.y - lane.pts[i].y),
+    0,
+  );
+  const lo = Math.max(0, Math.min(lengthM, sMin));
+  const hi = Math.max(lo, Math.min(lengthM, sMax));
+  if (hi - lo <= 1e-6) return [];
+  const start = pointAlongPolyline(lane.pts, lo);
+  const end = pointAlongPolyline(lane.pts, hi);
+  const center = [start.point];
+  for (let i = start.segment; i < end.segment; i += 1) center.push(lane.pts[i]);
+  center.push(end.point);
+  return [
+    ...offsetPolyline(center, lane.widthM / 2),
+    ...offsetPolyline(center, -lane.widthM / 2).reverse(),
+  ];
+}
+
+function surfacePatchPolygon(patch, lanes) {
+  const region = patch.region;
+  if (region?.kind === 'polygon') return region.points.map((point) => ({ x: point.x, y: -point.z }));
+  if (region?.kind === 'circle') {
+    return Array.from({ length: 32 }, (_, i) => {
+      const angle = (i / 32) * Math.PI * 2;
+      return {
+        x: region.center.x + Math.cos(angle) * region.radiusM,
+        y: -region.center.z - Math.sin(angle) * region.radiusM,
+      };
+    });
+  }
+  if (region?.kind === 'laneWindow') {
+    const lane = lanes.find((candidate) => candidate.rsl === region.rsl);
+    return lane ? laneWindowPolygon(lane, region.sMin, region.sMax) : [];
+  }
+  return [];
+}
+
+/**
+ * Render authored surface coverings from their concrete engine regions.
+ * `view.lanes` is supplied by `underlaySvgLayers` to resolve lane windows.
+ */
+export function surfacePatchSvgLayer(patches, view, project) {
+  const bounds = viewportBounds(view, 2);
+  const visible = [];
+  for (const patch of [...(patches ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    const style = SURFACE_PATCH_STYLES[patch.kind];
+    if (!style) continue;
+    const points = surfacePatchPolygon(patch, view.lanes ?? []);
+    if (points.length < 3) continue;
+    const minX = Math.min(...points.map((point) => point.x));
+    const maxX = Math.max(...points.map((point) => point.x));
+    const minY = Math.min(...points.map((point) => point.y));
+    const maxY = Math.max(...points.map((point) => point.y));
+    if (minX > bounds.maxX || maxX < bounds.minX || minY > bounds.maxY || maxY < bounds.minY) continue;
+    visible.push({ patch, style, points });
+  }
+  if (visible.length === 0) return [];
+
+  const kinds = [...new Set(visible.map(({ patch }) => patch.kind))].sort();
+  const layers = [
+    `<defs>${kinds.map((kind) => {
+      const color = SURFACE_PATCH_STYLES[kind].color;
+      return `<pattern id="surface-hatch-${kind}" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="8" stroke="${color}" stroke-width="2"/></pattern>`;
+    }).join('')}</defs>`,
+  ];
+  for (const { patch, style, points } of visible) {
+    const screen = screenPolyline(points, project);
+    const centroid = points.reduce(
+      (sum, point) => ({ x: sum.x + point.x / points.length, y: sum.y + point.y / points.length }),
+      { x: 0, y: 0 },
+    );
+    const label = project(centroid);
+    layers.push(
+      `<polygon class="underlay-surface-patch" points="${screen}" fill="${style.color}" opacity="0.35"/>`,
+      `<polygon class="underlay-surface-hatch" points="${screen}" fill="url(#surface-hatch-${patch.kind})" opacity="0.7"/>`,
+      `<text class="underlay-surface-tag" x="${label.x.toFixed(1)}" y="${label.y.toFixed(1)}" fill="#ffffff" font-family="monospace" font-size="9" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${style.tag}</text>`,
+    );
+  }
+  return layers;
+}
+
+function screenPoints(points) {
+  return points.map((point) => `${point.x.toFixed(1)},${point.y.toFixed(1)}`).join(' ');
+}
+
+/** Static sign furniture, already normalized into the trace/topology frame. */
+export function signSvgLayer(signs, view, project) {
+  const bounds = viewportBounds(view, 2);
+  const layers = [];
+  for (const sign of signs ?? []) {
+    if (sign.kind !== 'sign' || sign.x < bounds.minX || sign.x > bounds.maxX || sign.y < bounds.minY || sign.y > bounds.maxY) continue;
+    const c = project(sign);
+    if (sign.category === 'stop_sign') {
+      const points = [];
+      for (let i = 0; i < 8; i += 1) {
+        const angle = -Math.PI / 8 + (i * Math.PI) / 4;
+        points.push({ x: c.x + Math.cos(angle) * 7, y: c.y + Math.sin(angle) * 7 });
+      }
+      layers.push(`<polygon class="underlay-sign-stop" points="${screenPoints(points)}" fill="#c62828" stroke="#ffffff" stroke-width="1"/>`);
+    } else if (sign.category === 'yield_sign') {
+      const points = [
+        { x: c.x - 7, y: c.y - 5 },
+        { x: c.x + 7, y: c.y - 5 },
+        { x: c.x, y: c.y + 7 },
+      ];
+      layers.push(`<polygon class="underlay-sign-yield" points="${screenPoints(points)}" fill="#ffffff" stroke="#c62828" stroke-width="1.5"/>`);
+    } else if (sign.category === 'speed_limit_sign') {
+      const limit = sign.speedLimitMph ?? (sign.speedLimitKph ? Math.round(sign.speedLimitKph / 1.609344) : null);
+      layers.push(`<rect class="underlay-sign-speed" x="${(c.x - 7).toFixed(1)}" y="${(c.y - 7).toFixed(1)}" width="14" height="14" rx="2" fill="#ffffff" stroke="#555" stroke-width="1"/>`);
+      if (limit !== null) {
+        layers.push(`<text class="underlay-sign-speed-limit" x="${c.x.toFixed(1)}" y="${(c.y + 2.8).toFixed(1)}" fill="#000000" font-family="monospace" font-size="8" font-weight="bold" text-anchor="middle">${limit}</text>`);
+      }
+    } else {
+      layers.push(`<rect class="underlay-sign-other" x="${(c.x - 3.5).toFixed(1)}" y="${(c.y - 3.5).toFixed(1)}" width="7" height="7" fill="#ffffff" stroke="#555" stroke-width="1"/>`);
+    }
+  }
+  return layers;
+}
+
+function signalColor(phase) {
+  if (phase === 'green' || phase === 'green_arrow' || phase === 'proceed') return '#46a758';
+  if (phase === 'yellow' || phase === 'yellow_arrow' || phase === 'flashing_yellow' || phase === 'flashing_yellow_arrow') return '#f5a524';
+  if (phase === 'red' || phase === 'red_x' || phase === 'stop' || phase === 'flashing_red' || phase === 'flashing_red_arrow') return '#e5484d';
+  return '#3a3a3a';
+}
+
+function protectedMovementVector(program, head, lanesByRsl) {
+  const connectingRsls = (program.stopLines ?? []).flatMap((line) => line.connectingLaneRsls ?? []);
+  for (const rsl of connectingRsls) {
+    const lane = lanesByRsl.get(rsl);
+    if (!lane || lane.pts.length < 2) continue;
+    const first = lane.pts[0];
+    const last = lane.pts[lane.pts.length - 1];
+    const firstD = Math.hypot(first.x - head.x, first.y - head.y);
+    const lastD = Math.hypot(last.x - head.x, last.y - head.y);
+    const from = firstD <= lastD ? first : last;
+    const to = firstD <= lastD ? last : first;
+    const length = Math.hypot(to.x - from.x, to.y - from.y);
+    if (length > 0.001) return { x: (to.x - from.x) / length, y: (to.y - from.y) / length };
+  }
+  return { x: Math.cos(head.headingRad ?? 0), y: Math.sin(head.headingRad ?? 0) };
+}
+
+/**
+ * Physical signal heads joined to authoritative per-tick phases solely through
+ * SignalProgram.mapBinding.headIds. Flashing is a pure function of frame time.
+ */
+export function signalSvgLayer(signals, signalPrograms, signalTicks, tickIndex, frameTime, view, project, lanes = []) {
+  const bounds = viewportBounds(view, 2);
+  const headsById = new Map((signals ?? []).filter((feature) => feature.kind === 'signal_head').map((head) => [head.id, head]));
+  const lanesByRsl = new Map(lanes.map((lane) => [lane.rsl, lane]));
+  const layers = [];
+  for (const program of [...(signalPrograms ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id)))) {
+    const phase = signalTicks?.[program.id]?.phase?.[tickIndex] ?? 'off';
+    let color = signalColor(phase);
+    if (String(phase).startsWith('flashing_') && deterministicFlashPhase(frameTime, 1) === 1) color = '#3a3a3a';
+    const arrow = String(phase).endsWith('_arrow');
+    for (const headId of [...(program.mapBinding?.headIds ?? [])].sort()) {
+      const head = headsById.get(headId);
+      if (!head || head.x < bounds.minX || head.x > bounds.maxX || head.y < bounds.minY || head.y > bounds.maxY) continue;
+      const c = project(head);
+      layers.push(`<circle class="underlay-signal-head" cx="${c.x.toFixed(1)}" cy="${c.y.toFixed(1)}" r="5" fill="${color}" stroke="#111" stroke-width="1"/>`);
+      if (arrow) {
+        const worldDirection = protectedMovementVector(program, head, lanesByRsl);
+        const direction = { x: worldDirection.x, y: -worldDirection.y };
+        const normal = { x: -direction.y, y: direction.x };
+        const points = [
+          { x: c.x + direction.x * 13, y: c.y + direction.y * 13 },
+          { x: c.x + direction.x * 6 + normal.x * 3, y: c.y + direction.y * 6 + normal.y * 3 },
+          { x: c.x + direction.x * 6 - normal.x * 3, y: c.y + direction.y * 6 - normal.y * 3 },
+        ];
+        layers.push(`<polygon class="underlay-signal-arrow" points="${screenPoints(points)}" fill="${color}"/>`);
+      }
+    }
+  }
+  return layers;
+}
+
 /**
  * SVG layer strings for everything visible from the camera, in paint order:
- * junction surfaces → non-driving lanes → driving lanes → driving boundaries →
- * crosswalk stripes. `project` maps world points to screen points.
+ * junction surfaces → non-driving lanes → driving lanes → surface patches →
+ * driving boundaries → crosswalk stripes. `project` maps world points to
+ * screen points.
  */
-export function underlaySvgLayers(underlay, view, project) {
+export function underlaySvgLayers(underlay, view, project, surfacePatches = [], weatherPreset = null, signalState = null) {
   const { scale } = view;
   const bounds = viewportBounds(view, 14);
   const layers = [];
@@ -241,9 +495,19 @@ export function underlaySvgLayers(underlay, view, project) {
     );
   }
 
-  // 4. Boundary lines on non-junction driving lanes (junction interiors stay unmarked, like real asphalt).
+  // 4. Authored surface coverings sit on the asphalt, below physical markings.
+  layers.push(...surfacePatchSvgLayer(surfacePatches, { ...view, lanes: underlay.lanes }, project));
+
+  // 5. Boundary lines on non-junction driving lanes (junction interiors stay unmarked, like real asphalt).
+  const obscuredRsls = new Set(
+    surfacePatches
+      .filter((patch) => patch.region?.kind === 'laneWindow')
+      .map((patch) => patch.region.rsl),
+  );
+  const weatherObscuresMarkings = weatherPreset === 'snow' || weatherPreset === 'sleet';
   for (const lane of visible) {
     if (lane.laneType !== 'driving' || lane.isJunction) continue;
+    const obscured = weatherObscuresMarkings || obscuredRsls.has(lane.rsl);
     for (const side of [1, -1]) {
       layers.push(
         strokeLayer(
@@ -252,13 +516,14 @@ export function underlaySvgLayers(underlay, view, project) {
           project,
           BOUNDARY_STROKE,
           1.2,
-          '0.6',
+          obscured ? '0.15' : '0.6',
+          obscured ? '5 4' : null,
         ),
       );
     }
   }
 
-  // 5. Crosswalk zebra stripes.
+  // 6. Crosswalk zebra stripes.
   for (const cw of underlay.crosswalks) {
     if (cw.x < bounds.minX || cw.x > bounds.maxX || cw.y < bounds.minY || cw.y > bounds.maxY) continue;
     const stripes = Math.max(1, Math.floor((2 * cw.halfSpanM) / CROSSWALK_PITCH_M));
@@ -269,6 +534,23 @@ export function underlaySvgLayers(underlay, view, project) {
         `<polygon class="underlay-crosswalk" points="${screenPolyline(corners, project)}" fill="${CROSSWALK_STRIPE_FILL}" opacity="0.55"/>`,
       );
     }
+  }
+
+  // 7. Static road-sign furniture.
+  layers.push(...signSvgLayer(underlay.furniture, view, project));
+
+  // 8. Dynamic physical heads, joined to logical trace programs by head id.
+  if (signalState) {
+    layers.push(...signalSvgLayer(
+      underlay.furniture,
+      signalState.programs,
+      signalState.ticks,
+      signalState.tickIndex,
+      signalState.frameTime,
+      view,
+      project,
+      underlay.lanes,
+    ));
   }
 
   return layers;
@@ -309,27 +591,27 @@ export function actorGlyph(id, kind, isStatic) {
   return { shape: 'box', color: VEHICLE_FILL };
 }
 
-// --- emergency light state -----------------------------------------------------
+// --- recorded discrete actor state -------------------------------------------
 
 /**
- * Latest `lights.emergency` value for `actorId` at or before `t`, from the
- * trace's `state_set` events. 'off' when never set. The engine records the
- * event when a `set(lights.emergency)` interaction fires, so this is the
- * authoritative runtime state, not the authored intent.
+ * Latest recorded value for an actor state key at or before `t`.
+ *
+ * The trace's `state_set` events are authoritative runtime state. Equal-time
+ * events retain trace order, so the last matching event wins deterministically.
  */
-export function emergencyLightStateAt(events, actorId, t) {
-  let state = 'off';
-  let stateT = -Infinity;
+export function stateValueAt(events, actorId, key, t) {
+  let value;
+  let valueT = -Infinity;
   for (const e of events ?? []) {
-    if (e.kind !== 'state_set' || e.actorId !== actorId || e.key !== 'lights.emergency') continue;
-    if (e.t > t || e.t < stateT) continue;
-    state = String(e.value);
-    stateT = e.t;
+    if (e.kind !== 'state_set' || e.actorId !== actorId || e.key !== key) continue;
+    if (e.t > t || e.t < valueT) continue;
+    value = e.value;
+    valueT = e.t;
   }
-  return state;
+  return value;
 }
 
-/** Deterministic 4 Hz flash phase from frame time: 0 or 1, no wall clock. */
-export function emergencyFlashPhase(t) {
-  return Math.floor(t / 0.25) % 2 === 0 ? 0 : 1;
+/** Deterministic binary flash phase from frame time: 0 or 1, no wall clock. */
+export function deterministicFlashPhase(t, hz) {
+  return Math.floor(t * hz * 2) % 2 === 0 ? 0 : 1;
 }

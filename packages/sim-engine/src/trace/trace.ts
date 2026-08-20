@@ -239,6 +239,13 @@ export interface InvariantResidual {
   readonly residual: number;
 }
 
+/** Grip recorded at the exact tick where one actor's required-deceleration demand peaked. */
+export interface RequiredDecelContext {
+  readonly value: number;
+  readonly t: number;
+  readonly frictionScale: number;
+}
+
 export interface EpisodeMetrics {
   readonly minTTC: MinTtcRecord | null;
   /** Crossing-route TTC; null when no future occupancy overlap was observed. */
@@ -248,7 +255,10 @@ export interface EpisodeMetrics {
   /** Window-selectable observations; absent on legacy traces. */
   readonly criticalitySamples?: CriticalitySamples;
   readonly minDistance: PairMinDistance[];
+  /** Numeric projection retained for frozen gate and legacy trace compatibility. */
   readonly requiredDecelMax: Record<string, number>;
+  /** Per-tick source record for grip-aware plausibility evaluation. Absent on legacy traces. */
+  readonly requiredDecelContext?: Record<string, RequiredDecelContext>;
   readonly invariantResiduals?: InvariantResidual[];
   readonly revealToConflict?: RevealToConflict | null;
   /** Complete directional evidence, one entry per authored occlusion pair. */

@@ -14,8 +14,9 @@ import { basename, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import { gunzipSync } from 'node:zlib';
+import { incidentWindow } from '../../../scripts/export-render-lib.mjs';
 
-import { actorGlyph, emergencyFlashPhase, emergencyLightStateAt, underlayFromTopology, underlaySvgLayers } from './underlay.mjs';
+import { actorGlyph, deterministicFlashPhase, propSvgLayer, stateValueAt, underlayFromTopology, underlaySvgLayers } from './underlay.mjs';
 
 const require = createRequire(import.meta.url);
 let sharp;
@@ -191,6 +192,57 @@ function cameraFor(trace, index, mode = 'pair') {
   return { x: 0, y: 0, basis: 'origin', pair: [] };
 }
 
+const VIEW_SCALE_LADDER = [8, 6, 4, 3, 2];
+const VIEW_EDGE_MARGIN_PX = 8;
+
+function requiredViewActorIds(trace) {
+  const pair = trace.metrics?.minTTC?.pair
+    ?? trace.metrics?.minPathTTC?.pair
+    ?? trace.metrics?.minPET?.pair
+    ?? [];
+  return [...new Set(['ego', ...pair])].filter((id) => trace.ticks.actors[id]);
+}
+
+function viewScaleLadder(requestedScale) {
+  if (!Number.isFinite(requestedScale) || requestedScale <= 0) {
+    throw new Error(`render scale must be a positive finite number, got ${String(requestedScale)}`);
+  }
+  return [...new Set([requestedScale, ...VIEW_SCALE_LADDER.filter((scale) => scale < requestedScale)])];
+}
+
+function actorFitsView(trace, actorId, index, camera, scale, width, height, dims) {
+  const pose = poseAt(trace, actorId, index);
+  if (!pose.present) return true;
+  const actorDimsAtFrame = dims.get(actorId) ?? { l: 1, w: 1 };
+  return obbCorners(pose, pose.headingRad, actorDimsAtFrame.l, actorDimsAtFrame.w)
+    .map((point) => pointToScreen(point, camera, scale, width, height))
+    .every((point) => (
+      point.x >= VIEW_EDGE_MARGIN_PX
+      && point.x <= width - VIEW_EDGE_MARGIN_PX
+      && point.y >= VIEW_EDGE_MARGIN_PX
+      && point.y <= height - VIEW_EDGE_MARGIN_PX
+    ));
+}
+
+function chooseViewScale(trace, instanceDoc, frameIndices, cameraMode, requestedScale, width, height) {
+  const requiredActorIds = requiredViewActorIds(trace);
+  const ladder = viewScaleLadder(requestedScale);
+  const dims = actorDims(instanceDoc);
+  for (const scale of ladder) {
+    const containsRequiredActors = frameIndices.every((index) => {
+      const camera = cameraFor(trace, index, cameraMode);
+      return requiredActorIds.every(
+        (actorId) => actorFitsView(trace, actorId, index, camera, scale, width, height, dims),
+      );
+    });
+    if (containsRequiredActors) return { scale, ladder, requiredActorIds };
+  }
+  throw new Error(
+    `2D composition cannot contain required actors ${requiredActorIds.join(', ')} `
+    + `within ${width}x${height} at minimum scale ${ladder[ladder.length - 1]} px/m`,
+  );
+}
+
 function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&apos;' }[c]));
 }
@@ -243,12 +295,122 @@ function actorKinds(trace) {
 // Shape + fill per actor class lives in the lib (`actorGlyph`) so the legend is
 // testable and single-sourced; trail color follows the body color for classes,
 // with the legacy amber for anonymous vehicles.
+function actorStateSvgLayer({ events, actorId, frameTime, pose, dims, shape, camera, scale, width, height }) {
+  const layers = [];
+  const tags = [];
+  const center = pointToScreen(pose, camera, scale, width, height);
+  const forward = { x: Math.cos(pose.headingRad), y: -Math.sin(pose.headingRad) };
+  const left = { x: -Math.sin(pose.headingRad), y: -Math.cos(pose.headingRad) };
+  const add = (a, b, scaleB = 1) => ({ x: a.x + b.x * scaleB, y: a.y + b.y * scaleB });
+  const point = (p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
+  const radius = shape === 'disc'
+    ? Math.max(5, dims.w * scale / 2)
+    : Math.max(dims.l, dims.w) * scale / 2;
+
+  const gesture = stateValueAt(events, actorId, 'pose.gesture', frameTime);
+  const gestureCenter = add(center, left, radius + 7);
+  if (gesture === 'halt') {
+    layers.push(`<line x1="${add(gestureCenter, left, -6).x.toFixed(1)}" y1="${add(gestureCenter, left, -6).y.toFixed(1)}" x2="${add(gestureCenter, left, 6).x.toFixed(1)}" y2="${add(gestureCenter, left, 6).y.toFixed(1)}" stroke="#ffffff" stroke-width="3"/>`);
+    tags.push('HALT');
+  } else if (gesture === 'wave_through') {
+    const tip = add(gestureCenter, forward, 6);
+    const rear = add(gestureCenter, forward, -5);
+    layers.push(`<polyline points="${point(add(rear, left, 4))} ${point(tip)} ${point(add(rear, left, -4))}" fill="none" stroke="#ffffff" stroke-width="2"/>`);
+    tags.push('WAVE');
+  } else if (gesture === 'point') {
+    const tip = add(gestureCenter, forward, 7);
+    const neck = add(gestureCenter, forward, 2);
+    layers.push(`<line x1="${add(gestureCenter, forward, -6).x.toFixed(1)}" y1="${add(gestureCenter, forward, -6).y.toFixed(1)}" x2="${neck.x.toFixed(1)}" y2="${neck.y.toFixed(1)}" stroke="#ffffff" stroke-width="2"/>`);
+    layers.push(`<polygon points="${point(tip)} ${point(add(add(neck, left, 3), forward, -1))} ${point(add(add(neck, left, -3), forward, -1))}" fill="#ffffff"/>`);
+    tags.push('POINT');
+  } else if (gesture === 'phone') {
+    tags.push('PHONE');
+  }
+
+  const paddle = stateValueAt(events, actorId, 'pose.paddle', frameTime);
+  if (paddle === 'stop' || paddle === 'slow') {
+    const paddleCenter = add(center, left, -(radius + 9));
+    const stemStart = add(center, left, -(radius + 1));
+    const color = paddle === 'stop' ? '#c62828' : '#f5a524';
+    layers.push(`<line x1="${stemStart.x.toFixed(1)}" y1="${stemStart.y.toFixed(1)}" x2="${paddleCenter.x.toFixed(1)}" y2="${paddleCenter.y.toFixed(1)}" stroke="#ffffff" stroke-width="1.5"/>`);
+    layers.push(`<rect x="${(paddleCenter.x - 3).toFixed(1)}" y="${(paddleCenter.y - 4).toFixed(1)}" width="6" height="8" rx="1" fill="${color}" stroke="#ffffff" stroke-width="1"/>`);
+    tags.push(paddle === 'stop' ? 'STOP' : 'SLOW');
+  }
+
+  const stopArm = stateValueAt(events, actorId, 'pose.stopArm', frameTime);
+  if (stopArm === 'extended' || stopArm === 'extending') {
+    const bodySide = add(center, left, dims.w * scale / 2);
+    const armEnd = add(bodySide, left, 12);
+    layers.push(`<line x1="${bodySide.x.toFixed(1)}" y1="${bodySide.y.toFixed(1)}" x2="${armEnd.x.toFixed(1)}" y2="${armEnd.y.toFixed(1)}" stroke="#f5a524" stroke-width="4" stroke-linecap="square"/>`);
+    tags.push('STOP ARM');
+  }
+
+  const indicator = stateValueAt(events, actorId, 'lights.indicator', frameTime);
+  if ((indicator === 'left' || indicator === 'right' || indicator === 'hazard')
+      && deterministicFlashPhase(frameTime, 1.5) === 0) {
+    const corners = obbCorners(pose, pose.headingRad, dims.l, dims.w)
+      .map((p) => pointToScreen(p, camera, scale, width, height));
+    const sides = indicator === 'hazard' ? [0, 1] : indicator === 'left' ? [0] : [1];
+    for (const side of sides) {
+      const corner = corners[side];
+      const outward = side === 0 ? left : { x: -left.x, y: -left.y };
+      layers.push(`<polygon points="${point(add(corner, forward, 5))} ${point(add(corner, outward, 4))} ${point(add(corner, forward, -3))}" fill="#f5a524"/>`);
+    }
+  }
+  if (indicator === 'left') tags.push('LEFT');
+  else if (indicator === 'right') tags.push('RIGHT');
+  else if (indicator === 'hazard') tags.push('HAZARD');
+
+  if (stateValueAt(events, actorId, 'lights.brake', frameTime) === true) {
+    const corners = obbCorners(pose, pose.headingRad, dims.l, dims.w)
+      .map((p) => pointToScreen(p, camera, scale, width, height));
+    layers.push(`<line x1="${corners[2].x.toFixed(1)}" y1="${corners[2].y.toFixed(1)}" x2="${corners[3].x.toFixed(1)}" y2="${corners[3].y.toFixed(1)}" stroke="#e5484d" stroke-width="4"/>`);
+    tags.push('BRAKE');
+  }
+
+  const tagX = center.x + radius + 8;
+  const tagY = center.y - ((tags.length - 1) * 11) / 2;
+  for (let i = 0; i < tags.length; i += 1) {
+    layers.push(`<text x="${tagX.toFixed(1)}" y="${(tagY + i * 11).toFixed(1)}" fill="#ffffff" font-family="monospace" font-size="9">${tags[i]}</text>`);
+  }
+  return layers;
+}
+function renderedEnvironment(instanceDoc) {
+  const operational = instanceDoc.input.operationalConditions ?? {};
+  const authored = instanceDoc.environment
+    ?? instanceDoc.authoredEnvironment
+    ?? instanceDoc.manifest?.environment
+    ?? null;
+  return {
+    weather: authored?.weather ?? operational.weather ?? null,
+    timeOfDay: authored?.timeOfDay ?? operational.timeOfDay ?? null,
+    frictionScale: typeof authored?.frictionScale === 'number'
+      ? authored.frictionScale
+      : operational.effects?.frictionScale ?? null,
+  };
+}
+
+function weatherBadgeText(environment) {
+  const fields = [];
+  if (environment.weather && environment.weather !== 'clear') {
+    fields.push(`WEATHER: ${environment.weather}`);
+  }
+  if (environment.timeOfDay && environment.timeOfDay !== 'day' && environment.timeOfDay !== 'noon') {
+    fields.push(`TIME: ${environment.timeOfDay}`);
+  }
+  if (typeof environment.frictionScale === 'number' && environment.frictionScale !== 1) {
+    fields.push(`GRIP: x${environment.frictionScale}`);
+  }
+  return fields.join(' | ');
+}
+
 
 function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, width, height, scale, underlay, redact }) {
   const dims = actorDims(instanceDoc);
   const staticIds = actorStatic(instanceDoc);
   const kinds = actorKinds(trace);
   const actorIds = sortedActorIdsFromTrace(trace);
+  const environment = renderedEnvironment(instanceDoc);
   const layers = [];
   layers.push(`<rect width="100%" height="100%" fill="#101820"/>`);
   layers.push(`<g stroke="#314459" stroke-width="1" opacity="0.55">`);
@@ -266,7 +428,19 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
   // Lane/junction underlay so a vision judge sees roads, not boxes on a grid.
   if (underlay) {
     const project = (p) => pointToScreen(p, camera, scale, width, height);
-    layers.push(...underlaySvgLayers(underlay, { camera, scale, width, height }, project));
+    layers.push(...underlaySvgLayers(
+      underlay,
+      { camera, scale, width, height },
+      project,
+      instanceDoc.input.surfacePatches,
+      environment.weather,
+      {
+        programs: instanceDoc.input.signalPrograms,
+        ticks: trace.ticks.signals,
+        tickIndex: index,
+        frameTime,
+      },
+    ));
   }
 
   // Recent trace paths around the incident, by actor id.
@@ -296,6 +470,13 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     }
   }
 
+  // Fixed catalog props: solid slate OBBs, distinct from dashed occluders.
+  layers.push(...propSvgLayer(
+    instanceDoc.input.props,
+    { camera, scale, width, height },
+    (p) => pointToScreen(p, camera, scale, width, height),
+  ));
+
   for (const id of actorIds) {
     const p = poseAt(trace, id, index);
     if (!p.present) continue;
@@ -310,11 +491,11 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     } else {
       const pts = obbCorners(p, p.headingRad, d.l, d.w).map((q) => pointToScreen(q, camera, scale, width, height));
       layers.push(`<polygon points="${polygon(pts)}" fill="${color}" fill-opacity="0.9" stroke="#ffffff" stroke-width="1.5"/>`);
-      // Emergency light bar, from the trace's recorded lights.emergency state.
+      // Emergency light bar, from the shared recorded-state decoder.
       // Flash phase derives from frame time only — deterministic re-renders.
-      const emergency = emergencyLightStateAt(trace.events, id, frameTime);
+      const emergency = stateValueAt(trace.events, id, 'lights.emergency', frameTime) ?? 'off';
       if (emergency === 'flashing' || emergency === 'flashing_siren') {
-        const phase = emergencyFlashPhase(frameTime);
+        const phase = deterministicFlashPhase(frameTime, 4);
         const f = { x: Math.cos(p.headingRad), y: Math.sin(p.headingRad) };
         const r = { x: -Math.sin(p.headingRad), y: Math.cos(p.headingRad) };
         const lampR = Math.max(2.5, 0.28 * scale);
@@ -332,6 +513,18 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
       const c = pointToScreen(p, camera, scale, width, height);
       if (!redact) layers.push(`<text x="${c.x.toFixed(1)}" y="${(c.y - 10).toFixed(1)}" fill="#fff" font-family="monospace" font-size="13" text-anchor="middle">${esc(id)}${staticIds.has(id) ? ' (static)' : ''}</text>`);
     }
+    layers.push(...actorStateSvgLayer({
+      events: trace.events,
+      actorId: id,
+      frameTime,
+      pose: p,
+      dims: d,
+      shape: g.shape,
+      camera,
+      scale,
+      width,
+      height,
+    }));
   }
 
   layers.push(`<g font-family="monospace" font-size="14" fill="#e7edf5">`);
@@ -344,6 +537,10 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
     layers.push(`<text x="18" y="26">${esc(trace.header.mapId)} frame ${frameNo} t=${frameTime.toFixed(3)}s camera=${camera.basis}</text>`);
     layers.push(`<text x="18" y="46">actors=${actorIds.join(', ')} minTTC=${minTtc ? `${minTtc.value.toFixed(3)}s @ ${minTtc.t.toFixed(3)}s ${minTtc.pair.join('/')}` : '—'}</text>`);
     layers.push(`<text x="18" y="66">reveal=${r ? `${r.value.toFixed(3)}s open=${r.losOpenT.toFixed(3)} conflict=${r.conflictT.toFixed(3)} occ=${r.occluderId ?? 'any'}` : '—'}</text>`);
+  }
+  const weatherBadge = weatherBadgeText(environment);
+  if (weatherBadge) {
+    layers.push(`<text x="18" y="${redact ? 46 : 86}">${esc(weatherBadge)}</text>`);
   }
   layers.push(`</g>`);
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${layers.join('\n')}</svg>`;
@@ -371,7 +568,15 @@ function loadUnderlayAssets(devAssetsRoot, mapId) {
     locationsDoc = JSON.parse(gunzipSync(locationsBytes).toString('utf8'));
     locationsSha256 = sha256Bytes(locationsBytes);
   }
-  const underlay = underlayFromTopology(topology, locationsDoc);
+  const signalsPath = join(mapDir, 'derived', 'signals.json.gz');
+  let signalsDoc = null;
+  let signalsSha256 = null;
+  if (existsSync(signalsPath)) {
+    const signalsBytes = readFileSync(signalsPath);
+    signalsDoc = JSON.parse(gunzipSync(signalsBytes).toString('utf8'));
+    signalsSha256 = sha256Bytes(signalsBytes);
+  }
+  const underlay = underlayFromTopology(topology, locationsDoc, signalsDoc);
   return {
     underlay,
     provenance: {
@@ -381,8 +586,13 @@ function loadUnderlayAssets(devAssetsRoot, mapId) {
       topologyMapName: underlay.mapName,
       locationsFile: locationsDoc ? locationsPath : null,
       locationsSha256,
+      signalsFile: signalsDoc ? signalsPath : null,
+      signalsSha256,
       laneCount: underlay.lanes.length,
       crosswalkCount: underlay.crosswalks.length,
+      signalFeatureCount: underlay.furniture.length,
+      signalHeadCount: underlay.furniture.filter((feature) => feature.kind === 'signal_head').length,
+      staticSignCount: underlay.furniture.filter((feature) => feature.kind === 'sign').length,
       // Crosswalk bands are anchor+heading approximations from derived
       // locations, not surveyed outlines. Recorded so nobody mistakes them.
       crosswalksApproximate: underlay.crosswalks.length > 0,
@@ -413,15 +623,25 @@ export async function renderTrace(options) {
   const selectedTimes = (
     args.times ?? (args.fullClip ? fullClipFrameTimes(trace, args.fps) : defaultFrameTimes(trace))
   ).map((t) => trace.ticks.t[nearestIndex(trace.ticks.t, t)]);
+  const selectedIndices = selectedTimes.map((frameTime) => nearestIndex(trace.ticks.t, frameTime));
+  const view = chooseViewScale(
+    trace,
+    instanceDoc,
+    selectedIndices,
+    args.camera,
+    args.scale,
+    args.width,
+    args.height,
+  );
   const framesDir = join(outDir, 'frames');
   mkdirSync(framesDir, { recursive: true });
 
   const frameRecords = [];
   for (let i = 0; i < selectedTimes.length; i += 1) {
     const frameTime = selectedTimes[i];
-    const index = nearestIndex(trace.ticks.t, frameTime);
+    const index = selectedIndices[i];
     const camera = cameraFor(trace, index, args.camera);
-    const svg = renderSvg({ instanceDoc, trace, index, frameNo: i, frameTime, camera, width: args.width, height: args.height, scale: args.scale, underlay: underlayAssets?.underlay ?? null, redact: args.redact });
+    const svg = renderSvg({ instanceDoc, trace, index, frameNo: i, frameTime, camera, width: args.width, height: args.height, scale: view.scale, underlay: underlayAssets?.underlay ?? null, redact: args.redact });
     const svgPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.svg`);
     const pngPath = join(framesDir, `frame-${String(i).padStart(3, '0')}.png`);
     writeFileSync(svgPath, svg);
@@ -434,6 +654,7 @@ export async function renderTrace(options) {
       svgSha256: sha256Bytes(readFileSync(svgPath)),
       pngSha256: sha256Bytes(readFileSync(pngPath)),
       camera,
+      scale: view.scale,
     });
   }
 
@@ -456,6 +677,16 @@ export async function renderTrace(options) {
     deterministic: true,
     renderer: 'scripts/render-trace.mjs@2',
     redact: args.redact,
+    incidentWindow: incidentWindow(trace),
+    viewport: {
+      width: args.width,
+      height: args.height,
+      requestedScale: args.scale,
+      chosenScale: view.scale,
+      scaleLadder: view.ladder,
+      requiredActorIds: view.requiredActorIds,
+      edgeMarginPx: VIEW_EDGE_MARGIN_PX,
+    },
     underlay: underlayAssets ? underlayAssets.provenance : null,
     scenarioId: instanceDoc.manifest?.replayKey?.templateId ?? null,
     instanceId: instanceDoc.manifest?.instanceId ?? null,
@@ -476,6 +707,7 @@ export async function renderTrace(options) {
       index: f.index,
       t: f.t,
       camera: f.camera,
+      scale: f.scale,
       svg: basename(f.svg),
       png: basename(f.png),
       svgSha256: f.svgSha256,

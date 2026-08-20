@@ -131,7 +131,6 @@ export const MAPS = [
  */
 const REVIEW_MODEL = 'gpt-5.6-sol';
 const REVIEW_EFFORT = 'medium';
-const REVIEW_STRATEGY = 'spread8';
 
 const COMPILER_TERMS = /\b(brak|lead|vehicle|car|truck|bus|pedestrian|child|cycl|scooter|junction|intersection|cross|cut.?in|lane chang|swerve|oncoming|u.?turn|parking|pull.?out|work.?zone|road.?work|closure)/i;
 
@@ -826,6 +825,7 @@ async function normalizeRender(outDir, redact) {
 }
 
 async function renderCell(context, cell, outDir, { redact = false, tier = '2d', composition = 'incident' } = {}) {
+  await rm(outDir, { recursive: true, force: true });
   await mkdir(outDir, { recursive: true });
   const cliArgs = [
     context.cli,
@@ -857,23 +857,7 @@ async function renderCell(context, cell, outDir, { redact = false, tier = '2d', 
   if (tier === '2d') cliArgs.push('--dev-assets', join(context.root, 'dev-assets'));
   if (redact) cliArgs.push('--redact');
   const builtIn = await command('node', cliArgs, { cwd: context.root, allowFailure: true, timeout: tier === '3d' ? 900_000 : 180_000 });
-  if (builtIn.code !== 0 && tier === '2d') {
-    const fallback = [
-      join(context.root, 'scripts', 'render-trace.mjs'),
-      '--instance',
-      cell.instanceFile,
-      '--trace',
-      cell.traceFile,
-      '--out',
-      outDir,
-      '--camera',
-      'follow-ego',
-      '--fps',
-      '12',
-    ];
-    if (redact) fallback.push('--redact');
-    await command('node', fallback, { cwd: context.root, timeout: 180_000 });
-  } else if (builtIn.code !== 0) {
+  if (builtIn.code !== 0) {
     throw new Error(String(builtIn.stderr).slice(-2000));
   }
   await normalizeRender(outDir, redact);
@@ -1031,7 +1015,7 @@ export class ShowcasePipeline {
       },
       models: {
         author: { model: job.authorModel ?? null, effort: job.authorEffort ?? null },
-        review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT, strategy: REVIEW_STRATEGY },
+        review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT },
         engineRequested: job.engine ?? 'auto',
         engineResolved: null,
       },
@@ -1180,7 +1164,7 @@ export class ShowcasePipeline {
         methodology: {
           profile: job.methodology ?? 'custom',
           author: { model: job.authorModel, effort: job.authorEffort },
-          review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT, strategy: REVIEW_STRATEGY },
+          review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT },
           fallbackToVisual: job.fallbackToVisual === true,
         },
         semanticContract,
@@ -1479,7 +1463,6 @@ export class ShowcasePipeline {
               '--render', join(render2dDir, item.redacted),
               '--model', REVIEW_MODEL,
               '--effort', REVIEW_EFFORT,
-              '--strategy', REVIEW_STRATEGY,
             ], {
               cwd: this.root,
               timeout: 600_000,

@@ -49,7 +49,7 @@ function actor(id: string, x: number, speedMps = 0): ActorRuntime {
     pendingMotionDirection: null,
     hasMoved: false,
     standstillSinceS: null,
-    requiredDecelMax: 0,
+    requiredDecelContext: { value: 0, t: 0, frictionScale: 1 },
   };
 }
 

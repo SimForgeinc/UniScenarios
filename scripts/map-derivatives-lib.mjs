@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
+import { CoordinateFrame, signalsFromGeoJson } from '../packages/xodr-tools/dist/index.js';
 
 const GLB_MAGIC = 0x46546c67;
 const JSON_CHUNK = 0x4e4f534a;
@@ -489,4 +490,50 @@ export function atomicWrite(file, contents) {
   const temporary = `${file}.tmp-${process.pid}`;
   fs.writeFileSync(temporary, contents);
   fs.renameSync(temporary, file);
+}
+
+/**
+ * Normalize the raw WGS84 traffic-furniture sidecar into the trace/topology
+ * frame. Projection deliberately reuses xodr-tools; the renderer consumes only
+ * this compact derivative and therefore keeps projection and Three.js out of
+ * its runtime dependency graph.
+ */
+export function buildTraceSignalArtifact(xodrText, signalsGeoJson) {
+  const frame = CoordinateFrame.fromMapAssets(xodrText);
+  const normalized = signalsFromGeoJson(signalsGeoJson, frame);
+  const furniture = [];
+  for (const feature of normalized) {
+    if (!feature.withinExtents || feature.featureKind !== 'signal') continue;
+    const rawCategory = feature.properties.signal_category;
+    const category = typeof rawCategory === 'string' ? rawCategory : feature.category;
+    const isHead = category === 'traffic_light' && feature.dynamic;
+    const isSign = category !== 'traffic_light' && category !== 'stop_line';
+    if (!isHead && !isSign) continue;
+    const speedLimitMph = Number(feature.properties.speed_limit_mph);
+    const speedLimitKph = Number(feature.properties.speed_limit_kph);
+    furniture.push({
+      id: feature.id,
+      kind: isHead ? 'signal_head' : 'sign',
+      category,
+      x: feature.scenePosition[0],
+      y: -feature.scenePosition[2],
+      headingRad: Number.isFinite(Number(feature.properties.hdg)) ? Number(feature.properties.hdg) : 0,
+      widthM: feature.width,
+      heightM: feature.height,
+      mutcdCode: feature.mutcdCode,
+      signDescription: feature.signDescription,
+      speedLimitMph: Number.isFinite(speedLimitMph) && speedLimitMph > 0 ? speedLimitMph : null,
+      speedLimitKph: Number.isFinite(speedLimitKph) && speedLimitKph > 0 ? speedLimitKph : null,
+    });
+  }
+  furniture.sort((a, b) => a.id.localeCompare(b.id));
+  return {
+    schemaVersion: 1,
+    coordinateFrame: 'trace-topology-x-east-y-north',
+    furniture,
+    counts: {
+      signalHeads: furniture.filter((feature) => feature.kind === 'signal_head').length,
+      signs: furniture.filter((feature) => feature.kind === 'sign').length,
+    },
+  };
 }

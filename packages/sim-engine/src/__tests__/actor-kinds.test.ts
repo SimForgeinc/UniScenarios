@@ -102,7 +102,7 @@ describe('executable operational conditions', () => {
     expect(trace.header.inputHash).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it('uses weather friction in trace-level hard eligibility', () => {
+  const frictionScenario = () => {
     const graph = syntheticGraph();
     const input = parseSimScenarioInput({
       mapId: 'friction',
@@ -117,16 +117,48 @@ describe('executable operational conditions', () => {
         effects: { visibilityRangeM: 10_000, frictionScale: 0.5, trafficSpeedFactor: 1 },
       },
     });
-    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    return runSimulation(input, { graph, guards: 'collect' }).trace;
+  };
+
+  const gripSourceOf = (detail: unknown): unknown => (
+    detail !== null && typeof detail === 'object' && 'gripSource' in detail
+      ? detail.gripSource
+      : undefined
+  );
+
+  // A demand of 5 m/s^2 is achievable on dry asphalt (~7.85) but not on grip 0.5 (~3.92),
+  // so the wet-road ceiling is the only thing that makes this trace unavoidable.
+  it('uses the grip recorded under the actor for hard eligibility', () => {
+    const trace = frictionScenario();
     const forced = {
       ...trace,
       metrics: {
         ...trace.metrics,
         minTTC: { value: 1, t: 5, pair: ['car', 'hazard'] as [string, string] },
         requiredDecelMax: { car: 5 },
+        requiredDecelContext: { car: { value: 5, t: 5, frictionScale: 0.5 } },
       },
     };
-    expect(evaluateTrace(forced).findings.map((finding) => finding.code))
-      .toContain('physically_unavoidable');
+    const finding = evaluateTrace(forced).findings.find((f) => f.code === 'physically_unavoidable');
+    expect(finding).toBeDefined();
+    expect(gripSourceOf(finding?.detail)).toBe('per-tick');
+  });
+
+  // A trace predating per-tick grip provenance must fall back to scene friction audibly,
+  // never silently to a dry-road ceiling.
+  it('falls back to scene friction for traces without recorded grip', () => {
+    const trace = frictionScenario();
+    const { requiredDecelContext: _dropped, ...legacyMetrics } = trace.metrics;
+    const forced = {
+      ...trace,
+      metrics: {
+        ...legacyMetrics,
+        minTTC: { value: 1, t: 5, pair: ['car', 'hazard'] as [string, string] },
+        requiredDecelMax: { car: 5 },
+      },
+    };
+    const finding = evaluateTrace(forced).findings.find((f) => f.code === 'physically_unavoidable');
+    expect(finding).toBeDefined();
+    expect(gripSourceOf(finding?.detail)).toBe('scene');
   });
 });

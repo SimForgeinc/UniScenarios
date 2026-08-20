@@ -248,6 +248,7 @@ interface Plan {
   position: Vec2;
   heading: number;
   requiredDecel: number;
+  frictionScale: number;
   retire: boolean;
   /** Completed lane change: swap the route after the apply pass. */
   swap: { route: Route; s: number; separationM: number; targetRsl: string | null } | null;
@@ -649,7 +650,11 @@ class Simulation {
       stateKeys: new Map(),
       roadControlStates: new Map(),
       standstillSinceS: null,
-      requiredDecelMax: 0,
+      requiredDecelContext: {
+        value: 0,
+        t: 0,
+        frictionScale: this.resolvedInput.operationalConditions.effects.frictionScale,
+      },
       crashDisabledAtS: null,
       crashDisabledReason: null,
       hasMoved: false,
@@ -2023,6 +2028,7 @@ class Simulation {
       position: a.position,
       heading: a.headingRad,
       requiredDecel: 0,
+      frictionScale: this.surface.baselineFrictionScale,
       retire: false,
       swap: null,
     };
@@ -2039,8 +2045,9 @@ class Simulation {
       return plan;
     }
 
+    const frictionScale = this.frictionScaleFor(a);
+    plan.frictionScale = frictionScale;
     if (a.crashDisabledAtS != null) {
-      const frictionScale = this.frictionScaleFor(a);
       const emergencyDecel = Math.min(limitsFor(a).brakeHard * frictionScale, Math.max(0, a.speedMps / this.dt));
       const speed = Math.max(0, a.speedMps - emergencyDecel * this.dt);
       plan.accel = -emergencyDecel;
@@ -2122,7 +2129,7 @@ class Simulation {
     const conflict = a.bestEffortWorldPath ? null : this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
-    const frictionScale = this.frictionScaleFor(a);
+    plan.frictionScale = frictionScale;
     accel = Math.max(accel, -lim.brakeHard * frictionScale);
     // The body still brakes for a generated car in front — `accel` above is
     // untouched — but the *evidence* figure `requiredDecelMax` must keep
@@ -2370,7 +2377,19 @@ class Simulation {
       a.lateralReferenceAccelMps2 = plan.lateralReferenceAccel;
       a.position = plan.position;
       a.headingRad = plan.heading;
-      if (t >= 0) a.requiredDecelMax = Math.max(a.requiredDecelMax, plan.requiredDecel);
+      if (t >= 0 && (
+        plan.requiredDecel > a.requiredDecelContext.value
+        || (
+          plan.requiredDecel === a.requiredDecelContext.value
+          && plan.frictionScale < a.requiredDecelContext.frictionScale
+        )
+      )) {
+        a.requiredDecelContext = {
+          value: plan.requiredDecel,
+          t,
+          frictionScale: plan.frictionScale,
+        };
+      }
 
       if (a.speedMps < 0.05) {
         if (a.standstillSinceS === null) a.standstillSinceS = t;
@@ -2626,7 +2645,7 @@ class Simulation {
     const signals: Record<string, SignalTrack> = {};
     for (const id of this.signals.ids()) signals[id] = this.signalTracks.get(id)!;
     for (const a of this.actors) {
-      this.metrics.requiredDecelMax[a.id] = a.requiredDecelMax;
+      this.metrics.requiredDecelContext[a.id] = a.requiredDecelContext;
     }
     return {
       header: {

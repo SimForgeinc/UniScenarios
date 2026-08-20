@@ -69,7 +69,7 @@ function pathActor(
     pendingMotionDirection: null,
     hasMoved: false,
     standstillSinceS: null,
-    requiredDecelMax: 0,
+    requiredDecelContext: { value: 0, t: 0, frictionScale: 1 },
   };
 }
 

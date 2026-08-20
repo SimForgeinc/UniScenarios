@@ -281,7 +281,7 @@ def judge(args):
         staged = pathlib.Path(tmp)
         shutil.copyfile(cell / 'meta.json', staged / 'meta.json')
         os.symlink(render, staged / 'render', target_is_directory=True)
-        result = module.judge_cell(str(staged), args.model, args.effort, args.strategy,
+        result = module.judge_cell(str(staged), args.model, args.effort, module.STRATEGIES[0],
                                    require_redacted=True)
     # The blind judge never sees the brief, so its verdict is presentation-tier evidence only.
     result['tier'] = '2d'
@@ -294,8 +294,62 @@ def judge(args):
 # presentation axis are out of scope here. Its semantic verdict is the acceptance
 # authority, and a completed deterministic 3D render is the transfer proof.
 SEMANTIC2D_PROMPT = """You are reviewing a top-down SCHEMATIC 2D rendering of a simulated traffic scenario.
-The rendering is deliberately abstract: boxes for vehicles, dots for pedestrians, plain road geometry.
-Never judge visual quality, detail, lighting, or realism of the drawing itself.
+The rendering is deliberately abstract. Never judge visual quality, detail, lighting, or realism of
+the drawing itself. Judge only what the traffic does.
+
+LEGEND -- this is the complete visual language. Nothing is drawn that is not listed here.
+
+Actors (filled shapes, oriented by heading; a short trail shows recent motion):
+  blue box          the ego vehicle
+  green box         another vehicle
+  violet box        motorcycle
+  amber box         a static/parked non-VRU body
+  red disc          pedestrian
+  orange disc       cyclist or scooter
+  tan disc          animal
+  purple disc       sidewalk robot or drone
+  Discs carry a short white line showing facing. Boxes are drawn to true length and width.
+
+Road (drawn from the real HD map):
+  gray bands        driving lanes;  dark gray shoulder;  gray parking;  green bike lane;
+  brown-gray sidewalk;  wider gray patch = junction
+  thin pale lines   lane boundary markings, normally solid
+  faint dashed lines  markings that are PHYSICALLY NOT VISIBLE (snow-covered or otherwise obscured)
+  white stripe band   crosswalk
+
+Traffic control:
+  filled circle     a traffic signal head. Red, yellow, green, or dark gray when unlit/blacked out.
+                    A head that alternates between its color and dark gray between frames is FLASHING.
+  triangle beside a head   a protected arrow movement, pointing where the arrow protects
+  red octagon       stop sign;  white inverted triangle with red edge   yield sign
+  white square with a number   speed limit (mph);  small white square   another regulatory sign
+
+Objects:
+  gray rectangles           authored physical objects: cones, barrels, barricades, signs, arrow boards
+  dashed brown/orange boxes  sight-line occluders (they block visibility)
+
+Road surface patches (translucent hatched area over a lane, labeled with its material):
+  ICE, SNOW, WATER, WET LEAVES, GRAVEL, SAND, OIL, POLISHED, GRIT
+  These are real low-grip surfaces: vehicles on them genuinely cannot brake or turn as hard.
+
+Actor state (drawn next to the actor, with a short uppercase tag):
+  HALT       a person signalling traffic to stop (bar across their facing)
+  WAVE       a person waving traffic through (chevron)
+  POINT      a person pointing;  PHONE   a person distracted by a phone
+  STOP/SLOW  a handheld traffic paddle showing that face
+  STOP ARM   a school bus stop arm extended
+  LEFT/RIGHT/HAZARD   turn indicators or hazards, blinking between frames
+  BRAKE      brake lights on
+  red/blue roof lamps with a halo   emergency lights active
+
+A text line reports the conditions in force, e.g. "WEATHER: snow | TIME: dusk | GRIP: x0.35".
+GRIP below x1 means genuinely reduced tyre friction. Absent fields are default (clear, day, full grip).
+
+Tags and labels state only recorded physical conditions. They never tell you whether the requested
+behavior happened -- you must judge that from the motion you can see.
+
+Frames are sampled around the critical moment of the clip, not evenly, so consecutive frames near the
+conflict may be only a fraction of a second apart. Judge order of events from the timestamps shown.
 
 Judge ONLY what the traffic does, against the user's exact request:
 1. mechanismFidelity: Does the visible motion implement the exact requested causal mechanism
@@ -334,13 +388,51 @@ def semantic2d_verdict(emission):
     return {'semanticMatch': bool(match), 'scenarioDefectCodes': codes}
 
 
-def _select_review_frames(frames_dir, count=8):
-    """Evenly spaced PNG keyframes across the full clip, first and last included."""
+def _select_review_frames(render_dir, count=8):
+    """Select deterministic incident-centered review frames from a render manifest."""
+    frames_dir = render_dir / 'frames'
     frames = sorted(frames_dir.glob('frame-*.png'))
+    manifest = load(render_dir / 'manifest.json')
+    records = {
+        pathlib.Path(record['png']).name: record
+        for record in manifest.get('frames', [])
+        if isinstance(record, dict) and isinstance(record.get('png'), str)
+        and isinstance(record.get('t'), (int, float))
+    }
+    missing = [frame.name for frame in frames if frame.name not in records]
+    if missing:
+        raise RuntimeError(f'render manifest has no timestamp for {missing[0]}')
     if len(frames) <= count:
-        return frames
-    last = len(frames) - 1
-    return [frames[round(last * index / (count - 1))] for index in range(count)]
+        return frames, [records[frame.name]['t'] for frame in frames], manifest.get('incidentWindow')
+
+    window = manifest.get('incidentWindow')
+    if not isinstance(window, dict):
+        raise RuntimeError('render manifest has no incidentWindow')
+    onset = window.get('losOpenT')
+    conflict = window.get('conflictT')
+    if not isinstance(onset, (int, float)) or not isinstance(conflict, (int, float)):
+        raise RuntimeError('render manifest incidentWindow has invalid timestamps')
+    if conflict < onset:
+        raise RuntimeError('render manifest incidentWindow ends before its onset')
+
+    times = [records[frame.name]['t'] for frame in frames]
+    selected = {0, len(frames) - 1}
+    incident_budget = count - len(selected)
+    aftermath = min(times[-1], conflict + 0.8)
+    if incident_budget == 1:
+        targets = [conflict]
+    else:
+        core_budget = incident_budget - 1
+        targets = [
+            onset + (conflict - onset) * index / max(1, core_budget - 1)
+            for index in range(core_budget)
+        ]
+        targets.append(aftermath)
+    for target in targets:
+        available = (index for index in range(1, len(frames) - 1) if index not in selected)
+        selected.add(min(available, key=lambda index: (abs(times[index] - target), index)))
+    ordered = sorted(selected)
+    return [frames[index] for index in ordered], [times[index] for index in ordered], window
 
 
 def _authored_scene_evidence(instance_path, trace_path):
@@ -375,7 +467,8 @@ def semantic_2d(args):
     futil.assert_vision_session(args.model)
     brief = load(args.brief)
     render = pathlib.Path(args.render)
-    frames = [frame for frame in _select_review_frames(render / 'frames') if frame.is_file()]
+    selected, frame_times, incident_window = _select_review_frames(render)
+    frames = [frame for frame in selected if frame.is_file()]
     if not frames:
         raise RuntimeError(f'no 2D review frames in {render}')
     cell = pathlib.Path(args.cell)
@@ -413,6 +506,8 @@ def semantic_2d(args):
         **emission,
         **semantic2d_verdict(emission),
         'framesUsed': [str(frame.relative_to(render)) for frame in frames],
+        'frameTimesUsed': frame_times,
+        'incidentWindow': incident_window,
         'latencyS': round(wall, 2),
         'tokens': {
             'in': usage.get('input_tokens'),
@@ -555,7 +650,6 @@ def main():
     cmd.add_argument('--render', required=True)
     cmd.add_argument('--model', default='gpt-5.6-sol')
     cmd.add_argument('--effort', default='medium')
-    cmd.add_argument('--strategy', default='spread8')
     cmd.set_defaults(func=judge)
 
     cmd = sub.add_parser('semantic2d')

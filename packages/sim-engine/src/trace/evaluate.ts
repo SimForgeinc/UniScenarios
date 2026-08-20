@@ -24,8 +24,10 @@ export interface EvaluateFilters {
   readonly trivialTtcS?: number;
   /** PET above this is a trivially separated crossing. Default 1.5 s. */
   readonly trivialPetS?: number;
-  /** Road-friction decel ceiling, m/s². Default `0.8 × 9.81 = 7.85`. */
+  /** Absolute decel ceiling override, m/s². Otherwise uses `0.8g × grip at peak demand`. */
   readonly maxAchievableDecelMps2?: number;
+  /** Scene-wide grip used only for traces predating per-tick demand context. */
+  readonly fallbackFrictionScale?: number;
   /** Criticality window. Defaults to the proportional, edge-safe clip window. */
   readonly window?: [number, number];
   /** Treat any collision as a rejection. Default `false`. */
@@ -78,6 +80,8 @@ export interface TraceEvaluation {
     readonly criticality: number | null;
     readonly criticalityT: number | null;
     readonly requiredDecelMax: number;
+    readonly requiredDecelCeiling: number;
+    readonly requiredDecelGripSource: 'per-tick' | 'scene' | 'filter';
     readonly collisions: number;
     readonly neverFired: number;
     readonly occlusionUnproven: number;
@@ -87,6 +91,11 @@ export interface TraceEvaluation {
 export const DEFAULT_TRIVIAL_TTC_S = 3;
 export const DEFAULT_TRIVIAL_PET_S = 1.5;
 export const DEFAULT_MAX_DECEL_MPS2 = 0.8 * 9.81;
+
+/** The single plausibility-ceiling policy used for both current and legacy traces. */
+function achievableDecelCeiling(overrideMps2: number | undefined, frictionScale: number): number {
+  return overrideMps2 ?? DEFAULT_MAX_DECEL_MPS2 * frictionScale;
+}
 
 function seriesPairMatches(actual: readonly string[], expected?: readonly [string, string]): boolean {
   return expected === undefined || (actual[0] === expected[0] && actual[1] === expected[1]) ||
@@ -166,7 +175,7 @@ export function evaluateMetrics(
   const tags: string[] = [];
   const trivialTtc = filters.trivialTtcS ?? DEFAULT_TRIVIAL_TTC_S;
   const trivialPet = filters.trivialPetS ?? DEFAULT_TRIVIAL_PET_S;
-  const maxDecel = filters.maxAchievableDecelMps2 ?? DEFAULT_MAX_DECEL_MPS2;
+  const fallbackFrictionScale = filters.fallbackFrictionScale ?? 1;
   const [lo, hi] = filters.window ?? criticalityWindow(clipSeconds);
 
   const windowMetrics = criticalityMetricsInWindow(metrics, [lo, hi]);
@@ -217,20 +226,67 @@ export function evaluateMetrics(
 
   let worstDecel = 0;
   let worstActor = '';
+  let worstCeiling = achievableDecelCeiling(filters.maxAchievableDecelMps2, fallbackFrictionScale);
+  let worstGripSource: 'per-tick' | 'scene' | 'filter' =
+    filters.maxAchievableDecelMps2 === undefined ? 'scene' : 'filter';
+  let worstViolation: {
+    actorId: string;
+    requiredDecel: number;
+    ceiling: number;
+    gripSource: 'per-tick' | 'scene' | 'filter';
+    frictionScale: number;
+    t: number | null;
+    ratio: number;
+  } | null = null;
   const ambientActorIds = new Set(filters.ambientActorIds ?? []);
   for (const id of Object.keys(metrics.requiredDecelMax).sort()) {
     if (ambientActorIds.has(id)) continue;
-    const v = metrics.requiredDecelMax[id]!;
-    if (v > worstDecel) {
-      worstDecel = v;
+    const context = metrics.requiredDecelContext?.[id];
+    const requiredDecel = context?.value ?? metrics.requiredDecelMax[id]!;
+    const frictionScale = context?.frictionScale ?? fallbackFrictionScale;
+    const gripSource = filters.maxAchievableDecelMps2 !== undefined
+      ? 'filter' as const
+      : context
+        ? 'per-tick' as const
+        : 'scene' as const;
+    // The sole plausibility ceiling: explicit filter override, otherwise 0.8g
+    // scaled by the grip recorded under this actor at its peak demand.
+    const ceiling = achievableDecelCeiling(filters.maxAchievableDecelMps2, frictionScale);
+    if (requiredDecel > worstDecel || worstActor === '') {
+      worstDecel = requiredDecel;
       worstActor = id;
+      worstCeiling = ceiling;
+      worstGripSource = gripSource;
+    }
+    const ratio = ceiling > 0 ? requiredDecel / ceiling : Infinity;
+    if (requiredDecel > ceiling && (
+      worstViolation === null
+      || ratio > worstViolation.ratio
+      || (ratio === worstViolation.ratio && id < worstViolation.actorId)
+    )) {
+      worstViolation = {
+        actorId: id,
+        requiredDecel,
+        ceiling,
+        gripSource,
+        frictionScale,
+        t: context?.t ?? null,
+        ratio,
+      };
     }
   }
-  if (worstDecel > maxDecel) {
+  if (worstViolation) {
     findings.push({
       code: 'physically_unavoidable',
-      reason: `${worstActor} needed ${worstDecel.toFixed(2)} m/s², above the ${maxDecel.toFixed(2)} m/s² friction ceiling`,
-      detail: { actorId: worstActor, requiredDecel: worstDecel, ceiling: maxDecel },
+      reason: `${worstViolation.actorId} needed ${worstViolation.requiredDecel.toFixed(2)} m/s², above the ${worstViolation.ceiling.toFixed(2)} m/s² friction ceiling`,
+      detail: {
+        actorId: worstViolation.actorId,
+        requiredDecel: worstViolation.requiredDecel,
+        ceiling: worstViolation.ceiling,
+        frictionScale: worstViolation.frictionScale,
+        gripSource: worstViolation.gripSource,
+        demandT: worstViolation.t,
+      },
     });
   }
 
@@ -298,6 +354,8 @@ export function evaluateMetrics(
       criticality: criticality?.value ?? null,
       criticalityT: criticality?.t ?? null,
       requiredDecelMax: worstDecel,
+      requiredDecelCeiling: worstCeiling,
+      requiredDecelGripSource: worstGripSource,
       collisions: metrics.collisions.length,
       neverFired: neverFired.length,
       occlusionUnproven: occlusionUnproven.length,
@@ -307,11 +365,10 @@ export function evaluateMetrics(
 
 /** Apply the reject filters to a trace. */
 export function evaluateTrace(trace: SimTrace, filters: EvaluateFilters = {}): TraceEvaluation {
-  const frictionScale = trace.header.operationalConditions?.effects.frictionScale ?? 1;
   return evaluateMetrics(trace.metrics, trace.header.clipSeconds, {
     ...filters,
     ambientActorIds: filters.ambientActorIds ?? trace.header.ambientActorIds ?? [],
-    maxAchievableDecelMps2:
-      filters.maxAchievableDecelMps2 ?? DEFAULT_MAX_DECEL_MPS2 * frictionScale,
+    fallbackFrictionScale:
+      filters.fallbackFrictionScale ?? trace.header.operationalConditions?.effects.frictionScale ?? 1,
   });
 }

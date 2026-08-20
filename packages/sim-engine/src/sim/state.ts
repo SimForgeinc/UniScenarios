@@ -18,6 +18,7 @@ import type {
   Interaction,
   TurnRelation,
 } from '../schema/input.js';
+import type { RequiredDecelContext } from '../trace/trace.js';
 
 /** The five axes. `set` owns one axis per key so two `set`s of different keys
  * coexist, matching "one axis, one owner" without over-serialising state. */
@@ -193,8 +194,8 @@ export interface ActorRuntime {
   pendingMotionDirection: 1 | -1 | null;
 
   standstillSinceS: number | null;
-  /** Running max of the decel that would have been required to stay safe. */
-  requiredDecelMax: number;
+  /** Peak demand together with the grip available on that exact tick. */
+  requiredDecelContext: RequiredDecelContext;
   /** Latched after the first material contact; propulsion never resumes. */
   crashDisabledAtS?: number | null;
   crashDisabledReason?: string | null;

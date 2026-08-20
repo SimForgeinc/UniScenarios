@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
 import {
-  analyzeRoadTiling, atomicWrite, classifyRoadsOnlySceneRoots, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, makeMarkingFirstRoadsOnlyGlb, readGlb, sha256, subsetSceneNodes, subsetSceneRoots,
+  analyzeRoadTiling, atomicWrite, buildTraceSignalArtifact, classifyRoadsOnlySceneRoots, collectManifestGlbs, geometryIdentity, makeGeometryOnlyGlb, makeMarkingFirstRoadsOnlyGlb, readGlb, sha256, subsetSceneNodes, subsetSceneRoots,
 } from './map-derivatives-lib.mjs';
 import { inspectPinnedToolchain, pinnedToolEnvironment } from './map-derivative-toolchain.mjs';
 import { buildStaticColliderArtifact, serializeStaticColliderArtifact } from './static-map-colliders-lib.mjs';
@@ -33,7 +33,7 @@ const mode = arg('mode', 'dry-run');
 const variant = arg('variant', 'all');
 if (!mapId || !/^[a-z0-9-]+$/.test(mapId)) throw new Error('Pass a safe map id with --map <id>');
 if (!['dry-run', 'build'].includes(mode)) throw new Error('--mode must be dry-run or build');
-if (!['all', 'geometry-only', 'roads-only', 'roads-only-v2', 'ktx2', 'static-colliders'].includes(variant)) throw new Error('--variant must be all, geometry-only, roads-only, roads-only-v2, ktx2, or static-colliders');
+if (!['all', 'geometry-only', 'roads-only', 'roads-only-v2', 'ktx2', 'static-colliders', 'signals'].includes(variant)) throw new Error('--variant must be all, geometry-only, roads-only, roads-only-v2, ktx2, static-colliders, or signals');
 
 const repository = path.resolve(import.meta.dirname, '..');
 const mapRoot = path.join(repository, 'dev-assets', mapId, '3d');
@@ -324,7 +324,45 @@ if (variant === 'ktx2' || variant === 'all') {
     runtime: { ktx2TranscoderPath: 'variants/basis/', assets: runtimeAssets },
   };
 }
+let traceSignals = null;
+if (variant === 'signals' || variant === 'all') {
+  const mapDirectory = path.dirname(mapRoot);
+  const xodrFile = path.join(mapDirectory, 'map.xodr');
+  const signalsFile = path.join(mapDirectory, 'signals.geojson.gz');
+  if (!fs.existsSync(xodrFile)) throw new Error(`Signal derivative requires ${xodrFile}`);
+  if (!fs.existsSync(signalsFile)) throw new Error(`Signal derivative requires ${signalsFile}`);
+  const xodrBytes = fs.readFileSync(xodrFile);
+  const signalsBytes = fs.readFileSync(signalsFile);
+  const signalsGeoJson = JSON.parse(zlib.gunzipSync(signalsBytes));
+  const artifact = buildTraceSignalArtifact(xodrBytes.toString('utf8'), signalsGeoJson);
+  const artifactBytes = zlib.gzipSync(Buffer.from(`${JSON.stringify(artifact)}\n`), { level: 9, mtime: 0 });
+  const derivedDirectory = path.join(mapDirectory, 'derived');
+  const artifactFile = path.join(derivedDirectory, 'signals.json.gz');
+  atomicWrite(artifactFile, artifactBytes);
+
+  const receiptFile = path.join(derivedDirectory, 'map-intel-build-receipt.json');
+  const receipt = fs.existsSync(receiptFile) ? JSON.parse(fs.readFileSync(receiptFile)) : {
+    contractVersion: 'uniscenario.map-intel-build/v1',
+    builder: { package: '@uniscenarios/map-derivative-toolchain', version: '1' },
+    mapId,
+    sourceHashes: {},
+    outputs: {},
+  };
+  receipt.sourceHashes ??= {};
+  receipt.outputs ??= {};
+  receipt.sourceHashes.signals = sha256(signalsBytes);
+  receipt.sourceHashes.xodr = sha256(xodrBytes);
+  receipt.outputs.traceSignals = {
+    path: 'derived/signals.json.gz',
+    sha256: sha256(artifactBytes),
+    sizeBytes: artifactBytes.length,
+    signalHeadCount: artifact.counts.signalHeads,
+    signCount: artifact.counts.signs,
+  };
+  atomicWrite(receiptFile, `${JSON.stringify(receipt, null, 2)}\n`);
+  traceSignals = { file: artifactFile, ...artifact.counts };
+}
 const variantManifest = { schemaVersion: 1, sourceManifestSha256: sha256(manifestBytes), variants };
 atomicWrite(variantManifestFile, `${JSON.stringify(variantManifest, null, 2)}\n`);
 atomicWrite(path.join(outputRoot, 'build-plan.json'), `${JSON.stringify(plan, null, 2)}\n`);
-console.log(JSON.stringify({ ...plan, outputRoot, variants: Object.keys(variants) }, null, 2));
+console.log(JSON.stringify({ ...plan, outputRoot, variants: Object.keys(variants), traceSignals }, null, 2));

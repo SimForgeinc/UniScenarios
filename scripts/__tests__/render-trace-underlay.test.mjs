@@ -5,13 +5,13 @@ import {
   LANE_STYLES,
   actorGlyph,
   crosswalksFromLocations,
-  emergencyFlashPhase,
-  emergencyLightStateAt,
+  deterministicFlashPhase,
   offsetPolyline,
+  stateValueAt,
   underlayFromTopology,
   underlaySvgLayers,
   viewportBounds,
-} from '../render-trace-underlay-lib.mjs';
+} from '../../packages/trace-render/src/underlay.mjs';
 
 /** Minimal topology-index shape: two driving lanes, one sidewalk, one junction-internal lane. */
 function topology() {
@@ -181,7 +181,7 @@ test('actorGlyph falls back to legacy id semantics when kind is missing', () => 
   assert.deepEqual(actorGlyph('ego', null, false), { shape: 'box', color: '#45a3ff' });
 });
 
-test('emergencyLightStateAt samples the latest lights.emergency event at or before t', () => {
+test('stateValueAt samples the latest state_set for a key at or before t', () => {
   const events = [
     { t: 1.0, kind: 'state_set', actorId: 'ambulance', key: 'lights.emergency', value: 'flashing' },
     { t: 4.0, kind: 'state_set', actorId: 'ambulance', key: 'lights.emergency', value: 'flashing_siren' },
@@ -190,18 +190,25 @@ test('emergencyLightStateAt samples the latest lights.emergency event at or befo
     { t: 0.0, kind: 'state_set', actorId: 'other', key: 'lights.emergency', value: 'flashing' },
     { t: 3.0, kind: 'spawn', actorId: 'ambulance' },
   ];
-  assert.equal(emergencyLightStateAt(events, 'ambulance', 0.5), 'off');
-  assert.equal(emergencyLightStateAt(events, 'ambulance', 1.0), 'flashing');
-  assert.equal(emergencyLightStateAt(events, 'ambulance', 3.9), 'flashing');
-  assert.equal(emergencyLightStateAt(events, 'ambulance', 5.0), 'flashing_siren');
-  assert.equal(emergencyLightStateAt(events, 'ambulance', 7.0), 'off');
-  assert.equal(emergencyLightStateAt(events, 'nobody', 5.0), 'off');
-  assert.equal(emergencyLightStateAt(undefined, 'ambulance', 5.0), 'off');
+  const emergency = (t) => stateValueAt(events, 'ambulance', 'lights.emergency', t);
+  assert.equal(emergency(0.5), undefined, 'no state recorded yet');
+  assert.equal(emergency(1.0), 'flashing');
+  assert.equal(emergency(3.9), 'flashing');
+  assert.equal(emergency(5.0), 'flashing_siren');
+  assert.equal(emergency(7.0), 'off');
+  assert.equal(stateValueAt(events, 'nobody', 'lights.emergency', 5.0), undefined);
+  assert.equal(stateValueAt(undefined, 'ambulance', 'lights.emergency', 5.0), undefined);
+  // Keys must not bleed into one another.
+  assert.equal(stateValueAt(events, 'ambulance', 'audio.horn', 5.0), true);
+  assert.equal(stateValueAt(events, 'ambulance', 'pose.gesture', 5.0), undefined);
 });
 
-test('emergencyFlashPhase is deterministic in frame time and alternates', () => {
-  assert.equal(emergencyFlashPhase(1.0), emergencyFlashPhase(1.0));
-  assert.notEqual(emergencyFlashPhase(1.0), emergencyFlashPhase(1.25));
-  assert.ok([0, 1].includes(emergencyFlashPhase(0)));
-  assert.ok([0, 1].includes(emergencyFlashPhase(123.456)));
+test('deterministicFlashPhase is a pure function of frame time and alternates', () => {
+  assert.equal(deterministicFlashPhase(1.0, 4), deterministicFlashPhase(1.0, 4));
+  assert.notEqual(deterministicFlashPhase(1.0, 4), deterministicFlashPhase(1.125, 4));
+  assert.ok([0, 1].includes(deterministicFlashPhase(0, 4)));
+  assert.ok([0, 1].includes(deterministicFlashPhase(123.456, 1.5)));
+  // Rate is honoured: a 1 Hz signal holds across a window that a 4 Hz signal flips within.
+  assert.equal(deterministicFlashPhase(0.1, 1), deterministicFlashPhase(0.4, 1));
+  assert.notEqual(deterministicFlashPhase(0.1, 4), deterministicFlashPhase(0.4, 4));
 });

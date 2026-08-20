@@ -23,6 +23,7 @@ import type {
   MinTtcRecord,
   OccluderIneffective,
   PairMinDistance,
+  RequiredDecelContext,
   RevealToConflict,
 } from './trace.js';
 import { MONITORED_PAIR_POLICY_VERSION, selectMetricPair } from './monitored-pairs.js';
@@ -82,7 +83,7 @@ export interface MetricAccumulator {
   readonly ambientActorIds: ReadonlySet<string>;
   readonly pairs: Map<string, PairAccumulator>;
   readonly occlusionMonitors: OcclusionMonitor[];
-  readonly requiredDecelMax: Record<string, number>;
+  readonly requiredDecelContext: Record<string, RequiredDecelContext>;
   readonly collisions: Array<{
     t: number;
     a: string;
@@ -100,8 +101,10 @@ export function newMetricAccumulator(
   metricSubject: string | null = null,
   ambientActorIds: readonly string[] = [],
 ): MetricAccumulator {
-  const requiredDecelMax: Record<string, number> = {};
-  for (const id of [...actorIds].sort()) requiredDecelMax[id] = 0;
+  const requiredDecelContext: Record<string, RequiredDecelContext> = {};
+  for (const id of [...actorIds].sort()) {
+    requiredDecelContext[id] = { value: 0, t: 0, frictionScale: 1 };
+  }
   return {
     metricSubject,
     ambientActorIds: new Set(ambientActorIds),
@@ -120,7 +123,7 @@ export function newMetricAccumulator(
         sawBlocked: false,
       }))
       .sort((a, b) => a.key.localeCompare(b.key) || (a.occluderId ?? '').localeCompare(b.occluderId ?? '')),
-    requiredDecelMax,
+    requiredDecelContext,
     collisions: [],
     triggerNeverFired: [],
     ticks: 0,
@@ -500,8 +503,11 @@ export function computeMetrics(acc: MetricAccumulator, clipSeconds: number): Epi
   const clipped = effectiveCriticality !== null && !windowHasCriticality;
 
   const requiredDecelMax: Record<string, number> = {};
-  for (const id of Object.keys(acc.requiredDecelMax).sort()) {
-    requiredDecelMax[id] = acc.requiredDecelMax[id]!;
+  const requiredDecelContext: Record<string, RequiredDecelContext> = {};
+  for (const id of Object.keys(acc.requiredDecelContext).sort()) {
+    const context = acc.requiredDecelContext[id]!;
+    requiredDecelMax[id] = context.value;
+    requiredDecelContext[id] = { ...context };
   }
 
   return {
@@ -531,6 +537,7 @@ export function computeMetrics(acc: MetricAccumulator, clipSeconds: number): Epi
     },
     minDistance,
     requiredDecelMax,
+    requiredDecelContext,
     revealToConflict,
     declaredOcclusion,
     occluderIneffective,
