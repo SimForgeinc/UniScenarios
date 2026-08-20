@@ -196,8 +196,14 @@ export interface SampledActor {
   readonly static: boolean;
   /** Body motion direction; reverse motion must not be presented by flipping heading. */
   readonly motionDirection: -1 | 1;
-  /** 0 while on its feet, rising to 1 over `KNOCKDOWN_FALL_S` after `downSinceS`. */
-  readonly downProgress: number;
+  /**
+   * 0 while on its feet, rising to 1 over `KNOCKDOWN_FALL_S` after `downSinceS`.
+   *
+   * Optional so a consumer hand-building a sampled actor for a test need not
+   * declare a presentation field with an obvious default. The sampler always
+   * sets it, and every reader treats absence as upright.
+   */
+  readonly downProgress?: number;
 }
 
 export interface SampledSignal extends PlaybackSignal {
@@ -841,7 +847,6 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
         present,
         static: true,
         motionDirection,
-        downProgress: 0,
       };
     }
     // Presence changes and collision response are discontinuities. Holding the
