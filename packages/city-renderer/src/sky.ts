@@ -26,10 +26,17 @@ import { Sky } from 'three/addons/objects/Sky.js';
 export const ATMOSPHERE_LAYER = 1;
 
 /**
- * Radius the dome is drawn at. The shader is direction-only, so this is purely
- * a question of sitting outside the far plane of any camera that draws it.
+ * Fraction of the camera's far plane the dome is drawn at.
+ *
+ * The dome is geometry, so its vertices are clipped by the far plane like
+ * anything else — a dome parked past it renders nothing at all. It is also
+ * recentred on the camera every frame, so this only has to be far enough away
+ * to sit behind the world, not large enough to enclose the map.
  */
-const SKY_RADIUS = 450_000;
+const SKY_RADIUS_FAR_FRACTION = 0.6;
+
+/** Fallback radius before a camera has declared its far plane. */
+const DEFAULT_SKY_RADIUS = 3600;
 
 /** Sun elevation (degrees) below which the sun contributes no direct light. */
 const CIVIL_TWILIGHT_DEG = -6;
@@ -174,12 +181,13 @@ export class SkyDome {
   private bakeScene: Scene | null = null;
   private environment: Texture | null = null;
   private baked: { sun: Vector3; key: string } | null = null;
+  private radius = DEFAULT_SKY_RADIUS;
 
   constructor() {
     this.mesh = new Sky();
     this.mesh.name = 'sky';
     this.mesh.userData.uniscenariosRole = 'city-sky';
-    this.mesh.scale.setScalar(SKY_RADIUS);
+    this.mesh.scale.setScalar(this.radius);
     this.mesh.frustumCulled = false;
     // Drawn before the world so the depth-tested world overwrites it, and the
     // dome never pays a full-screen fill against geometry it sits behind.
@@ -212,6 +220,37 @@ export class SkyDome {
     };
     this.uniforms.cloudCoverage.value = 0;
     this.setAppearance(CLEAR_SKY);
+  }
+
+  /**
+   * Sizes the dome to a camera's far plane.
+   *
+   * A dome larger than the frustum is clipped away entirely and renders
+   * nothing, which is indistinguishable from a missing sky.
+   */
+  fitToCamera(far: number): void {
+    const radius = Number.isFinite(far) && far > 0
+      ? far * SKY_RADIUS_FAR_FRACTION
+      : DEFAULT_SKY_RADIUS;
+    if (radius === this.radius) return;
+    this.radius = radius;
+    this.mesh.scale.setScalar(radius);
+  }
+
+  /**
+   * Recentres the dome on the viewpoint.
+   *
+   * The dome is smaller than the map, so it has to travel with the camera or
+   * the camera would fly through it. The shader shades by view direction, so
+   * moving the dome does not move the sky.
+   */
+  follow(cameraPosition: Vector3): void {
+    this.mesh.position.copy(cameraPosition);
+  }
+
+  /** Radius the dome is currently drawn at. */
+  currentRadius(): number {
+    return this.radius;
   }
 
   /**
@@ -293,9 +332,13 @@ export class SkyDome {
     const bakeScene = (this.bakeScene ??= new Scene());
     const previousParent = this.mesh.parent;
     const previousLayers = this.mesh.layers.mask;
+    const previousPosition = this.mesh.position.clone();
     // PMREM renders through cube cameras that only see layer 0.
     this.mesh.layers.enable(0);
+    // Baked at unit scale about the origin: the cube cameras use their own
+    // near/far, and the dome's real radius sits outside them.
     this.mesh.scale.setScalar(1);
+    this.mesh.position.set(0, 0, 0);
     // Convolving the solar disc leaves a hotspot instead of ambient light.
     this.uniforms.showSunDisc.value = 0;
     this.mesh.updateMatrixWorld(true);
@@ -308,7 +351,8 @@ export class SkyDome {
     } finally {
       bakeScene.remove(this.mesh);
       this.mesh.layers.mask = previousLayers;
-      this.mesh.scale.setScalar(SKY_RADIUS);
+      this.mesh.scale.setScalar(this.radius);
+      this.mesh.position.copy(previousPosition);
       this.mesh.updateMatrixWorld(true);
       if (previousParent) previousParent.add(this.mesh);
       this.uniforms.showSunDisc.value = 1;

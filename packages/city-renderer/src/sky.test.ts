@@ -22,6 +22,35 @@ describe('sky dome', () => {
     }
   });
 
+  it('sizes the dome inside the camera far plane so it is not clipped away', () => {
+    const sky = new SkyDome();
+    try {
+      // The dome is geometry: parked past the far plane it renders nothing,
+      // which looks exactly like a missing sky.
+      sky.fitToCamera(6000);
+      expect(sky.currentRadius()).toBeLessThan(6000);
+      expect(sky.currentRadius()).toBeGreaterThan(0);
+      expect(sky.mesh.scale.x).toBeCloseTo(sky.currentRadius(), 6);
+
+      sky.fitToCamera(0);
+      expect(sky.currentRadius()).toBeGreaterThan(0);
+      sky.fitToCamera(Number.NaN);
+      expect(Number.isFinite(sky.currentRadius())).toBe(true);
+    } finally {
+      sky.dispose();
+    }
+  });
+
+  it('rides with the camera so the viewpoint never leaves the dome', () => {
+    const sky = new SkyDome();
+    try {
+      sky.follow(new Vector3(1200, 40, -900));
+      expect(sky.mesh.position.toArray()).toEqual([1200, 40, -900]);
+    } finally {
+      sky.dispose();
+    }
+  });
+
   it('applies the overcast tint patch to the shader it was compiled against', () => {
     const sky = new SkyDome();
     try {

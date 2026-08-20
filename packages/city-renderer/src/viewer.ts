@@ -387,8 +387,11 @@ export class CityViewer {
 
     this.camera = new PerspectiveCamera(55, this.aspect(), 0.5, 6000);
     this.camera.position.set(0, 200, 400);
-    // Sky is drawn on its own layer so sensor depth/LiDAR/id passes, which
-    // build their own cameras, never see the dome.
+    // Sized inside the far plane or it clips away entirely, and drawn on its
+    // own layer so sensor depth/LiDAR/id passes, which build their own
+    // cameras, never see the dome.
+    this.sky.fitToCamera(this.camera.far);
+    this.sky.follow(this.camera.position);
     this.camera.layers.enable(ATMOSPHERE_LAYER);
     this.scene.add(this.sky.mesh);
     this.snowCover = new SnowCoverController(this.scene, {
@@ -1157,6 +1160,8 @@ export class CityViewer {
     if (!this.renderingSuspended) {
       this.camera.updateMatrixWorld();
       this.camera.getWorldPosition(_cameraPos);
+      // The dome is smaller than the map, so it rides along with the camera.
+      this.sky.follow(_cameraPos);
     }
 
     // Streaming decisions are cheap but not free: 10 Hz is plenty responsive.
