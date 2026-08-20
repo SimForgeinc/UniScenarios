@@ -91,6 +91,13 @@ ENVIRONMENT_FIELDS = (
 
 ENVIRONMENT_READBACK_TIMEOUT_S = 2.0
 
+#: A body on the ground is pitched a quarter turn from standing, matching the
+#: browser renderer so a recording and its preview agree.
+DOWNED_BODY_PITCH_DEG = 90.0
+#: Half a pedestrian's depth. The transform sits at the feet, so pitching alone
+#: would leave the body cutting through the surface it is lying on.
+DOWNED_BODY_LIFT_M = 0.3
+
 
 def flash_on(t: float) -> bool:
     """Deterministic 50% duty flash phase for plan time `t`."""
@@ -866,6 +873,18 @@ class CarlaBackend:
             if actor.type_id.startswith("walker."):
                 if state.speed_mps < -1e-6:
                     raise RuntimeError(f"native physics does not support reverse pedestrian motion for {actor_id}")
+                if state.downed:
+                    # Walkers are kinematic here: native physics owns vehicle
+                    # motion only, so CARLA will not topple one for us. The plan
+                    # pose already carries where the body slid to; pitch it onto
+                    # the ground and stop the gait so the recording shows what
+                    # the trace says happened.
+                    actor.apply_control(self.carla.WalkerControl(speed=0.0, jump=False))
+                    actor.set_transform(self.carla.Transform(
+                        self.carla.Location(x=state.x, y=-state.y, z=state.z + DOWNED_BODY_LIFT_M),
+                        self.carla.Rotation(pitch=DOWNED_BODY_PITCH_DEG, yaw=-state.heading_deg),
+                    ))
+                    continue
                 direction = target.get_forward_vector()
                 actor.apply_control(self.carla.WalkerControl(direction=direction, speed=state.speed_mps, jump=False))
                 continue

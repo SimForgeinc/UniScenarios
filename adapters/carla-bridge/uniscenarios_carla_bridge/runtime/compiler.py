@@ -72,6 +72,11 @@ class ActorFrame:
     #: Latched appearance state, keyed `light.<vehicleLightType>`,
     #: `door.<vehicleComponentType>` or `cue.<userDefinedAnimationType>`.
     appearance: Mapping[str, str] = field(default_factory=dict)
+    #: The body was knocked off its feet before this frame. OpenSCENARIO carries
+    #: where it slid to but has no posture for it, so the export declares the
+    #: time in a `uniscenarios.trajectoryReplay.knockedDownAtS.*` header property
+    #: and the backend lays the actor down from here.
+    downed: bool = False
 
 
 @dataclass(frozen=True)
@@ -560,6 +565,10 @@ def _canonical_plan_sha256(
             abort()
             state = frame.actors[actor_id]
             add(f"S|{actor_id}|{state.lifecycle}|{state.x:.9f}|{state.y:.9f}|{state.z:.9f}|{state.heading_deg:.9f}|{state.speed_mps:.9f}")
+            if state.downed:
+                # Appended only when a body went down, so every plan that came
+                # before knockdowns existed keeps its exact digest.
+                add(f"D|{actor_id}")
             if state.appearance:
                 # Appended only when present, so plans without appearance state
                 # keep the exact digest they had before appearance existed.
@@ -589,6 +598,18 @@ def compile_xosc14(xml_bytes: bytes, abort: Callable[[], None] | None = None) ->
         raise ContractError("FileHeader must declare OpenSCENARIO XML 1.4")
     header_properties = _property_map(header)
     execution_mode = header_properties.get("uniscenario.executionMode") or header_properties.get("uniscenarios.executionMode")
+    # A knocked-down body is a simulation outcome with no OpenSCENARIO element,
+    # so the exporter declares it per actor in the header. Absent for every
+    # scenario where nobody was run over.
+    knocked_down_at: dict[str, float] = {}
+    for name, value in header_properties.items():
+        for prefix in ("uniscenario.trajectoryReplay.knockedDownAtS.", "uniscenarios.trajectoryReplay.knockedDownAtS."):
+            if not name.startswith(prefix):
+                continue
+            try:
+                knocked_down_at[name[len(prefix):]] = float(value)
+            except ValueError as exc:
+                raise ContractError(f"invalid knockdown time for {name[len(prefix):]}: {value!r}") from exc
     if execution_mode != "trajectory-replay":
         raise ContractError("render worker requires the OpenSCENARIO 1.4 trajectory-replay export profile")
     if root.findall(".//UserDefinedAction"):
@@ -663,9 +684,11 @@ def compile_xosc14(xml_bytes: bytes, abort: Callable[[], None] | None = None) ->
                 lifecycle = LIFECYCLE_ABSENT
             else:
                 lifecycle = LIFECYCLE_SPAWN if index == 0 else LIFECYCLE_ACTIVE
+            downed_at = knocked_down_at.get(actor_id)
             states[actor_id] = ActorFrame(
                 lifecycle, raw[0], raw[1], raw[2], math.degrees(raw[3]), raw[4],
                 dict(appearance_state.get(actor_id, {})),
+                downed_at is not None and t >= downed_at - 1e-9,
             )
         frames.append(PlanFrame(index, t, states, dict(signal_state)))
     immutable = tuple(frames)
