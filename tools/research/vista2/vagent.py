@@ -60,8 +60,9 @@ Counted (budget shown each turn):
 4. {{"action":"set_world","key":K,"value":v}} — the ONE world-scoped authoring mechanism. Exact environment forms:
    {{"action":"set_world","key":"env.weather","value":"snow"}}
    {{"action":"set_world","key":"env.timeOfDay","value":"dusk"}} or key env.frictionScale with a numeric value
-   {{"action":"set_world","key":"env.surfacePatch","value":{{"id":"ice-zone","kind":"ice","atM":45,"lengthM":35,"laneOffsets":[0]}}}}
-   {{"action":"set_world","key":"env.marking","value":{{"id":"faded-zone","quality":"faded","atM":20,"lengthM":80,"laneOffsets":[0]}}}}
+   AFTER selecting a site, place one contiguous ego-route approach window with concrete numbers and laneOffsets:[0]. The window must cover >=20 m between ego s=40 and s=100; off-route/scattered windows are rejected:
+   {{"action":"set_world","key":"env.surfacePatch","value":{{"id":"ice-zone","kind":"ice","atM":25,"lengthM":50,"laneOffsets":[0]}}}}
+   {{"action":"set_world","key":"env.marking","value":{{"id":"faded-zone","quality":"faded","atM":50,"lengthM":30,"laneOffsets":[0]}}}} — exactly one marking window; it must lower to one non-junction lane because junction lanes have no painted boundaries.
    {{"action":"set_world","key":"env.wind","value":{{"directionDeg":90,"speedMps":0,"gust":{{"startS":3,"durationS":4,"peakSpeedMps":35}}}}}}
    Signal phase is also world-scoped and may carry "trigger":T: {{"action":"set_world","key":"signal:feature:<featureId>:<ego|opposing|left|right>.phase","value":"red","trigger":{{"at":3}}}}. Phase values: green yellow red flashing_yellow flashing_red off green_arrow yellow_arrow red_x flashing_yellow_arrow flashing_red_arrow. Environment keys are static and reject trigger.
 5. {{"action":"simulate"}} — run the scenario at the working site: rollout keyframes + gate verdict per rule + measured facts.

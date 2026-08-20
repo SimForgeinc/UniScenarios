@@ -574,6 +574,87 @@ class Scene:
             return {'kind': 'standstill', 'of': c.get('of', 'ego'), 'forS': float(c['forS'])}
         raise ValueError('unknown condition %r' % w)
 
+    def _validate_corridor_world(self, key, value):
+        """Prove a local environment window is on the visible ego approach."""
+        noun = 'surface patch' if key == 'env.surfacePatch' else 'marking treatment'
+        usage = ('select a site first, then use one contiguous window on the reference '
+                 'lane, e.g. {"action":"set_world","key":"%s","value":'
+                 '{"id":"approach","%s":"%s","atM":50,"lengthM":30,'
+                 '"laneOffsets":[0]}}'
+                 % (key, 'kind' if key == 'env.surfacePatch' else 'quality',
+                    'ice' if key == 'env.surfacePatch' else 'absent'))
+        if self.site is None or self.route_pl is None:
+            return False, '%s needs a calibrated working site; %s' % (noun, usage)
+        if not isinstance(value, dict):
+            return False, '%s value must be an object; %s' % (noun, usage)
+        if value.get('feature') is not None:
+            return False, ('%s must use a frame-relative approach window, not a feature '
+                           'anchor; %s' % (noun, usage))
+        if value.get('laneOffsets') != [0]:
+            return False, ('%s must target laneOffsets:[0], the ego route corridor; %s'
+                           % (noun, usage))
+        try:
+            start = float(value['atM'])
+            length = float(value['lengthM'])
+        except (KeyError, TypeError, ValueError):
+            return False, '%s needs concrete numeric atM and lengthM; %s' % (noun, usage)
+        ego_s = float(self.roles['ego']['pose']['s'])
+        approach_overlap = max(0.0, min(start + length, ego_s + 60.0) -
+                               max(start, ego_s))
+        if length <= 0 or approach_overlap < min(20.0, length):
+            return False, (
+                '%s must cover at least %.0fm of the ego approach [%g,%g] so the ego '
+                'drives it and the camera frames it; authored window was [%g,%g]. %s'
+                % (noun, min(20.0, max(length, 0.0)), ego_s, ego_s + 60.0,
+                   start, start + length, usage))
+
+        field = 'surfacePatches' if key == 'env.surfacePatch' else 'markingTreatments'
+        authored_id = str(value.get('id', ''))
+        previous = copy.deepcopy(self.environment)
+        items = self.environment.setdefault(field, [])
+        existing_index = next((i for i, item in enumerate(items)
+                               if item.get('id') == authored_id), None)
+        if existing_index is None:
+            items.append(copy.deepcopy(value))
+        else:
+            items[existing_index] = copy.deepcopy(value)
+        try:
+            inst, issues = self.instantiate_t0()
+        finally:
+            self.environment = previous
+        if inst is None:
+            return False, '%s could not be proven at this site: %s; %s' \
+                % (noun, '; '.join(issues), usage)
+        ego = next(a for a in inst['input']['actors'] if a['id'] == 'ego')
+        route_lanes = set((ego.get('behavior', {}).get('route') or {}).get('lanes') or [])
+        authored_id = str(value.get('id', ''))
+        lowered = [item for item in inst['input'].get(field, [])
+                   if item.get('id') == authored_id or
+                   str(item.get('id', '')).startswith(authored_id + ':')]
+        if not lowered:
+            return False, '%s produced no concrete lane window; %s' % (noun, usage)
+        windows = [item.get('region') or {} for item in lowered]
+        if any(w.get('rsl') not in route_lanes for w in windows):
+            return False, '%s resolved away from the ego route corridor; %s' % (noun, usage)
+        covered_m = sum(max(0.0, float(w.get('sMax', 0)) - float(w.get('sMin', 0)))
+                        for w in windows)
+        if covered_m < min(20.0, length):
+            return False, ('%s resolved to only %.1fm on the driven corridor; %s'
+                           % (noun, covered_m, usage))
+        if key == 'env.marking':
+            lanes = R.topo(R.DEV_ASSETS, self.site['mapId'])['lanes']
+            if any((lanes.get(w.get('rsl')) or {}).get('isJunction') for w in windows):
+                return False, (
+                    'marking treatment reaches a junction lane, which has no painted '
+                    'boundaries and is unprovable; place one shorter contiguous window '
+                    'on the non-junction approach. %s' % usage)
+            if len(windows) != 1:
+                return False, (
+                    'marking treatment fragmented into %d lane stubs; use one contiguous '
+                    'window on a single painted ego-route approach instead. %s'
+                    % (len(windows), usage))
+        return True, None
+
     def set_world(self, key, value, trigger=None, frames=None):
         """Author environment state or a world-scoped signal phase.
 
@@ -582,6 +663,20 @@ class Scene:
         Every mutation is validated through the v2 template schema before it sticks.
         """
         if key in WORLD_ENV_KEYS or key in WORLD_COLLECTION_KEYS:
+            if key in WORLD_COLLECTION_KEYS:
+                field = WORLD_COLLECTION_KEYS[key]
+                existing = self.environment.get(field) or []
+                authored_id = value.get('id') if isinstance(value, dict) else None
+                if (key == 'env.marking' and existing and
+                        all(item.get('id') != authored_id for item in existing)):
+                    return False, {
+                        'error': 'use one contiguous ego-route marking window, not many '
+                                 'scattered fragments; reuse id %r to replace the existing '
+                                 'treatment' % existing[0].get('id'),
+                    }
+                ok, reason = self._validate_corridor_world(key, value)
+                if not ok:
+                    return False, {'error': reason}
             if trigger is not None:
                 return False, {'error': 'environment state is static and does not accept "trigger"; '
                                         'correct invocation: %s' % WORLD_USAGE}
@@ -590,7 +685,14 @@ class Scene:
                 self.environment[WORLD_ENV_KEYS[key]] = copy.deepcopy(value)
             else:
                 field = WORLD_COLLECTION_KEYS[key]
-                self.environment.setdefault(field, []).append(copy.deepcopy(value))
+                items = self.environment.setdefault(field, [])
+                authored_id = value.get('id')
+                existing_index = next((i for i, item in enumerate(items)
+                                       if item.get('id') == authored_id), None)
+                if existing_index is None:
+                    items.append(copy.deepcopy(value))
+                else:
+                    items[existing_index] = copy.deepcopy(value)
             ok, issues = self.validate()
             if not ok:
                 self.environment = previous
