@@ -16,7 +16,7 @@ MAX_XODR_BYTES = 128 * 1024 * 1024
 MAX_CATALOG_BYTES = 4 * 1024 * 1024
 MAX_MANIFEST_BYTES = 4 * 1024 * 1024
 MAX_TRAFFIC_BYTES = 64 * 1024 * 1024
-MAX_SENSOR_COUNT = 16
+MAX_SENSOR_COUNT = 64
 MAX_ACTOR_COUNT = 256
 MAX_DURATION_SECONDS = 300.0
 MAX_CAPTURE_FRAMES = 18_000
@@ -216,11 +216,11 @@ class RenderResourceRequest:
     capture_frames: int
     actors: int
     actor_frame_states: int
-    sensor_pixels: int
+    sensor_samples: int
     output_bytes: int
-    max_camera_width: int
-    max_camera_height: int
-    pixels_per_frame: int
+    max_frame_width: int
+    max_frame_height: int
+    samples_per_frame: int
 
     @classmethod
     def parse(cls, value: Any) -> "RenderResourceRequest":
@@ -228,8 +228,8 @@ class RenderResourceRequest:
             raise ContractError("runtimeRequirements.resources must be an object")
         expected_fields = {
             "schema", "durationS", "sensors", "captureFrames", "actors",
-            "actorFrameStates", "sensorPixels", "outputBytes", "maxCameraWidth",
-            "maxCameraHeight", "pixelsPerFrame",
+            "actorFrameStates", "sensorSamples", "outputBytes", "maxFrameWidth",
+            "maxFrameHeight", "samplesPerFrame",
         }
         if set(value) != expected_fields:
             raise ContractError("runtimeRequirements.resources has invalid fields")
@@ -266,22 +266,21 @@ class RenderResourceRequest:
         capture_frames = bounded_integer("captureFrames", 0, MAX_CAPTURE_FRAMES)
         actors = bounded_integer("actors", 1, MAX_ACTOR_COUNT)
         actor_frame_states = bounded_integer("actorFrameStates", 1, MAX_ACTOR_FRAME_STATES)
-        sensor_pixels = bounded_integer("sensorPixels", 0, MAX_SENSOR_PIXELS)
+        sensor_samples = bounded_integer("sensorSamples", 0, MAX_SENSOR_PIXELS)
         output_bytes = bounded_integer("outputBytes", 1, MAX_OUTPUT_BYTES)
-        max_camera_width = bounded_integer("maxCameraWidth", 0, MAX_SENSOR_PIXELS)
-        max_camera_height = bounded_integer("maxCameraHeight", 0, MAX_SENSOR_PIXELS)
-        pixels_per_frame = bounded_integer("pixelsPerFrame", 0, MAX_SENSOR_PIXELS)
+        max_frame_width = bounded_integer("maxFrameWidth", 0, MAX_SENSOR_PIXELS)
+        max_frame_height = bounded_integer("maxFrameHeight", 0, MAX_SENSOR_PIXELS)
+        samples_per_frame = bounded_integer("samplesPerFrame", 0, MAX_SENSOR_PIXELS)
         if sensors == 0 and any(
-            (capture_frames, sensor_pixels, max_camera_width, max_camera_height, pixels_per_frame)
+            (capture_frames, sensor_samples, max_frame_width, max_frame_height, samples_per_frame)
         ):
             raise ContractError("runtimeRequirements.resources declares capture work without sensors")
         if sensors > 0 and any(
-            item == 0
-            for item in (
-                capture_frames, sensor_pixels, max_camera_width, max_camera_height, pixels_per_frame,
-            )
+            item == 0 for item in (capture_frames, sensor_samples, samples_per_frame)
         ):
             raise ContractError("runtimeRequirements.resources omits required sensor capture bounds")
+        if (max_frame_width == 0) != (max_frame_height == 0):
+            raise ContractError("runtimeRequirements.resources raster dimensions must both be zero or non-zero")
         if actor_frame_states < actors:
             raise ContractError("runtimeRequirements.resources.actorFrameStates must cover every actor")
         return cls(
@@ -291,11 +290,11 @@ class RenderResourceRequest:
             capture_frames,
             actors,
             actor_frame_states,
-            sensor_pixels,
+            sensor_samples,
             output_bytes,
-            max_camera_width,
-            max_camera_height,
-            pixels_per_frame,
+            max_frame_width,
+            max_frame_height,
+            samples_per_frame,
         )
 
 
@@ -308,7 +307,7 @@ class RuntimeRequirements:
     job_mode: str
     traffic_mode: str
     execution_mode: str
-    camera_kinds: tuple[str, ...]
+    sensor_modalities: tuple[str, ...]
     outputs: tuple[str, ...]
     resources: RenderResourceRequest
 
@@ -318,7 +317,7 @@ class RuntimeRequirements:
             raise ContractError("executionPackage.runtimeRequirements must be an object")
         expected_fields = {
             "schema", "xoscVersion", "capabilityProfile", "fixedTimestepS", "jobMode",
-            "trafficMode", "executionMode", "cameraKinds", "outputs", "resources",
+            "trafficMode", "executionMode", "sensorModalities", "outputs", "resources",
         }
         if set(value) != expected_fields:
             raise ContractError("executionPackage.runtimeRequirements has invalid fields")
@@ -338,31 +337,53 @@ class RuntimeRequirements:
             raise ContractError("runtimeRequirements.trafficMode is unsupported")
         if execution_mode not in {"native-physics", "diagnostic-replay"}:
             raise ContractError("runtimeRequirements.executionMode is unsupported")
-        camera_kinds = value.get("cameraKinds")
+        sensor_modalities = value.get("sensorModalities")
         outputs = value.get("outputs")
-        if not isinstance(camera_kinds, list) or camera_kinds != sorted(set(camera_kinds)) or any(
-            item not in {"rgb", "depth", "semantic", "instance"} for item in camera_kinds
+        if (
+            not isinstance(sensor_modalities, list)
+            or sensor_modalities != sorted(set(sensor_modalities))
+            or any(item not in SENSOR_MODALITIES for item in sensor_modalities)
         ):
-            raise ContractError("runtimeRequirements.cameraKinds must be sorted, unique supported values")
+            raise ContractError("runtimeRequirements.sensorModalities must be sorted, unique supported values")
         if not isinstance(outputs, list) or outputs != sorted(set(outputs)) or any(
             item not in {"frames", "video", "trace", "manifest", "annotations"} for item in outputs
         ):
             raise ContractError("runtimeRequirements.outputs must be sorted, unique supported values")
         return cls(
             RUNTIME_REQUIREMENTS_SCHEMA, "1.4", CAPABILITY_PROFILE, 0.02,
-            job_mode, traffic_mode, execution_mode, tuple(camera_kinds), tuple(outputs),
+            job_mode, traffic_mode, execution_mode, tuple(sensor_modalities), tuple(outputs),
             RenderResourceRequest.parse(value.get("resources")),
         )
 
 
+CAMERA_MODALITIES = frozenset({"rgb", "depth", "semantic", "instance", "normals"})
+LIDAR_MODALITIES = frozenset({"lidar", "semantic-lidar"})
+RADAR_MODALITIES = frozenset({"radar"})
+SENSOR_MODALITIES = CAMERA_MODALITIES | LIDAR_MODALITIES | RADAR_MODALITIES
+SENSOR_FORMATS: Mapping[str, str] = {
+    **{modality: "png" for modality in CAMERA_MODALITIES},
+    **{modality: "ply" for modality in LIDAR_MODALITIES},
+    "radar": "csv",
+}
+
+
 @dataclass(frozen=True)
-class Camera:
-    id: str
-    kind: str
-    attach_to: str | None
+class Sensor:
+    role: str
+    actor_id: str | None
+    sensor_id: str
+    modality: str
     transform: Mapping[str, float]
-    fov: float
-    mount: str
+    config: Mapping[str, int | float]
+
+    @property
+    def artifact_key(self) -> tuple[str, str | None, str, str]:
+        return self.role, self.actor_id, self.sensor_id, self.modality
+
+    @property
+    def artifact_name(self) -> str:
+        actor = self.actor_id if self.actor_id is not None else "world"
+        return f"{self.role}:{actor}:{self.sensor_id}:{self.modality}"
 
 
 @dataclass(frozen=True)
@@ -378,23 +399,77 @@ class Environment:
     wetness: float = 0.0
 
 
-CAMERA_MOUNTS: Mapping[str, Mapping[str, float]] = {
-    "chase": {"x": -7.5, "y": 0.0, "z": 3.0, "pitch": -12.0, "yaw": 0.0, "roll": 0.0},
-    "hood": {"x": 1.4, "y": 0.0, "z": 1.25, "pitch": -3.0, "yaw": 0.0, "roll": 0.0},
-    "dash": {"x": 0.35, "y": 0.0, "z": 1.4, "pitch": 0.0, "yaw": 0.0, "roll": 0.0},
-    "roof": {"x": 0.0, "y": 0.0, "z": 2.3, "pitch": -5.0, "yaw": 0.0, "roll": 0.0},
-    "birdseye": {"x": 0.0, "y": 0.0, "z": 28.0, "pitch": -90.0, "yaw": 0.0, "roll": 0.0},
-    "world": {"x": 0.0, "y": 0.0, "z": 8.0, "pitch": -20.0, "yaw": 0.0, "roll": 0.0},
-}
+def _finite_number(value: Any, label: str, minimum: float, maximum: float) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool):
+        raise ContractError(f"{label} must be a number")
+    result = float(value)
+    if not math.isfinite(result) or not minimum <= result <= maximum:
+        raise ContractError(f"{label} must be in [{minimum}, {maximum}]")
+    return result
+
+
+def _parse_sensor_config(modality: str, value: Any, label: str) -> Mapping[str, int | float]:
+    if not isinstance(value, Mapping):
+        raise ContractError(f"{label} must be an object")
+    if modality in CAMERA_MODALITIES:
+        expected = {"width", "height", "fov"}
+        if set(value) != expected:
+            raise ContractError(f"{label} must contain exactly width, height, and fov")
+        width, height = value["width"], value["height"]
+        if not isinstance(width, int) or isinstance(width, bool) or not 64 <= width <= 8192:
+            raise ContractError(f"{label}.width must be an integer in [64, 8192]")
+        if not isinstance(height, int) or isinstance(height, bool) or not 64 <= height <= 8192:
+            raise ContractError(f"{label}.height must be an integer in [64, 8192]")
+        return {
+            "width": width,
+            "height": height,
+            "fov": _finite_number(value["fov"], f"{label}.fov", 0.001, 179.0),
+        }
+    if modality in LIDAR_MODALITIES:
+        expected = {
+            "channels", "rangeM", "pointsPerSecond", "rotationFrequencyHz",
+            "upperFovDeg", "lowerFovDeg",
+        }
+        if set(value) != expected:
+            raise ContractError(f"{label} has invalid {modality} fields")
+        channels, points = value["channels"], value["pointsPerSecond"]
+        if not isinstance(channels, int) or isinstance(channels, bool) or not 1 <= channels <= 256:
+            raise ContractError(f"{label}.channels must be an integer in [1, 256]")
+        if not isinstance(points, int) or isinstance(points, bool) or not 1 <= points <= 20_000_000:
+            raise ContractError(f"{label}.pointsPerSecond must be an integer in [1, 20000000]")
+        upper = _finite_number(value["upperFovDeg"], f"{label}.upperFovDeg", -90.0, 90.0)
+        lower = _finite_number(value["lowerFovDeg"], f"{label}.lowerFovDeg", -90.0, 90.0)
+        if lower >= upper:
+            raise ContractError(f"{label}.lowerFovDeg must be less than upperFovDeg")
+        return {
+            "channels": channels,
+            "rangeM": _finite_number(value["rangeM"], f"{label}.rangeM", 0.1, 1000.0),
+            "pointsPerSecond": points,
+            "rotationFrequencyHz": _finite_number(
+                value["rotationFrequencyHz"], f"{label}.rotationFrequencyHz", 0.01, 1000.0,
+            ),
+            "upperFovDeg": upper,
+            "lowerFovDeg": lower,
+        }
+    expected = {"horizontalFovDeg", "verticalFovDeg", "rangeM", "pointsPerSecond"}
+    if set(value) != expected:
+        raise ContractError(f"{label} has invalid radar fields")
+    points = value["pointsPerSecond"]
+    if not isinstance(points, int) or isinstance(points, bool) or not 1 <= points <= 20_000_000:
+        raise ContractError(f"{label}.pointsPerSecond must be an integer in [1, 20000000]")
+    return {
+        "horizontalFovDeg": _finite_number(value["horizontalFovDeg"], f"{label}.horizontalFovDeg", 0.001, 180.0),
+        "verticalFovDeg": _finite_number(value["verticalFovDeg"], f"{label}.verticalFovDeg", 0.001, 180.0),
+        "rangeM": _finite_number(value["rangeM"], f"{label}.rangeM", 0.1, 1000.0),
+        "pointsPerSecond": points,
+    }
 
 
 @dataclass(frozen=True)
 class RenderSpec:
     schema: str
-    width: int
-    height: int
     fps: float
-    cameras: tuple[Camera, ...]
+    sensors: tuple[Sensor, ...]
     outputs: tuple[str, ...]
     execution_mode: str
     quality: str
@@ -402,56 +477,71 @@ class RenderSpec:
     formats: tuple[str, ...]
 
     @classmethod
-    def parse(cls, value: Any, allow_camera_free: bool = False) -> "RenderSpec":
+    def parse(cls, value: Any, allow_sensor_free: bool = False) -> "RenderSpec":
         if not isinstance(value, Mapping):
             raise ContractError("renderSpec must be an object")
-        expected_schema = "uniscenario.interaction-spec/v1" if allow_camera_free else "uniscenario.render-spec/v1"
+        expected_schema = "uniscenario.interaction-spec/v1" if allow_sensor_free else "uniscenario.render-spec/v1"
+        allowed_fields = {
+            "schema", "fps", "sensors", "outputs", "executionMode", "quality",
+            "environment", "formats",
+        }
+        required_fields = {"schema", "fps", "sensors", "outputs"}
+        if set(value) - allowed_fields or not required_fields.issubset(value):
+            raise ContractError("renderSpec has invalid fields")
         if value.get("schema") != expected_schema:
             raise ContractError(f"renderSpec.schema must equal {expected_schema}")
-        width, height, fps = value.get("width"), value.get("height"), value.get("fps")
-        if not isinstance(width, int) or not 64 <= width <= 8192:
-            raise ContractError("renderSpec.width must be an integer in [64, 8192]")
-        if not isinstance(height, int) or not 64 <= height <= 8192:
-            raise ContractError("renderSpec.height must be an integer in [64, 8192]")
-        if not isinstance(fps, (int, float)) or isinstance(fps, bool) or not math.isfinite(fps) or not 0 < fps <= 240:
-            raise ContractError("renderSpec.fps must be in (0, 240]")
-        raw_cameras = value.get("cameras")
-        if not isinstance(raw_cameras, list) or len(raw_cameras) > MAX_SENSOR_COUNT or (not raw_cameras and not allow_camera_free):
-            raise ContractError(f"renderSpec.cameras must contain 1..{MAX_SENSOR_COUNT} cameras, or be empty for interaction_2d")
-        cameras: list[Camera] = []
-        ids: set[str] = set()
-        for index, raw in enumerate(raw_cameras):
-            sensor_kind = raw.get("kind")
-            if not isinstance(raw, Mapping) or sensor_kind not in {"rgb", "depth", "semantic", "instance"}:
-                raise ContractError(f"renderSpec.cameras.{index} has an unsupported CARLA camera kind")
-            camera_id = _required_string(raw, "id")
-            if len(camera_id) > 100:
-                raise ContractError(f"renderSpec.cameras.{index}.id exceeds 100 characters")
-            if camera_id in ids:
-                raise ContractError("renderSpec camera ids must be unique")
-            ids.add(camera_id)
-            mount = raw.get("mount", "chase")
-            if mount not in CAMERA_MOUNTS:
-                raise ContractError(f"renderSpec.cameras.{index}.mount is unsupported")
-            transform = raw.get("transform", CAMERA_MOUNTS[mount])
-            if not isinstance(transform, Mapping):
-                raise ContractError(f"renderSpec.cameras.{index}.transform must be an object")
-            numeric = {key: float(transform.get(key, 0.0)) for key in ("x", "y", "z", "pitch", "yaw", "roll")}
-            if not all(math.isfinite(item) for item in numeric.values()):
-                raise ContractError(f"renderSpec.cameras.{index}.transform must be finite")
-            attach_to = raw.get("attachTo")
-            if attach_to is not None and not isinstance(attach_to, str):
-                raise ContractError(f"renderSpec.cameras.{index}.attachTo must be an actor id")
-            if mount == "world" and attach_to:
-                raise ContractError(f"renderSpec.cameras.{index}.world mount cannot attach to an actor")
-            fov = float(raw.get("fov", 90))
-            if not math.isfinite(fov) or not 0 < fov <= 179:
-                raise ContractError(f"renderSpec.cameras.{index}.fov must be in (0, 179]")
-            cameras.append(Camera(camera_id, sensor_kind, attach_to, numeric, fov, mount))
+        fps = _finite_number(value.get("fps"), "renderSpec.fps", 0.001, 240.0)
+        raw_sensors = value.get("sensors")
+        if (
+            not isinstance(raw_sensors, list)
+            or len(raw_sensors) > MAX_SENSOR_COUNT
+            or (not raw_sensors and not allow_sensor_free)
+        ):
+            raise ContractError(
+                f"renderSpec.sensors must contain 1..{MAX_SENSOR_COUNT} sensors, or be empty for interaction_2d"
+            )
+        sensors: list[Sensor] = []
+        identities: set[tuple[str, str | None, str, str]] = set()
+        for index, raw in enumerate(raw_sensors):
+            label = f"renderSpec.sensors.{index}"
+            if not isinstance(raw, Mapping) or set(raw) != {
+                "role", "actorId", "sensorId", "modality", "transform", "config",
+            }:
+                raise ContractError(f"{label} must use the strict generic sensor shape")
+            role = _required_string(raw, "role")
+            sensor_id = _required_string(raw, "sensorId")
+            if (
+                len(role) > 100
+                or len(sensor_id) > 100
+                or not re.fullmatch(r"[A-Za-z0-9._-]+", role)
+                or not re.fullmatch(r"[A-Za-z0-9._-]+", sensor_id)
+            ):
+                raise ContractError(f"{label} identity must use 1..100 portable characters")
+            actor_id = raw.get("actorId")
+            if actor_id is not None and (not isinstance(actor_id, str) or not actor_id):
+                raise ContractError(f"{label}.actorId must be a non-empty actor id or null")
+            modality = raw.get("modality")
+            if modality not in SENSOR_MODALITIES:
+                raise ContractError(f"{label}.modality is unsupported")
+            transform = raw.get("transform")
+            if not isinstance(transform, Mapping) or set(transform) != {"x", "y", "z", "pitch", "yaw", "roll"}:
+                raise ContractError(f"{label}.transform must contain exactly x, y, z, pitch, yaw, and roll")
+            numeric_transform = {
+                key: _finite_number(transform[key], f"{label}.transform.{key}", -1_000_000.0, 1_000_000.0)
+                for key in ("x", "y", "z", "pitch", "yaw", "roll")
+            }
+            config = _parse_sensor_config(modality, raw.get("config"), f"{label}.config")
+            sensor = Sensor(role, actor_id, sensor_id, modality, numeric_transform, config)
+            if sensor.artifact_key in identities:
+                raise ContractError("renderSpec sensor artifact identities must be unique")
+            identities.add(sensor.artifact_key)
+            sensors.append(sensor)
         outputs = value.get("outputs")
-        allowed = {"frames", "video", "trace", "manifest", "annotations"}
-        if not isinstance(outputs, list) or not outputs or any(item not in allowed for item in outputs):
-            raise ContractError("renderSpec.outputs must contain frames, video, or trace")
+        allowed_outputs = {"frames", "video", "trace", "manifest", "annotations"}
+        if not isinstance(outputs, list) or not outputs or outputs != list(dict.fromkeys(outputs)) or any(
+            item not in allowed_outputs for item in outputs
+        ):
+            raise ContractError("renderSpec.outputs must contain unique supported values")
         execution_mode = value.get("executionMode", "native-physics")
         if execution_mode not in {"native-physics", "diagnostic-replay"}:
             raise ContractError("renderSpec.executionMode must be native-physics or diagnostic-replay")
@@ -467,30 +557,43 @@ class RenderSpec:
             "sunAzimuth": "sun_azimuth_angle", "sunAltitude": "sun_altitude_angle",
             "fogDensity": "fog_density", "fogDistance": "fog_distance", "wetness": "wetness",
         }
+        if set(raw_environment) - set(environment_fields):
+            raise ContractError("renderSpec.environment has invalid fields")
         environment_values: dict[str, float] = {}
+        defaults = Environment()
         for external, internal in environment_fields.items():
-            number = float(raw_environment.get(external, getattr(Environment(), internal)))
-            if not math.isfinite(number):
-                raise ContractError(f"renderSpec.environment.{external} must be finite")
-            if external == "sunAzimuth" and not 0 <= number <= 360:
-                raise ContractError("renderSpec.environment.sunAzimuth must be in [0, 360]")
-            if external == "sunAltitude" and not -90 <= number <= 90:
-                raise ContractError("renderSpec.environment.sunAltitude must be in [-90, 90]")
-            if external not in {"sunAzimuth", "sunAltitude", "fogDistance"} and not 0 <= number <= 100:
-                raise ContractError(f"renderSpec.environment.{external} must be in [0, 100]")
-            environment_values[internal] = number
+            default = getattr(defaults, internal)
+            minimum, maximum = (
+                (-90.0, 90.0) if external == "sunAltitude" else
+                (0.0, 360.0) if external == "sunAzimuth" else
+                (0.0, 1_000_000.0) if external == "fogDistance" else
+                (0.0, 100.0)
+            )
+            environment_values[internal] = _finite_number(
+                raw_environment.get(external, default), f"renderSpec.environment.{external}", minimum, maximum,
+            )
         environment = Environment(**environment_values)
-        raw_formats = value.get("formats", ["png", "mp4-h264", "json", "jsonl"])
-        allowed_formats = {"png", "mp4-h264", "json", "jsonl"}
-        if not isinstance(raw_formats, list) or not raw_formats or any(item not in allowed_formats for item in raw_formats):
-            raise ContractError("renderSpec.formats contains an unsupported format")
-        required_format = {"frames": "png", "video": "mp4-h264", "trace": "json", "manifest": "json", "annotations": "jsonl"}
-        missing_formats = sorted({required_format[output] for output in outputs} - set(raw_formats))
+        raw_formats = value.get("formats", ["png", "ply", "csv", "mp4-h264", "json", "jsonl"])
+        allowed_formats = {"png", "ply", "csv", "mp4-h264", "json", "jsonl"}
+        if not isinstance(raw_formats, list) or not raw_formats or raw_formats != list(dict.fromkeys(raw_formats)) or any(
+            item not in allowed_formats for item in raw_formats
+        ):
+            raise ContractError("renderSpec.formats contains an unsupported or duplicate format")
+        required_formats = {
+            *(SENSOR_FORMATS[sensor.modality] for sensor in sensors if "frames" in outputs),
+            *({"mp4-h264"} if "video" in outputs else set()),
+            *({"json"} if any(output in outputs for output in ("trace", "manifest")) else set()),
+            *({"jsonl"} if "annotations" in outputs else set()),
+        }
+        missing_formats = sorted(required_formats - set(raw_formats))
         if missing_formats:
             raise ContractError(f"renderSpec.formats is missing required formats: {', '.join(missing_formats)}")
-        if "video" in outputs and not any(camera.kind == "rgb" for camera in cameras):
-            raise ContractError("video output requires at least one RGB camera")
-        return cls(expected_schema, width, height, float(fps), tuple(cameras), tuple(dict.fromkeys(outputs)), execution_mode, quality, environment, tuple(dict.fromkeys(raw_formats)))
+        if "video" in outputs and not any(sensor.modality == "rgb" for sensor in sensors):
+            raise ContractError("video output requires at least one RGB sensor")
+        return cls(
+            expected_schema, fps, tuple(sensors), tuple(outputs), execution_mode,
+            quality, environment, tuple(raw_formats),
+        )
 
 
 @dataclass(frozen=True)
@@ -640,13 +743,13 @@ def parse_lease(value: Any) -> Lease:
     job_mode = job.get("mode")
     if job_mode not in {"interaction_2d", "full_render"}:
         raise ContractError("job.mode must be interaction_2d or full_render")
-    render_spec = RenderSpec.parse(job.get("renderSpec"), allow_camera_free=job_mode == "interaction_2d")
-    if job_mode == "interaction_2d" and render_spec.cameras:
-        raise ContractError("interaction_2d jobs must not include cameras")
+    render_spec = RenderSpec.parse(job.get("renderSpec"), allow_sensor_free=job_mode == "interaction_2d")
+    if job_mode == "interaction_2d" and render_spec.sensors:
+        raise ContractError("interaction_2d jobs must not include sensors")
     expected_uploads = {"trace"}
     expected_uploads.update(output for output in render_spec.outputs if output != "frames")
     if "frames" in render_spec.outputs:
-        expected_uploads.update(f"framesArchive-{camera.id}" for camera in render_spec.cameras)
+        expected_uploads.update(f"framesArchive:{sensor.artifact_name}" for sensor in render_spec.sensors)
     missing_uploads = sorted(expected_uploads - set(uploads))
     if missing_uploads:
         raise ContractError(f"artifactUploads is missing reservations: {', '.join(missing_uploads)}")
@@ -664,13 +767,13 @@ def parse_lease(value: Any) -> Lease:
         raise ContractError("leaseToken must contain at least 32 characters")
     execution_package = ExecutionPackage.parse(job.get("executionPackage"))
     requirements = execution_package.runtime_requirements
-    actual_camera_kinds = tuple(sorted({camera.kind for camera in render_spec.cameras}))
+    actual_sensor_modalities = tuple(sorted({sensor.modality for sensor in render_spec.sensors}))
     actual_outputs = tuple(sorted(render_spec.outputs))
     if (
         requirements.job_mode != job_mode
         or requirements.traffic_mode != execution_package.ambient["ambientMode"]
         or requirements.execution_mode != render_spec.execution_mode
-        or requirements.camera_kinds != actual_camera_kinds
+        or requirements.sensor_modalities != actual_sensor_modalities
         or requirements.outputs != actual_outputs
     ):
         raise ContractError("runtimeRequirements do not match the leased job and render specification")

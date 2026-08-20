@@ -192,6 +192,17 @@ def seal_lease(value, manifest: bytes = MANIFEST):
     package = job["executionPackage"]
     package["manifest"] = {"url": "memory:manifest", "sha256": digest(manifest), "sizeBytes": len(manifest)}
     package["materializedTrafficDigest"] = package["ambient"]["resultSha256"]
+    sensors = job["renderSpec"]["sensors"]
+    raster = [
+        sensor for sensor in sensors
+        if sensor["modality"] in {"rgb", "depth", "semantic", "instance", "normals"}
+    ]
+    samples_per_frame = sum(
+        sensor["config"]["width"] * sensor["config"]["height"] for sensor in raster
+    ) + sum(
+        int(sensor["config"]["pointsPerSecond"] / job["renderSpec"]["fps"])
+        for sensor in sensors if "pointsPerSecond" in sensor["config"]
+    )
     package["runtimeRequirements"] = {
         "schema": "uniscenario.runtime-requirements/v1",
         "xoscVersion": "1.4",
@@ -200,28 +211,20 @@ def seal_lease(value, manifest: bytes = MANIFEST):
         "jobMode": job["mode"],
         "trafficMode": package["ambient"]["ambientMode"],
         "executionMode": job["renderSpec"].get("executionMode", "native-physics"),
-        "cameraKinds": sorted({camera["kind"] for camera in job["renderSpec"]["cameras"]}),
+        "sensorModalities": sorted({sensor["modality"] for sensor in sensors}),
         "outputs": sorted(set(job["renderSpec"]["outputs"])),
         "resources": {
             "schema": "uniscenario.render-resource-request/v1",
             "durationS": 0.04,
-            "sensors": len(job["renderSpec"]["cameras"]),
-            "captureFrames": len(job["renderSpec"]["cameras"]),
+            "sensors": len(sensors),
+            "captureFrames": len(sensors),
             "actors": 256,
             "actorFrameStates": 512,
-            "sensorPixels": (
-                job["renderSpec"]["width"]
-                * job["renderSpec"]["height"]
-                * len(job["renderSpec"]["cameras"])
-            ),
+            "sensorSamples": samples_per_frame * len(sensors),
             "outputBytes": 2_147_483_648,
-            "maxCameraWidth": job["renderSpec"]["width"] if job["renderSpec"]["cameras"] else 0,
-            "maxCameraHeight": job["renderSpec"]["height"] if job["renderSpec"]["cameras"] else 0,
-            "pixelsPerFrame": (
-                job["renderSpec"]["width"]
-                * job["renderSpec"]["height"]
-                * len(job["renderSpec"]["cameras"])
-            ),
+            "maxFrameWidth": max((sensor["config"]["width"] for sensor in raster), default=0),
+            "maxFrameHeight": max((sensor["config"]["height"] for sensor in raster), default=0),
+            "samplesPerFrame": samples_per_frame,
         },
     }
     reseal_control(package)
@@ -233,7 +236,7 @@ def lease_value(outputs=None, uploads=None):
     if uploads is None:
         upload_kinds = list(dict.fromkeys(["trace", *[item for item in selected_outputs if item != "frames"]]))
         if "frames" in selected_outputs:
-            upload_kinds.append("framesArchive-hero")
+            upload_kinds.append("framesArchive:primary:ego:hero:rgb")
         media_types = {
             "trace": "application/gzip",
             "video": "video/mp4",
@@ -268,7 +271,21 @@ def lease_value(outputs=None, uploads=None):
                 },
             },
             "mode": "full_render",
-            "renderSpec": {"schema": "uniscenario.render-spec/v1", "width": 640, "height": 360, "fps": 25, "cameras": [{"id": "hero", "kind": "rgb", "attachTo": "ego", "mount": "chase"}], "outputs": selected_outputs, "executionMode": "native-physics", "quality": "high"},
+            "renderSpec": {
+                "schema": "uniscenario.render-spec/v1",
+                "fps": 25,
+                "sensors": [{
+                    "role": "primary",
+                    "actorId": "ego",
+                    "sensorId": "hero",
+                    "modality": "rgb",
+                    "transform": {"x": -7.5, "y": 0, "z": 3, "pitch": -12, "yaw": 0, "roll": 0},
+                    "config": {"width": 640, "height": 360, "fov": 90},
+                }],
+                "outputs": selected_outputs,
+                "executionMode": "native-physics",
+                "quality": "high",
+            },
             "parityThresholds": {"positionM": 0.01, "headingDeg": 0.01, "speedMps": 0.01},
             "artifactUploads": uploads,
         },
@@ -292,18 +309,36 @@ class FakeBackend:
     def configure_environment(self, environment): self.calls.append(("environment", environment.cloudiness))
     def spawn(self, actors, first_frame, catalog, abort=None): (abort or (lambda: None))(); self.calls.append(("spawn", sorted(actors)))
     def prepare_scenario(self, first_frame, abort=None): (abort or (lambda: None))(); self.calls.append(("prepare", first_frame.index)); return self.stability
-    def configure_cameras(self, spec, output_dir: Path, max_capture_disk_bytes, abort=None): (abort or (lambda: None))(); output_dir.mkdir(parents=True); self.output_dir = output_dir; self.calls.append(("cameras", spec.width)); self.max_capture_disk_bytes = max_capture_disk_bytes
+    def configure_sensors(self, spec, output_dir: Path, max_capture_disk_bytes, abort=None):
+        (abort or (lambda: None))()
+        output_dir.mkdir(parents=True)
+        self.output_dir = output_dir
+        self.sensor_specs = spec.sensors
+        self.calls.append(("sensors", len(spec.sensors)))
+        self.max_capture_disk_bytes = max_capture_disk_bytes
     def apply(self, frame, abort=None): (abort or (lambda: None))(); self.frame = frame; self.executed_signals = dict(frame.signals); self.calls.append(("apply", frame.index))
     def tick(self, capture=None, abort=None):
         (abort or (lambda: None))()
         self.calls.append(("tick", self.frame.index))
         if capture is not None:
-            for camera_id in ("hero",):
-                target = self.output_dir / camera_id
+            for sensor in self.sensor_specs:
+                sensor_key = sensor.artifact_name
+                target = self.output_dir / sensor_key
                 target.mkdir(parents=True, exist_ok=True)
                 output_index = int(capture["outputFrameIndex"])
                 (target / f"{output_index:08d}.png").write_bytes(b"png")
-                self.records.append({"sensorId": camera_id, "kind": "rgb", "outputFrameIndex": output_index, "scheduledTimeS": capture["scheduledTimeS"], "carlaFrame": self.frame.index + 1, "timestamp": self.frame.t, "relativePath": f"{camera_id}/{output_index:08d}.png"})
+                self.records.append({
+                    "artifactName": sensor_key,
+                    "role": sensor.role,
+                    "actorId": sensor.actor_id,
+                    "sensorId": sensor.sensor_id,
+                    "modality": sensor.modality,
+                    "outputFrameIndex": output_index,
+                    "scheduledTimeS": capture["scheduledTimeS"],
+                    "carlaFrame": self.frame.index + 1,
+                    "actualCarlaTimeS": self.frame.t,
+                    "relativePath": f"{sensor_key}/{output_index:08d}.png",
+                })
         return {actor_id: {"x": state.x + self.offset, "y": state.y, "z": state.z, "headingDeg": state.heading_deg, "speedMps": state.speed_mps} for actor_id, state in self.frame.actors.items()}
     def finalize_capture(self, expected_frame_count, abort=None):
         (abort or (lambda: None))()
@@ -391,10 +426,14 @@ def test_carla_spawn_preserves_absolute_xosc_elevation_and_coordinate_sign():
     Carla.Location, Carla.Rotation, Carla.Transform = Location, Rotation, Transform
     class Library:
         def find(self, blueprint_id): return blueprint_id
+    class Actor:
+        id = 1
+        type_id = "vehicle.lincoln.mkz"
+        def destroy(self): return True
     class World:
         def __init__(self): self.transform = None
         def get_blueprint_library(self): return Library()
-        def try_spawn_actor(self, _blueprint, transform): self.transform = transform; return object()
+        def try_spawn_actor(self, _blueprint, transform): self.transform = transform; return Actor()
 
     backend = object.__new__(CarlaBackend)
     backend.carla = Carla
@@ -567,8 +606,20 @@ def _capture_backend(tmp_path, callback):
     backend.capture_disk_bytes = 0
     backend.max_capture_disk_bytes = 1024 * 1024
     backend.sensor_timeout_s = 0.2
+    backend.sensor_writer_workers = 2
+    backend.sensor_writer_pool = None
     backend.sensor_configs = {
-        camera_id: {"target": tmp_path / camera_id, "kind": "rgb", "converter": None, "attachTo": "ego", "mount": "chase"}
+        camera_id: {
+            "target": tmp_path / camera_id,
+            "role": "primary",
+            "actorId": "ego",
+            "sensorId": camera_id,
+            "modality": "rgb",
+            "converter": None,
+            "extension": "png",
+            "transform": {},
+            "config": {"width": 640, "height": 360, "fov": 90},
+        }
         for camera_id in ("hero", "rear")
     }
     for config in backend.sensor_configs.values():
@@ -939,7 +990,7 @@ def test_executes_hash_closed_lease_and_uploads_trace():
     assert backend.calls[0] == ("mode", "native-physics")
     assert backend.calls.index(("signals", ())) < backend.calls.index(("environment", 0.0))
     assert backend.calls.index(("signals", ())) < backend.calls.index(("spawn", ["ego"]))
-    assert backend.calls.index(("prepare", 0)) < backend.calls.index(("cameras", 640))
+    assert backend.calls.index(("prepare", 0)) < backend.calls.index(("sensors", 1))
 
 
 def test_mode_is_explicit_and_parity_tolerance_gates_result():
@@ -967,7 +1018,7 @@ def test_interaction_2d_is_camera_free_and_emits_trace_and_manifest():
     })
     value["job"]["mode"] = "interaction_2d"
     value["job"]["renderSpec"]["schema"] = "uniscenario.interaction-spec/v1"
-    value["job"]["renderSpec"]["cameras"] = []
+    value["job"]["renderSpec"]["sensors"] = []
     lease = parse_lease(seal_lease(value))
     backend = FakeBackend()
     assets = {"memory:manifest": MANIFEST, "memory:xosc": XOSC, "memory:xodr": XODR, "memory:catalog": CATALOG, "memory:traffic": DISABLED_TRAFFIC}
@@ -977,7 +1028,7 @@ def test_interaction_2d_is_camera_free_and_emits_trace_and_manifest():
         downloader=lambda url, _limit: assets[url],
         uploader=lambda *_args: None,
     )
-    assert not any(call[0] == "cameras" for call in backend.calls)
+    assert not any(call[0] == "sensors" for call in backend.calls)
     assert [artifact["kind"] for artifact in result["artifacts"]] == ["trace", "manifest"]
 
 
@@ -1202,22 +1253,32 @@ def test_rejects_fake_or_incomplete_ambient_provenance():
         parse_lease(bad_digest)
 
 
-def test_versioned_render_spec_supports_mounts_sensors_quality_environment_and_formats():
+def test_versioned_render_spec_supports_all_native_sensors_quality_environment_and_formats():
     value = lease_value(outputs=["trace", "manifest", "annotations"])
+    transform = {"x": 1.4, "y": 0, "z": 1.25, "pitch": -3, "yaw": 0, "roll": 0}
+    camera = {"width": 1280, "height": 720, "fov": 82}
+    lidar = {
+        "channels": 64, "rangeM": 120, "pointsPerSecond": 1_000_000,
+        "rotationFrequencyHz": 24, "upperFovDeg": 10, "lowerFovDeg": -30,
+    }
+    radar = {"horizontalFovDeg": 40, "verticalFovDeg": 20, "rangeM": 100, "pointsPerSecond": 20_000}
+    modalities = ["rgb", "depth", "semantic", "instance", "normals", "lidar", "semantic-lidar", "radar"]
     value["job"]["renderSpec"].update({
         "quality": "cinematic",
         "environment": {"cloudiness": 70, "precipitation": 25, "wetness": 50, "sunAltitude": 12},
         "formats": ["json", "jsonl"],
-        "cameras": [
-            {"id": "hero", "kind": "rgb", "attachTo": "ego", "mount": "hood", "fov": 82},
-            {"id": "depth", "kind": "depth", "attachTo": "ego", "mount": "roof"},
-            {"id": "sem", "kind": "semantic", "mount": "world", "transform": {"x": 10, "y": 2, "z": 8, "pitch": -20}},
-            {"id": "inst", "kind": "instance", "attachTo": "ego", "mount": "dash"},
+        "sensors": [
+            {
+                "role": f"capture-{index}", "actorId": "ego", "sensorId": f"sensor-{index}",
+                "modality": modality, "transform": transform,
+                "config": camera if modality in {"rgb", "depth", "semantic", "instance", "normals"} else lidar if "lidar" in modality else radar,
+            }
+            for index, modality in enumerate(modalities)
         ],
     })
     lease = parse_lease(seal_lease(value))
-    assert [camera.kind for camera in lease.render_spec.cameras] == ["rgb", "depth", "semantic", "instance"]
-    assert lease.render_spec.cameras[0].transform["x"] == 1.4
+    assert [sensor.modality for sensor in lease.render_spec.sensors] == modalities
+    assert lease.render_spec.sensors[0].transform["x"] == 1.4
     assert lease.render_spec.quality == "cinematic"
     assert lease.render_spec.environment.cloudiness == 70
 
@@ -1318,7 +1379,7 @@ def test_cleanup_failure_is_chained_without_masking_execution_failure():
     assert str(raised.value.__cause__) == "secondary cleanup failure"
 
 
-def test_frame_archives_are_reserved_and_reported_per_camera(monkeypatch):
+def test_frame_archives_are_reserved_and_reported_per_sensor(monkeypatch):
     lease = parse_lease(lease_value(outputs=["frames"]))
     assets = {"memory:manifest": MANIFEST, "memory:xosc": XOSC, "memory:xodr": XODR, "memory:catalog": CATALOG, "memory:traffic": DISABLED_TRAFFIC}
     uploads = []
@@ -1332,13 +1393,14 @@ def test_frame_archives_are_reserved_and_reported_per_camera(monkeypatch):
         downloader=lambda url, _limit: assets[url],
         uploader=stream_upload,
     )
-    assert [item["kind"] for item in result["artifacts"]] == ["trace", "framesArchive-hero"]
+    assert [item["kind"] for item in result["artifacts"]] == ["trace", "framesArchive:primary:ego:hero:rgb"]
     assert result["artifacts"][1]["mediaType"] == "application/zip"
     assert result["artifacts"][1]["metadata"] == {
-        "sensorId": "hero", "sensorKind": "rgb", "format": "png",
+        "outputName": "primary", "actorId": "ego", "sensorId": "hero",
+        "modality": "rgb", "format": "png",
         "frameCount": 1, "fps": 25.0, "durationS": 0.04,
     }
-    assert uploads[1][0] == "memory:upload:framesArchive-hero"
+    assert uploads[1][0] == "memory:upload:framesArchive:primary:ego:hero:rgb"
     assert uploads[1][1].startswith(b"PK")
 
 
@@ -1725,7 +1787,7 @@ def test_expiry_inside_actor_spawn_cleans_up_without_binding_or_upload(monkeypat
             deadline_monotonic=lambda: 1.0,
         )
     assert backend.calls[-1] == ("cleanup",)
-    assert not any(call[0] in {"prepare", "cameras"} for call in backend.calls)
+    assert not any(call[0] in {"prepare", "sensors"} for call in backend.calls)
 
 
 def test_expiry_inside_native_stability_cleans_up_without_binding_or_upload(monkeypatch):
@@ -1749,7 +1811,7 @@ def test_expiry_inside_native_stability_cleans_up_without_binding_or_upload(monk
             deadline_monotonic=lambda: 1.0,
         )
     assert backend.calls[-1] == ("cleanup",)
-    assert not any(call[0] == "cameras" for call in backend.calls)
+    assert not any(call[0] == "sensors" for call in backend.calls)
 
 
 def test_cancellation_during_trace_serialization_never_binds_or_uploads():
@@ -1854,9 +1916,12 @@ def test_slow_heartbeat_never_blocks_arriving_sensor_callback(tmp_path):
     backend.sensor_lock = lock
     backend.sensor_condition = Condition(lock)
     backend.sensor_configs = {"hero": {
-        "target": tmp_path, "kind": "rgb", "converter": None,
-        "attachTo": None, "mount": "world",
+        "target": tmp_path, "role": "primary", "actorId": None, "sensorId": "hero",
+        "modality": "rgb", "converter": None, "extension": "png",
+        "transform": {}, "config": {"width": 640, "height": 360, "fov": 90},
     }}
+    backend.sensor_writer_workers = 1
+    backend.sensor_writer_pool = None
     backend.sensor_timeout_s = 0.5
     backend.sensor_error = None
     backend.sensor_pending = {}
@@ -2005,7 +2070,7 @@ def test_raw_frames_and_archive_share_one_peak_temp_budget(monkeypatch):
             "uploadId": "trace", "uploadUrl": "memory:trace", "artifactUrl": "/api/uniscenario/artifact-uploads/trace",
             "requiredHeaders": {"content-type": "application/gzip"},
         },
-        "framesArchive-hero": {
+        "framesArchive:primary:ego:hero:rgb": {
             "uploadId": "frames", "uploadUrl": "memory:frames", "artifactUrl": "/api/uniscenario/artifact-uploads/frames",
             "requiredHeaders": {"content-type": "application/zip"},
         },
@@ -2018,13 +2083,15 @@ def test_raw_frames_and_archive_share_one_peak_temp_budget(monkeypatch):
             (abort or (lambda: None))()
             self.calls.append(("tick", self.frame.index))
             if capture is not None:
-                target = self.output_dir / "hero"
+                sensor_key = "primary:ego:hero:rgb"
+                target = self.output_dir / sensor_key
                 target.mkdir(parents=True, exist_ok=True)
                 (target / "00000000.png").write_bytes(b"x" * 1_000_000)
                 self.records.append({
-                    "sensorId": "hero", "kind": "rgb", "outputFrameIndex": 0,
-                    "scheduledTimeS": 0.0, "carlaFrame": 1, "timestamp": 0.0,
-                    "relativePath": "hero/00000000.png",
+                    "artifactName": sensor_key, "role": "primary", "actorId": "ego",
+                    "sensorId": "hero", "modality": "rgb", "outputFrameIndex": 0,
+                    "scheduledTimeS": 0.0, "carlaFrame": 1, "actualCarlaTimeS": 0.0,
+                    "relativePath": f"{sensor_key}/00000000.png",
                 })
             return {
                 actor_id: {"x": state.x, "y": state.y, "z": state.z, "headingDeg": state.heading_deg, "speedMps": state.speed_mps}
@@ -2061,14 +2128,17 @@ def test_duration_frame_pixel_sensor_and_output_budgets(monkeypatch):
         worker_runner._enforce_render_budgets(lease, short, 18_000)
 
     sensor_heavy = lease_value()
-    sensor_heavy["job"]["renderSpec"]["cameras"] = [
-        {"id": f"camera-{index}", "kind": "rgb", "attachTo": "ego", "mount": "chase"}
-        for index in range(17)
+    sensor_heavy["job"]["renderSpec"]["sensors"] = [
+        {
+            "role": f"capture-{index}", "actorId": "ego", "sensorId": f"camera-{index}",
+            "modality": "rgb",
+            "transform": {"x": 0, "y": 0, "z": 2, "pitch": 0, "yaw": 0, "roll": 0},
+            "config": {"width": 640, "height": 360, "fov": 90},
+        }
+        for index in range(65)
     ]
     sensor_heavy = seal_lease(sensor_heavy)
-    sensor_heavy["job"]["executionPackage"]["runtimeRequirements"]["resources"]["sensors"] = 16
-    reseal_control(sensor_heavy["job"]["executionPackage"])
-    with pytest.raises(ContractError, match="1..16 cameras"):
+    with pytest.raises(ContractError, match="1..64 sensors"):
         parse_lease(sensor_heavy)
 
     invalid_resources = lease_value()

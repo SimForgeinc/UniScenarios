@@ -1,12 +1,12 @@
 # UniScenarios CARLA bridge
 
-`uniscenarios-carla-bridge` is the optional public CARLA renderer and sensor
-adapter for UniScenarios. It consumes the same immutable execution-package and
-lease contracts used by SimCloud. The package owns the OpenSCENARIO 1.4
-compiler, deterministic execution loop, concrete CARLA backend, materialized
-ambient-traffic merge, parity evidence, bounded artifact transport, and the
-official schema validator. SimCloud adds only its authenticated remote worker
-control plane.
+`uniscenarios-carla-bridge` is the public CARLA renderer and sensor adapter
+owned by UniScenarios. It consumes `uniscenario.render-intent/v1` plus a
+hash-closed local input package; the managed worker retains only leases,
+fencing, authorization, and transfer. The package owns OpenSCENARIO 1.4
+compilation, deterministic native execution, RGB/depth/semantic/instance/
+normals cameras, LiDAR, semantic LiDAR, radar, materialized traffic, parity
+evidence, bounded artifact transport, and the official schema validator.
 
 CARLA is optional. The browser editor, local deterministic simulation,
 OpenDRIVE tooling, OpenSCENARIO export, and playback do not import CARLA or
@@ -38,23 +38,39 @@ world:
 uniscenarios-carla --host 127.0.0.1 --port 2000 probe
 ```
 
-Execute a locally materialized lease:
+The unified Node CLI dispatches `--engine carla` to this installed process
+adapter:
 
 ```sh
-uniscenarios-carla --host 127.0.0.1 --port 2000 run-lease \
-  --lease lease.json \
-  --manifest manifest.json \
-  --xosc scenario.xosc \
-  --xodr map.xodr \
-  --asset-catalog asset-catalog.json \
-  --output-dir output/carla
+uniscenarios-carla --host 127.0.0.1 --port 2000 run-intent \
+  --intent render-intent.json \
+  --package input-package.json \
+  --output output/carla \
+  --progress output/carla-progress.jsonl \
+  --manifest output/render-artifact-manifest.json
 ```
 
-Pass `--materialized-traffic` when the lease references an ambient-traffic
-artifact. `--xsd` is optional and defaults to the schema bundled in the wheel.
-All input sizes and hashes, execution-package identity, map/catalog bindings,
-fixed-step requirements, and output reservations are checked before CARLA is
-allowed to execute.
+`run-intent` accepts strict render-spec/v3 sources, verifies `intentSha256` and
+every local input before CARLA starts, writes `uniscenario.render-progress/v1`
+JSONL, and closes with `uniscenario.render-artifact-manifest/v1`.
+
+Set `UNISCENARIO_CARLA_COOKED_MAPS_JSON` to a JSON map of cooked map names to
+their source XODR SHA-256 values; a digest or loaded-world identity mismatch is
+fatal. `UNISCENARIO_CARLA_SIGNAL_ID_MAP` supplies an explicit one-to-one authored
+to cooked OpenDRIVE signal-id map. `UNISCENARIO_SENSOR_WRITER_WORKERS` bounds
+parallel streaming writers. Set `UNISCENARIO_PRESENTATION_VIDEO_ENCODER=nvidia`
+to request `h264_nvenc`; PNG/PLY/CSV sensor frames remain the canonical output.
+
+Managed Pronto execution derives from
+`ghcr.io/simforgeinc/carla-rfs-munich-belmont@sha256:baed0d038437c55efe0abe52a762d352aeb21acdeeff5b11a15f6bd8a648de64`
+(OCI index `sha256:f17c639e5f86fd7458fe1d02d3be1d481deeaa714f3cac30e465187d04ec90e5`).
+All 18 sensors must attach to one host actor whose catalog asset and CARLA
+blueprint are both exactly `vehicle.kia.carnival`. The packaged evidence is
+`CarlaUnreal/Content/Carla/Config/VehicleParameters.json`: Make `Kia`, Model
+`Carnival`, BaseType `van`, class
+`/Game/Carla/Blueprints/Vehicles/KiaCarnival2025/BP_KiaCarnival2025.BP_KiaCarnival2025_C`.
+The runtime rejects mismatched intent identity, catalog binding, spawned actor
+type-id, sensor parent readback, or image-manifest provenance.
 
 ## Develop and verify
 

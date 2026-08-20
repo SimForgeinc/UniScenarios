@@ -1,7 +1,14 @@
 """Versioned, fail-closed semantic coverage for CARLA execution paths."""
 
 from dataclasses import dataclass
-from typing import Literal
+from typing import Literal, Mapping
+
+from .runtime.backend import (
+    KIA_CARNIVAL_BLUEPRINT_ID,
+    KIA_CARNIVAL_CATALOG_ID,
+    NATIVE_SENSOR_BLUEPRINTS,
+)
+from .runtime.contract import SENSOR_FORMATS, SENSOR_MODALITIES
 
 Coverage = Literal["exact", "approximate", "unsupported"]
 
@@ -29,14 +36,39 @@ BRIDGE_CAPABILITIES: dict[str, Capability] = {
     "traffic_signal.controller_logic": Capability("exact", "unsupported", "UniScenarios evaluates logic; bridge applies resulting head states."),
     "weather": Capability("exact", "approximate", "Public weather parameters are supported after explicit field mapping."),
     "collision.observe": Capability("exact", "approximate", "Passive collision sensors record first-contact frame/time/pair/impulse and segment parity at the contact boundary."),
-    "camera.rgb": Capability("exact", "unsupported", "CARLA camera sensor output is recorded by frame."),
-    "sensor.depth_semantic_instance": Capability("exact", "unsupported", "Camera calibration and frame closure are immutable evidence."),
-    "sensor.lidar_radar": Capability("unsupported", "unsupported", "The current render-spec contract does not expose lidar or radar; reject rather than silently substitute a camera."),
-    "sensor.depth_lidar_radar": Capability("unsupported", "unsupported", "Legacy aggregate identifier; depth is supported only through camera.depth, while lidar and radar remain fail-closed."),
+    **{
+        f"sensor.{modality}": Capability(
+            "exact",
+            "unsupported",
+            f"Native CARLA blueprint {NATIVE_SENSOR_BLUEPRINTS[modality]} writes deterministic "
+            f"{SENSOR_FORMATS[modality].upper()} frames with sensor-scoped closure.",
+        )
+        for modality in sorted(SENSOR_MODALITIES)
+    },
+    "sensor-host.pronto-kia-carnival": Capability(
+        "exact",
+        "unsupported",
+        f"Pronto 8/6/4 rigs require exact catalog {KIA_CARNIVAL_CATALOG_ID} and "
+        f"runtime type-id readback {KIA_CARNIVAL_BLUEPRINT_ID}.",
+    ),
     "custom.map.opendrive": Capability("exact", "approximate", "Load identical XODR; visual assets need a packaged custom map."),
     "custom.prop.procedural": Capability("unsupported", "unsupported", "Reject until a catalog asset is explicitly bound."),
     "occlusion.metric": Capability("exact", "unsupported", "UniScenarios evaluates the metric; CARLA sensor evidence is supplementary."),
 }
+
+if set(NATIVE_SENSOR_BLUEPRINTS) != set(SENSOR_MODALITIES) or set(SENSOR_FORMATS) != set(SENSOR_MODALITIES):
+    raise RuntimeError("advertised CARLA sensor capabilities differ from the parser/runtime support set")
+
+
+def native_sensor_capabilities() -> Mapping[str, Mapping[str, str]]:
+    """Return the exact parser/runtime sensor surface advertised by probes."""
+    return {
+        modality: {
+            "blueprint": NATIVE_SENSOR_BLUEPRINTS[modality],
+            "artifactFormat": SENSOR_FORMATS[modality],
+        }
+        for modality in sorted(SENSOR_MODALITIES)
+    }
 
 
 @dataclass(frozen=True)
