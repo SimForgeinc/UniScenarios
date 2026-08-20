@@ -1,10 +1,8 @@
 import type { MapSignalPlan, MapSignalPlanClip } from '@uniscenarios/scenario-model';
-import {
-  contentHash,
-  type ControlIndication,
-  type RoadControl,
-  type SignalProgram,
-  type TopologyIndex,
+import type {
+  ControlIndication,
+  SignalProgram,
+  TopologyIndex,
 } from '@uniscenarios/sim-engine';
 
 import type { MapSignalCatalog } from './map-signals.js';
@@ -14,9 +12,15 @@ import {
   selectSignalReference,
 } from './signal-control.js';
 
+/**
+ * A plan binds by immutable map id plus exact junction, controller and head
+ * ids, and every one of those is checked below. It deliberately does NOT bind
+ * to a broad hash of the map's control closure: unrelated road-control
+ * enrichment - a stop line added on another arm, a parking bay - must not
+ * invalidate a signal plan that still names live heads.
+ */
 export type MapSignalPlanCompileErrorCode =
   | 'map_signal_plan_map_mismatch'
-  | 'map_signal_plan_stale_binding'
   | 'map_signal_plan_junction_unbound'
   | 'map_signal_plan_reference_unbound'
   | 'map_signal_plan_dual_ownership'
@@ -38,8 +42,6 @@ export interface CompileMapSignalPlansOptions {
   readonly clipSeconds: number;
   readonly warmupSeconds: number;
   readonly signalCatalog: MapSignalCatalog;
-  /** The physical road controls included in the plan binding digest. */
-  readonly roadControls: readonly RoadControl[];
   readonly topology: TopologyIndex;
   /** Derived gate conflicts keyed by physical junction id. */
   readonly conflictPairsByJunction: Readonly<Record<string, readonly { gateA: string; gateB: string }[]>>;
@@ -158,7 +160,6 @@ function compileJunction(
   programs: readonly SignalProgram[],
   plan: MapSignalPlan,
   options: CompileMapSignalPlansOptions,
-  controlDigest: string,
   planIndex: number,
 ): SignalProgram[] {
   const prefix = `mapSignalPlans.${planIndex}`;
@@ -167,13 +168,6 @@ function compileJunction(
       'map_signal_plan_map_mismatch',
       `signal plan is bound to map "${plan.binding.mapId}", not "${options.mapId}"`,
       `${prefix}.binding.mapId`,
-    );
-  }
-  if (plan.binding.controlDigest !== controlDigest) {
-    throw new MapSignalPlanCompileError(
-      'map_signal_plan_stale_binding',
-      'physical traffic-control metadata changed; reselect the intersection before playback',
-      `${prefix}.binding.controlDigest`,
     );
   }
   const junctionPrograms = programs.filter((program) => program.mapBinding?.junctionId === plan.binding.junctionId);
@@ -278,10 +272,9 @@ export function compileMapSignalPlans(
   plans: readonly MapSignalPlan[],
   options: CompileMapSignalPlansOptions,
 ): SignalProgram[] {
-  const controlDigest = contentHash({ signalPrograms: programs, roadControls: options.roadControls });
   let output = [...programs];
   plans.forEach((plan, planIndex) => {
-    const compiled = compileJunction(output, plan, options, controlDigest, planIndex);
+    const compiled = compileJunction(output, plan, options, planIndex);
     const replacements = new Map(compiled.map((program) => [program.id, program]));
     output = output.map((program) => replacements.get(program.id) ?? program);
   });

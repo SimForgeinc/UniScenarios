@@ -40,7 +40,7 @@ const topology = {
 } as any;
 const options = {
   mapId: 'map', clipSeconds: 8, warmupSeconds: 2,
-  signalCatalog: catalog, roadControls: controls.roadControls, topology,
+  signalCatalog: catalog, topology,
   conflictPairsByJunction: { j1: [{ gateA: 'g1', gateB: 'g2' }] },
 };
 
@@ -201,12 +201,20 @@ describe('map signal plan compiler', () => {
     ))).toBe(true);
   });
 
-  it('fails closed on stale metadata and dual ownership', () => {
-    const stalePrograms = programs.map((program) => program.id === 'signal:h1'
+  it('binds by id, not by a hash of the whole control closure', () => {
+    // Retiming an unrelated head, or enriching road controls elsewhere on the
+    // map, must not invalidate a plan whose own junction and heads are live:
+    // executability binds by immutable ids, not by a broad provenance digest.
+    const retimed = programs.map((program) => program.id === 'signal:h2'
       ? { ...program, phases: [{ phase: 'green' as const, durationS: 3 }, ...program.phases.slice(1)] }
       : program);
-    expect(() => compileMapSignalPlans(stalePrograms, [plan], options))
-      .toThrowError(expect.objectContaining({ code: 'map_signal_plan_stale_binding' }));
+    expect(() => compileMapSignalPlans(retimed, [plan], options)).not.toThrow();
+  });
+
+  it('fails closed when the bound junction is gone, or ownership is split', () => {
+    const orphaned = programs.map((program) => ({ ...program, mapBinding: undefined }));
+    expect(() => compileMapSignalPlans(orphaned, [plan], options))
+      .toThrowError(expect.objectContaining({ code: 'map_signal_plan_junction_unbound' }));
     expect(() => compileMapSignalPlans(programs, [plan], { ...options, worldSignalSetIds: ['signal:h1'] }))
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_dual_ownership' }));
   });

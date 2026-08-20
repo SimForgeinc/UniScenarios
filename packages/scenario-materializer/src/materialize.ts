@@ -2530,7 +2530,6 @@ class Materializer {
           clipSeconds: this.template.choreography.clipSeconds,
           warmupSeconds: this.template.choreography.warmupSeconds,
           signalCatalog: this.bundle.signalCatalog,
-          roadControls: controls.roadControls,
           topology: this.bundle.topology,
           conflictPairsByJunction: Object.fromEntries(
             Object.entries(this.bundle.index.junctionDescriptors).map(([id, descriptor]) => [id, descriptor.conflictPairs]),
