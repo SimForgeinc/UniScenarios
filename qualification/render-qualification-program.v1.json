@@ -1,0 +1,67 @@
+{
+  "schema": "uniscenario.render-qualification-program/v1",
+  "selectionCount": 5,
+  "sourceEnvironment": "dev",
+  "eligibility": {
+    "minimumAuthoredRolesExclusive": 5,
+    "requireCurrentNondeletedRevision": true,
+    "requireValidOpenScenario14Package": true,
+    "requireProntoCapableCar": true,
+    "requireCarlaCookedMap": true,
+    "requireCarlaAssetCatalog": true
+  },
+  "qualificationHost": {
+    "assetId": "vehicle.kia.carnival",
+    "carlaBlueprintId": "vehicle.kia.carnival",
+    "make": "Kia",
+    "model": "Carnival",
+    "baseType": "van",
+    "carlaClassPath": "/Game/Carla/Blueprints/Vehicles/KiaCarnival2025/BP_KiaCarnival2025.BP_KiaCarnival2025_C",
+    "image": {
+      "reference": "ghcr.io/simforgeinc/carla-rfs-munich-belmont",
+      "ociIndexDigest": "sha256:f17c639e5f86fd7458fe1d02d3be1d481deeaa714f3cac30e465187d04ec90e5",
+      "linuxAmd64ManifestDigest": "sha256:baed0d038437c55efe0abe52a762d352aeb21acdeeff5b11a15f6bd8a648de64"
+    },
+    "evidence": {
+      "vehicleParametersPath": "/home/carla/CarlaUnreal/Content/Carla/Config/VehicleParameters.json",
+      "packagedAssetPath": "/home/carla/CarlaUnreal/Content/Carla/Blueprints/Vehicles/KiaCarnival2025/BP_KiaCarnival2025.uasset",
+      "identityRule": "exact Make/Model-derived CARLA id; aliases and fuzzy matching forbidden"
+    }
+  },
+  "render": {
+    "width": 1280,
+    "height": 720,
+    "fps": 24,
+    "clip": "full",
+    "sensorConcurrency": "all",
+    "intentSchema": "uniscenario.render-intent/v1",
+    "workerControlSchema": "uniscenario.render-worker-control/v2"
+  },
+  "prontoRig": {
+    "id": "pronto-port-e",
+    "name": "Pronto Rig",
+    "sourceFrame": "vehicle: longitudinal-mm, lateral-right-mm, up-mm",
+    "canonicalFrame": "x-forward, y-up, z-left; metres; radians",
+    "compatibleActorClasses": ["car"],
+    "sensors": [
+      {"id":"pronto-cam0","type":"dash_camera","label":"CAM0 — Front Driver","sourceMountMm":{"longitudinal":-150.9,"lateralRight":-795.8,"up":51.7},"rotationDeg":{"yaw":122,"pitch":25,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam1","type":"dash_camera","label":"CAM1 — Front Center","sourceMountMm":{"longitudinal":-150.8,"lateralRight":0,"up":51.7},"rotationDeg":{"yaw":0,"pitch":10,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam2","type":"dash_camera","label":"CAM2 — Rear Driver","sourceMountMm":{"longitudinal":-2460.3,"lateralRight":-795.8,"up":51.7},"rotationDeg":{"yaw":60,"pitch":25,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam3","type":"dash_camera","label":"CAM3 — Front Driver Falcon","sourceMountMm":{"longitudinal":-48.4,"lateralRight":-595.3,"up":72.7},"rotationDeg":{"yaw":0,"pitch":0,"roll":0},"horizontalFovDeg":30},
+      {"id":"pronto-cam4","type":"dash_camera","label":"CAM4 — Rear Passenger","sourceMountMm":{"longitudinal":-2460.3,"lateralRight":795.8,"up":51.7},"rotationDeg":{"yaw":-60,"pitch":25,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam5","type":"dash_camera","label":"CAM5 — Rear Center","sourceMountMm":{"longitudinal":-2460.3,"lateralRight":0,"up":51.7},"rotationDeg":{"yaw":180,"pitch":10,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam6","type":"dash_camera","label":"CAM6 — Front Passenger","sourceMountMm":{"longitudinal":-150.8,"lateralRight":798.5,"up":51.7},"rotationDeg":{"yaw":-122,"pitch":25,"roll":0},"horizontalFovDeg":120},
+      {"id":"pronto-cam7","type":"dash_camera","label":"CAM7 — Front Passenger Falcon","sourceMountMm":{"longitudinal":-61.6,"lateralRight":592.7,"up":72.7},"rotationDeg":{"yaw":0,"pitch":5,"roll":0},"horizontalFovDeg":60},
+      {"id":"pronto-lidar-front-left","type":"lidar","label":"Front left — Seyond Falcon","sourceMountMm":{"longitudinal":-115.9,"lateralRight":-477.2,"up":127.8},"rotationDeg":{"yaw":0,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":25},
+      {"id":"pronto-lidar-front-left-wide","type":"lidar","label":"Front left wide — Seyond Robin W","sourceMountMm":{"longitudinal":-134.3,"lateralRight":-767.1,"up":78.6},"rotationDeg":{"yaw":120,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":70},
+      {"id":"pronto-lidar-front-right","type":"lidar","label":"Front right — Seyond Falcon","sourceMountMm":{"longitudinal":-115.9,"lateralRight":479.8,"up":127.8},"rotationDeg":{"yaw":0,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":25},
+      {"id":"pronto-lidar-front-right-wide","type":"lidar","label":"Front right wide — Seyond Robin W","sourceMountMm":{"longitudinal":-134.2,"lateralRight":769.8,"up":78.6},"rotationDeg":{"yaw":-120,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":70},
+      {"id":"pronto-lidar-rear-left","type":"lidar","label":"Rear left — Seyond Robin W","sourceMountMm":{"longitudinal":-2476.9,"lateralRight":-767.1,"up":78.6},"rotationDeg":{"yaw":60,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":70},
+      {"id":"pronto-lidar-rear-right","type":"lidar","label":"Rear right — Seyond Robin W","sourceMountMm":{"longitudinal":-2476.9,"lateralRight":767.1,"up":78.6},"rotationDeg":{"yaw":-60,"pitch":0,"roll":0},"horizontalFovDeg":120,"verticalFovDeg":70},
+      {"id":"pronto-rad-01","type":"radar","label":"RAD-01 — Altos V4","sourceMountMm":{"longitudinal":-59.3,"lateralRight":-487.1,"up":74.8},"rotationDeg":{"yaw":0,"pitch":0,"roll":0},"horizontalFovDeg":30,"verticalFovDeg":30},
+      {"id":"pronto-rad-02","type":"radar","label":"RAD-02 — Altos V4","sourceMountMm":{"longitudinal":-59.3,"lateralRight":469.9,"up":74.8},"rotationDeg":{"yaw":0,"pitch":0,"roll":0},"horizontalFovDeg":30,"verticalFovDeg":30},
+      {"id":"pronto-rad-03","type":"radar","label":"RAD-03 — Altos RF6","sourceMountMm":{"longitudinal":-2587.1,"lateralRight":-461,"up":31.5},"rotationDeg":{"yaw":160,"pitch":0,"roll":0},"horizontalFovDeg":30,"verticalFovDeg":30},
+      {"id":"pronto-rad-04","type":"radar","label":"RAD-04 — Altos RF6","sourceMountMm":{"longitudinal":-2537.4,"lateralRight":514.2,"up":31.5},"rotationDeg":{"yaw":-160,"pitch":0,"roll":0},"horizontalFovDeg":30,"verticalFovDeg":30}
+    ]
+  }
+}
