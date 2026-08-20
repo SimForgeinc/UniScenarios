@@ -42,9 +42,17 @@ export interface CompileMapSignalPlansOptions {
   readonly clipSeconds: number;
   readonly warmupSeconds: number;
   readonly signalCatalog: MapSignalCatalog;
-  readonly topology: TopologyIndex;
+  /**
+   * Derived conflict geometry, from the map's `derived/topology-derived.json.gz`
+   * when that artifact is reachable. Both are optional together and advisory:
+   * the authoritative conflict-free partition is the map's own declared
+   * controller-stage sequence, which the head-group check below enforces. A
+   * browser caller compiling without the derived artifact gets no conflict
+   * scan rather than a false rejection.
+   */
+  readonly topology?: TopologyIndex;
   /** Derived gate conflicts keyed by physical junction id. */
-  readonly conflictPairsByJunction: Readonly<Record<string, readonly { gateA: string; gateB: string }[]>>;
+  readonly conflictPairsByJunction?: Readonly<Record<string, readonly { gateA: string; gateB: string }[]>>;
   /** Resolved engine signal ids owned by legacy `@world set(signal:*.phase)`. */
   readonly worldSignalSetIds?: readonly string[];
 }
@@ -136,12 +144,15 @@ function validateControllerStage(
     );
   }
 
+  const declaredConflicts = options.topology
+    ? options.conflictPairsByJunction?.[plan.binding.junctionId] ?? []
+    : [];
   const active = controllerStagePrograms(programs, clip.reference.controllerId);
   const activeConnectingLanes = new Set(active.flatMap((program) =>
     program.stopLines.flatMap((line) => line.connectingLaneRsls),
   ));
-  const gateById = new Map(options.topology.gates.map((gate) => [gate.id, gate]));
-  for (const pair of options.conflictPairsByJunction[plan.binding.junctionId] ?? []) {
+  const gateById = new Map((options.topology?.gates ?? []).map((gate) => [gate.id, gate]));
+  for (const pair of declaredConflicts) {
     const a = gateById.get(pair.gateA)?.connectingLaneRsl;
     const b = gateById.get(pair.gateB)?.connectingLaneRsl;
     if (a && b && activeConnectingLanes.has(a) && activeConnectingLanes.has(b)) {

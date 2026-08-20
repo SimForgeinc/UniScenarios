@@ -219,6 +219,21 @@ describe('map signal plan compiler', () => {
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_dual_ownership' }));
   });
 
+  it('compiles without derived conflict geometry, and still enforces the stage rule', () => {
+    // A browser caller compiles from the signal catalog alone: the derived
+    // topology artifact may not be reachable. Absent conflict geometry means no
+    // conflict scan, not a crash and not a rejection - and the authoritative
+    // controller-stage rule is unaffected by its absence.
+    const { topology: _topology, conflictPairsByJunction: _pairs, ...browserOptions } = options;
+    expect(() => compileMapSignalPlans(programs, [plan], browserOptions)).not.toThrow();
+    const compiled = compileMapSignalPlans(programs, [plan], browserOptions);
+    expect(compiled.find((program) => program.id === 'signal:h1')?.mapBinding?.timingSource).toBe('authored');
+    const inconsistent = programs.map((program) => program.id === 'signal:h1'
+      ? { ...program, mapBinding: { ...program.mapBinding!, headIds: ['h1', 'h-not-in-controller'] } }
+      : program);
+    expect(() => compileMapSignalPlans(inconsistent, [plan], browserOptions)).toThrow();
+  });
+
   it('fails closed when the referenced head is not in the exact controller head group', () => {
     const inconsistent = programs.map((program) => program.id === 'signal:h1' ? {
       ...program,
