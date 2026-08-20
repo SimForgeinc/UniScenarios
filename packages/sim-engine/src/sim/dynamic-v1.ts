@@ -25,9 +25,14 @@ export const DYNAMIC_V1_DEFAULT_SUBSTEP_S = 0.005;
  */
 const SLIDING_FRICTION_COEFFICIENT = 0.55;
 /**
- * The sideways velocity a walker can still catch itself from, in m/s. Above it
- * the body goes down. Human balance recovery, not a crash-load threshold: a
- * stumble is recoverable, being hit by a car at any real speed is not.
+ * The sideways velocity a walker can still catch itself from, in m/s. A contact
+ * that *adds* more than this takes the body down.
+ *
+ * Human balance recovery, not a crash-load threshold: a stumble is recoverable,
+ * being hit by a car at any real speed is not. It is measured against the
+ * velocity the contact added rather than the impulse it carried, so a walker who
+ * strides into a parked car — same order of impulse, but only their own momentum
+ * being arrested — keeps their feet.
  */
 export const BALANCE_RECOVERY_DELTA_V_MPS = 0.6;
 

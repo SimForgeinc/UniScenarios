@@ -2877,6 +2877,17 @@ class Simulation {
           },
         };
       });
+    // The velocity each vulnerable body carried into the contact. A knockdown is
+    // about what the contact *added*, so this is the baseline it is measured
+    // against — see `applyKnockdowns`.
+    const speedBeforeContact = new Map<string, number>();
+    for (const actor of activeActors) {
+      if (!isKnockdownVulnerableKind(actor.kind)) continue;
+      const state = this.dynamicBackend.state(actor.id);
+      if (state) {
+        speedBeforeContact.set(actor.id, Math.hypot(state.longitudinalVelocityMps, state.lateralVelocityMps));
+      }
+    }
     const impulses = this.dynamicBackend.resolveCollisions(
       active,
       [
@@ -2887,7 +2898,7 @@ class Simulation {
       ],
       this.dt,
     );
-    this.applyKnockdowns(impulses);
+    this.applyKnockdowns(impulses, speedBeforeContact);
     for (const actor of this.actors) {
       if (!active.has(actor.id)) continue;
       const state = this.dynamicBackend.state(actor.id)!;
@@ -2909,15 +2920,24 @@ class Simulation {
   }
 
   /**
-   * Take vulnerable bodies off their feet when the contact exceeded what they
-   * could have caught themselves from.
+   * Take vulnerable bodies off their feet when the contact threw them harder
+   * than they could have caught themselves.
    *
-   * The solver's own normal impulse is the input, converted to the velocity
-   * change it represents for that body's mass, so the decision scales with the
-   * profile rather than a tuned force number. Drones are excluded: they hold
-   * altitude and have no feet to be swept from under them.
+   * The test is the velocity the contact *added*, not the impulse it carried.
+   * Those differ in the case that matters: a walker who strides into a parked
+   * car takes an impulse of the same order, but it only arrests momentum the
+   * walker already had — a bump, not a knockdown — while a car striking a
+   * standing pedestrian adds all of it. Comparing planar speed across the
+   * contact separates the two without needing contact normals, and it keeps the
+   * threshold in the units it is argued in: the sideways velocity a person can
+   * still recover their balance from.
+   *
+   * Drones are excluded: they hold altitude and have no stance to lose.
    */
-  private applyKnockdowns(impulses: readonly CollisionImpulse[]): void {
+  private applyKnockdowns(
+    impulses: readonly CollisionImpulse[],
+    speedBeforeContact: ReadonlyMap<string, number>,
+  ): void {
     if (impulses.length === 0) return;
     const normalByActor = new Map<string, { impulseNs: number; otherId: string }>();
     for (const impulse of impulses) {
@@ -2934,10 +2954,12 @@ class Simulation {
       const actor = this.byId.get(actorId);
       if (!actor || actor.static || actor.downedAtS != null) continue;
       if (!isKnockdownVulnerableKind(actor.kind)) continue;
-      const profile = this.dynamicBackend?.profile(actorId);
-      if (!profile) continue;
+      const before = speedBeforeContact.get(actorId);
+      const state = this.dynamicBackend?.state(actorId);
+      if (before == null || !state) continue;
+      const after = Math.hypot(state.longitudinalVelocityMps, state.lateralVelocityMps);
+      if (after - before < BALANCE_RECOVERY_DELTA_V_MPS) continue;
       const { impulseNs, otherId } = normalByActor.get(actorId)!;
-      if (impulseNs / profile.massKg < BALANCE_RECOVERY_DELTA_V_MPS) continue;
       actor.downedAtS = this.world.t;
       actor.downedByActorId = otherId;
       // Planning routes a downed body through the crash-disabled branch, so the

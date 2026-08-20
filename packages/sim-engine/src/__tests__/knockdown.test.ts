@@ -168,6 +168,57 @@ describe('pedestrian knockdown', () => {
     expect(knockdowns(permuted.events)).toHaveLength(1);
   });
 
+  it('never knocks down a walker approaching a parked car', () => {
+    // The longitudinal controller brings a walker to rest short of a static
+    // obstacle, with or without avoidance, so this contact does not occur — and
+    // if it ever did, the rule measures the velocity the contact *added*, so
+    // arresting the walker's own momentum could not put it on the ground.
+    const graph = syntheticGraph();
+    const input = parseSimScenarioInput({
+      mapId: 'synthetic-straight',
+      clipSeconds: 12,
+      warmupSeconds: 0,
+      actors: [
+        {
+          id: 'parked',
+          kind: 'car',
+          static: true,
+          initial: {
+            laneRef: { rsl: LANE_LEFT, s: 25, tFrac: 0 },
+            pose: poseOnLane(graph, LANE_LEFT, 25),
+            speedMps: 0,
+          },
+          behavior: {
+            route: { kind: 'follow' as const, startRsl: LANE_LEFT, turns: [], maxLengthM: 2000 },
+            cruiseSpeedMps: 0,
+          },
+        },
+        {
+          id: 'walker',
+          kind: 'pedestrian',
+          rules: { collisionAvoidance: false },
+          initial: {
+            laneRef: { rsl: LANE_LEFT, s: 15, tFrac: 0 },
+            pose: poseOnLane(graph, LANE_LEFT, 15),
+            speedMps: 1.4,
+          },
+          behavior: {
+            route: { kind: 'follow' as const, startRsl: LANE_LEFT, turns: [], maxLengthM: 2000 },
+            cruiseSpeedMps: 1.4,
+          },
+        },
+      ],
+    });
+    const { trace } = runSimulation(input, { graph, guards: 'collect' });
+    const track = trace.ticks.actors.walker!;
+
+    expect(knockdowns(trace.events)).toHaveLength(0);
+    expect(track.downSinceS).toBeUndefined();
+    // Came to rest on its feet, short of the car.
+    expect(track.speedMps.at(-1)).toBeCloseTo(0, 2);
+    expect(track.x.at(-1)).toBeLessThan(25);
+  });
+
   it('leaves a shove below the balance limit recoverable', () => {
     // The impulse a 78 kg body needs to exceed 0.6 m/s is ~47 Ns; a slow nudge
     // stays under it, and the walker must keep its feet.
