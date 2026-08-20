@@ -25,13 +25,13 @@
     "dist"
   ],
   "dependencies": {
-    "three": "^0.182.0",
+    "three": "^0.185.0",
     "@uniscenarios/prop-catalog": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*"
   },
   "devDependencies": {
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.185.0",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"
   },

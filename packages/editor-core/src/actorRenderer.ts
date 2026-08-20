@@ -56,7 +56,7 @@ import {
 } from 'three';
 import { clone as cloneSkeleton } from 'three/addons/utils/SkeletonUtils.js';
 import { LOW_FIDELITY_HIDDEN_ROLE } from './viewer-contract';
-import { buildProp, getEntry, type CatalogId, type Dims, type ExternalModelBinding } from '@uniscenarios/prop-catalog';
+import { buildProp, getEntry, type Dims, type ExternalModelBinding } from '@uniscenarios/prop-catalog';
 import type { ActorKind } from '@uniscenarios/sim-engine';
 import type { ActorSensor } from '@uniscenarios/scenario-model';
 import {
@@ -72,13 +72,13 @@ export type DoorState = 'closed' | 'opening' | 'open' | 'closing';
 export type DoorStates = Readonly<Partial<Record<DoorName, DoorState>>>;
 
 export type ActorRenderIdentity =
-  | { readonly source: 'catalog'; readonly catalogId: CatalogId }
+  | { readonly source: 'catalog'; readonly catalogId: string }
   | { readonly source: 'semantic'; readonly kind: 'animal' | 'scooter' | 'static_object' };
 
 /** What the renderer needs to draw one actor. */
 export interface ActorView {
   readonly id: string;
-  readonly catalogId: CatalogId;
+  readonly catalogId: string;
   /** Ground-contact position in scene metres (prop origins are ground-centred). */
   readonly x: number;
   readonly y: number;
@@ -143,7 +143,7 @@ const SEMANTIC_TEMPLATE_DIMS = {
  * GLBs additionally retain UVs and every material group so textured assets can
  * share the same instanced batching path without losing their appearance.
  */
-export function propTemplate(catalogId: CatalogId): PropTemplate {
+export function propTemplate(catalogId: string): PropTemplate {
   const entry = getEntry(catalogId);
   const binding = entry.model;
   if (binding?.kind === 'proxy') {
@@ -708,7 +708,7 @@ export class ActorRenderer {
   }
 
   /** Resolve a raycast hit against {@link pickables} to an actor id. */
-  actorIdForHit(hit: Intersection): string | null {
+  actorIdForHit(hit: Pick<Intersection, 'object' | 'instanceId'>): string | null {
     const ids = hit.object.userData.actorIds as string[] | undefined;
     if (ids && hit.instanceId !== undefined) return ids[hit.instanceId] ?? null;
     let object: Object3D | null = hit.object;

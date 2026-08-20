@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AnimationClip, Box3, BoxGeometry, Group, Mesh, MeshBasicMaterial, Vector3 } from 'three';
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
   disposeExternalModels,
   externalModelClips,
@@ -10,6 +9,10 @@ import {
   requestExternalModel,
   setExternalModelLoader,
 } from './externalModel';
+interface TestGltf {
+  readonly scene: Group;
+  readonly animations: readonly AnimationClip[];
+}
 
 function deferred<T>(): {
   promise: Promise<T>;
@@ -25,7 +28,7 @@ function deferred<T>(): {
   return { promise, resolve, reject };
 }
 
-function model(): { gltf: GLTF; scene: Group; clip: AnimationClip } {
+function model(): { gltf: TestGltf; scene: Group; clip: AnimationClip } {
   const scene = new Group();
   const mesh = new Mesh(new BoxGeometry(2, 4, 6), new MeshBasicMaterial());
   mesh.position.set(5, 7, -3);
@@ -34,7 +37,7 @@ function model(): { gltf: GLTF; scene: Group; clip: AnimationClip } {
   return {
     scene,
     clip,
-    gltf: { scene, scenes: [scene], animations: [clip], cameras: [], asset: {} } as GLTF,
+    gltf: { scene, animations: [clip] },
   };
 }
 
@@ -57,7 +60,7 @@ describe('external GLB model cache', () => {
   it('normalises once, transitions idle to loading to ready, and dedupes listeners and loads', async () => {
     const hash = 'a'.repeat(64);
     const loaded = model();
-    const pending = deferred<GLTF>();
+    const pending = deferred<TestGltf>();
     const loader = vi.fn(() => pending.promise);
     setExternalModelLoader(loader);
     const listener = vi.fn();
@@ -103,7 +106,7 @@ describe('external GLB model cache', () => {
   });
 
   it('caps concurrent GLB fetches at four', async () => {
-    const pending = Array.from({ length: 5 }, () => deferred<GLTF>());
+    const pending = Array.from({ length: 5 }, () => deferred<TestGltf>());
     let active = 0;
     let peakActive = 0;
     const loader = vi.fn((_url: string) => {

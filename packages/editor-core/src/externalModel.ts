@@ -9,11 +9,16 @@ import {
   Vector3,
   type BufferGeometry,
 } from 'three';
-import { GLTFLoader, type GLTF } from 'three/addons/loaders/GLTFLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 export type ExternalModelState = 'idle' | 'loading' | 'ready' | 'failed';
 
-type ExternalModelLoader = (url: string) => Promise<GLTF>;
+interface ExternalModelAsset {
+  readonly scene: Group;
+  readonly animations: readonly AnimationClip[];
+}
+
+type ExternalModelLoader = (url: string) => Promise<ExternalModelAsset>;
 
 interface LoadedExternalModel {
   state: 'ready';
@@ -81,7 +86,7 @@ export function disposeExternalModels(): void {
   records.clear();
 }
 
-export function setExternalModelLoader(load: (url: string) => Promise<GLTF>): void {
+export function setExternalModelLoader(load: ExternalModelLoader): void {
   loadExternalModel = load;
 }
 
@@ -98,7 +103,7 @@ function pumpQueue(): void {
 }
 
 async function performLoad({ binding, generation: loadGeneration }: QueuedLoad): Promise<void> {
-  let gltf: GLTF;
+  let gltf: ExternalModelAsset;
   try {
     gltf = await Promise.resolve().then(() => loadExternalModel(binding.url));
   } catch {

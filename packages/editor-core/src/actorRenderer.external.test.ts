@@ -11,7 +11,6 @@ import {
   VectorKeyframeTrack,
   Vector3,
 } from 'three';
-import type { GLTF } from 'three/addons/loaders/GLTFLoader.js';
 import {
   clearExternalCatalogEntries,
   registerExternalCatalogEntry,
@@ -41,16 +40,13 @@ beforeAll(() => {
 });
 
 /** Head slides 0 -> 2 m over the clip; locomotion moves twice as far. */
-function animatedGltf(): GLTF {
+function animatedGltf(): { scene: Group; animations: readonly AnimationClip[] } {
   const scene = new Group();
   const head = new Mesh(new BoxGeometry(1, 1, 1), new MeshStandardMaterial());
   head.name = 'Head';
   scene.add(head);
   return {
     scene,
-    scenes: [scene],
-    cameras: [],
-    asset: {},
     animations: [
       new AnimationClip('idle', 2, [
         new VectorKeyframeTrack('Head.position', [0, 2], [0, 0, 0, 0, 2, 0]),
@@ -59,7 +55,7 @@ function animatedGltf(): GLTF {
         new VectorKeyframeTrack('Head.position', [0, 2], [0, 0, 0, 0, 4, 0]),
       ]),
     ],
-  } as unknown as GLTF;
+  };
 }
 
 const BINDING: ExternalModelBinding = {
@@ -228,7 +224,7 @@ describe('ActorRenderer external animated models', () => {
     expect(renderer.actorIdForHit({
       object: first!,
       instanceId: 0,
-    } as Parameters<ActorRenderer['actorIdForHit']>[0])).toBe('proxy-1');
+    })).toBe('proxy-1');
     expect(loader).not.toHaveBeenCalled();
     expect(renderer.group.getObjectByName('animated-actor.proxy-1')).toBeUndefined();
 

@@ -6,7 +6,10 @@ import type {
   PropTag,
 } from './types';
 export const EXTERNAL_CATALOG_PREFIXES = ['gallery.', 'carla.'] as const;
-export type ExternalCatalogEntry = CatalogEntry & { readonly model: ExternalModelBinding };
+export type ExternalCatalogEntry = Omit<CatalogEntry, 'id'> & {
+  readonly id: string;
+  readonly model: ExternalModelBinding;
+};
 
 
 /**

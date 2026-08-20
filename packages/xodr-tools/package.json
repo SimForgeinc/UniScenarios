@@ -25,12 +25,12 @@
   ],
   "dependencies": {
     "proj4": "^2.15.0",
-    "three": "^0.182.0"
+    "three": "^0.185.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
     "@types/proj4": "^2.5.5",
-    "@types/three": "^0.182.0",
+    "@types/three": "^0.185.0",
     "typescript": "^5.6.0",
     "vitest": "^3.0.0"
   },
