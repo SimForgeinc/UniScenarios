@@ -1567,7 +1567,18 @@ class Simulation {
     if (axis === 'lateral' && reason === 'until' && a.latCmd?.interactionId === interactionId) {
       this.abortLateral(interactionId, a.id, t, reason);
     }
-    if (axis === 'longitudinal') a.longCmd = null;
+    if (axis === 'longitudinal') {
+      const command = a.longCmd;
+      if (
+        reason === 'until'
+        && command?.interactionId === interactionId
+        && command.priorCruiseOverrideMps !== undefined
+      ) {
+        a.cruiseOverrideMps = command.priorCruiseOverrideMps;
+        a.cruiseSpeedMps = cruiseSpeed(a, this.speedLimitAt(a));
+      }
+      a.longCmd = null;
+    }
     else if (axis === 'lateral') a.latCmd = null;
     const untilOwner = a.untilByAxis.get(axis);
     if (untilOwner?.interactionId === interactionId) a.untilByAxis.delete(axis);
@@ -1612,6 +1623,7 @@ class Simulation {
           duration,
           target,
           speedTarget: it,
+          priorCruiseOverrideMps: a.cruiseOverrideMps,
         };
         // A SpeedAction changes the actor's desired cruise state. The profile
         // owns how the target is reached; its editor clip is not a temporary

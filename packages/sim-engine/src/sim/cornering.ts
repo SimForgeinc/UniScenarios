@@ -77,12 +77,13 @@ export function corneringPlan(input: CornerSpeedInput): CorneringPlan {
   const speedLimitMps = clamp(capMps, 0, desired);
   return {
     speedLimitMps,
-    // The envelope is a look-ahead target, not an instantaneous hard limit.
-    // Asking a force-based vehicle to erase the whole speed error in one fixed
-    // simulation tick creates emergency braking and actuator-lag undershoot.
-    // A road-scale response time produces the same gradual command in both the
-    // kinematic preview and the dynamic body controller.
-    accelerationCapMps2: (speedLimitMps - input.currentSpeedMps) / ENVELOPE_RESPONSE_S,
+    // Do not dilute the free-flow controller when there is no upcoming curve:
+    // this planner is a cap, not a second cruise convergence law. Once a curve
+    // does lower the envelope, approach it gradually so a force-based vehicle
+    // does not try to erase the whole speed error in one fixed simulation tick.
+    accelerationCapMps2: speedLimitMps < desired
+      ? (speedLimitMps - input.currentSpeedMps) / ENVELOPE_RESPONSE_S
+      : Number.POSITIVE_INFINITY,
   };
 }
 

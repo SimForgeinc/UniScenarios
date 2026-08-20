@@ -55,6 +55,8 @@ export interface LongitudinalCommand {
   readonly gap?: { actorId: string; value: number; mode: 'time' | 'distance' };
   /** `speed` only — kept so `match` can be re-resolved. */
   readonly speedTarget?: Interaction & { verb: 'speed' };
+  /** `speed` only — cruise state to restore when an explicit `until` releases it. */
+  readonly priorCruiseOverrideMps?: number | null;
 }
 
 export interface LateralCommand {
