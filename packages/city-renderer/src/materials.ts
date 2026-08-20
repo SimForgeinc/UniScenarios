@@ -22,6 +22,20 @@ interface PatchUniforms {
   uShadowTerm: IUniform<Vector4>;
 }
 
+/**
+ * Region where the real-time sun shadow supersedes the baked term:
+ * (centreX, centreZ, suppressStart, suppressEnd).
+ *
+ * Exactly one real-time shadow region exists per viewer, so every patched
+ * material shares this uniform object. That is what lets the region follow the
+ * camera without the viewer tracking — and having to forget — each streamed
+ * material as tiles come and go.
+ *
+ * The default radii are negative, so `smoothstep` returns 1 for every real
+ * distance and the baked term applies everywhere until a caller opts in.
+ */
+const sharedSuppression: IUniform<Vector4> = { value: new Vec4(0, 0, -2, -1) };
+
 const VERT_DECL = /* glsl */ `
 varying vec3 vCityWorldPos;
 `;
@@ -39,6 +53,7 @@ varying vec3 vCityWorldPos;
 uniform sampler2D uShadowMap;
 uniform vec4 uShadowRect;
 uniform vec4 uShadowTerm; // strength, wallWeight, fadeStartY, fadeEndY
+uniform vec4 uShadowNear; // centreX, centreZ, suppressStart, suppressEnd
 `;
 
 /**
@@ -53,6 +68,9 @@ uniform vec4 uShadowTerm; // strength, wallWeight, fadeStartY, fadeEndY
  *    in the road layer stay lit.
  * Indirect light keeps 35% of the term (an occluded patch of street still sees
  * plenty of sky), which is what stops shadowed ground from crushing to black.
+ *
+ * Where the real-time sun shadow covers the ground the term is suppressed, so
+ * the two shadow systems never multiply against each other.
  */
 export function patchMaterialWithBakedShadow(material: Material, opts: ShadowPatchOptions): void {
   const uniforms: PatchUniforms = {
@@ -60,10 +78,10 @@ export function patchMaterialWithBakedShadow(material: Material, opts: ShadowPat
     uShadowRect: { value: opts.rect },
     uShadowTerm: { value: new Vec4(opts.strength, opts.wallWeight, opts.fadeStartY, opts.fadeEndY) },
   };
-  (material as unknown as { userData: Record<string, unknown> }).userData.cityShadow = uniforms;
+  material.userData.cityShadow = uniforms;
 
   material.onBeforeCompile = (shader) => {
-    Object.assign(shader.uniforms, uniforms);
+    Object.assign(shader.uniforms, uniforms, { uShadowNear: sharedSuppression });
     shader.vertexShader = VERT_DECL + shader.vertexShader.replace(
       '#include <project_vertex>',
       `#include <project_vertex>\n${VERT_BODY}`,
@@ -78,7 +96,8 @@ export function patchMaterialWithBakedShadow(material: Material, opts: ShadowPat
 		vec3 cityUpView = normalize( ( viewMatrix * vec4( 0.0, 1.0, 0.0, 0.0 ) ).xyz );
 		float cityFacing = mix( uShadowTerm.y, 1.0, smoothstep( 0.0, 0.6, abs( dot( normalize( normal ), cityUpView ) ) ) );
 		float cityHeight = 1.0 - smoothstep( uShadowTerm.z, uShadowTerm.w, vCityWorldPos.y );
-		cityShadow = mix( 1.0, cityShadowRaw, clamp( uShadowTerm.x * cityFacing * cityHeight, 0.0, 1.0 ) );
+		float cityBaked = smoothstep( uShadowNear.z, uShadowNear.w, distance( vCityWorldPos.xz, uShadowNear.xy ) );
+		cityShadow = mix( 1.0, cityShadowRaw, clamp( uShadowTerm.x * cityBaked * cityFacing * cityHeight, 0.0, 1.0 ) );
 		reflectedLight.directDiffuse *= cityShadow;
 		reflectedLight.directSpecular *= cityShadow;
 		float cityIndirect = mix( 1.0, cityShadow, 0.35 );
@@ -97,14 +116,48 @@ export function patchMaterialWithBakedShadow(material: Material, opts: ShadowPat
   // All patched materials compile to the same program; without this every
   // material clone would get its own program (three keys the cache on the
   // stringified onBeforeCompile, which is shared here, but be explicit).
-  material.customProgramCacheKey = () => (opts.debug ? 'city-shadow-debug' : 'city-baked-shadow-v1');
+  material.customProgramCacheKey = () => (opts.debug ? 'city-shadow-debug' : 'city-baked-shadow-v2');
   material.needsUpdate = true;
 }
 
+/**
+ * Uniform block this module attached to `material`, or `undefined` when the
+ * material was never patched.
+ *
+ * `Material.userData` is typed `any` by three, so the read is narrowed here
+ * once instead of at each call site.
+ */
+function patchedUniforms(material: Material): PatchUniforms | undefined {
+  const userData: unknown = material.userData;
+  if (!userData || typeof userData !== 'object' || !('cityShadow' in userData)) return undefined;
+  // Written only by `patchMaterialWithBakedShadow` a few lines above.
+  const uniforms = userData.cityShadow as PatchUniforms | undefined;
+  return uniforms;
+}
+
 export function setShadowStrength(material: Material, strength: number): void {
-  const uniforms = (material as unknown as { userData: { cityShadow?: PatchUniforms } }).userData
-    .cityShadow;
+  const uniforms = patchedUniforms(material);
   if (uniforms) uniforms.uShadowTerm.value.x = strength;
+}
+
+/**
+ * Moves the region where the real-time shadow supersedes the bake.
+ *
+ * Called as the camera drifts, so it writes the shared uniform in place; no
+ * material is touched and nothing recompiles.
+ */
+export function setBakedSuppression(
+  center: { x: number; z: number },
+  start: number,
+  end: number,
+): void {
+  sharedSuppression.value.set(center.x, center.z, start, end);
+}
+
+/** Current suppression region, for tests and diagnostics. */
+export function bakedSuppression(): { x: number; z: number; start: number; end: number } {
+  const v = sharedSuppression.value;
+  return { x: v.x, z: v.y, start: v.z, end: v.w };
 }
 
 /**

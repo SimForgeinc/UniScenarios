@@ -26,6 +26,15 @@ export { indexedWorldHeightSampler } from './indexed-height-sampler';
 export type { GroundHeightSampler } from './indexed-height-sampler';
 export { keepInRoadsOnly, isTrafficSignalMesh, isLowFidelityHiddenHelper, isRoadsOnlyHiddenHelper, LOW_FIDELITY_HIDDEN_ROLE, ROADS_ONLY_HIDDEN_ROLE } from './roads-only';
 export { ShadowAtlas } from './shadow-atlas';
+export { ATMOSPHERE_LAYER, CLEAR_SKY, SkyDome, skyAppearanceForWeather, sunElevationFalloff } from './sky';
+export type { SkyAppearance } from './sky';
+export {
+  bakedSuppressionRadii,
+  fitSunShadow,
+  shadowBakeIsStale,
+  shadowRadiusForScene,
+} from './sun-shadow';
+export type { SunShadowFit } from './sun-shadow';
 export { isCityAssetVariantManifest, selectAssetVariant } from './asset-variants';
 export type {
   CityAssetVariant,

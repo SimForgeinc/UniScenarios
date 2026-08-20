@@ -467,6 +467,13 @@ export class ActorRenderer {
   private readonly shadowGeometry: PlaneGeometry;
   private shadows: InstancedMesh | null = null;
   private shadowCapacity = 0;
+  /**
+   * Painted contact shadows are a stand-in for a real shadow pass: a soft blob
+   * under the footprint that does not track the sun. When the host renderer
+   * casts a real sun shadow they must be switched off, or every actor carries
+   * two shadows, one of which points the wrong way.
+   */
+  private contactShadows = true;
   private readonly doorGeometry = new BoxGeometry(1, 1, 1);
   private readonly doorMaterial = new MeshStandardMaterial({
     color: 0x26384b,
@@ -588,6 +595,16 @@ export class ActorRenderer {
     const changed = visible ? this.hiddenLayers.delete(layer) : !this.hiddenLayers.has(layer);
     if (!visible) this.hiddenLayers.add(layer);
     if (changed) this.syncLayers();
+  }
+
+  /**
+   * Turns the painted contact shadow blobs off, for hosts whose renderer casts
+   * a real sun shadow. Actors keep casting into that shadow map either way.
+   */
+  setContactShadows(enabled: boolean): void {
+    if (this.contactShadows === enabled) return;
+    this.contactShadows = enabled;
+    this.syncLayers();
   }
 
   private syncLayers(): void {
@@ -807,6 +824,9 @@ export class ActorRenderer {
       root.traverse((object) => {
         const mesh = object as Mesh;
         if (!mesh.isMesh) return;
+        // Skinned actors are the reason a bake can never hold every shadow.
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         drawCalls += Array.isArray(mesh.material) && mesh.geometry.groups.length > 0
           ? mesh.geometry.groups.length
           : 1;
@@ -863,8 +883,8 @@ export class ActorRenderer {
     const mesh = new InstancedMesh(spec.geometry, spec.material, capacity);
     mesh.name = `actor-batch.${key}`;
     mesh.count = 0;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     const batch: Batch = { mesh, capacity };
     this.batches.set(key, batch);
     this.group.add(mesh);
@@ -872,7 +892,7 @@ export class ActorRenderer {
   }
 
   private syncShadows(actors: readonly ActorView[]): void {
-    if (actors.length === 0) {
+    if (!this.contactShadows || actors.length === 0) {
       if (this.shadows) this.shadows.count = 0;
       return;
     }
@@ -946,8 +966,8 @@ export class ActorRenderer {
     const mesh = new InstancedMesh(this.doorGeometry, this.doorMaterial, capacity);
     mesh.name = `actor-doors.${name}`;
     mesh.count = 0;
-    mesh.castShadow = false;
-    mesh.receiveShadow = false;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     const batch = { mesh, capacity };
     this.doorBatches.set(name, batch);
     this.group.add(mesh);

@@ -119,8 +119,6 @@ export interface CityViewerOptions {
   uploadBudgetMs?: number;
   /** Per-frame texel budget for GPU uploads. */
   uploadPixelsPerFrame?: number;
-  /** HDRI environment, relative to baseUrl. */
-  environmentUrl?: string;
   /** Directional light intensity. */
   sunIntensity?: number;
   /** Environment (IBL) intensity. */
@@ -135,6 +133,16 @@ export interface CityViewerOptions {
   shadowStrength?: number;
   /** Render the baked shadow term instead of shading (projection QA). */
   debugShadowProjection?: boolean;
+  /**
+   * Cast a real-time sun shadow map. Maps that ship no baked lightmap have no
+   * other source of ground contact, and the map also shadows actors, which a
+   * bake can never contain.
+   */
+  realtimeShadows?: boolean;
+  /** Shadow map resolution per side. */
+  shadowMapSize?: number;
+  /** Radius (m) around the camera the shadow map covers. */
+  shadowRadiusM?: number;
   /** Horizontal metres kept between the camera and the map footprint edge. */
   cameraBoundsInset?: number;
   /** Local optimized asset preference. Ultra Low fails closed rather than fetching textured source. */

@@ -7,6 +7,7 @@ import {
   MathUtils,
   Mesh,
   Object3D,
+  PCFSoftShadowMap,
   PerspectiveCamera,
   Raycaster,
   Scene,
@@ -26,17 +27,32 @@ import {
   estimateResourceBytes,
   getGLTFLoader,
 } from './gltf';
-import { createSun, loadEnvironment } from './environment';
+import { createSun } from './environment';
 import { GroundIndex, type GroundIndexOptions } from './ground-index';
 import { isLowFidelityHiddenHelper, keepInRoadsOnly } from './roads-only';
 import { boundsToBox3, normalizeLods, resolveUrl } from './manifest';
-import { patchTree, type ShadowPatchOptions } from './materials';
+import { patchTree, setBakedSuppression, type ShadowPatchOptions } from './materials';
 import { SurfaceMaterialRegistry, type SurfaceMaterialProfile } from './surface-materials';
 import { SnowCoverController } from './snow-cover';
 import { WeatherController, type CityWeatherAppearance } from './weather';
 import { UltraLowMaterialCache, type UltraLowLayer } from './ultra-low-materials';
 import { ShadowAtlas } from './shadow-atlas';
 import { allowsSourceAssetFallback, isCityAssetVariantManifest, resolveSnowCoverVariant, selectAssetVariant, type CityAssetVariantManifest } from './asset-variants';
+import {
+  ATMOSPHERE_LAYER,
+  CLEAR_SKY,
+  SkyDome,
+  skyAppearanceForWeather,
+  sunElevationFalloff,
+} from './sky';
+import {
+  BAKED_SUPPRESSION_OFF,
+  applySunShadowFit,
+  bakedSuppressionRadii,
+  fitSunShadow,
+  shadowBakeIsStale,
+  shadowRadiusForScene,
+} from './sun-shadow';
 import {
   applyStaticSemantics,
   parseStaticSemantics,
@@ -97,11 +113,10 @@ const DEFAULTS = {
   uploadBudgetMs: 5,
   /** ~one 2048px texture per frame; the pacer stops as soon as this is spent. */
   uploadPixelsPerFrame: 4.2e6,
-  environmentUrl: 'env/sky.hdr',
   /**
-   * Sun vs sky balance. The baked lightmap only removes *direct* light, so a
-   * sky-dominant balance makes the shadows invisible; 5.0 / 0.6 is where the
-   * path-traced shadows read at street level without crushing the ambient.
+   * Sun vs sky balance. The lightmap only removes *direct* light, so a
+   * sky-dominant balance makes the baked shadows invisible; 5.0 / 0.6 is where
+   * the path-traced shadows read at street level without crushing the ambient.
    */
   sunIntensity: 5,
   environmentIntensity: 0.6,
@@ -110,6 +125,13 @@ const DEFAULTS = {
   shadowAtlasCellSize: 512,
   shadowStrength: 1,
   debugShadowProjection: false,
+  realtimeShadows: true,
+  /**
+   * 2048 over a 120 m radius is ~12 cm per texel, which resolves the contact
+   * shadow under a vehicle without the acne a coarser map produces on curbs.
+   */
+  shadowMapSize: 2048,
+  shadowRadiusM: 120,
   cameraBoundsInset: 2,
   assetVariant: 'auto' as const,
   ultraLowFidelity: false,
@@ -129,10 +151,18 @@ const VEG_BAND_KEEP_ROW = [0, 2, 3];
 const _rayOrigin = new Vector3();
 const _down = new Vector3(0, -1, 0);
 const _cameraPos = new Vector3();
+const _sunTravel = new Vector3();
+
+/**
+ * Sun movement that is worth rebuilding the image-based light and the shadow
+ * bake for. Below this the ambient term does not visibly change, and a scene
+ * clock scrubbed continuously would otherwise rebuild both every tick.
+ */
+const SUN_SYNC_TOLERANCE_RAD = MathUtils.degToRad(0.25);
 
 export function isRendererOwnedVisualRoot(object: Object3D): boolean {
   const role = object.userData.uniscenariosRole;
-  return role === 'city-weather' || role === 'city-snow-cover';
+  return role === 'city-weather' || role === 'city-snow-cover' || role === 'city-sky';
 }
 
 export function snowStreamingContribution(stats: import('./snow-cover').SnowCoverStats): {
@@ -248,7 +278,11 @@ export class CityViewer {
   private vegLayer: TileStreamLayer | null = null;
   private roadLayer: TileStreamLayer | null = null;
   private sun: DirectionalLight | null = null;
-  private disposeEnvironment: (() => void) | null = null;
+  private readonly sky = new SkyDome();
+  private realtimeShadows = false;
+  private shadowRadius = 0;
+  private shadowBake: { focus: Vector3; radius: number; sun: Vector3 } | null = null;
+  private environmentFromSky = false;
   private visualResourcesPromise: Promise<void> | null = null;
   private visualResourcesStarted = false;
   private vegetationData = new Map<string, VegetationInstanceFile>();
@@ -284,8 +318,6 @@ export class CityViewer {
   private readonly roadsOnlyVisibility = new Map<Object3D, boolean>();
   private readonly ultraLowVisibility = new Map<Object3D, boolean>();
   private readonly ultraLowMaterials = new UltraLowMaterialCache();
-  private savedEnvironment: Scene['environment'] = null;
-  private savedBackground: Scene['background'] = null;
   private ultraRefreshCounter = 0;
   private readonly surfaceMaterials = new SurfaceMaterialRegistry();
   private readonly snowCover: SnowCoverController;
@@ -339,10 +371,13 @@ export class CityViewer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.options.maxPixelRatio));
     this.renderer.toneMapping = AgXToneMapping;
     this.renderer.toneMappingExposure = this.options.exposure;
-    this.renderer.shadowMap.enabled = false; // the city ships baked shadows
+    this.realtimeShadows = this.options.realtimeShadows && !this.ultraLowFidelity;
+    this.renderer.shadowMap.enabled = this.realtimeShadows;
+    this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.info.autoReset = false;
 
     this.scene.name = 'city';
+    // Behind the sky dome; only visible if the atmosphere is ever disabled.
     this.scene.background = new Color(0x14181e);
     this.scene.environmentIntensity = this.options.environmentIntensity;
     this.cityGroup.name = 'city-tiles';
@@ -352,6 +387,10 @@ export class CityViewer {
 
     this.camera = new PerspectiveCamera(55, this.aspect(), 0.5, 6000);
     this.camera.position.set(0, 200, 400);
+    // Sky is drawn on its own layer so sensor depth/LiDAR/id passes, which
+    // build their own cameras, never see the dome.
+    this.camera.layers.enable(ATMOSPHERE_LAYER);
+    this.scene.add(this.sky.mesh);
     this.snowCover = new SnowCoverController(this.scene, {
       admit: (bytes) => admitSnowWithinBudget(
         bytes,
@@ -443,6 +482,16 @@ export class CityViewer {
     return this.capabilities;
   }
 
+  /**
+   * Whether the sun is currently casting a real shadow map.
+   *
+   * Hosts that paint their own stand-in contact shadows use this to switch
+   * them off, so an actor never carries both.
+   */
+  castsRealtimeShadows(): boolean {
+    return this.realtimeShadows && this.sun?.castShadow === true;
+  }
+
   private async loadMapInner(manifestUrl: string): Promise<void> {
     const url = this.options.baseUrl ? resolveUrl(this.options.baseUrl, manifestUrl) : manifestUrl;
     this.assetBase = url.replace(/[^/]*$/, '');
@@ -464,12 +513,16 @@ export class CityViewer {
     this.frameCamera(center, size);
 
     const sunDir = manifest.shadowLightmap?.sunDirection ?? [-0.5, -0.6, -0.6];
+    const sunTravel = new Vector3(sunDir[0] ?? -0.5, sunDir[1] ?? -0.6, sunDir[2] ?? -0.6);
     this.sun = createSun({
-      direction: new Vector3(sunDir[0] ?? -0.5, sunDir[1] ?? -0.6, sunDir[2] ?? -0.6),
+      direction: sunTravel,
       intensity: this.options.sunIntensity,
       target: center,
     });
+    this.sky.setSunTravelDirection(sunTravel);
     this.scene.add(this.sun, this.sun.target);
+    this.shadowRadius = shadowRadiusForScene(this.sceneBox, this.options.shadowRadiusM);
+    this.configureSunShadow();
 
     this.atlas = new ShadowAtlas(manifest, this.options.shadowAtlasCellSize);
     this.snowCover.setShadowOptions(this.shadowOptions(this.sceneBox, 20, 40));
@@ -499,21 +552,91 @@ export class CityViewer {
     const atlas = this.atlas;
     if (!manifest || !atlas) return Promise.resolve();
     this.visualResourcesStarted = true;
-    const environmentUrl = resolveUrl(this.assetBase, this.options.environmentUrl);
-    const environmentPromise = loadEnvironment(this.renderer, this.scene, environmentUrl)
-      .then((dispose) => {
-        if (this.disposed) dispose();
-        else {
-          this.disposeEnvironment = dispose;
-          if (this.ultraLowFidelity) this.disableEnvironment();
-        }
-      })
-      .catch((err: unknown) => console.error('[city-renderer] environment failed', err));
-    this.visualResourcesPromise = Promise.all([
-      environmentPromise,
-      atlas.load(manifest, this.assetBase, this.abort.signal),
-    ]).then(() => undefined);
+    this.refreshSkyEnvironment();
+    if (this.ultraLowFidelity) this.disableEnvironment();
+    this.visualResourcesPromise = atlas
+      .load(manifest, this.assetBase, this.abort.signal)
+      .then(() => undefined);
     return this.visualResourcesPromise;
+  }
+
+  /**
+   * Installs the sky's image-based light.
+   *
+   * The environment is convolved from the dome itself, so a map that ships no
+   * HDRI is still lit by its own sky, and moving the sun moves the ambient
+   * light with it. Rebuilds are gated inside `SkyDome`.
+   */
+  private refreshSkyEnvironment(): void {
+    if (this.ultraLowFidelity) return;
+    this.scene.environment = this.sky.environmentTexture(this.renderer);
+    this.environmentFromSky = true;
+  }
+
+  /**
+   * Points the shadow-casting sun at the camera's neighbourhood.
+   *
+   * A map fitted to the whole footprint would spend all its texels on ground
+   * the camera cannot resolve, so the frustum tracks the view and is re-baked
+   * when it drifts. Below civil twilight the sun contributes nothing, so the
+   * pass is skipped outright rather than baking an all-lit map.
+   */
+  private configureSunShadow(): void {
+    const sun = this.sun;
+    if (!sun) return;
+    const lit = sunElevationFalloff(this.sky.sunElevationDeg()) > 0;
+    sun.castShadow = this.realtimeShadows && lit;
+    if (!sun.castShadow) {
+      setBakedSuppression({ x: 0, z: 0 }, BAKED_SUPPRESSION_OFF.start, BAKED_SUPPRESSION_OFF.end);
+      this.shadowBake = null;
+      return;
+    }
+    const size = this.options.shadowMapSize;
+    sun.shadow.mapSize.set(size, size);
+    // Tuned against the 0.15 m/texel curb geometry in the road layer: enough
+    // to kill acne on near-tangent surfaces without detaching contact shadows.
+    sun.shadow.bias = -0.0004;
+    sun.shadow.normalBias = 0.03;
+    // The sun is static while the camera is not, so the map is re-baked on
+    // demand instead of every frame.
+    sun.shadow.autoUpdate = false;
+    sun.shadow.needsUpdate = true;
+    this.updateSunShadowFocus(true);
+  }
+
+  /**
+   * Re-fits and re-bakes the shadow map when the camera has left the region the
+   * current bake covers.
+   */
+  private updateSunShadowFocus(force = false): void {
+    const sun = this.sun;
+    if (!sun?.castShadow) return;
+    const focus = this.shadowFocusPoint();
+    const live = { focus, radius: this.shadowRadius, sun: this.sky.sunDirection() };
+    if (!force && !shadowBakeIsStale(this.shadowBake, live)) return;
+
+    const travel = this.sky.sunDirection().negate();
+    const span = Math.max(40, this.sceneBox.max.y - this.sceneBox.min.y);
+    applySunShadowFit(sun, fitSunShadow(focus, travel, this.shadowRadius, span));
+    sun.shadow.needsUpdate = true;
+    this.shadowBake = { focus: focus.clone(), radius: this.shadowRadius, sun: live.sun.clone() };
+
+    const radii = bakedSuppressionRadii(this.shadowRadius);
+    setBakedSuppression({ x: focus.x, z: focus.z }, radii.start, radii.end);
+  }
+
+  /** Ground point the shadow frustum is centred on. */
+  private shadowFocusPoint(): Vector3 {
+    this.camera.getWorldPosition(_cameraPos);
+    const groundY = this.cameraGroundIndex?.sample(_cameraPos.x, _cameraPos.z) ?? this.localGroundY;
+    // Biased along the view so the covered region sits in front of the camera
+    // rather than half behind it.
+    const [targetX, , targetZ] = this.controls.getView().target;
+    return new Vector3(
+      (_cameraPos.x + targetX) * 0.5,
+      Number.isFinite(groundY) ? groundY : 0,
+      (_cameraPos.z + targetZ) * 0.5,
+    );
   }
 
   /** Neighborhood framing close enough to read houses, roads and actors. */
@@ -749,7 +872,16 @@ export class CityViewer {
     return parsed;
   }
 
-  /** Shared per-asset preparation: static matrices, bounds, anisotropy. */
+  /**
+   * Shared per-asset preparation: static matrices, bounds, anisotropy, and
+   * shadow participation.
+   *
+   * Streamed world geometry both casts and receives: a building has to throw a
+   * shadow across the street it stands on. The flags are set unconditionally
+   * rather than behind `realtimeShadows`, because the option can be toggled
+   * after tiles are already resident and three ignores them when the shadow map
+   * is off.
+   */
   private prepareTree(root: Object3D): void {
     const maxAnisotropy = Math.min(8, this.renderer.capabilities.getMaxAnisotropy());
     root.matrixAutoUpdate = false;
@@ -757,6 +889,8 @@ export class CityViewer {
       obj.matrixAutoUpdate = false;
       const mesh = obj as Mesh;
       if (!mesh.isMesh) return;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       if (!mesh.geometry.boundingSphere) mesh.geometry.computeBoundingSphere();
       if (!mesh.geometry.boundingBox) mesh.geometry.computeBoundingBox();
       const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
@@ -1030,6 +1164,10 @@ export class CityViewer {
       phaseStart = performance.now();
       this.lastStreamUpdate = now;
       this.updateStreaming(_cameraPos);
+      // Shares the streaming cadence: all three answer "where are the camera
+      // and the sun now", and a re-bake is far too expensive per frame.
+      this.syncSunFromLight();
+      this.updateSunShadowFocus();
       this.phaseStats.streaming.push(performance.now() - phaseStart);
     } else {
       this.phaseStats.streaming.push(0);
@@ -1311,9 +1449,13 @@ export class CityViewer {
       this.originalMaterials.clear();
       for (const [object, visible] of this.ultraLowVisibility) object.visible = visible;
       this.ultraLowVisibility.clear();
-      this.scene.environment = this.savedEnvironment;
-      this.scene.background = this.savedBackground ?? new Color(0x14181e);
+      this.sky.mesh.visible = true;
+      this.realtimeShadows = this.options.realtimeShadows;
+      this.renderer.shadowMap.enabled = this.realtimeShadows;
+      this.scene.background = new Color(0x14181e);
       if (this.sun) this.sun.visible = true;
+      this.refreshSkyEnvironment();
+      this.configureSunShadow();
       if (!this.visualResourcesStarted) {
         void this.ensureVisualResources().then(() => {
           this.refreshWeatherAppearance();
@@ -1469,6 +1611,7 @@ export class CityViewer {
     if (!appearance) {
       this.surfaceMaterials.setWeatherAppearance({ wetness: 0, snowCoverage: 0 });
       this.snowCover.setAppearance({ coverage: 0 });
+      this.applySkyWeather(null);
       return;
     }
     const lowFidelity = this.ultraLowFidelity || this.roadsOnlyFidelity;
@@ -1483,6 +1626,45 @@ export class CityViewer {
       compaction: effective.surface.snowCompaction,
     });
     this.weather.apply(effective, this.sun);
+    this.applySkyWeather(effective);
+  }
+
+  /**
+   * Matches the atmosphere to the weather.
+   *
+   * `WeatherController` also assigns `scene.background`, which sits behind the
+   * dome and is therefore invisible; the authored colour has to reach the sky
+   * itself or an overcast scenario would keep a clear blue sky.
+   */
+  private applySkyWeather(appearance: CityWeatherAppearance | null): void {
+    this.sky.setAppearance(appearance === null
+      ? CLEAR_SKY
+      : skyAppearanceForWeather({
+        haze: appearance.fog?.haze ?? 0,
+        backgroundColor: appearance.backgroundColor,
+      }));
+    this.syncSunFromLight(true);
+  }
+
+  /**
+   * Adopts the light's own orientation as the sun direction.
+   *
+   * The consuming editor moves the `sun` object directly to place time of day,
+   * and it does so *after* pushing weather, so the sky cannot rely on being
+   * told. Reading the light back on the streaming cadence keeps the atmosphere,
+   * the image-based light and the shadow frustum consistent with whoever moved
+   * it last.
+   */
+  private syncSunFromLight(force = false): void {
+    const sun = this.sun;
+    if (!sun) return;
+    _sunTravel.copy(sun.target.position).sub(sun.position);
+    if (_sunTravel.lengthSq() === 0) return;
+    const previous = this.sky.sunDirection();
+    this.sky.setSunTravelDirection(_sunTravel);
+    if (!force && this.sky.sunDirection().angleTo(previous) <= SUN_SYNC_TOLERANCE_RAD) return;
+    if (this.environmentFromSky) this.refreshSkyEnvironment();
+    this.configureSunShadow();
   }
 
   private simplifyTree(root: Object3D, layer: UltraLowLayer): void {
@@ -1504,10 +1686,17 @@ export class CityViewer {
     });
   }
 
+  /**
+   * Ultra Low is a texture-free authoring view: it drops the image-based light
+   * and the atmosphere, leaving a flat clear colour and the direct sun.
+   */
   private disableEnvironment(): void {
-    if (this.scene.environment) this.savedEnvironment = this.scene.environment;
-    if (this.scene.background) this.savedBackground = this.scene.background;
     this.scene.environment = null;
+    this.environmentFromSky = false;
+    this.sky.mesh.visible = false;
+    this.realtimeShadows = false;
+    this.renderer.shadowMap.enabled = false;
+    if (this.sun) this.sun.castShadow = false;
     this.scene.background = new Color(0x171c22);
   }
 
@@ -1770,7 +1959,7 @@ export class CityViewer {
     this.atlas?.dispose();
     this.weather.dispose();
     this.snowCover.dispose();
-    this.disposeEnvironment?.();
+    this.sky.dispose();
     this.vegetationData.clear();
     this.surfaceMaterials.dispose();
     if (this.sun) this.scene.remove(this.sun, this.sun.target);
@@ -1804,8 +1993,9 @@ export class CityViewer {
     this.roadGroup.clear();
     this.atlas?.dispose();
     this.atlas = null;
-    this.disposeEnvironment?.();
-    this.disposeEnvironment = null;
+    this.scene.environment = null;
+    this.environmentFromSky = false;
+    this.shadowBake = null;
     this.visualResourcesPromise = null;
     this.visualResourcesStarted = false;
     if (this.sun) this.scene.remove(this.sun, this.sun.target);
