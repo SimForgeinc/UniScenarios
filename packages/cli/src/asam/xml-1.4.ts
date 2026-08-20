@@ -1298,6 +1298,15 @@ export function exportOpenScenarioXml14(
       ...(input.perception
         ? [`<Property name="uniscenarios.trajectoryReplay.perception.v1" value="${xml(JSON.stringify(input.perception))}"/>`]
         : []),
+      // OpenSCENARIO has no posture for a body on the ground: the polyline
+      // carries where it slid to, and nothing in the standard says it is prone.
+      // Declare it, so a consumer replaying this file knows the difference
+      // between a pedestrian standing still and one that was run over.
+      ...Object.entries(replayTrace.ticks.actors)
+        .filter(([, track]) => track.downSinceS != null)
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([actorId, track]) =>
+          `<Property name="uniscenarios.trajectoryReplay.knockedDownAtS.${xml(actorId)}" value="${finite(track.downSinceS!)}"/>`),
     ] : []),
     ...Object.entries(options.provenance ?? {}).sort(([a], [b]) => a.localeCompare(b)).map(
       ([key, value]) => `<Property name="uniscenarios.provenance.${xml(key)}" value="${xml(String(value))}"/>`,

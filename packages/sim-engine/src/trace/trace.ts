@@ -66,6 +66,16 @@ export interface ActorTrack {
   readonly present: number[];
   /** Optional force-based backend telemetry; absent for kinematic-v1. */
   readonly physics?: ActorPhysicsTrack;
+  /**
+   * Clip time at which this body was knocked off its feet, absent while it
+   * stayed on them.
+   *
+   * A scalar rather than a per-tick lane: the state is monotonic — nothing in a
+   * planar engine stands a body back up — so consumers derive "down at t" as
+   * `t >= downSinceS`, and a renderer gets fall progress from the same number
+   * without the trace carrying a boolean for every tick.
+   */
+  readonly downSinceS?: number;
 }
 
 export interface ActorPhysicsTrack {
@@ -116,6 +126,11 @@ export type SimEvent =
       allowedCenterOffsetM: number;
     }
   | { t: number; kind: 'crash_disabled'; actorId: string; otherId: string; reason: 'material-collision' }
+  /**
+   * A vulnerable body was taken off its feet. `normalImpulseNs` is the solver's
+   * own contact impulse — telemetry, never a crash-load or injury claim.
+   */
+  | { t: number; kind: 'knocked_down'; actorId: string; otherId: string; normalImpulseNs: number }
   | { t: number; kind: 'spawn'; actorId: string }
   | { t: number; kind: 'despawn'; actorId: string; reason: 'route_end' | 'interaction' | 'clip_end' }
   | { t: number; kind: 'state_set'; actorId: string; key: string; value: boolean | number | string };

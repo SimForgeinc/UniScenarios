@@ -196,6 +196,8 @@ export interface SampledActor {
   readonly static: boolean;
   /** Body motion direction; reverse motion must not be presented by flipping heading. */
   readonly motionDirection: -1 | 1;
+  /** 0 while on its feet, rising to 1 over `KNOCKDOWN_FALL_S` after `downSinceS`. */
+  readonly downProgress: number;
 }
 
 export interface SampledSignal extends PlaybackSignal {
@@ -799,6 +801,25 @@ function hasCollisionBetween(times: readonly number[] | undefined, after: number
   return low < times.length && times[low]! <= through;
 }
 
+/**
+ * How long a body takes to go from upright to flat, in seconds.
+ *
+ * Presentation only: the engine's state is binary from `downSinceS` onward, and
+ * this is the ramp a renderer plays over it. Roughly a real fall from standing.
+ */
+export const KNOCKDOWN_FALL_S = 0.45;
+
+/**
+ * Fall progress at `time`, 0 upright and 1 flat.
+ *
+ * Monotonic and derived purely from the recorded timestamp, so scrubbing
+ * backwards through the clip stands the body back up exactly where it fell.
+ */
+export function knockdownProgress(downSinceS: number | undefined, time: number): number {
+  if (downSinceS == null || time < downSinceS) return 0;
+  return Math.min(1, (time - downSinceS) / KNOCKDOWN_FALL_S);
+}
+
 /** Interpolate dynamic poses; static actors always retain their authored instance pose. */
 export function samplePlaybackActors(bundle: PlaybackBundle, time: number): SampledActor[] {
   const bracket = sampleBracket(bundle.trace.ticks.t, time);
@@ -820,6 +841,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
         present,
         static: true,
         motionDirection,
+        downProgress: 0,
       };
     }
     // Presence changes and collision response are discontinuities. Holding the
@@ -851,6 +873,7 @@ export function samplePlaybackActors(bundle: PlaybackBundle, time: number): Samp
       present,
       static: false,
       motionDirection,
+      downProgress: knockdownProgress(track.downSinceS, time),
     };
   });
 }

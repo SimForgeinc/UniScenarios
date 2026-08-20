@@ -106,6 +106,12 @@ export interface ActorView {
   readonly speedMps?: number;
   /** Physical sensors authored on this actor. Playback-only views omit them. */
   readonly sensors?: readonly ActorSensor[];
+  /**
+   * How far through being knocked down this body is: 0 standing, 1 flat on the
+   * ground. Derived from the trace's `downSinceS`, so it is a presentation of a
+   * recorded fact rather than a second source of truth.
+   */
+  readonly downProgress?: number;
 }
 
 /** One material's worth of a merged prop. */
@@ -419,6 +425,8 @@ const _position = new Vector3();
 const _quaternion = new Quaternion();
 const _scale = new Vector3(1, 1, 1);
 const _up = new Vector3(0, 1, 0);
+/** Body lateral axis in model space: the axis a body pitches forward about. */
+const _lateral = new Vector3(0, 0, 1);
 const WHITE_INSTANCE_TINT = new Color('#ffffff');
 const instanceTintCache = new Map<string, Color>();
 
@@ -1072,6 +1080,27 @@ function indicatorMatrix(actor: ActorView, side: 'left' | 'right', front: boolea
   return new Matrix4().compose(local, new Quaternion().setFromAxisAngle(_up, actor.headingRad), new Vector3(0.12, 0.1, 0.16));
 }
 
+/**
+ * Lay a knocked-down body onto the ground.
+ *
+ * The engine is planar and keeps the yaw it was struck with, so the fall is
+ * purely presentational: pitch the model forward about its own lateral axis,
+ * pivoting on the ground-contact origin, which reads as being knocked off its
+ * feet in the direction of travel. Gait animation is suppressed by the caller
+ * passing no speed once down.
+ */
+function applyDownPose(actor: ActorView, dims: Dims): void {
+  const progress = Math.min(1, Math.max(0, actor.downProgress ?? 0));
+  if (progress <= 0) return;
+  // Ease out: the body drops fast and settles, rather than rotating linearly.
+  const eased = 1 - (1 - progress) * (1 - progress);
+  const angle = eased * Math.PI / 2;
+  _quaternion.multiply(new Quaternion().setFromAxisAngle(_lateral, angle));
+  // The origin is at the feet; rotating there would leave the body hanging off
+  // them. Lift toward half a body's width so it rests flat on the surface.
+  _position.y += Math.sin(angle) * Math.min(dims.h, dims.w) * 0.5;
+}
+
 export function poseMatrix(actor: ActorView, templateDims = getEntry(actor.catalogId).dims): Matrix4 {
   const animation = getEntry(actor.catalogId).animation;
   const time = actor.animationTimeS ?? 0;
@@ -1084,6 +1113,7 @@ export function poseMatrix(actor: ActorView, templateDims = getEntry(actor.catal
       : 0;
   _position.set(actor.x, actor.y + hover + bob, actor.z);
   _quaternion.setFromAxisAngle(_up, actor.headingRad);
+  applyDownPose(actor, actor.dims);
   _scale.set(
     actor.dims.l / templateDims.l,
     actor.dims.h / templateDims.h,

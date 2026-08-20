@@ -39,6 +39,7 @@ import {
 import {
   normalizeSimScenarioInput,
   resolvePhysicsConfig,
+  isKnockdownVulnerableKind,
   isPedestrianLikeKind,
   isRoadActorKind,
   type Dynamics,
@@ -73,8 +74,10 @@ import {
   initialMotionDirection,
   motionDirectionOfGear,
 } from './gear.js';
+import type { CollisionImpulse } from './collision-response.js';
 import {
   ACTOR_PHYSICS_PROFILES,
+  BALANCE_RECOVERY_DELTA_V_MPS,
   DynamicV1Backend,
   DYNAMIC_V1_DEFAULT_SUBSTEP_S,
 } from './dynamic-v1.js';
@@ -2353,8 +2356,11 @@ class Simulation {
           targetAccelerationMps2: -emergencyDecel,
           previewPoint: { x: a.position.x + Math.cos(a.headingRad), y: a.position.y + Math.sin(a.headingRad) },
           previewHeadingRad: a.headingRad,
+          ...(a.downedAtS != null ? { downed: true } : {}),
         }, this.dt, frictionScale);
-        plan.speed = Math.abs(result.state.longitudinalVelocityMps);
+        plan.speed = a.downedAtS != null
+          ? Math.hypot(result.state.longitudinalVelocityMps, result.state.lateralVelocityMps)
+          : Math.abs(result.state.longitudinalVelocityMps);
         plan.accel = result.state.longitudinalAccelerationMps2 * (isReverseMotion(a) ? -1 : 1);
         plan.position = { x: result.state.x, y: result.state.y };
         plan.heading = result.state.yawRad;
@@ -2871,7 +2877,7 @@ class Simulation {
           },
         };
       });
-    this.dynamicBackend.resolveCollisions(
+    const impulses = this.dynamicBackend.resolveCollisions(
       active,
       [
         ...[...nearbyStatics.values()]
@@ -2881,18 +2887,77 @@ class Simulation {
       ],
       this.dt,
     );
+    this.applyKnockdowns(impulses);
     for (const actor of this.actors) {
       if (!active.has(actor.id)) continue;
       const state = this.dynamicBackend.state(actor.id)!;
       actor.position = { x: state.x, y: state.y };
       actor.headingRad = state.yawRad;
-      actor.speedMps = Math.abs(state.longitudinalVelocityMps);
+      // A body on the ground slides whichever way it was thrown, so its speed
+      // is the planar magnitude. Taking the longitudinal component alone would
+      // report a side impact as stationary.
+      actor.speedMps = actor.downedAtS != null
+        ? Math.hypot(state.longitudinalVelocityMps, state.lateralVelocityMps)
+        : Math.abs(state.longitudinalVelocityMps);
       actor.lateralRateMps = state.lateralVelocityMps;
       const projected = actor.route.projectPoint(actor.position);
       actor.routeS = projected.s;
       actor.lateralOffsetM = actor.route.lateralOffsetAt(projected.s, actor.position);
       const telemetry = this.dynamicBackend.telemetry(actor.id);
       if (telemetry) this.physicsTelemetry.set(actor.id, telemetry);
+    }
+  }
+
+  /**
+   * Take vulnerable bodies off their feet when the contact exceeded what they
+   * could have caught themselves from.
+   *
+   * The solver's own normal impulse is the input, converted to the velocity
+   * change it represents for that body's mass, so the decision scales with the
+   * profile rather than a tuned force number. Drones are excluded: they hold
+   * altitude and have no feet to be swept from under them.
+   */
+  private applyKnockdowns(impulses: readonly CollisionImpulse[]): void {
+    if (impulses.length === 0) return;
+    const normalByActor = new Map<string, { impulseNs: number; otherId: string }>();
+    for (const impulse of impulses) {
+      for (const [id, otherId] of [[impulse.a, impulse.b], [impulse.b, impulse.a]] as const) {
+        const previous = normalByActor.get(id);
+        normalByActor.set(id, {
+          impulseNs: (previous?.impulseNs ?? 0) + impulse.normalImpulseNs,
+          otherId: previous?.otherId ?? otherId,
+        });
+      }
+    }
+    // Sorted so the event order cannot depend on solver iteration order.
+    for (const actorId of [...normalByActor.keys()].sort()) {
+      const actor = this.byId.get(actorId);
+      if (!actor || actor.static || actor.downedAtS != null) continue;
+      if (!isKnockdownVulnerableKind(actor.kind)) continue;
+      const profile = this.dynamicBackend?.profile(actorId);
+      if (!profile) continue;
+      const { impulseNs, otherId } = normalByActor.get(actorId)!;
+      if (impulseNs / profile.massKg < BALANCE_RECOVERY_DELTA_V_MPS) continue;
+      actor.downedAtS = this.world.t;
+      actor.downedByActorId = otherId;
+      // Planning routes a downed body through the crash-disabled branch, so the
+      // two must never disagree. Contact detection normally sets this first;
+      // assert it here so a knockdown can never leave a body still steering.
+      if (actor.crashDisabledAtS == null) {
+        actor.crashDisabledAtS = this.world.t;
+        actor.crashDisabledReason = `material-collision:${otherId}`;
+        actor.longCmd = null;
+        actor.latCmd = null;
+        actor.lateralAccelMps2 = 0;
+        actor.untilByAxis.clear();
+      }
+      this.events.push({
+        t: this.world.t,
+        kind: 'knocked_down',
+        actorId,
+        otherId,
+        normalImpulseNs: impulseNs,
+      });
     }
   }
 
@@ -2996,7 +3061,11 @@ class Simulation {
       ]),
     );
     const actors: Record<string, ActorTrack> = {};
-    for (const id of [...actorIds].sort()) actors[id] = this.tracks.get(id)!;
+    for (const id of [...actorIds].sort()) {
+      const track = this.tracks.get(id)!;
+      const downedAtS = this.byId.get(id)?.downedAtS;
+      actors[id] = downedAtS != null ? { ...track, downSinceS: downedAtS } : track;
+    }
     const signals: Record<string, SignalTrack> = {};
     for (const id of this.signals.ids()) signals[id] = this.signalTracks.get(id)!;
     for (const a of this.actors) {

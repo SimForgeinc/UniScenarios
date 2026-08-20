@@ -604,8 +604,11 @@ export class PlaybackController {
           z: actor.z,
           headingRad: actor.headingRad,
           animationTimeS: this.time,
-          speedMps: actor.speedMps,
+          // A body on the ground has no gait: leaving speed here would keep the
+          // walk cycle and the bob running while it slides.
+          speedMps: actor.downProgress > 0 ? 0 : actor.speedMps,
           reversing: actor.motionDirection === -1,
+          ...(actor.downProgress > 0 ? { downProgress: actor.downProgress } : {}),
           ...(metadata ? { kind: metadata.kind } : {}),
           ...(metadata?.modelBasis === 'input-tag' ? { catalogIdAuthored: true } : {}),
           ...(metadata?.bodyColor ? { bodyColor: metadata.bodyColor } : {}),

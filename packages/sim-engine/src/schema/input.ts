@@ -223,6 +223,16 @@ export function isPedestrianLikeKind(kind: ActorKind): boolean {
   return kind === 'pedestrian' || kind === 'sidewalk_robot' || kind === 'drone' || kind === 'animal';
 }
 
+/**
+ * Kinds that can be taken off their feet by a contact.
+ *
+ * Pedestrian-like minus the drone: a quadrotor holds altitude and has no stance
+ * to lose, so a contact slows or stops it instead of putting it on the ground.
+ */
+export function isKnockdownVulnerableKind(kind: ActorKind): boolean {
+  return kind === 'pedestrian' || kind === 'animal' || kind === 'sidewalk_robot';
+}
+
 export function isRoadActorKind(kind: ActorKind): boolean {
   return !isPedestrianLikeKind(kind) && kind !== 'static_object';
 }

@@ -13,6 +13,12 @@ export interface MotionIntent {
   readonly targetAccelerationMps2: number;
   readonly previewPoint: Vec2;
   readonly previewHeadingRad: number;
+  /**
+   * The body is off its feet. A walker agent must stop steering toward
+   * `previewPoint` and let the contact impulse carry it, or the knock it just
+   * received is erased on the next substep.
+   */
+  readonly downed?: boolean;
 }
 
 /** Normalised actuator requests. */
