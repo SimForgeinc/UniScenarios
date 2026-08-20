@@ -39,8 +39,9 @@ const topology = {
   ],
 } as any;
 const options = {
-  mapId: 'map', controlDigest: digest, clipSeconds: 8, warmupSeconds: 2,
-  signalCatalog: catalog, topology, conflictPairsByJunction: { j1: [{ gateA: 'g1', gateB: 'g2' }] },
+  mapId: 'map', clipSeconds: 8, warmupSeconds: 2,
+  signalCatalog: catalog, roadControls: controls.roadControls, topology,
+  conflictPairsByJunction: { j1: [{ gateA: 'g1', gateB: 'g2' }] },
 };
 
 describe('map signal plan compiler', () => {
@@ -116,7 +117,6 @@ describe('map signal plan compiler', () => {
       };
       const compiled = compileMapSignalPlans(stagePrograms, [authored], {
         ...options,
-        controlDigest: stageDigest,
         signalCatalog: stageCatalog,
         topology: stageTopology,
       });
@@ -175,7 +175,6 @@ describe('map signal plan compiler', () => {
     } as any;
     const compiled = compileMapSignalPlans(sharedPrograms, [sharedPlan], {
       ...options,
-      controlDigest: sharedDigest,
       signalCatalog: sharedCatalog,
       topology: sharedTopology,
       conflictPairsByJunction: { j1: [{ gateA: 'g-preferred', gateB: 'g-conflict' }] },
@@ -203,7 +202,10 @@ describe('map signal plan compiler', () => {
   });
 
   it('fails closed on stale metadata and dual ownership', () => {
-    expect(() => compileMapSignalPlans(programs, [plan], { ...options, controlDigest: 'changed' }))
+    const stalePrograms = programs.map((program) => program.id === 'signal:h1'
+      ? { ...program, phases: [{ phase: 'green' as const, durationS: 3 }, ...program.phases.slice(1)] }
+      : program);
+    expect(() => compileMapSignalPlans(stalePrograms, [plan], options))
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_stale_binding' }));
     expect(() => compileMapSignalPlans(programs, [plan], { ...options, worldSignalSetIds: ['signal:h1'] }))
       .toThrowError(expect.objectContaining({ code: 'map_signal_plan_dual_ownership' }));
@@ -228,7 +230,6 @@ describe('map signal plan compiler', () => {
       binding: { ...plan.binding, controlDigest: inconsistentDigest },
     }], {
       ...options,
-      controlDigest: inconsistentDigest,
     })).toThrowError(expect.objectContaining({
       code: 'map_signal_plan_reference_unbound',
     } satisfies Partial<MapSignalPlanCompileError>));
@@ -242,7 +243,7 @@ describe('map signal plan compiler', () => {
     const groupedCatalog = { ...catalog, controllers: [{ id: 'c1', sequence: 0, signalIds: ['h1', 'h2'] }], junctions: [{ junctionId: 'j1', controllerIds: ['c1'] }] };
     const groupedDigest = contentHash({ signalPrograms: groupedPrograms, roadControls: [] });
     expect(() => compileMapSignalPlans(groupedPrograms, [{ ...plan, binding: { ...plan.binding, controlDigest: groupedDigest } }], {
-      ...options, controlDigest: groupedDigest, signalCatalog: groupedCatalog,
+      ...options, signalCatalog: groupedCatalog,
     })).toThrowError(expect.objectContaining({ code: 'map_signal_plan_controller_conflict' } satisfies Partial<MapSignalPlanCompileError>));
   });
 });
