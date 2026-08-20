@@ -125,6 +125,7 @@ const DEFAULTS = {
   shadowAtlasCellSize: 512,
   shadowStrength: 1,
   debugShadowProjection: false,
+  cinematicLighting: true,
   realtimeShadows: true,
   /**
    * 2048 over a 120 m radius is ~12 cm per texel, which resolves the contact
@@ -280,6 +281,12 @@ export class CityViewer {
   private sun: DirectionalLight | null = null;
   private readonly sky = new SkyDome();
   private realtimeShadows = false;
+  /**
+   * Whether the generated sky, its image-based light and the sun's shadow map
+   * are active. Off leaves the flat clear colour and the bare direct sun, which
+   * is what the reduced authoring presets ask for.
+   */
+  private cinematicLighting = false;
   private shadowRadius = 0;
   private shadowBake: { focus: Vector3; radius: number; sun: Vector3 } | null = null;
   private environmentFromSky = false;
@@ -371,7 +378,8 @@ export class CityViewer {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, this.options.maxPixelRatio));
     this.renderer.toneMapping = AgXToneMapping;
     this.renderer.toneMappingExposure = this.options.exposure;
-    this.realtimeShadows = this.options.realtimeShadows && !this.ultraLowFidelity;
+    this.cinematicLighting = this.options.cinematicLighting && !this.ultraLowFidelity;
+    this.realtimeShadows = this.cinematicLighting && this.options.realtimeShadows;
     this.renderer.shadowMap.enabled = this.realtimeShadows;
     this.renderer.shadowMap.type = PCFSoftShadowMap;
     this.renderer.info.autoReset = false;
@@ -394,6 +402,7 @@ export class CityViewer {
     this.sky.follow(this.camera.position);
     this.camera.layers.enable(ATMOSPHERE_LAYER);
     this.scene.add(this.sky.mesh);
+    this.sky.mesh.visible = this.cinematicLighting;
     this.snowCover = new SnowCoverController(this.scene, {
       admit: (bytes) => admitSnowWithinBudget(
         bytes,
@@ -571,7 +580,7 @@ export class CityViewer {
    * light with it. Rebuilds are gated inside `SkyDome`.
    */
   private refreshSkyEnvironment(): void {
-    if (this.ultraLowFidelity) return;
+    if (!this.cinematicLighting) return;
     this.scene.environment = this.sky.environmentTexture(this.renderer);
     this.environmentFromSky = true;
   }
@@ -1414,8 +1423,39 @@ export class CityViewer {
   }
 
   /** Atomically change related modes so one preference switch causes one asset reset. */
-  setAuthoringFidelity(modes: { ultraLow: boolean; roadsOnly: boolean }): void {
+  setAuthoringFidelity(modes: {
+    ultraLow: boolean;
+    roadsOnly: boolean;
+    cinematicLighting?: boolean;
+  }): void {
+    if (modes.cinematicLighting !== undefined) {
+      this.setCinematicLighting(modes.cinematicLighting);
+    }
     this.setFidelityModes(modes.ultraLow, modes.roadsOnly);
+  }
+
+  /**
+   * Turns the generated sky, its image-based light and the sun's shadow map on
+   * or off without rebuilding the viewer.
+   *
+   * A quality change usually remounts the canvas, because pixel ratio and
+   * antialias are context-creation options — but the persistent world host
+   * switches presets on a live viewer, so this has to be reversible.
+   */
+  setCinematicLighting(enabled: boolean): void {
+    const next = enabled && !this.ultraLowFidelity;
+    if (next === this.cinematicLighting) return;
+    this.cinematicLighting = next;
+    this.sky.mesh.visible = next;
+    this.realtimeShadows = next && this.options.realtimeShadows;
+    this.renderer.shadowMap.enabled = this.realtimeShadows;
+    if (next) {
+      this.refreshSkyEnvironment();
+    } else {
+      this.scene.environment = null;
+      this.environmentFromSky = false;
+    }
+    this.configureSunShadow();
   }
 
   private setFidelityModes(requestedUltraLow: boolean, roadsOnly: boolean): void {
@@ -1454,8 +1494,11 @@ export class CityViewer {
       this.originalMaterials.clear();
       for (const [object, visible] of this.ultraLowVisibility) object.visible = visible;
       this.ultraLowVisibility.clear();
-      this.sky.mesh.visible = true;
-      this.realtimeShadows = this.options.realtimeShadows;
+      // Leaving Ultra Low restores whatever the preset asked for, which is not
+      // necessarily the cinematic path.
+      this.cinematicLighting = this.options.cinematicLighting;
+      this.sky.mesh.visible = this.cinematicLighting;
+      this.realtimeShadows = this.cinematicLighting && this.options.realtimeShadows;
       this.renderer.shadowMap.enabled = this.realtimeShadows;
       this.scene.background = new Color(0x14181e);
       if (this.sun) this.sun.visible = true;

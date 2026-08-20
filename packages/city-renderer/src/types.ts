@@ -134,6 +134,14 @@ export interface CityViewerOptions {
   /** Render the baked shadow term instead of shading (projection QA). */
   debugShadowProjection?: boolean;
   /**
+   * Generated sky, its image-based light, and the sun's shadow map.
+   *
+   * Off leaves the flat clear colour and the bare direct sun. Reduced authoring
+   * presets turn it off: the shadow pass is the real cost, and the dome's
+   * scattering shader is not free on the GPUs those presets exist for.
+   */
+  cinematicLighting?: boolean;
+  /**
    * Cast a real-time sun shadow map. Maps that ship no baked lightmap have no
    * other source of ground contact, and the map also shadows actors, which a
    * bake can never contain.
