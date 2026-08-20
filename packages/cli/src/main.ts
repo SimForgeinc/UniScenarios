@@ -41,6 +41,8 @@ import { debugScenario } from './commands/debug.js';
 import { sitesMatch } from './commands/sites.js';
 import { templateValidate } from './commands/template.js';
 import { validate } from './commands/validate.js';
+import { renderHash, renderRun } from './commands/render.js';
+import { workerStart } from './commands/worker.js';
 
 const COMMANDS = [
   { name: 'maps list', summary: 'the five dev maps, their artifacts and catalog revisions' },
@@ -60,6 +62,9 @@ const COMMANDS = [
   { name: 'catalog verify', summary: 'reject catalog identity, cardinality, provenance, or evidence gaps' },
   { name: 'catalog batch', summary: 'resumable catalog materialization + simulation with an attempt ledger' },
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
+  { name: 'render run', summary: 'execute one immutable render intent with the browser or CARLA engine' },
+  { name: 'render hash', summary: 'compute the canonical SHA-256 identity of a render intent' },
+  { name: 'worker start', summary: 'run the control-plane-neutral pull worker from a configuration file' },
   { name: 'schemas', summary: 'the published JSON Schemas — the LLM emission contract' },
 ] as const;
 
@@ -535,6 +540,44 @@ async function dispatch(argv: readonly string[]): Promise<number> {
         ...(ambientSettleArg(args) === undefined ? {} : { ambientSettleSeconds: ambientSettleArg(args) }),
         pretty: boolFlag(args, 'pretty'),
       });
+    }
+
+    case 'render': {
+      if (sub === 'hash') {
+        const args = parseArgs(argv.slice(2), { booleans: GLOBAL_BOOLEANS });
+        return renderHash(positional(args, 0, 'render-intent.json'), boolFlag(args, 'pretty'));
+      }
+      if (sub === 'run') {
+        const args = parseArgs(argv.slice(2), {
+          booleans: GLOBAL_BOOLEANS,
+          values: ['engine', 'out', 'inputs', 'engine-options'],
+        });
+        const engine = requireString(args, 'engine');
+        if (engine !== 'browser' && engine !== 'carla') {
+          throw new CliError('bad_value', '--engine must be browser | carla', { path: '--engine' });
+        }
+        return renderRun({
+          intentPath: positional(args, 0, 'render-intent.json'),
+          engine,
+          outDir: requireString(args, 'out'),
+          inputsPath: requireString(args, 'inputs'),
+          engineOptionsPath: optionalString(args, 'engine-options'),
+          pretty: boolFlag(args, 'pretty'),
+        });
+      }
+      throw new CliError('unknown_command', `uniscenarios render ${sub ?? ''}`.trim(), {
+        detail: { known: ['run', 'hash'] },
+      });
+    }
+
+    case 'worker': {
+      if (sub !== 'start') {
+        throw new CliError('unknown_command', `uniscenarios worker ${sub ?? ''}`.trim(), {
+          detail: { known: ['start'] },
+        });
+      }
+      const args = parseArgs(argv.slice(2), { booleans: GLOBAL_BOOLEANS, values: ['config'] });
+      return workerStart(requireString(args, 'config'));
     }
 
     case 'schemas': {

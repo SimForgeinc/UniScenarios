@@ -1,0 +1,40 @@
+{
+  "name": "@uniscenarios/render-worker",
+  "version": "0.1.0-rc.42",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
+    "directory": "services/render-worker"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "license": "Apache-2.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "uniscenarios-render-worker": "./bin/uniscenarios-render-worker.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist", "bin"],
+  "dependencies": {
+    "@uniscenarios/render-runtime": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.6.0"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/main.ts --format esm --dts --sourcemap --clean --out-dir dist",
+    "start": "node dist/main.js"
+  }
+}

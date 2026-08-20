@@ -156,6 +156,15 @@ export { evaluate, combinedEvaluationVerdict, criticalityBand, filtersFor, type 
 export { metricsSummary } from './commands/simulate.js';
 export { debugScenario, type DebugOptions, type DebugPathSample } from './commands/debug.js';
 export { SCHEMAS, type SchemaEntry } from './commands/schemas.js';
+export { renderHash, renderRun, type RenderRunOptions } from './commands/render.js';
+export { workerStart } from './commands/worker.js';
+export {
+  loadBuiltinRenderEngine,
+  loadRenderEngine,
+  type BuiltinRenderEngineId,
+  type RenderEngineAdapter,
+  type RenderExecutionContext,
+} from '@uniscenarios/render-runtime';
 
 export {
   ASAM_FORMATS,

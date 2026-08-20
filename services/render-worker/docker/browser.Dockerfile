@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1.7
+FROM node:22.14.0-bookworm-slim AS build
+WORKDIR /src
+RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
+COPY --from=source /package.json /pnpm-lock.yaml /pnpm-workspace.yaml /tsconfig.base.json ./
+COPY --from=source /packages/scenario-model ./packages/scenario-model
+COPY --from=source /packages/render-runtime ./packages/render-runtime
+COPY --from=source /packages/browser-renderer ./packages/browser-renderer
+COPY --from=source /services/render-worker ./services/render-worker
+RUN pnpm install --frozen-lockfile --ignore-scripts \
+ && pnpm --filter @uniscenarios/scenario-model --filter @uniscenarios/render-runtime --filter @uniscenarios/browser-renderer --filter @uniscenarios/render-worker build \
+ && pnpm deploy --filter @uniscenarios/render-worker --prod /out/worker \
+ && pnpm deploy --filter @uniscenarios/browser-renderer --prod /out/browser-renderer
+
+FROM node:22.14.0-bookworm-slim AS runtime
+ARG SOURCE_REVISION
+ARG IMAGE_VERSION
+RUN test -n "$SOURCE_REVISION" && test -n "$IMAGE_VERSION" \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends chromium tini ca-certificates \
+ && rm -rf /var/lib/apt/lists/* \
+ && groupadd --system --gid 10001 renderer \
+ && useradd --system --uid 10001 --gid renderer --home-dir /nonexistent --shell /usr/sbin/nologin renderer \
+ && mkdir -p /opt/uniscenarios /scratch /cache /run/uniscenarios \
+ && chown -R renderer:renderer /scratch /cache /run/uniscenarios
+COPY --from=build --chown=renderer:renderer /out/worker /opt/uniscenarios/worker
+COPY --from=build --chown=renderer:renderer /out/browser-renderer /opt/uniscenarios/browser-renderer
+ENV NODE_ENV=production \
+    PORT=8080 \
+    UNISCENARIOS_BROWSER_ENGINE_MODULE=/opt/uniscenarios/browser-renderer/dist/index.js \
+    UNISCENARIOS_SCRATCH_DIR=/scratch \
+    UNISCENARIOS_CACHE_DIR=/cache \
+    UNISCENARIOS_GPU_LOCK=/run/uniscenarios/gpu.lock
+LABEL org.opencontainers.image.title="UniScenarios browser render worker" \
+      org.opencontainers.image.version="$IMAGE_VERSION" \
+      org.opencontainers.image.revision="$SOURCE_REVISION" \
+      org.opencontainers.image.source="https://github.com/SimForgeinc/UniScenarios" \
+      io.uniscenarios.engine="browser" \
+      io.uniscenarios.contract="uniscenario.render-worker-control/v2"
+USER 10001:10001
+WORKDIR /scratch
+VOLUME ["/scratch", "/cache", "/run/uniscenarios"]
+EXPOSE 8080
+HEALTHCHECK --interval=15s --timeout=3s --start-period=20s --retries=3 CMD ["node", "-e", "fetch('http://127.0.0.1:8080/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+ENTRYPOINT ["/usr/bin/tini", "--", "node", "/opt/uniscenarios/worker/dist/main.js"]
+CMD ["--config", "/config/worker.json"]
