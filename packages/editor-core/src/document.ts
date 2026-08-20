@@ -729,6 +729,44 @@ export class EditorDocument {
           for (const id of plan.variantIds) this.#doc.removeVariant(id);
           for (const id of plan.invariantIds) this.#doc.removeInvariant(id);
           for (const id of plan.interactionIds) this.#doc.removeInteraction(id);
+        } else {
+          // A timed route is absolute world geometry and the simulation starts the actor
+          // from `points[0]`, not from the role pose, so a move that rewrote only the pose
+          // was undone the instant playback began. The route travels with the actor.
+          //
+          // Rigidly, not by dragging `points[0]` alone onto the new pose: the simple-mode
+          // timeline is locked to one point per second, so moving the first point without
+          // the rest demands the entire displacement inside that first second at an
+          // arbitrary speed. Translation keeps the authored shape and timing, and when the
+          // route was seeded at the actor it lands `points[0]` exactly on the new position.
+          //
+          // Here rather than in the drag commit because every pose write arrives here -
+          // drag, grab, the inspector's world-pose and lane-station fields - and because
+          // this is the only place that can share the pose write's transaction. Split
+          // across two, undo would need two presses and would expose a state with the
+          // route back at the old start and the actor still moved.
+          const timedRouteDx = role.pose.position.x - current.pose.position.x;
+          const timedRouteDz = role.pose.position.z - current.pose.position.z;
+          if (Math.hypot(timedRouteDx, timedRouteDz) > 1e-6) {
+            for (const interaction of [...this.#doc.data.choreography.interactions]) {
+              if (
+                interaction.actor !== update.id ||
+                interaction.verb !== 'route' ||
+                interaction.target.mode !== 'customTimedRoute'
+              ) continue;
+              this.#doc.replaceInteraction(interaction.id, {
+                ...interaction,
+                target: {
+                  ...interaction.target,
+                  points: interaction.target.points.map((point) => ({
+                    ...point,
+                    x: Number((point.x + timedRouteDx).toFixed(3)),
+                    z: Number((point.z + timedRouteDz).toFixed(3)),
+                  })),
+                },
+              });
+            }
+          }
         }
         this.#doc.replaceRole(update.id, role);
       }
