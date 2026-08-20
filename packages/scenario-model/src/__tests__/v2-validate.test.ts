@@ -745,10 +745,12 @@ describe('map-dependent checks', () => {
   it('reports insufficient runway over the whole clip, not just the event window', () => {
     // 45 kph for 20 s is 250 m; this corridor only offers 120 m ahead.
     const map = createFakeMapContext({ lanes: [{ k: 0, extentM: [-200, 40] }] });
-    const [found] = find(validateTemplate(ltapTemplate(), map).issues, 'runway_insufficient');
-    expect(found?.severity).toBe('error');
-    expect(found?.required).toBe(250);
-    expect(found?.actual).toBe(120);
+    const found = find(validateTemplate(ltapTemplate(), map).issues, 'runway_insufficient');
+    expect(found).toHaveLength(1);
+    expect(found[0]?.severity).toBe('warning');
+    expect(found[0]?.path).toBe('roles.0');
+    expect(found[0]?.required).toBe(250);
+    expect(found[0]?.actual).toBe(120);
   });
 
   it('warns when there is not enough run-up for the warm-up', () => {

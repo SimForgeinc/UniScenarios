@@ -76,7 +76,6 @@ function resolveActor(
           `actors.${spec.id}.initial.laneRef.rsl`,
           `spawn lane ${laneRef.rsl} is not on the actor's route`,
           { rsl: laneRef.rsl },
-          'warning',
         ),
       );
       startS = route.projectPoint(localFromScene(spec.initial.pose)).s;

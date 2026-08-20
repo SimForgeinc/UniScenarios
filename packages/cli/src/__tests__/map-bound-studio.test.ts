@@ -3,12 +3,14 @@ import { parseTemplate, TemplateDocument } from '@uniscenarios/scenario-model';
 import { materializeMapBound } from '@uniscenarios/scenario-materializer';
 import { buildSeededPlacementRoute, createFixedStepSimulation, runSimulation } from '@uniscenarios/sim-engine';
 import { loadMap } from '../maps.js';
+import { localMapAssetRequirement } from './asset-test-utils.js';
 
+const studioMapAssets = localMapAssetRequirement(['yale-street', 'belmont-research-center']);
 function xy(point: { x: number; y: number } | readonly [number, number]): { x: number; y: number } {
   return Array.isArray(point) ? { x: point[0]!, y: point[1]! } : point as { x: number; y: number };
 }
 
-describe('map-bound Studio materialization', () => {
+describe.skipIf(!studioMapAssets.available)(`map-bound Studio materialization${studioMapAssets.missingReason}`, () => {
   it('compiles the actor-owned initial lanePath and exact 30 mph profile without timeline indirection', async () => {
     const bundle = await loadMap('yale-street');
     const actorId = 'vehicle-random-turns';

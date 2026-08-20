@@ -28,8 +28,10 @@ import {
 } from '../catalog.js';
 import { REPO_ROOT } from '../maps.js';
 import { readTemplate } from '../template-io.js';
+import { localMapAssetRequirement } from './asset-test-utils.js';
 
 const temporary: string[] = [];
+const catalogMapAssets = localMapAssetRequirement(['yale-street']);
 
 async function waitForChild(child: ChildProcess): Promise<{ code: number | null; stdout: string; stderr: string }> {
   let stdout = '';
@@ -82,12 +84,12 @@ function currentContractCatalog(catalog: ScenarioCatalogManifest): ScenarioCatal
 }
 
 describe('catalog batch ledger', () => {
-  it.each([
+  it.skipIf(!catalogMapAssets.available).each([
     ['adult-midblock', 'examples/mechanisms/junction-vru/adult-midblock-crossing.template.json', 'yale-street', '74807eaab0cafa84'],
     ['lead-hard-brake', 'examples/mechanisms/corridor/lead-hard-brake.template.json', 'yale-street', 'c68b36f5280f929e'],
     ['driveway-emergence', 'examples/mechanisms/parking-transit/driveway-emergence.template.json', 'yale-street', '9d1fc997d6b5ab83'],
     ['animal-crossing', 'examples/mechanisms/obstacle/animal-crossing.template.json', 'yale-street', '337ecc44df9470ed'],
-  ] as const)('carries the catalog exact-site policy through the worker cell path for %s', async (_name, source, mapId, siteId) => {
+  ] as const)(`carries the catalog exact-site policy through the worker cell path for %s${catalogMapAssets.missingReason}`, async (_name, source, mapId, siteId) => {
     const outDir = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-catalog-worker-'));
     temporary.push(outDir);
     const template = await readTemplate(path.join(REPO_ROOT, source));
@@ -105,7 +107,7 @@ describe('catalog batch ledger', () => {
     expect(result.error?.code).not.toBe('unknown_site');
   }, 180_000);
 
-  it('replays every persisted catalog site under the same lossless exact-site policy used by authoring', async () => {
+  it.skipIf(!catalogMapAssets.available)(`replays every persisted catalog site under the same lossless exact-site policy used by authoring${catalogMapAssets.missingReason}`, async () => {
     const catalog = JSON.parse(await readFile(
       path.join(REPO_ROOT, 'catalog', 'uniscenarios-five-map-v2.catalog.json'),
       'utf8',
@@ -124,7 +126,7 @@ describe('catalog batch ledger', () => {
     }
   }, 3_600_000);
 
-  it('fails closed when an exact persisted matcher site no longer exists', async () => {
+  it.skipIf(!catalogMapAssets.available)(`fails closed when an exact persisted matcher site no longer exists${catalogMapAssets.missingReason}`, async () => {
     const catalog = JSON.parse(await readFile(
       path.join(REPO_ROOT, 'catalog', 'uniscenarios-five-map-v2.catalog.json'),
       'utf8',
@@ -141,7 +143,7 @@ describe('catalog batch ledger', () => {
     });
   }, 180_000);
 
-  it('fails closed when the persisted matcher-site and catalog location no longer close', async () => {
+  it.skipIf(!catalogMapAssets.available)(`fails closed when the persisted matcher-site and catalog location no longer close${catalogMapAssets.missingReason}`, async () => {
     const catalog = JSON.parse(await readFile(
       path.join(REPO_ROOT, 'catalog', 'uniscenarios-five-map-v2.catalog.json'),
       'utf8',
@@ -434,7 +436,7 @@ describe('catalog batch ledger', () => {
     expect(record.attempts[0]).toMatchObject({ attempt: 0, seed: 'seed-0', verdict: 'reject' });
   });
 
-  it('cancels and resumes through the direct CLI without consuming the interrupted attempt', async () => {
+  it.skipIf(!catalogMapAssets.available)(`cancels and resumes through the direct CLI without consuming the interrupted attempt${catalogMapAssets.missingReason}`, async () => {
     const dir = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-catalog-cancel-resume-'));
     temporary.push(dir);
     const source = path.join(REPO_ROOT, 'catalog', 'uniscenarios-five-map-v2.catalog.json');

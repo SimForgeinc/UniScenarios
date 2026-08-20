@@ -21,10 +21,12 @@ import { templateId as canonicalTemplateId } from '../materialize.js';
 import { matchOnMap } from '../sites.js';
 import { readTemplate } from '../template-io.js';
 import { validateCatalogLiveClosure } from '../commands/catalog.js';
+import { localMapAssetRequirement } from './asset-test-utils.js';
 
 let tmp: string;
 let manifestFile: string;
 let catalog: ScenarioCatalogManifest;
+const catalogMapAssets = localMapAssetRequirement(KNOWN_MAPS);
 
 beforeAll(async () => {
   tmp = await mkdtemp(path.join(os.tmpdir(), 'uniscenarios-catalog-'));
@@ -53,7 +55,7 @@ function refreshSlotDigest(slot: Record<string, unknown>): void {
 }
 
 describe('UniScenarios authored scenario catalog', () => {
-  it('contains exactly 100 deterministic, map-grounded occurrences per supported map', async () => {
+  it.skipIf(!catalogMapAssets.available)(`contains exactly 100 deterministic, map-grounded occurrences per supported map${catalogMapAssets.missingReason}`, async () => {
     expect(catalog.slots).toHaveLength(KNOWN_MAPS.length * CATALOG_SLOTS_PER_MAP);
     expect(new Set(catalog.slots.map((slot) => slot.identity)).size).toBe(catalog.slots.length);
     expect(new Set(catalog.slots.map((slot) => slot.seed)).size).toBe(catalog.slots.length);
@@ -128,7 +130,7 @@ describe('UniScenarios authored scenario catalog', () => {
     }
   });
 
-  it('persists only matcher sites that close against the selected catalog location', async () => {
+  it.skipIf(!catalogMapAssets.available)(`persists only matcher sites that close against the selected catalog location${catalogMapAssets.missingReason}`, async () => {
     const executable = catalog.slots.filter((slot) => slot.implementation.state === 'template-backed');
     const matchCache = new Map<string, ReturnType<typeof matchOnMap>>();
     expect(executable.length).toBeGreaterThan(0);
@@ -175,7 +177,7 @@ describe('UniScenarios authored scenario catalog', () => {
     expect(catalog.researchSources.every((source) => source.url.startsWith('https://'))).toBe(true);
   });
 
-  it('verifies the authoritative 500-occurrence manifest through the real CLI', async () => {
+  it.skipIf(!catalogMapAssets.available)(`verifies the authoritative 500-occurrence manifest through the real CLI${catalogMapAssets.missingReason}`, async () => {
     const verified = await execa('node', [
       path.join(REPO_ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js'),
       'catalog', 'verify', manifestFile,
@@ -189,7 +191,7 @@ describe('UniScenarios authored scenario catalog', () => {
     });
   }, 600_000);
 
-  it('makes verification execute live matcher closure instead of trusting a self-consistent stale id', async () => {
+  it.skipIf(!catalogMapAssets.available)(`makes verification execute live matcher closure instead of trusting a self-consistent stale id${catalogMapAssets.missingReason}`, async () => {
     const original = catalog.slots.find((slot) => slot.implementation.state === 'template-backed')!;
     const stale = {
       ...catalog,

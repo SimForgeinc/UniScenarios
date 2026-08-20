@@ -21,7 +21,7 @@ describe('feasibility guards', () => {
     const issues = checkFeasibility(input, graph);
     const runway = issues.find((i) => i.code === 'runway_insufficient');
     expect(runway).toBeDefined();
-    expect(runway!.severity).toBe('error');
+    expect(runway!.severity).toBe('warning');
     expect(runway!.path).toBe('actors.ego.behavior.route');
     expect(runway!.detail!.neededM).toBeGreaterThan(200);
     expect(runway!.detail!.availableM).toBeCloseTo(55, 0);
@@ -29,17 +29,20 @@ describe('feasibility guards', () => {
 
   it('runSimulation throws a structured SimEngineError by default', () => {
     const input = scenario(graph, {
-      actors: [vehicle(graph, { id: 'ego', rsl: LANE_DEAD_END, s: 5, speedMps: 12, cruiseSpeedMps: 12 })],
+      actors: [
+        vehicle(graph, { id: 'a', s: 100, speedMps: 10, cruiseSpeedMps: 10 }),
+        vehicle(graph, { id: 'b', s: 102, speedMps: 10, cruiseSpeedMps: 10 }),
+      ],
     });
     expect(() => runSimulation(input, { graph })).toThrow(SimEngineError);
     try {
       runSimulation(input, { graph });
     } catch (e) {
-      expect((e as SimEngineError).issues[0]!.code).toBe('runway_insufficient');
+      expect((e as SimEngineError).issues[0]!.code).toBe('spawn_overlap');
     }
     // …but `guards: 'collect'` lets a study run anyway.
     const { issues } = runSimulation(input, { graph, guards: 'collect' });
-    expect(issues.some((i) => i.code === 'runway_insufficient')).toBe(true);
+    expect(issues.some((i) => i.code === 'spawn_overlap')).toBe(true);
   });
 
   it('accepts a route with enough runway', () => {
@@ -109,6 +112,25 @@ describe('feasibility guards', () => {
     expect(found).toBeDefined();
   });
 
+  it('treats a spawn lane outside the route as an error', () => {
+    const actor = vehicle(graph, { id: 'ego', s: 10, speedMps: 10, cruiseSpeedMps: 10 });
+    const input = scenario(graph, {
+      actors: [{
+        ...actor,
+        behavior: {
+          ...actor.behavior,
+          route: { kind: 'follow', startRsl: LANE_RIGHT, turns: [], maxLengthM: 2000 },
+        },
+      }],
+    });
+    const found = checkFeasibility(input, graph).find((i) => i.code === 'spawn_lane_not_on_route');
+    expect(found).toEqual(expect.objectContaining({
+      severity: 'error',
+      path: 'actors.ego.initial.laneRef.rsl',
+      detail: { rsl: LANE_LEFT },
+    }));
+  });
+
   it('catches a decel budget blown by the dynamics', () => {
     const base = scenario(graph, {
       actors: [vehicle(graph, { id: 'ego', s: 10, speedMps: 25, cruiseSpeedMps: 25 })],
@@ -128,7 +150,9 @@ describe('feasibility guards', () => {
     };
     const found = checkFeasibility(input, graph).find((i) => i.code === 'decel_budget_exceeded');
     expect(found).toBeDefined();
-    expect(found!.severity).toBe('error');
+    expect(found!.severity).toBe('warning');
+    expect(found!.path).toBe('interactions.slam.dynamics');
+    expect(found!.detail!.budget).toBe(8);
     expect(found!.detail!.impliedDecel).toBeCloseTo(25, 0);
   });
 
