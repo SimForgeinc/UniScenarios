@@ -955,6 +955,35 @@ function projectSensorHostEvidence(value) {
 }
 
 
+function carlaKiaEvidenceCheck(result, expected) {
+  const readback = getPath(result, ['carlaEvidence.sensorHostReadback']);
+  const runtimeImage = getPath(result, ['carlaEvidence.runtimeImage']);
+  const vehicle = expected.vehicleAsset;
+  const image = vehicle.sourceImage ?? expected.sourceImage;
+  const errors = [];
+  if (!readback || readback.actorId !== expected.actorId
+    || readback.catalogId !== vehicle.catalogAssetId
+    || readback.requiredCatalogId !== vehicle.catalogAssetId
+    || readback.requestedBlueprintId !== vehicle.carlaBlueprintId
+    || readback.observedBlueprintId !== vehicle.carlaBlueprintId
+    || readback.requiredBlueprintId !== vehicle.carlaBlueprintId
+    || readback.classPath !== vehicle.carlaClassPath
+    || readback.make !== vehicle.make || readback.model !== vehicle.model || readback.baseType !== vehicle.baseType
+    || readback.verification !== 'catalog-binding-and-runtime-type-id-readback') {
+    errors.push('kia-carnival-catalog-blueprint-runtime-readback');
+  }
+  if (!runtimeImage || runtimeImage.repository !== image.repository
+    || runtimeImage.indexSha256 !== image.indexSha256
+    || runtimeImage.linuxAmd64ManifestSha256 !== image.linuxAmd64ManifestSha256
+    || runtimeImage.configuredManifestSha256 !== image.linuxAmd64ManifestSha256
+    || runtimeImage.configuredBlueprintId !== vehicle.carlaBlueprintId
+    || runtimeImage.configuredClassPath !== vehicle.carlaClassPath
+    || runtimeImage.managed !== true || runtimeImage.exact !== true) {
+    errors.push('kia-carnival-managed-image-runtime-readback');
+  }
+  return { passed: errors.length === 0, errors, sensorHostReadback: readback ?? null, runtimeImage: runtimeImage ?? null };
+}
+
 export function comparePair(requestPair, browser, carla, { output } = {}) {
   if (requestPair.browser?.intentSha256 !== requestPair.carla?.intentSha256 || !DIGEST.test(requestPair.browser?.intentSha256 ?? '')) throw new Error('paired request does not carry one valid shared intentSha256');
   const intent = requestPair.browser.intent;
@@ -982,6 +1011,7 @@ export function comparePair(requestPair, browser, carla, { output } = {}) {
   const expectedSources = renderSpec.sources.map((source) => ({ role: 'sensor-output', actorId: source.actorId, sensorId: source.sensorId, modality: source.modality }));
   const browserArtifacts = artifactClosure(browser, expectedSources, expectedFrames);
   const carlaArtifacts = artifactClosure(carla, expectedSources, expectedFrames);
+  const carlaKiaEvidence = carlaKiaEvidenceCheck(carla, intent.sensorHost);
   const divergence = getPath(carla, ['classifiedDivergence', 'divergence']) ?? [];
   const divergenceErrors = [];
   if (!Array.isArray(divergence)) divergenceErrors.push('classified-divergence-not-an-array');
@@ -997,6 +1027,7 @@ export function comparePair(requestPair, browser, carla, { output } = {}) {
     intentionIdentity: identities,
     browserFrameAndChecksumClosure: browserArtifacts,
     carlaFrameAndChecksumClosure: carlaArtifacts,
+    carlaKiaRuntimeEvidence: carlaKiaEvidence,
     carlaClassifiedDivergence: { passed: divergenceErrors.length === 0, errors: divergenceErrors, entries: divergence },
     browserPlayableMedia: browserMedia,
     carlaPlayableMedia: carlaMedia,
@@ -1011,7 +1042,7 @@ export function comparePair(requestPair, browser, carla, { output } = {}) {
     expectedFramesPerSensor: expectedFrames,
     checks,
     passed: identities.every((item) => item.passed) && browserArtifacts.passed && carlaArtifacts.passed
-      && divergenceErrors.length === 0 && browserMedia.passed && carlaMedia.passed,
+      && carlaKiaEvidence.passed && divergenceErrors.length === 0 && browserMedia.passed && carlaMedia.passed,
   };
   const report = { ...reportBase, reportSha256: sha256(reportBase) };
   if (output) writeJson(output, report);
@@ -1026,7 +1057,8 @@ export function eightCameraMatrix(reports, { output } = {}) {
       const browserErrors = report.checks.browserFrameAndChecksumClosure.errors.filter((error) => error.includes(`\0${sensorId}\0`));
       const carlaErrors = report.checks.carlaFrameAndChecksumClosure.errors.filter((error) => error.includes(`\0${sensorId}\0`));
       return { pairId: report.pairId,
-        kiaCarnivalHost: report.checks.intentionIdentity.find((item) => item.name === 'kia-carnival-sensor-host-evidence')?.passed === true,
+        kiaCarnivalHost: report.checks.intentionIdentity.find((item) => item.name === 'kia-carnival-sensor-host-evidence')?.passed === true
+          && report.checks.carlaKiaRuntimeEvidence?.passed === true,
         schedule: report.checks.intentionIdentity.find((item) => item.name === 'capture-schedule')?.passed === true,
         calibration: report.checks.intentionIdentity.find((item) => item.name === 'sensor-calibration')?.passed === true,
         browserClosure: browserErrors.length === 0, carlaClosure: carlaErrors.length === 0,
