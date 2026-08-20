@@ -37,6 +37,8 @@ export const SetKeyDeclSchema = z.strictObject({
   valueType: SetValueTypeSchema,
   /** Legal values, for `enum`. */
   values: z.array(z.string().min(1)).optional(),
+  /** Optional narrower enum domain when the target is a vehicle rather than a VRU. */
+  vehicleValues: z.array(z.string().min(1)).optional(),
   /** Legal range, for `number`. */
   range: z.tuple([z.number(), z.number()]).optional(),
   unit: z.string().max(32).optional(),
@@ -218,8 +220,9 @@ export const SET_KEY_REGISTRY: readonly SetKeyDecl[] = [
     key: 'pose.gesture',
     valueType: 'enum',
     values: ['none', 'wave_through', 'halt', 'point', 'phone'],
-    appliesTo: 'vru',
-    description: 'Upper-body gesture; drives the intent cue a perception stack may or may not read.',
+    vehicleValues: ['none', 'wave_through', 'halt', 'point'],
+    appliesTo: 'any_actor',
+    description: 'Upper-body gesture; vehicle drivers support wave/halt/point intent cues, while VRUs additionally support a phone pose.',
   }),
   decl({
     key: 'pose.headingLookDeg',

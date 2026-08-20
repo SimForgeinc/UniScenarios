@@ -52,6 +52,11 @@ export interface PhysicsTelemetrySample {
   readonly collisionCount: number;
 }
 
+export interface MotionDisturbance {
+  /** World-frame velocity of ambient air, metres per second. */
+  readonly windVelocityMps: Vec2;
+}
+
 export interface MotionStepResult {
   readonly state: VehicleMotionState;
   readonly telemetry: PhysicsTelemetrySample;
@@ -76,7 +81,13 @@ export interface MotionBackend {
   readonly version: number;
   readonly substepS: number;
   register(input: MotionActorInitialization): void;
-  step(actorId: string, intent: MotionIntent, dtS: number, frictionScale: number): MotionStepResult;
+  step(
+    actorId: string,
+    intent: MotionIntent,
+    dtS: number,
+    frictionScale: number,
+    disturbance?: MotionDisturbance,
+  ): MotionStepResult;
   state(actorId: string): VehicleMotionState | undefined;
   telemetry(actorId: string): PhysicsTelemetrySample | undefined;
 }

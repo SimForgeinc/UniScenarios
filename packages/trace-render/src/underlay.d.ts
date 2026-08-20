@@ -6,6 +6,11 @@ export interface SurfacePatchRender {
     | { kind: 'polygon'; points: Array<{ x: number; z: number }> }
     | { kind: 'laneWindow'; rsl: string; sMin: number; sMax: number };
 }
+export interface MarkingTreatmentRender {
+  id: string;
+  quality: 'crisp' | 'faded' | 'absent' | 'misaligned';
+  region: { kind: 'laneWindow'; rsl: string; sMin: number; sMax: number };
+}
 export interface SurfaceRenderLane {
   rsl: string;
   widthM: number;
@@ -16,6 +21,7 @@ export const LANE_STYLE_FALLBACK: { readonly fill: string };
 export const JUNCTION_SURFACE_FILL: string;
 export const JUNCTION_SURFACE_WIDTH_FACTOR: number;
 export const BOUNDARY_STROKE: string;
+export const MISALIGNED_MARKING_OFFSET_M: number;
 export const CROSSWALK_STRIPE_FILL: string;
 export function underlayFromTopology(topology: any, locationsDoc?: any, signalsDoc?: unknown): any;
 export function crosswalksFromLocations(locationsDoc: any): any[];
@@ -33,6 +39,7 @@ export function underlaySvgLayers(
     tickIndex: number;
     frameTime: number;
   } | null,
+  markingTreatments?: MarkingTreatmentRender[],
 ): string[];
 export function actorGlyph(id: string, kind: string | null, isStatic: boolean): { shape: 'box' | 'disc'; color: string };
 export function stateValueAt(events: readonly { kind: string; actorId?: string; key?: string; t: number; value?: boolean | number | string }[] | undefined, actorId: string, key: string, t: number): boolean | number | string | undefined;

@@ -55,6 +55,13 @@ function capabilityDecisions(profile: AsamExportProfile): Record<keyof SimScenar
     surfacePatches: replay
       ? decision('derived', 'approximate', 'reduced-grip regions are baked into the sampled motion, but the patch geometry and its friction field are not recoverable from the trajectory')
       : decision('omitted', 'none', 'ASAM road conditions are scene-wide; a bounded low-grip region has no portable equivalent and promoting it to the whole scene would alter the scenario'),
+    // Marking quality is appearance, not geometry or physics: a faded, absent or misaligned
+    // marking changes what a driver can see, and it was verified not to alter simulated motion
+    // at all. So unlike a lane closure there is nothing baked into a replayed trajectory to
+    // recover it from, and OpenSCENARIO has no portable way to restate how a lane is painted --
+    // that is an OpenDRIVE road-network property. It is therefore retained as provenance in
+    // both profiles rather than claimed as executable content.
+    markingTreatments: decision('extension', 'metadata-only', 'ASAM describes lane paint in the road network, not the scenario; the treated window, quality and lane offsets are retained in UniScenarios Properties, and because markings do not affect simulated motion no part of them is recoverable from a replayed trajectory'),
     metricSubject: decision('omitted', 'none', 'UniScenarios metric evaluation is outside the exported execution model'),
     actors: replay
       ? decision('derived', 'approximate', 'identity and geometry are preserved; motion is a sampled simulation trace')

@@ -4,7 +4,7 @@
 Usage:
   .venv/bin/python tools/research/vista2/run_vista2.py --run-id pilot1 \
       --briefs c1-lead-stopped,c5b-runner,c7b-van-hides-ped \
-      --model gpt-5.6-sol --effort high
+      --model gpt-5.6-luna --effort medium
 
   --briefs sample        -> the frozen shared sample (tools/research/shared/briefs-sample.json)
   --briefs sample-dev    -> its 30 DEV briefs only
@@ -111,8 +111,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--run-id', required=True)
     ap.add_argument('--briefs', required=True)
-    ap.add_argument('--model', default='gpt-5.6-sol')
-    ap.add_argument('--effort', default='high')
+    ap.add_argument('--model', default='gpt-5.6-luna')
+    ap.add_argument('--effort', default='medium')
     ap.add_argument('--budget', type=int, default=40)
     ap.add_argument('--wall-cap', type=int, default=2400)
     ap.add_argument('--guide', default=None,

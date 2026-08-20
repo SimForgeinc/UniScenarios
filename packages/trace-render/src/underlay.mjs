@@ -30,6 +30,14 @@ export const JUNCTION_SURFACE_FILL = '#5a646f';
 export const JUNCTION_SURFACE_WIDTH_FACTOR = 1.9;
 
 export const BOUNDARY_STROKE = '#d9dee5';
+export const MISALIGNED_MARKING_OFFSET_M = 0.75;
+
+const MARKING_STYLES = {
+  crisp: { opacity: '0.6', dash: null },
+  faded: { opacity: '0.22', dash: '8 5' },
+  obscured: { opacity: '0.15', dash: '5 4' },
+  misaligned: { opacity: '0.75', dash: null },
+};
 export const CROSSWALK_STRIPE_FILL = '#e8ecf1';
 
 /** Paint order: below everything else, sidewalks under driving so kerb lines stay visible. */
@@ -248,19 +256,31 @@ function pointAlongPolyline(pts, targetM) {
   return { point: pts[pts.length - 1], segment: pts.length - 1 };
 }
 
-function laneWindowPolygon(lane, sMin, sMax) {
-  const lengthM = lane.pts.slice(1).reduce(
-    (sum, point, i) => sum + Math.hypot(point.x - lane.pts[i].x, point.y - lane.pts[i].y),
+function polylineLength(pts) {
+  return pts.slice(1).reduce(
+    (sum, point, i) => sum + Math.hypot(point.x - pts[i].x, point.y - pts[i].y),
     0,
   );
+}
+
+/** Exact longitudinal slice of a lane centreline, including interpolated ends. */
+function polylineWindow(pts, sMin, sMax) {
+  const lengthM = polylineLength(pts);
   const lo = Math.max(0, Math.min(lengthM, sMin));
   const hi = Math.max(lo, Math.min(lengthM, sMax));
   if (hi - lo <= 1e-6) return [];
-  const start = pointAlongPolyline(lane.pts, lo);
-  const end = pointAlongPolyline(lane.pts, hi);
+  if (lo === 0 && hi === lengthM) return pts;
+  const start = pointAlongPolyline(pts, lo);
+  const end = pointAlongPolyline(pts, hi);
   const center = [start.point];
-  for (let i = start.segment; i < end.segment; i += 1) center.push(lane.pts[i]);
+  for (let i = start.segment; i < end.segment; i += 1) center.push(pts[i]);
   center.push(end.point);
+  return center;
+}
+
+function laneWindowPolygon(lane, sMin, sMax) {
+  const center = polylineWindow(lane.pts, sMin, sMax);
+  if (center.length < 2) return [];
   return [
     ...offsetPolyline(center, lane.widthM / 2),
     ...offsetPolyline(center, -lane.widthM / 2).reverse(),
@@ -433,7 +453,7 @@ export function signalSvgLayer(signals, signalPrograms, signalTicks, tickIndex, 
  * driving boundaries → crosswalk stripes. `project` maps world points to
  * screen points.
  */
-export function underlaySvgLayers(underlay, view, project, surfacePatches = [], weatherPreset = null, signalState = null) {
+export function underlaySvgLayers(underlay, view, project, surfacePatches = [], weatherPreset = null, signalState = null, markingTreatments = []) {
   const { scale } = view;
   const bounds = viewportBounds(view, 14);
   const layers = [];
@@ -498,28 +518,52 @@ export function underlaySvgLayers(underlay, view, project, surfacePatches = [], 
   // 4. Authored surface coverings sit on the asphalt, below physical markings.
   layers.push(...surfacePatchSvgLayer(surfacePatches, { ...view, lanes: underlay.lanes }, project));
 
-  // 5. Boundary lines on non-junction driving lanes (junction interiors stay unmarked, like real asphalt).
-  const obscuredRsls = new Set(
-    surfacePatches
-      .filter((patch) => patch.region?.kind === 'laneWindow')
-      .map((patch) => patch.region.rsl),
-  );
+  // 5. Boundary lines on non-junction driving lanes. Authored appearance and
+  // surface/weather obscuration share one segmented path, so a local window
+  // changes only the paint it actually covers. Marking displacement never
+  // changes `lane.pts`, which remains the simulation/map truth.
   const weatherObscuresMarkings = weatherPreset === 'snow' || weatherPreset === 'sleet';
+  const sortedTreatments = [...(markingTreatments ?? [])].sort((a, b) => String(a.id).localeCompare(String(b.id)));
   for (const lane of visible) {
     if (lane.laneType !== 'driving' || lane.isJunction) continue;
-    const obscured = weatherObscuresMarkings || obscuredRsls.has(lane.rsl);
-    for (const side of [1, -1]) {
-      layers.push(
-        strokeLayer(
-          'underlay-boundary',
-          offsetPolyline(lane.pts, side * (lane.widthM / 2)),
-          project,
-          BOUNDARY_STROKE,
-          1.2,
-          obscured ? '0.15' : '0.6',
-          obscured ? '5 4' : null,
-        ),
-      );
+    const lengthM = polylineLength(lane.pts);
+    const authored = sortedTreatments.filter((item) => item.region?.kind === 'laneWindow' && item.region.rsl === lane.rsl);
+    const obscured = surfacePatches.filter((item) => item.region?.kind === 'laneWindow' && item.region.rsl === lane.rsl);
+    const breakpoints = [0, lengthM];
+    for (const item of [...authored, ...obscured]) {
+      breakpoints.push(Math.max(0, Math.min(lengthM, item.region.sMin)));
+      breakpoints.push(Math.max(0, Math.min(lengthM, item.region.sMax)));
+    }
+    breakpoints.sort((a, b) => a - b);
+    const uniqueBreakpoints = breakpoints.filter((value, index) => index === 0 || value - breakpoints[index - 1] > 1e-6);
+    for (let i = 1; i < uniqueBreakpoints.length; i += 1) {
+      const sMin = uniqueBreakpoints[i - 1];
+      const sMax = uniqueBreakpoints[i];
+      if (sMax - sMin <= 1e-6) continue;
+      const midpoint = (sMin + sMax) / 2;
+      const explicit = authored.find((item) => midpoint >= item.region.sMin && midpoint <= item.region.sMax);
+      const covered = obscured.some((item) => midpoint >= item.region.sMin && midpoint <= item.region.sMax);
+      const authoredQuality = explicit?.quality ?? 'crisp';
+      if (authoredQuality === 'absent') continue;
+      const quality = (weatherObscuresMarkings || covered) ? 'obscured' : authoredQuality;
+      const style = MARKING_STYLES[quality] ?? MARKING_STYLES.crisp;
+      const center = polylineWindow(lane.pts, sMin, sMax);
+      if (center.length < 2) continue;
+      for (const side of [1, -1]) {
+        const markingOffsetM = side * (lane.widthM / 2)
+          + (authoredQuality === 'misaligned' ? MISALIGNED_MARKING_OFFSET_M : 0);
+        layers.push(
+          strokeLayer(
+            quality === 'crisp' ? 'underlay-boundary' : `underlay-boundary underlay-boundary-${quality}`,
+            offsetPolyline(center, markingOffsetM),
+            project,
+            BOUNDARY_STROKE,
+            1.2,
+            style.opacity,
+            style.dash,
+          ),
+        );
+      }
     }
   }
 

@@ -440,6 +440,7 @@ function renderSvg({ instanceDoc, trace, index, frameNo, frameTime, camera, widt
         tickIndex: index,
         frameTime,
       },
+      instanceDoc.input.markingTreatments,
     ));
   }
 

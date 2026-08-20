@@ -8,6 +8,7 @@ describe('canonical template environment materialization', () => {
       weather: 'heavy_rain',
       timeOfDay: 'dusk',
       surfacePatches: [],
+      markingTreatments: [],
       frictionScale: 0.58,
       sunAzimuthDeg: 180,
       sunElevationDeg: 4,
@@ -22,7 +23,9 @@ describe('canonical template environment materialization', () => {
   });
 
   it('maps ordinary authoring presets into the engine vocabulary', () => {
-    expect(applyTemplateEnvironment({ weather: 'snow', timeOfDay: 'night_lit', surfacePatches: [] })).toMatchObject({
+    expect(applyTemplateEnvironment({
+      weather: 'snow', timeOfDay: 'night_lit', surfacePatches: [], markingTreatments: [],
+    })).toMatchObject({
       weather: 'overcast', timeOfDay: 'night', effects: { frictionScale: 0.35 },
     });
   });

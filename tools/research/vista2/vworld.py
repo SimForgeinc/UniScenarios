@@ -27,6 +27,24 @@ CLI = ['node', os.path.join(ROOT, 'packages', 'cli', 'bin', 'uniscenarios.js')]
 MAPS = ['yale-street', 'belmont-research-center', 'el-camino-road',
         'easterbrook-discovery-school', 'richmond-field-station']
 
+
+WORLD_ENV_KEYS = {
+    'env.weather': 'weather',
+    'env.timeOfDay': 'timeOfDay',
+    'env.frictionScale': 'frictionScale',
+    'env.wind': 'wind',
+}
+WORLD_COLLECTION_KEYS = {
+    'env.surfacePatch': 'surfacePatches',
+    'env.marking': 'markingTreatments',
+}
+SIGNAL_PHASE_KEY = re.compile(
+    r'^signal:feature:[A-Za-z][A-Za-z0-9_-]{0,63}:(ego|opposing|left|right)\.phase$')
+WORLD_USAGE = (
+    '{"action":"set_world","key":"env.weather","value":"snow"}; '
+    'use env.timeOfDay/env.frictionScale/env.wind, env.surfacePatch/env.marking, '
+    'or signal:feature:<featureId>:<ego|opposing|left|right>.phase')
+
 VEHICLE_CLASS = {
     'vehicle.bus': 'bus', 'vehicle.school_bus': 'bus', 'vehicle.shuttle_bus': 'bus',
     'vehicle.tram': 'bus',
@@ -136,6 +154,8 @@ class Scene:
         self.props = {}          # id -> prop dict (template form)
         self.interactions = []   # template form, ids i1..iN
         self._iseq = 0
+        self.environment = {}    # authored v2 environment; empty preserves legacy default
+
         self._ego_default()
 
     def _contract_need(self):
@@ -229,7 +249,9 @@ class Scene:
                      'tags': ['vista2'], 'author': 'agent/vista2-visual',
                      'negativeControl': False},
             'params': {'declarations': [], 'constraints': []},
-            'environment': {'weather': 'clear', 'timeOfDay': 'afternoon'},
+            'environment': (copy.deepcopy(self.environment) if self.environment else
+                            {'weather': 'clear', 'timeOfDay': 'afternoon'}),
+
             'anchor': {'id': self._anchor_id(),
                        'corridor': self.corridor(),
                        'features': self.features(),
@@ -552,7 +574,65 @@ class Scene:
             return {'kind': 'standstill', 'of': c.get('of', 'ego'), 'forS': float(c['forS'])}
         raise ValueError('unknown condition %r' % w)
 
+    def set_world(self, key, value, trigger=None, frames=None):
+        """Author environment state or a world-scoped signal phase.
+
+        Environment changes are static template state. Signal phases remain timed
+        `set` interactions, but the agent never has to invent a synthetic world role.
+        Every mutation is validated through the v2 template schema before it sticks.
+        """
+        if key in WORLD_ENV_KEYS or key in WORLD_COLLECTION_KEYS:
+            if trigger is not None:
+                return False, {'error': 'environment state is static and does not accept "trigger"; '
+                                        'correct invocation: %s' % WORLD_USAGE}
+            previous = copy.deepcopy(self.environment)
+            if key in WORLD_ENV_KEYS:
+                self.environment[WORLD_ENV_KEYS[key]] = copy.deepcopy(value)
+            else:
+                field = WORLD_COLLECTION_KEYS[key]
+                self.environment.setdefault(field, []).append(copy.deepcopy(value))
+            ok, issues = self.validate()
+            if not ok:
+                self.environment = previous
+                return False, {
+                    'error': 'invalid world value; correct invocation is %s' % WORLD_USAGE,
+                    'issues': issues,
+                }
+            self._last_instance = None
+            return True, {'key': key, 'value': copy.deepcopy(value)}
+
+        if SIGNAL_PHASE_KEY.fullmatch(str(key)):
+            try:
+                trig = self.compile_trigger(trigger, frames)
+            except (ValueError, KeyError, TypeError) as e:
+                return False, {'error': 'bad trigger: %s; correct invocation: %s'
+                                        % (e, WORLD_USAGE)}
+            self._iseq += 1
+            iid = 'i%d' % self._iseq
+            it = {'id': iid, 'actor': '@world', 'verb': 'set', 'trigger': trig,
+                  'target': {'key': key, 'value': value}}
+            self.interactions.append(it)
+            ok, issues = self.validate()
+            if not ok:
+                self.interactions.pop()
+                self._iseq -= 1
+                return False, {
+                    'error': 'invalid world value; correct invocation is %s' % WORLD_USAGE,
+                    'issues': issues,
+                }
+            self._last_instance = None
+            return True, {'interactionId': iid, 'compiled': it}
+
+        return False, {
+            'error': 'unknown world key %r; correct invocation is %s' % (key, WORLD_USAGE),
+        }
+
     def set_motion(self, actor, motion, frames=None):
+        if motion.get('kind') == 'rule':
+            key = str(motion.get('key', ''))
+            if key in WORLD_ENV_KEYS or key in WORLD_COLLECTION_KEYS or SIGNAL_PHASE_KEY.fullmatch(key):
+                return False, {'error': 'world-scoped key %r cannot be an actor rule; '
+                                        'correct invocation is %s' % (key, WORLD_USAGE)}
         if actor not in self.roles:
             return False, {'error': 'no role %r (props cannot move; place with static:false)' % actor}
         kind = motion.get('kind')

@@ -1192,7 +1192,7 @@ export class ShowcasePipeline {
       const authorOnce = async (subcommand) => {
         const args = [
           this.bridge, subcommand, '--brief', briefPath, '--out', authorDir,
-          '--model', job.authorModel ?? 'gpt-5.6-sol',
+          '--model', job.authorModel ?? 'gpt-5.6-luna',
           '--effort', job.authorEffort ?? 'medium',
         ];
         // Every pipeline attempt is a measured attempt. The bridge has no recipe-substitution
@@ -1728,7 +1728,7 @@ export class ShowcasePipeline {
             this.bridge, 'mutate', '--brief', briefPath, '--contract', contractPath,
             '--template', currentTemplatePath, '--feedback', feedbackPath,
             '--out', roundTemplatePath,
-            '--model', job.authorModel ?? 'gpt-5.6-sol', '--effort', job.authorEffort ?? 'medium',
+            '--model', job.authorModel ?? 'gpt-5.6-luna', '--effort', job.authorEffort ?? 'medium',
           ], {
             cwd: this.root,
             timeout: 600_000,
@@ -1757,7 +1757,7 @@ export class ShowcasePipeline {
           const authorDirRound = join(roundDir, 'author');
           const result = await command(this.python, [
             this.bridge, 'vista-author', '--brief', fallbackBriefPath, '--out', authorDirRound,
-            '--model', job.authorModel ?? 'gpt-5.6-sol', '--effort', job.authorEffort ?? 'medium',
+            '--model', job.authorModel ?? 'gpt-5.6-luna', '--effort', job.authorEffort ?? 'medium',
             '--contract', contractPath, '--retries', '0', '--budget', '20',
           ], {
             cwd: this.root,

@@ -72,7 +72,10 @@ describe('verified materialization recovery identity', () => {
     const baseline = template();
 
     const environmentEdit = structuredClone(baseline);
-    environmentEdit.environment = { weather: 'heavy_rain', timeOfDay: 'noon', frictionScale: 0.72, surfacePatches: [] };
+    environmentEdit.environment = {
+      weather: 'heavy_rain', timeOfDay: 'noon', frictionScale: 0.72,
+      surfacePatches: [], markingTreatments: [],
+    };
     expect(simulationSourceHash(environmentEdit)).not.toBe(simulationSourceHash(baseline));
 
     const controlEdit = structuredClone(baseline);

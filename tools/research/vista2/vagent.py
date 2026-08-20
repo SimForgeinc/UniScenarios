@@ -21,7 +21,7 @@ import httpx
 import vrender as R
 import vworld as W
 
-MUTATING = {'view_site', 'place_actor', 'set_motion', 'simulate', 'emit', 'remove'}
+MUTATING = {'view_site', 'place_actor', 'set_motion', 'set_world', 'simulate', 'emit', 'remove'}
 FREE = {'inspect', 'read_pixels'}
 
 SYSTEM_PROMPT = """# Scenario authoring game
@@ -54,14 +54,22 @@ Counted (budget shown each turn):
    {{"kind":"lane_offset","tFrac":-1..1,"durationS":d,"trigger":T}} (swerve/drift within lane, + = left)
    {{"kind":"change_lane","dk":+1|-1,"durationS":d,"trigger":T}}
    {{"kind":"gap","behind":"roleId","gapS":s,"trigger":T}} (car-following)
-   {{"kind":"rule","key":K,"value":v,"trigger":T}} (K: rules.collisionAvoidance rules.yieldToVehicles rules.yieldToPedestrians rules.obeySignals rules.obeySpeedLimit rules.aggression rules.reactionTimeS motion.gear lights.* doors.left|right|rear signal:feature:<featureId>:<ego|opposing|left|right>.phase env.weather env.frictionScale ...)
+   {{"kind":"rule","key":K,"value":v,"trigger":T}} — ACTOR-scoped only. K: rules.collisionAvoidance rules.yieldToVehicles rules.yieldToPedestrians rules.obeySignals rules.obeySpeedLimit rules.aggression rules.reactionTimeS motion.gear pose.gesture pose.paddle pose.stopArm lights.indicator lights.brake lights.emergency doors.left doors.right doors.rear
+   World-scoped keys are NOT actor rules; use set_world below.
    Triggers T: {{"at":sec}} | {{"after":{{"of":"iN","event":"start"|"end","delayS":d}}}} | {{"arrival":{{"of":"id","at":{{"frame":"fN","px":[x,y]}}|{{"dsM":m}},"syncWith":"ego","ttc":sec}}}} (solver back-solves the start so "of" reaches "at" ttc seconds before "syncWith") | {{"when":{{...,"byLatest":sec}}}} with one of "ttcBelow":{{"of","to","valueS"}} "distanceBelow":{{"from","to","valueM"}} "speedBelow"/"speedAbove":{{"of","valueKph"}} "visible":{{"of","to","visible"}} "standstill":{{"of","forS"}}
-4. {{"action":"simulate"}} — run the scenario at the working site: rollout keyframes + gate verdict per rule + measured facts.
-5. {{"action":"emit"}} — freeze and batch the template across all five maps (the portability half of the win). Win ends the game; a loss returns per-map evidence and you may continue.
-6. {{"action":"remove","id":"name"}} or {{"action":"remove","interaction":"iN"}}
+4. {{"action":"set_world","key":K,"value":v}} — the ONE world-scoped authoring mechanism. Exact environment forms:
+   {{"action":"set_world","key":"env.weather","value":"snow"}}
+   {{"action":"set_world","key":"env.timeOfDay","value":"dusk"}} or key env.frictionScale with a numeric value
+   {{"action":"set_world","key":"env.surfacePatch","value":{{"id":"ice-zone","kind":"ice","atM":45,"lengthM":35,"laneOffsets":[0]}}}}
+   {{"action":"set_world","key":"env.marking","value":{{"id":"faded-zone","quality":"faded","atM":20,"lengthM":80,"laneOffsets":[0]}}}}
+   {{"action":"set_world","key":"env.wind","value":{{"directionDeg":90,"speedMps":0,"gust":{{"startS":3,"durationS":4,"peakSpeedMps":35}}}}}}
+   Signal phase is also world-scoped and may carry "trigger":T: {{"action":"set_world","key":"signal:feature:<featureId>:<ego|opposing|left|right>.phase","value":"red","trigger":{{"at":3}}}}. Phase values: green yellow red flashing_yellow flashing_red off green_arrow yellow_arrow red_x flashing_yellow_arrow flashing_red_arrow. Environment keys are static and reject trigger.
+5. {{"action":"simulate"}} — run the scenario at the working site: rollout keyframes + gate verdict per rule + measured facts.
+6. {{"action":"emit"}} — freeze and batch the template across all five maps (the portability half of the win). Win ends the game; a loss returns per-map evidence and you may continue.
+7. {{"action":"remove","id":"name"}} or {{"action":"remove","interaction":"iN"}}
 Free (not counted):
-7. {{"action":"inspect","frame":"fN","centerPx":[x,y],"spanM":m}} — re-render any PAST frame at any region/zoom, losslessly (frames never expire).
-8. {{"action":"read_pixels","frame":"fN","px":[x,y]}} — ground truth at a point: surface (drivable/sidewalk/shoulder/parking/junction/off_road), lane width/speed-limit/travel-heading, and the portable projection of that point.
+8. {{"action":"inspect","frame":"fN","centerPx":[x,y],"spanM":m}} — re-render any PAST frame at any region/zoom, losslessly (frames never expire).
+9. {{"action":"read_pixels","frame":"fN","px":[x,y]}} — ground truth at a point: surface (drivable/sidewalk/shoulder/parking/junction/off_road), lane width/speed-limit/travel-heading, and the portable projection of that point.
 
 ## The gate (game rules)
 C1 the ego really drives: max speed >=2 m/s AND distance travelled >=10 m.
@@ -354,6 +362,8 @@ class Episode:
             return self.a_place(do)
         if name == 'set_motion':
             return self.a_motion(do)
+        if name == 'set_world':
+            return self.a_world(do)
         if name == 'simulate':
             return self.a_simulate(do)
         if name == 'inspect':
@@ -482,6 +492,26 @@ class Episode:
         return self._t0_frame('Interaction %s added: %s %s trigger=%s.'
                               % (info['interactionId'], it['verb'], it['actor'],
                                  json.dumps(it['trigger'])[:200]))
+
+    def a_world(self, do):
+        frames = {fid: fr['view'] for fid, fr in self.frames.frames.items()}
+        ok, info = self.scene.set_world(do.get('key'), do.get('value'),
+                                        trigger=do.get('trigger'), frames=frames)
+        if not ok:
+            return ('set_world rejected: %s %s'
+                    % (info.get('error'), '; '.join(info.get('issues', []))[:600])), [], []
+        if info.get('compiled'):
+            it = info['compiled']
+            caption = ('World interaction %s added: %s=%s trigger=%s.'
+                       % (info['interactionId'], it['target']['key'],
+                          json.dumps(it['target']['value']),
+                          json.dumps(it['trigger'])[:200]))
+        else:
+            caption = ('World environment authored: %s=%s.'
+                       % (info['key'], json.dumps(info['value'])))
+        if self.scene.site is None:
+            return caption + ' No working site selected yet.', [], []
+        return self._t0_frame(caption)
 
     def a_simulate(self, do):
         res, err = self.scene.simulate()

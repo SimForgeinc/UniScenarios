@@ -40,6 +40,7 @@ export {
   occlusionPairSchema,
   nearMissCriterionSchema,
   operationalConditionsSchema,
+  operationalWindSchema,
   motionPhysicsModeSchema,
   physicsConfigSchema,
   vehiclePhysicsProfileSchema,
@@ -49,6 +50,7 @@ export {
   roadControlSchema,
   signalProgramSchema,
   surfacePatchSchema,
+  markingTreatmentSchema,
   laneClosureSchema,
   staticPropSchema,
   triggerSchema,
@@ -87,6 +89,7 @@ export type {
   SpeedTarget,
   StaticProp,
   SurfacePatch,
+  MarkingTreatment,
   LaneClosure,
   Trigger,
   TurnRelation,
@@ -136,8 +139,20 @@ export { SignalBook, phaseForbidsEntry } from './sim/signals.js';
 export type { SignalPhase, SignalState, StopLineAuthority, StopLineBinding } from './sim/signals.js';
 
 /* ----------------------------------------------------- localised conditions */
-export { SURFACE_KINDS, SURFACE_KIND_FRICTION_SCALE, SurfaceField } from './environment.js';
-export type { SurfaceKind, SurfacePatchSpec, SurfaceQuery, SurfaceSample } from './environment.js';
+export {
+  SURFACE_KINDS,
+  SURFACE_KIND_FRICTION_SCALE,
+  SurfaceField,
+  windSpeedAt,
+  windVelocityAt,
+} from './environment.js';
+export type {
+  OperationalWind,
+  SurfaceKind,
+  SurfacePatchSpec,
+  SurfaceQuery,
+  SurfaceSample,
+} from './environment.js';
 export {
   MOTION_LIMITS_BY_KIND,
   PEDESTRIAN_LIMITS,
@@ -152,6 +167,7 @@ export {
   DynamicV1Backend,
   DYNAMIC_V1_DEFAULT_SUBSTEP_S,
   GENERIC_PASSENGER_CAR_PROFILE,
+  resolveActorPhysicsProfile,
   resolveVehiclePhysicsProfile,
 } from './sim/dynamic-v1.js';
 export type { ResolvedVehiclePhysicsProfile } from './sim/dynamic-v1.js';

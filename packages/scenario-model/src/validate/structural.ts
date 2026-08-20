@@ -547,6 +547,16 @@ export function structuralIssues(template: ScenarioTemplateV2): ClauseResult[] {
               ),
             );
           }
+          if (!isVru && declared.vehicleValues &&
+              (typeof interaction.target.value !== 'string' ||
+                !declared.vehicleValues.includes(interaction.target.value))) {
+            out.push(issue(
+              'error',
+              'set_value_type',
+              joinPath(base, 'target', 'value'),
+              `"${key}" on a vehicle takes one of: ${declared.vehicleValues.join(', ')}`,
+            ));
+          }
         }
         break;
       }

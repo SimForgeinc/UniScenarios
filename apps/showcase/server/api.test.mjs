@@ -464,7 +464,7 @@ test('production methodology freezes the research-proven recipe', async (t) => {
     ambient: 'light',
     render3d: true,
     topK: 3,
-    author: 'gpt-5.6-sol/low',
+    author: 'gpt-5.6-luna/medium',
     fallbackToVisual: true,
   });
 });

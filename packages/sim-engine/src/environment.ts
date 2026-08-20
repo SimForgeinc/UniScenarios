@@ -34,7 +34,7 @@
 
 import { pointInPolygon, type Vec2 } from './core/math.js';
 import { localFromScene } from './frames.js';
-import type { Region } from './schema/input.js';
+import type { OperationalConditions, Region } from './schema/input.js';
 
 /**
  * What is on the road. The list is the vocabulary an author picks from, so a
@@ -78,6 +78,27 @@ export const SURFACE_KIND_FRICTION_SCALE: Record<SurfaceKind, number> = {
   polished_asphalt: 0.75,
   grit_treated: 1.15,
 };
+
+export type OperationalWind = NonNullable<OperationalConditions['wind']>;
+
+/** Deterministic steady-plus-gust wind speed at simulation time `tS`. */
+export function windSpeedAt(wind: OperationalWind, tS: number): number {
+  const gust = wind.gust;
+  if (!gust || tS <= gust.startS || tS >= gust.startS + gust.durationS) return wind.speedMps;
+  const phase = (tS - gust.startS) / gust.durationS;
+  const pulse = Math.sin(Math.PI * phase) ** 2;
+  return wind.speedMps + (gust.peakSpeedMps - wind.speedMps) * pulse;
+}
+
+/** World-frame air velocity. The direction is where the air travels toward. */
+export function windVelocityAt(wind: OperationalWind | undefined, tS: number): Vec2 {
+  if (!wind) return { x: 0, y: 0 };
+  const speed = windSpeedAt(wind, tS);
+  return {
+    x: Math.cos(wind.directionRad) * speed,
+    y: Math.sin(wind.directionRad) * speed,
+  };
+}
 
 /** One localised covering. Structurally identical to `surfacePatchSchema`. */
 export interface SurfacePatchSpec {

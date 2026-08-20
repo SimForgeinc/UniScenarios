@@ -171,7 +171,11 @@ def vista_author(args):
     author_contract = load(args.contract)
     out = pathlib.Path(args.out)
     out.mkdir(parents=True, exist_ok=True)
-    guide_source = pathlib.Path('/tmp/tgr-vista-main1/GUIDE.md')
+    # The accumulated vista2 authoring guide is version-controlled: it carries hard-won
+    # site-matching and physics caveats, and authoring without it silently produces worse
+    # scenarios rather than failing. It lived in /tmp until 2026-08, where a reboot would
+    # have wiped it and left every exotic case authored blind.
+    guide_source = pathlib.Path(__file__).resolve().parents[1] / 'vista2' / 'GUIDE.md'
     attempts = []
     failures = []
     final_row = None
@@ -182,10 +186,9 @@ def vista_author(args):
         attempt_dir = out / f'attempt-{attempt_index + 1:02d}'
         attempt_dir.mkdir(parents=True, exist_ok=True)
         guide_out = attempt_dir / 'GUIDE.md'
-        if guide_source.is_file():
-            shutil.copyfile(guide_source, guide_out)
-        else:
-            guide_out.write_text('', encoding='utf-8')
+        if not guide_source.is_file():
+            raise RuntimeError(f'vista2 authoring guide missing: {guide_source}')
+        shutil.copyfile(guide_source, guide_out)
         brief = json.loads(json.dumps(original_brief))
         brief['showcaseContract'] = author_contract
         brief['id'] = f'{original_brief["id"]}-attempt-{attempt_index + 1:02d}'
@@ -313,8 +316,10 @@ Actors (filled shapes, oriented by heading; a short trail shows recent motion):
 Road (drawn from the real HD map):
   gray bands        driving lanes;  dark gray shoulder;  gray parking;  green bike lane;
   brown-gray sidewalk;  wider gray patch = junction
-  thin pale lines   lane boundary markings, normally solid
-  faint dashed lines  markings that are PHYSICALLY NOT VISIBLE (snow-covered or otherwise obscured)
+  thin pale solid lines  crisp lane boundary paint at the true lane edges
+  faint broken lines     faded paint; very faint dashed lines are snow-covered or otherwise obscured
+  gray lane edge with no pale line   absent lane paint
+  pale lines offset into/out of the gray lane edge   physically misaligned paint; gray lane geometry is unchanged
   white stripe band   crosswalk
 
 Traffic control:
@@ -623,7 +628,7 @@ def main():
     cmd = sub.add_parser('author')
     cmd.add_argument('--brief', required=True)
     cmd.add_argument('--out', required=True)
-    cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--model', default='gpt-5.6-luna')
     cmd.add_argument('--effort', default='medium')
     cmd.add_argument('--probe-draws', type=int, default=1)
     cmd.add_argument('--draws', type=int, default=1)
@@ -634,7 +639,7 @@ def main():
     cmd = sub.add_parser('vista-author')
     cmd.add_argument('--brief', required=True)
     cmd.add_argument('--out', required=True)
-    cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--model', default='gpt-5.6-luna')
     cmd.add_argument('--contract', required=True)
     cmd.add_argument('--retries', type=int, default=2)
     cmd.add_argument('--effort', default='medium')
@@ -668,7 +673,7 @@ def main():
     cmd.add_argument('--template', required=True)
     cmd.add_argument('--feedback', required=True)
     cmd.add_argument('--out', required=True)
-    cmd.add_argument('--model', default='gpt-5.6-sol')
+    cmd.add_argument('--model', default='gpt-5.6-luna')
     cmd.add_argument('--effort', default='medium')
     cmd.set_defaults(func=mutate)
 

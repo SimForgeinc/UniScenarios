@@ -24,7 +24,7 @@ import { angleDelta, clamp, obbCorners, obbOverlap, normalizeAngle, type Obb, ty
 import { contentHash } from '../core/hash.js';
 import { Rng } from '../core/rng.js';
 import { localFromScene, toSceneXZ } from '../frames.js';
-import { SurfaceField } from '../environment.js';
+import { SurfaceField, windVelocityAt } from '../environment.js';
 import { issue, SimEngineError, type SimIssue } from '../errors.js';
 import type { LaneGraph } from '../map/lane-graph.js';
 import type { LaneRsl } from '../map/topology.js';
@@ -177,6 +177,7 @@ function curveAwareSpeedCapMps(
   routeS: number,
   currentSpeedMps: number,
   profile: ResolvedVehiclePhysicsProfile,
+  routeDirection: 1 | -1,
 ): number {
   const comfortableBrakeMps2 = Math.max(1, profile.maxLongitudinalDecelMps2 * 0.5);
   // Road-going actors should corner well below their physical tyre limit. An
@@ -186,27 +187,32 @@ function curveAwareSpeedCapMps(
   const lateralBudgetMps2 = Math.max(0.6, profile.maxLateralAccelerationMps2 * 0.18);
   const brakingDistanceM = currentSpeedMps ** 2 / (2 * comfortableBrakeMps2);
   const horizonM = clamp(brakingDistanceM + 15, 18, 65);
-  const endS = Math.min(route.lengthM, routeS + horizonM);
+  const terminalS = routeDirection > 0
+    ? Math.min(route.lengthM, routeS + horizonM)
+    : Math.max(0, routeS - horizonM);
   const sampleStepM = 2.5;
   let priorS = routeS;
-  let priorHeading = route.poseAt(routeS).headingRad;
+  let priorHeading = normalizeAngle(route.poseAt(routeS).headingRad);
   let capMps = Number.POSITIVE_INFINITY;
 
-  for (let sampleS = Math.min(endS, routeS + sampleStepM); sampleS <= endS + 1e-6; sampleS = Math.min(endS, sampleS + sampleStepM)) {
+  while (Math.abs(terminalS - priorS) > 1e-6) {
+    const sampleS = routeDirection > 0
+      ? Math.min(terminalS, priorS + sampleStepM)
+      : Math.max(terminalS, priorS - sampleStepM);
     const pose = route.poseAt(sampleS);
-    const segmentM = Math.max(0.1, sampleS - priorS);
-    const curvaturePerM = Math.abs(angleDelta(priorHeading, pose.headingRad)) / segmentM;
+    const sampleHeading = normalizeAngle(pose.headingRad);
+    const segmentM = Math.max(0.1, Math.abs(sampleS - priorS));
+    const curvaturePerM = Math.abs(angleDelta(priorHeading, sampleHeading)) / segmentM;
     if (curvaturePerM > 1e-4) {
       const turnSpeedMps = Math.sqrt(lateralBudgetMps2 / curvaturePerM);
-      const distanceToCurveM = Math.max(0, priorS - routeS);
+      const distanceToCurveM = Math.abs(priorS - routeS);
       const approachSpeedMps = Math.sqrt(
         turnSpeedMps ** 2 + 2 * comfortableBrakeMps2 * distanceToCurveM,
       );
       capMps = Math.min(capMps, approachSpeedMps);
     }
-    if (sampleS >= endS) break;
     priorS = sampleS;
-    priorHeading = pose.headingRad;
+    priorHeading = sampleHeading;
   }
 
   return Math.max(0.75, capMps);
@@ -641,6 +647,7 @@ class Simulation {
       position: posePoint,
       headingRad: spawnHeadingRad,
       motionDirection,
+      routeDirection: 1,
       pendingMotionDirection: null,
       present: spec.presentAtStart,
       retired: false,
@@ -1569,20 +1576,13 @@ class Simulation {
   }
 
   /**
-   * Engage an outstanding gear change, if the body is slow enough to allow it.
+   * Engage an outstanding gear change once the body is slow enough to shift.
    *
-   * Called on the shift request and again every tick, so an author who commands
-   * `speed(stop)` and then `set(motion.gear = reverse)` gets the shift the
-   * moment the car actually comes to rest, without having to guess the stopping
-   * time.
-   *
-   * Selecting the opposite gear **reverses the route** rather than rotating the
-   * body. That is the physically honest model of backing down the lane you just
-   * came up: the heading is continuous (`newTangent + PI` is the old tangent),
-   * `routeS` re-bases to `lengthM - s`, and the lateral offset negates because
-   * "left" is measured relative to the direction of travel. Because the flipped
-   * route is still a lane chain, `laneRsl`, lane width and the leader search go
-   * on working throughout the manoeuvre.
+   * A route has one stable stationing convention. Reverse gear changes the
+   * direction in which that station is traversed; it does not replace the
+   * route with a second, reversed copy. Keeping the same route makes every
+   * consumer agree that reverse approaches decreasing station, including
+   * curvature preview, endpoint handling, lane identity and trace progress.
    */
   private engagePendingGear(a: ActorRuntime, t: number): void {
     const next = a.pendingMotionDirection;
@@ -1593,40 +1593,22 @@ class Simulation {
     }
     if (Math.abs(a.speedMps) > GEAR_ENGAGE_SPEED_MPS) return;
 
-    if (a.hasMoved) {
-      const flipped = a.route.reversedRoute();
-      a.routeS = clamp(a.route.lengthM - a.routeS, 0, flipped.lengthM);
-      a.route = flipped;
-      a.remainingTurns = [];
-      // "Left" is measured relative to the direction of travel, so flipping the
-      // traversal negates every lateral quantity with it.
-      a.lateralOffsetM = -a.lateralOffsetM;
-      a.lateralReferenceOffsetM = -a.lateralReferenceOffsetM;
-      a.lateralRestOffsetM = -(a.lateralRestOffsetM ?? 0);
-      a.lateralReferenceRateMps = -a.lateralReferenceRateMps;
-      a.lateralRateMps = -a.lateralRateMps;
-    } else {
-      // The body has never driven, so its heading is a placement rather than a
-      // physical outcome: this is a car parked nose-in being told to come out
-      // backwards. Keep the authored path — it is the escape path the author
-      // drew — and re-derive the heading from it, which is the same
-      // `routeTangent + PI` rule spawn-in-reverse actors already obey. The
-      // dynamic body is re-seeded at the new yaw so pure pursuit does not start
-      // 180 degrees out, which is precisely the failure this whole mechanism
-      // used to exhibit.
-      a.headingRad = normalizeAngle(
-        a.route.poseAt(a.routeS).headingRad + (next === -1 ? Math.PI : 0),
-      );
-      if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
-        this.motionBackend.register({
-          actorId: a.id,
-          kind: a.kind,
-          dimensions: { l: a.dims.l, w: a.dims.w },
-          motionDirection: next,
-          state: { x: a.position.x, y: a.position.y, yawRad: a.headingRad, longitudinalVelocityMps: 0 },
-          profile: this.physicsConfig.vehicleProfiles?.[a.id],
-        });
-      }
+    const routeHeadingRad = a.route.poseAt(a.routeS).headingRad;
+    const nextTravelHeadingRad = normalizeAngle(a.headingRad + (next < 0 ? Math.PI : 0));
+    a.routeDirection = Math.cos(angleDelta(routeHeadingRad, nextTravelHeadingRad)) >= 0 ? 1 : -1;
+
+    // A gear shift does not rotate or relocate the physical body. Re-seed the
+    // backend at rest so its signed longitudinal state changes direction
+    // without carrying force-integrator state through neutral.
+    if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
+      this.motionBackend.register({
+        actorId: a.id,
+        kind: a.kind,
+        dimensions: { l: a.dims.l, w: a.dims.w },
+        motionDirection: next,
+        state: { x: a.position.x, y: a.position.y, yawRad: a.headingRad, longitudinalVelocityMps: 0 },
+        profile: this.physicsConfig.vehicleProfiles?.[a.id],
+      });
     }
     a.motionDirection = next;
     a.pendingMotionDirection = null;
@@ -2044,6 +2026,7 @@ class Simulation {
       plan.heading = a.headingRad;
       return plan;
     }
+    const routeDirection = a.routeDirection ?? 1;
 
     const frictionScale = this.frictionScaleFor(a);
     plan.frictionScale = frictionScale;
@@ -2060,7 +2043,9 @@ class Simulation {
           targetAccelerationMps2: -emergencyDecel,
           previewPoint: { x: a.position.x + Math.cos(a.headingRad), y: a.position.y + Math.sin(a.headingRad) },
           previewHeadingRad: a.headingRad,
-        }, this.dt, frictionScale);
+        }, this.dt, frictionScale, {
+          windVelocityMps: windVelocityAt(this.resolvedInput.operationalConditions.wind, t),
+        });
         plan.speed = Math.abs(result.state.longitudinalVelocityMps);
         plan.accel = result.state.longitudinalAccelerationMps2 * (isReverseMotion(a) ? -1 : 1);
         plan.position = { x: result.state.x, y: result.state.y };
@@ -2129,6 +2114,14 @@ class Simulation {
     const conflict = a.bestEffortWorldPath ? null : this.findConflict(a);
     const gov = governorCap(a, nearestLeader, stopLineDist, conflict);
     if (gov.accelCap < accel) accel = gov.accelCap;
+    if (a.pendingMotionDirection !== null && a.longCmd !== null) {
+      // An opposite-gear speed request names the magnitude to achieve after
+      // engagement, not permission to keep accelerating in the old gear. Brake
+      // through neutral while that longitudinal request owns the axis. A bare
+      // gear request at road speed remains pending and cannot commandeer cruise
+      // control or teleport the body's momentum.
+      accel = Math.min(accel, -lim.brakeComfort * frictionScale);
+    }
     plan.frictionScale = frictionScale;
     accel = Math.max(accel, -lim.brakeHard * frictionScale);
     // The body still brakes for a generated car in front — `accel` above is
@@ -2160,7 +2153,7 @@ class Simulation {
     }
     plan.accel = accel;
     plan.speed = speed;
-    plan.routeS = a.routeS + speed * this.dt;
+    plan.routeS = a.routeS + routeDirection * speed * this.dt;
 
     const lat = lateralStep(a, t, this.dt);
     plan.lateralReferenceOffset = lat.offset;
@@ -2172,12 +2165,13 @@ class Simulation {
     }
 
     if (this.motionBackend && this.dynamicActorIds.has(a.id)) {
+      const motionDirection = isReverseMotion(a) ? -1 : 1;
       const dynamicProfile = this.dynamicBackend?.profile(a.id);
       const curveSpeedCap = dynamicProfile
-        ? curveAwareSpeedCapMps(a.route, a.routeS, Math.abs(a.speedMps), dynamicProfile)
+        ? curveAwareSpeedCapMps(a.route, a.routeS, Math.abs(a.speedMps), dynamicProfile, routeDirection)
         : Number.POSITIVE_INFINITY;
-      const dynamicTargetSpeed = Math.min(speed, curveSpeedCap);
-      const dynamicTargetAcceleration = dynamicTargetSpeed < Math.abs(a.speedMps) - 0.05
+      let dynamicTargetSpeed = Math.min(speed, curveSpeedCap);
+      let dynamicTargetAcceleration = dynamicTargetSpeed < Math.abs(a.speedMps) - 0.05
         ? Math.min(accel, (dynamicTargetSpeed - Math.abs(a.speedMps)) / 0.35)
         : accel;
       const shortSteeringLookaheadM = dynamicProfile
@@ -2187,27 +2181,40 @@ class Simulation {
       // amplified into left/right steering. On a geometrically straight
       // horizon, use a longer pure-pursuit chord; retain the short horizon as
       // soon as a material bend is ahead so turn tracking is unchanged.
-      const headingAtRouteS = a.route.poseAt(a.routeS).headingRad;
+      const travelRouteHeadingOffsetRad = routeDirection < 0 ? Math.PI : 0;
+      const bodyRouteHeadingOffsetRad = motionDirection === routeDirection ? 0 : Math.PI;
+      const headingAtRouteS = normalizeAngle(
+        a.route.poseAt(a.routeS).headingRad + travelRouteHeadingOffsetRad,
+      );
       const curvatureHorizonM = Math.max(10, Math.abs(a.speedMps));
       let maxHeadingChangeAheadRad = 0;
       for (let sampleM = 2.5; sampleM <= curvatureHorizonM + 1e-9; sampleM += 2.5) {
-        const sampleHeading = a.route.poseAt(Math.min(a.route.lengthM, a.routeS + sampleM)).headingRad;
+        const sampleS = clamp(a.routeS + routeDirection * sampleM, 0, a.route.lengthM);
+        const sampleHeading = normalizeAngle(
+          a.route.poseAt(sampleS).headingRad + travelRouteHeadingOffsetRad,
+        );
         maxHeadingChangeAheadRad = Math.max(
           maxHeadingChangeAheadRad,
           Math.abs(angleDelta(headingAtRouteS, sampleHeading)),
         );
       }
       const steeringLookaheadM = a.latCmd
-        ? Math.max(5, Math.abs(a.speedMps) * 0.8)
+        ? Math.max(
+            dynamicProfile?.wheelbaseM ?? 2,
+            Math.abs(a.speedMps) * (
+              0.4 + 0.18 * clamp((Math.abs(a.speedMps) - 12) / 2, 0, 1)
+            ),
+          )
         : maxHeadingChangeAheadRad < 3 * Math.PI / 180
           ? Math.max(4, Math.abs(a.speedMps) * 0.5, shortSteeringLookaheadM)
           : shortSteeringLookaheadM;
-      const previewS = Math.min(
+      const previewS = clamp(
+        a.routeS + routeDirection * steeringLookaheadM,
+        0,
         a.route.lengthM,
-        a.routeS + steeringLookaheadM,
       );
       const previewPose = a.route.poseAt(previewS);
-      const previewTimeS = Math.max(0.4, (previewS - a.routeS) / Math.max(Math.abs(a.speedMps), 1));
+      const previewTimeS = Math.max(0.4, Math.abs(previewS - a.routeS) / Math.max(Math.abs(a.speedMps), 1));
       // A force-based body needs a spatial reference ahead of its current
       // position. Feeding it only the one-tick lateral schedule produces a
       // vanishing steering angle (centimetres of offset several metres away),
@@ -2233,25 +2240,44 @@ class Simulation {
       // side to side. An active authored lateral transition still needs its
       // explicit schedule-tracking feedback to meet the commanded duration.
       const measuredTrackingErrorM = a.lateralOffsetM - a.lateralReferenceOffsetM;
-      const trackingPreviewOffset = previewLateralReference.offset - (a.latCmd ? measuredTrackingErrorM : 0);
+      const measuredRateErrorMps = a.lateralRateMps - a.lateralReferenceRateMps;
+      // Position feedback aims the spatial preview past the reference while
+      // rate feedback damps the crossing. Without the rate term a returning
+      // body crosses the centreline with residual lateral velocity, then loses
+      // steering authority when a simultaneous stop command brings it to rest.
+      // Gain scheduling keeps low-speed/low-grip manoeuvres responsive while
+      // giving highway-speed lane changes the longer, calmer preview their
+      // greater distance per control tick requires.
+      const lowSpeedDampingWeight = clamp(13 - Math.abs(a.speedMps), 0, 1);
+      const lateralRateDampingS = 0.25 + (
+        Math.min(previewTimeS, 0.75) - 0.25
+      ) * lowSpeedDampingWeight;
+      const trackingPreviewOffset = previewLateralReference.offset - (
+        a.latCmd
+          ? measuredTrackingErrorM + measuredRateErrorMps * lateralRateDampingS
+          : 0
+      );
+      const trackingReferenceRate = a.latCmd
+        ? plan.lateralReferenceRate - measuredTrackingErrorM / Math.max(previewTimeS, 0.4)
+        : plan.lateralReferenceRate;
       const result = this.motionBackend.step(a.id, {
-        motionDirection: isReverseMotion(a) ? -1 : 1,
+        motionDirection,
         targetSpeedMps: dynamicTargetSpeed,
         targetAccelerationMps2: dynamicTargetAcceleration,
         previewPoint: a.route.pointWithOffset(previewS, trackingPreviewOffset),
-        // The preview point already carries the future spatial offset. Heading
-        // uses the current reference rate so the controller does not apply the
-        // same future lateral transition twice (bearing and body slip).
-        previewHeadingRad: headingWithSlip(previewPose.headingRad, plan.lateralReferenceRate, Math.max(plan.speed, 0.5)),
-      }, this.dt, frictionScale);
+        previewHeadingRad: headingWithSlip(
+          normalizeAngle(previewPose.headingRad + travelRouteHeadingOffsetRad),
+          trackingReferenceRate,
+          Math.max(plan.speed, 0.5),
+        ),
+      }, this.dt, frictionScale, {
+        windVelocityMps: windVelocityAt(this.resolvedInput.operationalConditions.wind, t),
+      });
       const projected = a.route.projectPoint({ x: result.state.x, y: result.state.y });
       const projectedOffset = a.route.lateralOffsetAt(projected.s, {
         x: result.state.x,
         y: result.state.y,
       });
-      // Permit a modest tyre/body envelope beyond the painted lane centre
-      // corridor. The route remains authoritative, but a physically integrated
-      // body can briefly overhang a marking while completing a real turn.
       const roadCenterAllowanceM = Math.max(0.2, a.route.widthAt(projected.s) / 2 - a.dims.w / 2 + 0.5);
       // A legal lane change deliberately leaves the source-lane envelope.
       // Expand the route corridor only as far as the active authored lateral
@@ -2300,7 +2326,7 @@ class Simulation {
             a.route.poseAt(projected.s).headingRad,
             plan.lateralReferenceRate,
             Math.max(plan.speed, 0.5),
-          ) + (isReverseMotion(a) ? Math.PI : 0),
+          ) + bodyRouteHeadingOffsetRad,
         );
         const positionErrorM = plan.lateralOffset - plan.lateralReferenceOffset;
         const rateErrorMps = plan.lateralRate - plan.lateralReferenceRate;
@@ -2320,8 +2346,11 @@ class Simulation {
       }
     }
 
-    if (plan.routeS >= a.route.lengthM - ROUTE_END_SLACK_M) {
-      plan.routeS = a.route.lengthM;
+    const reachedRouteEnd = routeDirection < 0
+      ? plan.routeS <= ROUTE_END_SLACK_M
+      : plan.routeS >= a.route.lengthM - ROUTE_END_SLACK_M;
+    if (reachedRouteEnd) {
+      plan.routeS = routeDirection < 0 ? 0 : a.route.lengthM;
       // A route is a motion path, not an implicit lifecycle instruction. Hold
       // every semantic class at its terminal pose for truthful aftermath
       // evidence; only an explicit exist(absent) interaction may despawn it.
@@ -2337,7 +2366,8 @@ class Simulation {
       const terminalPose = a.route.poseAt(plan.routeS);
       plan.position = a.route.pointWithOffset(plan.routeS, plan.lateralOffset);
       plan.heading = normalizeAngle(
-        headingWithSlip(terminalPose.headingRad, 0, 0) + (isReverseMotion(a) ? Math.PI : 0),
+        headingWithSlip(terminalPose.headingRad, 0, 0) +
+          (a.motionDirection === routeDirection ? 0 : Math.PI),
       );
     }
 
@@ -2348,7 +2378,8 @@ class Simulation {
       const pose: RoutePose = a.route.poseAt(plan.routeS);
       plan.position = a.route.pointWithOffset(plan.routeS, plan.lateralOffset);
       plan.heading = normalizeAngle(
-        headingWithSlip(pose.headingRad, plan.lateralRate, plan.speed) + (isReverseMotion(a) ? Math.PI : 0),
+        headingWithSlip(pose.headingRad, plan.lateralRate, plan.speed) +
+          (a.motionDirection === routeDirection ? 0 : Math.PI),
       );
     }
     return plan;

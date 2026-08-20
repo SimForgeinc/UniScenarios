@@ -73,6 +73,7 @@ import {
   buildFollowRoute,
   buildLanePathRoute,
   nominalRun,
+  runSimulation,
   contentHash,
   checkFeasibility,
   parseSimScenarioInput,
@@ -89,6 +90,8 @@ import {
   toSceneXZ,
   applyAmbientTraffic,
   resolveAmbientTrafficProfile,
+  resolveActorPhysicsProfile,
+  SurfaceField,
   settleAmbientTraffic,
   type AmbientSettleProvenance,
   type AmbientTrafficProfile,
@@ -106,9 +109,12 @@ import {
   type SimActor,
   type SimIssue,
   type SimScenarioInput,
+  type SimEvent,
   type StaticProp,
   type PerceptionConfig as SimPerceptionConfig,
+  type ResolvedVehiclePhysicsProfile,
   type SurfacePatch as SimSurfacePatch,
+  type MarkingTreatment as SimMarkingTreatment,
   type LaneClosure as SimLaneClosure,
   type Trigger as SimTrigger,
   pruneDanglingAfterInteractions,
@@ -132,8 +138,55 @@ import {
   type SiteSignalPlan,
 } from './map-signals.js';
 import { compileMapSignalPlans, MapSignalPlanCompileError } from './map-signal-plan-compiler.js';
+type TriggerFiredEvent = Extract<SimEvent, { readonly kind: 'trigger_fired' }>;
+type LateralPlannedEvent = Extract<SimEvent, { readonly kind: 'lateral_maneuver_planned' }>;
+type LaneOffsetInteraction = Extract<SimInteraction, { readonly verb: 'laneOffset' }>;
+
 
 const KPH_TO_MPS = 1 / 3.6;
+const STANDARD_GRAVITY_MPS2 = 9.80665;
+
+export interface LateralFeasibilityEnvelope {
+  readonly peakLateralRateMps: number;
+  readonly demandedAccelerationMps2: number;
+  readonly tyreCeilingMps2: number;
+  readonly steeringCeilingMps2: number;
+  readonly availableAccelerationMps2: number;
+  readonly minimumDurationS: number;
+}
+
+/** Minimum-jerk demand against tyre friction and single-track steering geometry. */
+export function lateralFeasibilityEnvelope(
+  displacementM: number,
+  durationS: number,
+  speedMps: number,
+  localFrictionScale: number,
+  profile: Pick<
+    ResolvedVehiclePhysicsProfile,
+    'tireMu' | 'maxLateralAccelerationMps2' | 'maxSteerRad' | 'wheelbaseM'
+  >,
+): LateralFeasibilityEnvelope {
+  const peakLateralRateMps = 1.875 * displacementM / durationS;
+  const demandedAccelerationMps2 = 5.7735 * displacementM / (durationS * durationS);
+  const tyreCeilingMps2 = Math.min(
+    profile.maxLateralAccelerationMps2,
+    profile.tireMu * STANDARD_GRAVITY_MPS2 * localFrictionScale,
+  );
+  const steeringCeilingMps2 =
+    speedMps * speedMps * Math.tan(profile.maxSteerRad) / profile.wheelbaseM;
+  const availableAccelerationMps2 = Math.min(tyreCeilingMps2, steeringCeilingMps2);
+  const minimumDurationS = availableAccelerationMps2 > 0
+    ? Math.sqrt(5.7735 * displacementM / availableAccelerationMps2)
+    : Number.POSITIVE_INFINITY;
+  return {
+    peakLateralRateMps,
+    demandedAccelerationMps2,
+    tyreCeilingMps2,
+    steeringCeilingMps2,
+    availableAccelerationMps2,
+    minimumDurationS,
+  };
+}
 
 type Point2 = { readonly x: number; readonly y: number };
 
@@ -380,6 +433,36 @@ export interface InitialInteractionOutcome {
 const AMBIENT_SETTLE_COHORT_MPS = 15;
 const AMBIENT_SETTLE_COHORT_MULTIPLIER = 4;
 
+/**
+ * Lanes whose swept ambient traffic could meet a fixed authored collider.
+ *
+ * Spawn reservations alone are insufficient: the engine advances every actor
+ * through `warmupSeconds`, so a car can spawn clear and reach a barrier before
+ * the recorded clip begins.  Reserve the whole affected lane corridor as well.
+ * The prop's OBB is conservatively enclosed by its planar circumcircle; this
+ * cannot omit an intersecting lane, and keeps the result independent of sample
+ * spacing along the lane geometry.
+ */
+function collidablePropLaneRsls(input: SimScenarioInput, graph: LaneGraph): string[] {
+  const fixed = input.props.filter((prop) => prop.collidable && prop.attachment === undefined);
+  if (fixed.length === 0) return [];
+  const reserved = new Set<string>();
+  for (const rsl of graph.laneRsls()) {
+    const geometry = graph.geometry(rsl);
+    if (geometry?.lane.laneType !== 'driving') continue;
+    for (const prop of fixed) {
+      const projection = graph.projectOnto(rsl, { x: prop.pose.x, y: -prop.pose.z });
+      if (projection === null) continue;
+      const propRadiusM = Math.hypot(prop.dims.l, prop.dims.w) * prop.scale * 0.5;
+      if (projection.d <= propRadiusM + graph.widthAt(rsl, projection.s) * 0.5) {
+        reserved.add(rsl);
+        break;
+      }
+    }
+  }
+  return [...reserved];
+}
+
 export interface MaterializeResult {
   readonly input: SimScenarioInput;
   readonly manifest: InstanceManifest;
@@ -491,6 +574,7 @@ export function applyTemplateEnvironment(
     if (typeof value === 'number') return value;
     throw new CliError('environment_expression_unresolved', `cannot resolve ${path} without a parameter scope`, { path });
   },
+  referenceHeadingRad = 0,
 ): NonNullable<SimScenarioInput['operationalConditions']> {
   const rain = new Set(['light_rain', 'heavy_rain', 'wet_road', 'sleet']);
   const overcast = new Set(['cloudy', 'overcast', 'fog_light', 'fog_dense', 'snow']);
@@ -537,11 +621,41 @@ export function applyTemplateEnvironment(
         : visibility === 'directional-glare'
           ? 105
           : 90;
+  const wind = environment.wind === undefined
+    ? undefined
+    : (() => {
+        const speedMps = evaluateNumber(environment.wind.speedMps, 'environment.wind.speedMps');
+        const directionDeg = evaluateNumber(environment.wind.directionDeg, 'environment.wind.directionDeg');
+        if (!(speedMps >= 0 && speedMps <= 60)) {
+          throw new CliError('environment_wind_invalid', 'environment.wind.speedMps must be within [0, 60]', {
+            path: 'environment.wind.speedMps',
+          });
+        }
+        const gust = environment.wind.gust === undefined
+          ? undefined
+          : {
+              startS: evaluateNumber(environment.wind.gust.startS, 'environment.wind.gust.startS'),
+              durationS: evaluateNumber(environment.wind.gust.durationS, 'environment.wind.gust.durationS'),
+              peakSpeedMps: evaluateNumber(environment.wind.gust.peakSpeedMps, 'environment.wind.gust.peakSpeedMps'),
+            };
+        if (gust && (!(gust.durationS > 0) || gust.durationS > 60 ||
+            !(gust.peakSpeedMps >= speedMps && gust.peakSpeedMps <= 60))) {
+          throw new CliError('environment_wind_invalid', 'wind gust duration must be within (0, 60] and peak speed between the steady speed and 60', {
+            path: 'environment.wind.gust',
+          });
+        }
+        const directionRad = Math.atan2(
+          Math.sin(referenceHeadingRad + directionDeg * Math.PI / 180),
+          Math.cos(referenceHeadingRad + directionDeg * Math.PI / 180),
+        );
+        return { directionRad, speedMps, ...(gust ? { gust } : {}) };
+      })();
   return {
     weather,
     timeOfDay,
     traffic: 'moderate',
     visibility,
+    ...(wind ? { wind } : {}),
     effects: { visibilityRangeM, frictionScale, trafficSpeedFactor: 1 },
   };
 }
@@ -3484,34 +3598,7 @@ class Materializer {
         : evalNum(patch.frictionScale, scope, `${path}.frictionScale`);
       const edgeTaperM = Math.max(0, evalNum(patch.edgeTaperM, scope, `${path}.edgeTaperM`, 0));
 
-      const offsets = patch.laneOffsets.length > 0
-        ? [...new Set(patch.laneOffsets)].sort((a, b) => a - b)
-        : [...new Set([0, ...Object.keys(this.site.frame.lateralLanes).map(Number)])]
-            .filter((k) => Number.isFinite(k))
-            .sort((a, b) => a - b);
-
-      const windows: Array<{ rsl: string; sMin: number; sMax: number }> = [];
-      for (const k of offsets) {
-        const route = this.surfaceRouteAt(k, path);
-        if (!route) continue;
-        // Project the two frame endpoints onto whichever lane chain this offset
-        // resolved to: `s` restarts on every lane of a chain, so the interval
-        // cannot be carried across as a pair of numbers.
-        const from = route.projectPoint(this.framePoint(startFrameS)).s;
-        const to = route.projectPoint(this.framePoint(startFrameS + lengthM)).s;
-        const lo = Math.min(from, to);
-        const hi = Math.max(from, to);
-        for (const leg of route.legs) {
-          const legLo = Math.max(lo, leg.sStart);
-          const legHi = Math.min(hi, leg.sStart + leg.lengthM);
-          if (legHi - legLo <= 1e-6) continue;
-          // Route `s` runs along the leg's travel direction; a reversed leg
-          // stores its arc length the other way round.
-          const a = leg.reversed ? leg.lengthM - (legHi - leg.sStart) : legLo - leg.sStart;
-          const b = leg.reversed ? leg.lengthM - (legLo - leg.sStart) : legHi - leg.sStart;
-          windows.push({ rsl: leg.rsl, sMin: Math.max(0, Math.min(a, b)), sMax: Math.max(0, Math.max(a, b)) });
-        }
-      }
+      const windows = this.corridorLaneWindows(startFrameS, lengthM, patch.laneOffsets, path);
       if (windows.length === 0) {
         if (patch.essentiality === 'required') {
           throw new CliError(
@@ -3541,8 +3628,102 @@ class Materializer {
     return patches;
   }
 
-  /** The lane chain a surface patch at same-direction lane index `k` sits on. */
-  private surfaceRouteAt(k: number, path: string): Route | null {
+  /**
+   * Lower physical paint appearance onto concrete map-lane windows. The
+   * resulting records are deliberately not consumed by route construction or
+   * dynamics; they travel with the hashed simulation input for evidence replay.
+   */
+  private buildMarkingTreatments(): SimMarkingTreatment[] {
+    const treatments: SimMarkingTreatment[] = [];
+    const scope = this.baseScope();
+    for (const treatment of this.template.environment.markingTreatments) {
+      const path = `environment.markingTreatments.${treatment.id}`;
+      const featureOffset = treatment.feature
+        ? this.site.featureMatches[treatment.feature]?.s
+        : 0;
+      if (featureOffset === undefined) {
+        if (treatment.essentiality === 'required') {
+          throw new CliError(
+            'marking_treatment_feature_unbound',
+            `required marking treatment "${treatment.id}" is anchored to feature "${treatment.feature}", which is not bound at this site`,
+            { path: `${path}.feature`, detail: { feature: treatment.feature, siteId: this.site.siteId }, exitCode: 2 },
+          );
+        }
+        this.notes.push({ path: `${path}.feature`, reason: `feature "${treatment.feature}" is not bound at this site; treatment omitted` });
+        continue;
+      }
+      const startFrameS = featureOffset + evalNum(treatment.atM, scope, `${path}.atM`, 0);
+      const lengthM = evalNum(treatment.lengthM, scope, `${path}.lengthM`, 0);
+      if (!(lengthM > 0)) {
+        this.notes.push({ path: `${path}.lengthM`, reason: `treatment length resolved to ${lengthM} m; treatment omitted` });
+        continue;
+      }
+      const windows = this.corridorLaneWindows(startFrameS, lengthM, treatment.laneOffsets, path);
+      if (windows.length === 0) {
+        if (treatment.essentiality === 'required') {
+          throw new CliError(
+            'marking_treatment_unplaceable',
+            `required marking treatment "${treatment.id}" covers no drivable lane at this site`,
+            { path, detail: { atM: startFrameS, lengthM, siteId: this.site.siteId }, exitCode: 2 },
+          );
+        }
+        this.notes.push({ path, reason: 'treatment covers no drivable lane at this site; omitted' });
+        continue;
+      }
+      const seen = new Set<string>();
+      for (const window of windows) {
+        const key = `${window.rsl}${window.sMin.toFixed(3)}${window.sMax.toFixed(3)}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        treatments.push({
+          id: windows.length === 1 ? treatment.id : `${treatment.id}:${seen.size - 1}`,
+          quality: treatment.quality,
+          region: { kind: 'laneWindow', rsl: window.rsl, sMin: window.sMin, sMax: window.sMax },
+        });
+      }
+    }
+    return treatments;
+  }
+
+  /** Resolve a frame-relative interval into storage-station windows per lane. */
+  private corridorLaneWindows(
+    startFrameS: number,
+    lengthM: number,
+    laneOffsets: readonly number[],
+    path: string,
+  ): Array<{ rsl: string; sMin: number; sMax: number }> {
+    const offsets = laneOffsets.length > 0
+      ? [...new Set(laneOffsets)].sort((a, b) => a - b)
+      : [...new Set([0, ...Object.keys(this.site.frame.lateralLanes).map(Number)])]
+          .filter((k) => Number.isFinite(k))
+          .sort((a, b) => a - b);
+    const windows: Array<{ rsl: string; sMin: number; sMax: number }> = [];
+    for (const k of offsets) {
+      const route = this.corridorLaneRouteAt(k, path);
+      if (!route) continue;
+      // Frame distance and lane storage stations have independent origins.
+      const from = route.projectPoint(this.framePoint(startFrameS)).s;
+      const to = route.projectPoint(this.framePoint(startFrameS + lengthM)).s;
+      const lo = Math.min(from, to);
+      const hi = Math.max(from, to);
+      for (const leg of route.legs) {
+        const legLo = Math.max(lo, leg.sStart);
+        const legHi = Math.min(hi, leg.sStart + leg.lengthM);
+        if (legHi - legLo <= 1e-6) continue;
+        const a = leg.reversed ? leg.lengthM - (legHi - leg.sStart) : legLo - leg.sStart;
+        const b = leg.reversed ? leg.lengthM - (legLo - leg.sStart) : legHi - leg.sStart;
+        windows.push({
+          rsl: leg.rsl,
+          sMin: Math.max(0, Math.min(a, b)),
+          sMax: Math.max(0, Math.max(a, b)),
+        });
+      }
+    }
+    return windows;
+  }
+
+  /** The lane chain at same-direction corridor lane index `k`. */
+  private corridorLaneRouteAt(k: number, path: string): Route | null {
     if (k === 0) return this.refRoute;
     const rsl = this.site.frame.lateralLanes[k];
     if (!rsl) {
@@ -3991,6 +4172,193 @@ class Materializer {
     }
   }
 
+  /**
+   * Prove authored lane-relative motion against the same physical envelope the
+   * dynamic controller must obey. A short probe is necessary here: trigger
+   * conditions, earlier longitudinal commands, route curvature and yielding can
+   * all make the speed at fire time differ materially from the authored initial
+   * speed. The probe is deterministic and its trace is not retained.
+   */
+  private enforceLateralFeasibility(input: SimScenarioInput): SimScenarioInput {
+    const lateralIds = new Set(
+      input.interactions
+        .filter((interaction) => interaction.verb === 'laneOffset')
+        .map((interaction) => interaction.id),
+    );
+    if (lateralIds.size === 0) return input;
+
+    const probe = runSimulation(input, { graph: this.bundle.graph, guards: 'collect' }).trace;
+    const surface = new SurfaceField(
+      input.operationalConditions.effects.frictionScale,
+      input.surfacePatches,
+    );
+    const repaired = input;
+    const fired = probe.events
+      .filter((event): event is TriggerFiredEvent =>
+        event.kind === 'trigger_fired' && lateralIds.has(event.interactionId))
+      .sort((a, b) => a.t - b.t || a.interactionId.localeCompare(b.interactionId));
+
+    for (const event of fired) {
+      const interaction = repaired.interactions.find(
+        (candidate): candidate is LaneOffsetInteraction =>
+          candidate.id === event.interactionId && candidate.verb === 'laneOffset',
+      );
+      const actor = repaired.actors.find((candidate) => candidate.id === event.actorId);
+      const route = this.routeByRole.get(event.actorId);
+      const track = probe.ticks.actors[event.actorId];
+      if (!interaction || !actor || !route || !track) continue;
+
+      // A later lateral command can intentionally replace an in-progress one.
+      // Its realized displacement becomes the next command's starting point,
+      // so validate that successor rather than pretending the superseded
+      // command was required to reach its now-obsolete target.
+      const superseded = probe.events.some((candidate) =>
+        candidate.kind === 'interaction_aborted' &&
+        candidate.interactionId === interaction.id &&
+        candidate.reason === 'preempted');
+      if (superseded) continue;
+
+      const sampleIndex = probe.ticks.t.findIndex((t) => t >= event.t - 1e-9);
+      if (sampleIndex < 0 || track.present[sampleIndex] !== 1) continue;
+      const routeS = track.s[sampleIndex]!;
+      const routePose = route.poseAt(routeS);
+      const laneWidthM = route.widthAt(routeS);
+      if (!(laneWidthM > 0)) {
+        throw new CliError(
+          'lateral_width_unresolved',
+          `lateral command "${interaction.id}" for actor "${actor.id}" has no resolved lane width at fire time`,
+          {
+            path: `choreography.interactions.${interaction.id}`,
+            detail: { actorId: actor.id, interactionId: interaction.id, fireTimeS: event.t },
+            exitCode: 2,
+          },
+        );
+      }
+
+      const speedMps = track.speedMps[sampleIndex]!;
+      const fromOffsetM = track.lateralOffsetM[sampleIndex]!;
+      const targetOffsetM = interaction.target.value * laneWidthM;
+      const displacementM = Math.abs(targetOffsetM - fromOffsetM);
+      const planned = probe.events.find(
+        (candidate): candidate is LateralPlannedEvent =>
+          candidate.kind === 'lateral_maneuver_planned' &&
+          candidate.interactionId === interaction.id,
+      );
+      const requestedDurationS = planned?.requestedDurationS ??
+        (interaction.dynamics.constraint === 'time' ? interaction.dynamics.value : 0);
+      if (!(requestedDurationS > 0) || displacementM <= 1e-9) continue;
+
+      const localSurface = surface.sampleAt({
+        position: { x: track.x[sampleIndex]!, y: track.y[sampleIndex]! },
+        lane: routePose.rsl === null
+          ? null
+          : { rsl: routePose.rsl, laneS: routePose.storageS },
+      });
+      if (actor.kind === 'static_object') continue;
+      const profile = resolveActorPhysicsProfile(
+        actor.kind,
+        repaired.physics?.vehicleProfiles?.[actor.id],
+      );
+      const {
+        peakLateralRateMps,
+        demandedAccelerationMps2,
+        tyreCeilingMps2,
+        steeringCeilingMps2,
+        availableAccelerationMps2,
+        minimumDurationS,
+      } = lateralFeasibilityEnvelope(
+        displacementM,
+        requestedDurationS,
+        speedMps,
+        localSurface.frictionScale,
+        profile,
+      );
+      const effectiveDurationS = Math.max(
+        planned?.effectiveDurationS ?? requestedDurationS,
+        minimumDurationS,
+      );
+      const completed = probe.events.some((candidate) =>
+        candidate.kind === 'interaction_completed' &&
+        candidate.interactionId === interaction.id);
+      if (completed && demandedAccelerationMps2 <= availableAccelerationMps2 + 1e-9) continue;
+
+      const nearZeroSpeedEvent = probe.events
+        .filter((candidate): candidate is TriggerFiredEvent =>
+          candidate.kind === 'trigger_fired' &&
+          candidate.actorId === actor.id &&
+          candidate.t > event.t + 1e-9 &&
+          candidate.t < event.t + effectiveDurationS - 1e-9)
+        .find((candidate) => {
+          const command = repaired.interactions.find((item) =>
+            item.id === candidate.interactionId && item.verb === 'speed');
+          if (!command || command.verb !== 'speed') return false;
+          const at = probe.ticks.t.findIndex((t) => t >= candidate.t - 1e-9);
+          const speedAtFire = at < 0 ? speedMps : track.speedMps[at]!;
+          return command.target.mode === 'stop' ||
+            (command.target.mode === 'absolute' && command.target.value <= 0.1) ||
+            (command.target.mode === 'factor' && speedAtFire * command.target.value <= 0.1) ||
+            (command.target.mode === 'delta' && speedAtFire + command.target.value <= 0.1);
+        });
+      if (nearZeroSpeedEvent) {
+        throw new CliError(
+          'lateral_stop_conflict',
+          `actor "${actor.id}" lateral command "${interaction.id}" remains active until ${(
+            event.t + effectiveDurationS
+          ).toFixed(3)} s, but speed command "${nearZeroSpeedEvent.interactionId}" removes its steering authority at ${nearZeroSpeedEvent.t.toFixed(3)} s`,
+          {
+            path: `choreography.interactions.${interaction.id}`,
+            detail: {
+              actorId: actor.id,
+              interactionId: interaction.id,
+              speedInteractionId: nearZeroSpeedEvent.interactionId,
+              fireTimeS: event.t,
+              requestedDurationS,
+              effectiveDurationS,
+              speedCommandTimeS: nearZeroSpeedEvent.t,
+              displacementM,
+              speedMps,
+              localFrictionScale: localSurface.frictionScale,
+              demandedAccelerationMps2,
+              availableAccelerationMps2,
+              minimumFeasibleDurationS: Number.isFinite(minimumDurationS) ? minimumDurationS : null,
+              hint: 'do not stop or decelerate to near-zero until the lateral manoeuvre completes; alternatively use a smaller offset, a longer lateral duration, or a higher manoeuvre speed',
+            },
+            exitCode: 2,
+          },
+        );
+      }
+
+      if (demandedAccelerationMps2 <= availableAccelerationMps2 + 1e-9) continue;
+
+      throw new CliError(
+        'lateral_command_infeasible',
+        `actor "${actor.id}" lateral command "${interaction.id}" demands ${demandedAccelerationMps2.toFixed(3)} m/s² but only ${availableAccelerationMps2.toFixed(3)} m/s² is available; minimum feasible duration is ${Number.isFinite(minimumDurationS) ? `${minimumDurationS.toFixed(3)} s` : 'unbounded at the current speed'}`,
+        {
+          path: `choreography.interactions.${interaction.id}`,
+          detail: {
+            actorId: actor.id,
+            interactionId: interaction.id,
+            fireTimeS: event.t,
+            displacementM,
+            requestedDurationS,
+            speedMps,
+            localFrictionScale: localSurface.frictionScale,
+            patchIds: localSurface.patchIds,
+            peakLateralRateMps,
+            demandedAccelerationMps2,
+            tyreCeilingMps2,
+            steeringCeilingMps2,
+            availableAccelerationMps2,
+            minimumFeasibleDurationS: Number.isFinite(minimumDurationS) ? minimumDurationS : null,
+            hint: 'use at least the stated minimum duration, a smaller offset, or a higher manoeuvre speed; do not schedule later commands before the lateral manoeuvre completes',
+          },
+          exitCode: 2,
+        },
+      );
+    }
+    return repaired;
+  }
+
   /* --------------------------------------------------------------- assemble */
 
   /**
@@ -4097,18 +4465,20 @@ class Materializer {
   }
 
   run(options: MaterializeOptions): MaterializeResult {
-    const operationalConditions = options.variant === undefined
-      ? applyTemplateEnvironment(
-          this.template.environment,
-          (value, path) => evalNum(value, this.baseScope(), path),
-        )
-      : applyCatalogVariant(options.variant);
     this.signalPlan = buildSiteSignalPlan(this.bundle, this.site);
     this.roadControls = buildSiteRoadControls(this.bundle, this.site);
     assertMaterializableMapControls(this.template, this.bundle, this.site, this.signalPlan, this.roadControls);
     assertMaterializableMovementControls(this.template, this.bundle, this.site, this.roadControls);
     assertMaterializableRuleControls(this.template);
     this.buildReferenceRoute();
+    const referenceHeadingRad = this.refRoute === null ? 0 : this.refRoute.poseAt(0).headingRad;
+    const operationalConditions = options.variant === undefined
+      ? applyTemplateEnvironment(
+          this.template.environment,
+          (value, path) => evalNum(value, this.baseScope(), path),
+          referenceHeadingRad,
+        )
+      : applyCatalogVariant(options.variant);
     this.buildTrafficControls();
     this.compileAuthoredMapSignals();
     this.buildActors();
@@ -4152,6 +4522,7 @@ class Materializer {
     this.buildRoleOcclusionPairs();
     this.buildPropsAndOccluders();
     const perception = this.buildPerception();
+    const markingTreatments = this.buildMarkingTreatments();
 
     let input = parseSimScenarioInput({
       schemaVersion: 1,
@@ -4172,6 +4543,7 @@ class Materializer {
       signalPrograms: [...(this.compiledMapSignalPrograms ?? this.signalPlan.programs), ...this.authoredControlPrograms],
       roadControls: this.roadControls,
       surfacePatches: this.buildSurfacePatches(),
+      ...(markingTreatments.length > 0 ? { markingTreatments } : {}),
       laneClosures: this.buildLaneClosures(),
       props: this.props,
       occluders: this.occluders,
@@ -4320,6 +4692,8 @@ class Materializer {
       });
     }
 
+    input = this.enforceLateralFeasibility(input);
+
     this.assertDeliveryGeometryEligibility(input, solutions);
 
     const issues = checkFeasibility(input, this.bundle.graph);
@@ -4339,6 +4713,10 @@ class Materializer {
     if (ambientProfile !== undefined && resolveAmbientTrafficProfile(ambientProfile).preset !== 'off') {
       const resolvedAmbient = resolveAmbientTrafficProfile(ambientProfile);
       const applied = applyAmbientTraffic(input, this.bundle.graph, ambientProfile, {
+        // Fixed collidable props already reserve their OBB neighbourhood at
+        // spawn. Reserve every lane their footprint reaches too, so a candidate
+        // cannot drive into the prop during the scenario warm-up or clip.
+        excludedLaneRsls: collidablePropLaneRsls(input, this.bundle.graph),
         // NOT `extraTravelSeconds: ambientSettleSeconds`. Requiring every
         // candidate to own `cruise x (warmup + clip + settle)` of downstream
         // route — 480 m for a 20 s settle — is unaffordable on these maps:

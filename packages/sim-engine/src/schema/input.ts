@@ -373,6 +373,26 @@ export const surfacePatchSchema = z.object({
 export type SurfacePatch = z.infer<typeof surfacePatchSchema>;
 
 /**
+ * Concrete lane window whose painted boundaries have non-nominal appearance.
+ * This is replay/render metadata only: the `rsl` lane remains the sole geometry
+ * used by routing and dynamics.
+ */
+export const markingTreatmentSchema = z.object({
+  id: idSchema,
+  quality: z.enum(['crisp', 'faded', 'absent', 'misaligned']),
+  region: z.object({
+    kind: z.literal('laneWindow'),
+    rsl: z.string().min(1),
+    sMin: nonNeg,
+    sMax: nonNeg,
+  }),
+}).refine((value) => value.region.sMin <= value.region.sMax, {
+  message: 'marking treatment region.sMin must be <= region.sMax',
+  path: ['region', 'sMin'],
+});
+export type MarkingTreatment = z.infer<typeof markingTreatmentSchema>;
+
+/**
  * A lane-availability override: part of a lane is not drivable for part of its length.
  *
  * `roadControls` can only say `kind: 'stop'`, so before this there was no way to state that a lane
@@ -748,6 +768,22 @@ export type NearMissCriterion = z.infer<typeof nearMissCriterionSchema>;
  * the numeric effects prevent a catalog variant from being a metadata-only
  * claim. Adapters must choose these values deterministically.
  */
+export const operationalWindSchema = z.object({
+  /** Direction the air travels toward, in the xodr-local world frame. */
+  directionRad: finite,
+  /** Steady ambient speed. */
+  speedMps: nonNeg.max(60),
+  /** Optional deterministic smooth pulse whose peak replaces the steady speed. */
+  gust: z.object({
+    startS: finite,
+    durationS: positive.max(60),
+    peakSpeedMps: nonNeg.max(60),
+  }).optional(),
+}).refine(
+  (wind) => wind.gust === undefined || wind.gust.peakSpeedMps >= wind.speedMps,
+  { path: ['gust', 'peakSpeedMps'], message: 'gust peak speed must be at least the steady wind speed' },
+);
+
 export const operationalConditionsSchema = z.object({
   weather: z.enum(['clear', 'rain', 'overcast']).default('clear'),
   timeOfDay: z.enum(['day', 'dusk', 'night', 'dawn']).default('day'),
@@ -759,6 +795,7 @@ export const operationalConditionsSchema = z.object({
     'directional-glare',
     'dense-occlusion',
   ]).default('unrestricted'),
+  wind: operationalWindSchema.optional(),
   effects: z.object({
     /** Maximum actor-to-actor LOS range used by visible() and reveal metrics. */
     visibilityRangeM: positive.max(10_000).default(10_000),
@@ -874,6 +911,11 @@ export const simScenarioInputSchema = z
     roadControls: z.array(roadControlSchema).default([]),
     /** Localised grip: ice on the bend, a flooded dip, wet leaves under the trees. */
     surfacePatches: z.array(surfacePatchSchema).default([]),
+    /**
+     * Physical lane-marking appearance; never changes authoritative lane
+     * geometry. Optional so parsing historical inputs preserves their hash.
+     */
+    markingTreatments: z.array(markingTreatmentSchema).optional(),
     laneClosures: z.array(laneClosureSchema).default([]),
     /** Fixed renderable catalog props, expanded to one record per concrete member. */
     props: z.array(staticPropSchema).default([]),

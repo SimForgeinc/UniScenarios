@@ -24,6 +24,11 @@ export const SurfaceIdSchema = z
   .string()
   .regex(V2_ID_PATTERN, 'surface patch id must start with a letter and use only [A-Za-z0-9_-], max 64 chars');
 
+/** Id of a {@link MarkingTreatmentSchema}. */
+export const MarkingTreatmentIdSchema = z
+  .string()
+  .regex(V2_ID_PATTERN, 'marking treatment id must start with a letter and use only [A-Za-z0-9_-], max 64 chars');
+
 /** Weather presets. Ordered roughly by severity. */
 export const WEATHER_PRESETS = [
   'clear',
@@ -77,6 +82,33 @@ export const SURFACE_PATCH_KINDS = [
 /** Surface covering preset. */
 export const SurfacePatchKindSchema = z.enum(SURFACE_PATCH_KINDS);
 
+/** Physical appearance of painted lane boundaries; lane geometry is unchanged. */
+export const MARKING_QUALITIES = ['crisp', 'faded', 'absent', 'misaligned'] as const;
+export const MarkingQualitySchema = z.enum(MARKING_QUALITIES);
+
+/**
+ * A corridor-relative window where painted lane boundaries differ from the
+ * map's nominal crisp appearance. This is physical appearance only: routing,
+ * lane keeping and collision geometry continue to use the map lane.
+ */
+export const MarkingTreatmentSchema = z.strictObject({
+  id: MarkingTreatmentIdSchema,
+  quality: MarkingQualitySchema,
+  /** Start of the affected marking window along the corridor. */
+  atM: NumberOrExprSchema,
+  /** Longitudinal extent of the affected marking window, metres. */
+  lengthM: NumberOrExprSchema,
+  /** Optionally anchor `atM` to a matched corridor feature. */
+  feature: FeatureRefSchema.optional(),
+  /**
+   * Same-direction lane indices whose two painted boundaries are affected.
+   * Empty covers every same-direction lane known at the matched site.
+   */
+  laneOffsets: z.array(z.number().int().min(-6).max(6)).max(12).default([]),
+  essentiality: z.enum(['required', 'preferred', 'cosmetic']).default('required'),
+  extensions: V2ExtensionsSchema.optional(),
+});
+
 /**
  * A localised patch of road with different grip.
  *
@@ -127,6 +159,23 @@ export const SurfacePatchSchema = z.strictObject({
   extensions: V2ExtensionsSchema.optional(),
 });
 
+/**
+ * A deterministic crosswind. Direction is where the air travels toward,
+ * counter-clockwise from corridor-forward, so +90 is a push toward the left
+ * side of a forward-travelling actor.
+ */
+export const WindSchema = z.strictObject({
+  directionDeg: NumberOrExprSchema,
+  /** Steady wind speed, metres per second. Use zero for a still baseline before a gust. */
+  speedMps: NumberOrExprSchema,
+  /** Smooth single gust pulse; its peak speed replaces `speedMps` at the pulse midpoint. */
+  gust: z.strictObject({
+    startS: NumberOrExprSchema,
+    durationS: NumberOrExprSchema,
+    peakSpeedMps: NumberOrExprSchema,
+  }).optional(),
+});
+
 /** The `environment` block. */
 export const EnvironmentSchema = z.strictObject({
   weather: WeatherSchema.default('clear'),
@@ -145,11 +194,18 @@ export const EnvironmentSchema = z.strictObject({
   sunAzimuthDeg: NumberOrExprSchema.optional(),
   /** Sun elevation above the horizon, degrees. Low sun is the glare case. */
   sunElevationDeg: NumberOrExprSchema.optional(),
+  /** Wind disturbance, including an optional deterministic gust pulse. */
+  wind: WindSchema.optional(),
   /**
    * Localised grip. `frictionScale` above is the whole scene; these are the
    * places where the road is different from the rest of the road.
    */
   surfacePatches: z.array(SurfacePatchSchema).max(8).default([]),
+  /**
+   * Localised physical lane-marking appearance. Omit the property (or use an
+   * empty array) for the map's ordinary crisp paint.
+   */
+  markingTreatments: z.array(MarkingTreatmentSchema).max(8).default([]),
   /** Renderer/sensor-specific knobs. Nothing in this package interprets these. */
   extensions: V2ExtensionsSchema.optional(),
 });
@@ -164,6 +220,14 @@ export type SurfacePatch = z.infer<typeof SurfacePatchSchema>;
 export type SurfacePatchInput = z.input<typeof SurfacePatchSchema>;
 /** Surface covering preset. */
 export type SurfacePatchKind = z.infer<typeof SurfacePatchKindSchema>;
+/** A localised lane-marking appearance treatment. */
+export type MarkingTreatment = z.infer<typeof MarkingTreatmentSchema>;
+/** A localised lane-marking appearance treatment as authored. */
+export type MarkingTreatmentInput = z.input<typeof MarkingTreatmentSchema>;
+/** Physical lane-marking appearance. */
+export type MarkingQuality = z.infer<typeof MarkingQualitySchema>;
+/** Authored/resolved wind specification. */
+export type Wind = z.infer<typeof WindSchema>;
 /** Weather preset. */
 export type Weather = z.infer<typeof WeatherSchema>;
 /** Time-of-day preset. */

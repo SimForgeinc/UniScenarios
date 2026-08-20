@@ -160,28 +160,20 @@ export interface ActorRuntime {
    *
    * Reverse is a *gear*, not a negative speed. `speedMps` is a magnitude
    * everywhere downstream — TTC, required-decel, min-clearance, the exporters —
-   * so signing it would quietly corrupt all of them. The direction of travel
-   * lives here instead, and the whole engine reads it through
-   * `isReverseMotion()`.
-   *
-   * The governing invariant: **the route is the path the body travels**. In
-   * reverse the body traverses that same path rear-first, so `routeS` still
-   * advances and the body heading is `routeTangent + PI`. The heading is never
-   * flipped away from that — an oriented bounding box, a clearance measurement
-   * and a render all read `headingRad` directly.
+   * so signing it would quietly corrupt all of them.
    */
   motionDirection: 1 | -1;
   /**
-   * Whether this body has ever actually driven.
+   * Direction in which the stable route station is traversed.
    *
-   * Before it has, its heading is a *placement* — whichever way the author or
-   * the materializer happened to point a parked car — and selecting reverse
-   * means "you are parked nose-in, come out backwards", so the heading is
-   * re-derived from the route. After it has driven, the heading is a physical
-   * outcome that cannot be rewritten, and selecting reverse means "back down
-   * the path you just came up", so the route is reversed instead. Both give
-   * `heading == routeTangent + PI`; only one of them is legal at a time.
+   * Gear and route direction are related but distinct. A car authored already
+   * in reverse follows its escape path from station zero (`routeDirection = 1`)
+   * rear-first, while a forward-moving car that selects reverse backs over the
+   * route it just travelled (`routeDirection = -1`). Keeping this explicit
+   * avoids reversing the route object and preserves lane/station identity.
    */
+  routeDirection?: 1 | -1;
+  /** Whether this body has ever actually driven. */
   hasMoved: boolean;
   /**
    * A gear selection that has been requested but not yet engaged.

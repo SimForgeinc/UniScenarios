@@ -796,7 +796,7 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
           ...process.env,
           OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1',
           OPENAI_API_KEY: 'x',
-          VISTA_MODEL: 'gpt-5.6-sol',
+          VISTA_MODEL: 'gpt-5.6-luna',
           VISTA_EFFORT: 'low',
         },
       });

@@ -4,6 +4,7 @@ import type {
   MotionActorInitialization,
   MotionBackend,
   MotionIntent,
+  MotionDisturbance,
   MotionStepResult,
   PhysicsTelemetrySample,
   VehicleControl,
@@ -17,6 +18,7 @@ import {
 } from './collision-response.js';
 
 const G = 9.80665;
+const AIR_DENSITY_KG_PER_M3 = 1.225;
 export const DYNAMIC_V1_DEFAULT_SUBSTEP_S = 0.005;
 
 export interface ResolvedVehiclePhysicsProfile {
@@ -31,6 +33,10 @@ export interface ResolvedVehiclePhysicsProfile {
   readonly corneringStiffnessFrontNPerRad: number;
   readonly corneringStiffnessRearNPerRad: number;
   readonly dragCoefficientNPerMps2: number;
+  /** Effective projected side area exposed to crosswind. */
+  readonly lateralWindAreaM2: number;
+  /** Effective lateral aerodynamic coefficient. */
+  readonly lateralWindCoefficient: number;
   readonly rollingResistanceCoefficient: number;
   readonly maxDriveForceN: number;
   readonly maxBrakeForceN: number;
@@ -58,6 +64,8 @@ export const GENERIC_PASSENGER_CAR_PROFILE: ResolvedVehiclePhysicsProfile = {
   corneringStiffnessFrontNPerRad: 82_000,
   corneringStiffnessRearNPerRad: 88_000,
   dragCoefficientNPerMps2: 0.42,
+  lateralWindAreaM2: 4,
+  lateralWindCoefficient: 0.7,
   rollingResistanceCoefficient: 0.012,
   maxDriveForceN: 5_500,
   maxBrakeForceN: 13_500,
@@ -83,6 +91,7 @@ export const ACTOR_PHYSICS_PROFILES: Readonly<Record<Exclude<ActorKind, 'static_
     wheelbaseM: 3.35, cgToFrontM: 1.55, cgHeightM: 0.78, wheelRadiusM: 0.36,
     corneringStiffnessFrontNPerRad: 105_000, corneringStiffnessRearNPerRad: 118_000,
     dragCoefficientNPerMps2: 0.72, rollingResistanceCoefficient: 0.014,
+    lateralWindAreaM2: 10, lateralWindCoefficient: 1,
     maxDriveForceN: 7_500, maxBrakeForceN: 22_000, maxSteerRad: 0.54,
     steerRateRadPerS: 2.5, steerTimeConstantS: 0.2, tireMu: 0.92,
     maxLongitudinalAccelMps2: 2.5, maxLongitudinalDecelMps2: 7.2,
@@ -93,6 +102,7 @@ export const ACTOR_PHYSICS_PROFILES: Readonly<Record<Exclude<ActorKind, 'static_
     wheelbaseM: 5.2, cgToFrontM: 2.25, cgHeightM: 1.25, wheelRadiusM: 0.5,
     corneringStiffnessFrontNPerRad: 230_000, corneringStiffnessRearNPerRad: 310_000,
     dragCoefficientNPerMps2: 2.1, rollingResistanceCoefficient: 0.009,
+    lateralWindAreaM2: 35, lateralWindCoefficient: 1.2,
     maxDriveForceN: 42_000, maxBrakeForceN: 92_000, maxSteerRad: 0.44,
     steerRateRadPerS: 0.75, steerTimeConstantS: 0.38, tireMu: 0.78,
     maxLongitudinalAccelMps2: 1.5, maxLongitudinalDecelMps2: 5.5,
@@ -103,6 +113,7 @@ export const ACTOR_PHYSICS_PROFILES: Readonly<Record<Exclude<ActorKind, 'static_
     wheelbaseM: 6.0, cgToFrontM: 2.7, cgHeightM: 1.15, wheelRadiusM: 0.51,
     corneringStiffnessFrontNPerRad: 250_000, corneringStiffnessRearNPerRad: 330_000,
     dragCoefficientNPerMps2: 1.85, rollingResistanceCoefficient: 0.01,
+    lateralWindAreaM2: 38, lateralWindCoefficient: 1.25,
     maxDriveForceN: 39_000, maxBrakeForceN: 105_000, maxSteerRad: 0.46,
     steerRateRadPerS: 0.68, steerTimeConstantS: 0.42, tireMu: 0.8,
     maxLongitudinalAccelMps2: 1.35, maxLongitudinalDecelMps2: 5.2,
@@ -265,7 +276,12 @@ function controlFor(
   const alpha = angleDelta(trackingYaw, bearing);
   const purePursuit = Math.atan2(2 * profile.wheelbaseM * Math.sin(alpha), previewDistance);
   const headingCorrection = 0.35 * angleDelta(trackingYaw, intent.previewHeadingRad);
-  const steerRad = clamp(direction * (purePursuit + headingCorrection), -profile.maxSteerRad, profile.maxSteerRad);
+  // Steering a stationary tyre cannot generate a lateral contact force. Holding
+  // zero here also prevents a parked body whose facing direction intentionally
+  // opposes its escape path from rotating during warm-up before reverse engages.
+  const steerRad = travelSpeed < 0.05 && intent.targetSpeedMps < 0.05
+    ? 0
+    : clamp(direction * (purePursuit + headingCorrection), -profile.maxSteerRad, profile.maxSteerRad);
   return { throttle, brake, steer: steerRad / profile.maxSteerRad };
 }
 
@@ -332,7 +348,13 @@ export class DynamicV1Backend implements MotionBackend {
     return this.vehicles.get(actorId)?.profile;
   }
 
-  step(actorId: string, intent: MotionIntent, dtS: number, frictionScale: number): MotionStepResult {
+  step(
+    actorId: string,
+    intent: MotionIntent,
+    dtS: number,
+    frictionScale: number,
+    disturbance?: MotionDisturbance,
+  ): MotionStepResult {
     const entry = this.vehicles.get(actorId);
     if (!entry) throw new Error(`dynamic-v1 actor is not registered: ${actorId}`);
     if (!(dtS > 0)) throw new Error('dynamic-v1 step dtS must be positive');
@@ -340,7 +362,9 @@ export class DynamicV1Backend implements MotionBackend {
     const h = dtS / count;
     entry.previous = { x: entry.state.x, y: entry.state.y, yawRad: entry.state.yawRad };
     let telemetry = zeroTelemetry(h);
-    for (let i = 0; i < count; i++) telemetry = this.integrate(entry, intent, h, frictionScale);
+    for (let i = 0; i < count; i++) {
+      telemetry = this.integrate(entry, intent, h, frictionScale, disturbance);
+    }
     entry.telemetry = { ...telemetry, substeps: count, substepS: h };
     return { state: { ...entry.state }, telemetry: entry.telemetry };
   }
@@ -425,6 +449,7 @@ export class DynamicV1Backend implements MotionBackend {
     intent: MotionIntent,
     h: number,
     frictionScale: number,
+    disturbance?: MotionDisturbance,
   ): PhysicsTelemetrySample {
     if (entry.profile.dynamicsModel === 'pedestrian-agent') {
       return this.integratePedestrian(entry, intent, h, frictionScale);
@@ -514,8 +539,12 @@ export class DynamicV1Backend implements MotionBackend {
     const cosSteer = Math.cos(s.steerRad);
     const sinSteer = Math.sin(s.steerRad);
     const totalFx = rearFx + frontFx * cosSteer - frontFy * sinSteer;
+    const wind = disturbance?.windVelocityMps ?? { x: 0, y: 0 };
+    const crosswindMps = -wind.x * Math.sin(s.yawRad) + wind.y * Math.cos(s.yawRad);
+    const windLateralN = 0.5 * AIR_DENSITY_KG_PER_M3 * p.lateralWindCoefficient *
+      p.lateralWindAreaM2 * crosswindMps * Math.abs(crosswindMps);
     const uDot = totalFx / p.massKg + s.lateralVelocityMps * s.yawRateRadps;
-    const vDot = (rearFy + frontFy * cosSteer + frontFx * sinSteer) / p.massKg -
+    const vDot = (rearFy + frontFy * cosSteer + frontFx * sinSteer + windLateralN) / p.massKg -
       s.longitudinalVelocityMps * s.yawRateRadps;
     const yawDot = (lf * (frontFy * cosSteer + frontFx * sinSteer) - lr * rearFy) /
       p.yawInertiaKgM2;

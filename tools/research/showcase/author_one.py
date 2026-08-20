@@ -20,7 +20,7 @@ import time
 
 
 ROOT = Path(__file__).resolve().parents[3]
-MODEL = "gpt-5.6-sol"
+MODEL = "gpt-5.6-luna"
 EFFORT = "medium"
 BASE_URL = "http://127.0.0.1:4141/v1"
 

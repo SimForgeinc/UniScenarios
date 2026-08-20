@@ -26,6 +26,7 @@ function fixture() {
   runGit(root, ['config', 'user.name', 'Provenance Test']);
   runGit(root, ['config', 'user.email', 'provenance@example.invalid']);
   writeFileSync(join(root, 'tracked.txt'), 'committed\n');
+  chmodSync(join(root, 'tracked.txt'), 0o644);
   runGit(root, ['add', 'tracked.txt']);
   runGit(root, ['commit', '-m', 'fixture']);
 
@@ -87,6 +88,7 @@ function fixture() {
   writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
   // The fixture manifest is audit input, not part of the candidate material set.
   writeFileSync(join(root, '.gitignore'), 'manifest.json\n');
+  chmodSync(join(root, '.gitignore'), 0o644);
   // Add the ignore rule to the commit so it does not alter the captured status.
   runGit(root, ['add', '.gitignore']);
   runGit(root, ['commit', '--amend', '--no-edit']);

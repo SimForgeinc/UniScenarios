@@ -22,7 +22,7 @@ The gate is the frozen physical gate v2, applied to the RAW trace by tg_gate, un
 
 Usage:  author_llm.py --split DEV [--workers 6] [--out report.json]
 """
-import argparse, concurrent.futures, json, os, re, sys, threading
+import argparse, concurrent.futures, json, math, os, re, sys, threading
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
@@ -34,6 +34,28 @@ import tg_gate as G                                                        # noq
 import author_corpus as A                                                  # noqa: E402
 import vlm                                                                 # noqa: E402
 
+WEATHER = ('clear', 'cloudy', 'overcast', 'light_rain', 'heavy_rain', 'wet_road',
+           'fog_light', 'fog_dense', 'snow', 'sleet')
+TIMES_OF_DAY = ('dawn', 'morning', 'noon', 'afternoon', 'dusk', 'night', 'night_lit')
+SURFACES = ('ice', 'packed_snow', 'standing_water', 'wet_leaves', 'loose_gravel',
+            'sand', 'spilled_oil', 'polished_asphalt', 'grit_treated')
+MARKING_QUALITIES = ('crisp', 'faded', 'absent', 'misaligned')
+SURFACE_FRICTION = {
+  'ice': 0.15, 'packed_snow': 0.3, 'standing_water': 0.5, 'wet_leaves': 0.45,
+  'loose_gravel': 0.6, 'sand': 0.5, 'spilled_oil': 0.25,
+  'polished_asphalt': 0.75, 'grit_treated': 1.15,
+}
+# Low grip cannot be made admissible by asking for impossible braking. These caps keep the
+# approach conservative; the earlier reaction floor below gives the tyre circle time to work.
+LOW_GRIP_SPEED_CAP = {
+  'ice': 30.0, 'spilled_oil': 32.0, 'packed_snow': 35.0, 'wet_leaves': 40.0,
+  'standing_water': 42.0, 'sand': 42.0, 'loose_gravel': 45.0,
+  'polished_asphalt': 50.0,
+}
+LOW_GRIP_REACT_FLOOR = {
+  'ice': 3.0, 'spilled_oil': 2.8, 'packed_snow': 2.6, 'wet_leaves': 2.4,
+  'standing_water': 2.3, 'sand': 2.3, 'loose_gravel': 2.1,
+}
 WARMUP = 2.0
 CLIP = 18.0                                          # A._base's recorded clip length.
 HESITATE_CLIP = 12.0                                 # see `_hesitating_crossing`.
@@ -48,6 +70,25 @@ VRUS = {'pedestrian.adult_walking': 'pedestrian', 'pedestrian.child_walking': 'p
         'vehicle.bicycle': 'bicycle'}
 OCCLUDERS = ('occluder.hedge_run', 'occluder.covered_car', 'occluder.dumpster',
              'street.bus_shelter')
+
+# Class physics copied from ACTOR_PHYSICS_PROFILES in sim-engine/dynamic-v1.ts.
+# (wheelbaseM, maxSteerRad, tireMu, maxLateralAccelerationMps2)
+LATERAL_PHYSICS = {
+  'car': (2.7, 0.58, 1.0, 7.0),
+  'van': (3.35, 0.54, 0.92, 5.0),
+  'truck': (5.2, 0.44, 0.78, 3.1),
+  'bus': (6.0, 0.46, 0.8, 2.8),
+  'motorcycle': (1.45, 0.62, 0.95, 6.5),
+  'bicycle': (1.08, 0.7, 0.82, 3.5),
+}
+# A portable full lane change can bind to a lane whose centre spacing is not known yet.
+# Using the narrow end for the acceleration check and the wide end for completion is
+# conservative across ordinary 2.5-4.0 m traffic lanes.
+LANE_CHANGE_MIN_M = 2.5
+LANE_CHANGE_MAX_M = 4.0
+MIN_JERK_PEAK_RATE = 1.875
+MIN_JERK_PEAK_ACCEL = 5.7735
+GRAVITY_MPS2 = 9.80665
 
 # Pre-registered physical bounds. The compiler CLAMPS the LLM's numbers into these; it never
 # invents numbers of its own when the LLM supplied one.
@@ -64,6 +105,13 @@ BOUNDS = {
   'oncomingStartM':   (40.0, 160.0),
   'worksStartM':      (50.0, 110.0),
   'worksLengthM':     (20.0, 60.0),
+  'surfaceAtM':      (-160.0, 160.0),
+  'surfaceLengthM':  (5.0, 180.0),
+  'markingAtM':      (-160.0, 160.0),
+  'markingLengthM':  (5.0, 180.0),
+  'windDirectionDeg': (0.0, 359.0),
+  'windSpeedMps':     (0.0, 20.0),
+  'windGustPeakMps': (5.0, 35.0),
   'closedWidthM':     (1.0, 2.2),
   'workerSpeedKph':   (3.0, 8.0),
   'corridorSpeedKph': (25.0, 90.0),
@@ -86,8 +134,13 @@ def _window(d, key, default):
     """A [lo, hi] window from the decision, clamped into bounds, or the family default."""
     v = d.get(key)
     if not (isinstance(v, (list, tuple)) and len(v) == 2):
-        return default
-    lo, hi = _clamp(v[0], key), _clamp(v[1], key)
+        lo, hi = default
+    else:
+        lo, hi = _clamp(v[0], key), _clamp(v[1], key)
+    if key == 'reactAtTtcS':
+        floor = LOW_GRIP_REACT_FLOOR.get(d.get('surfaceKind'))
+        if floor is not None:
+            lo, hi = max(lo, floor), max(hi, floor)
     if hi <= lo:
         hi = min(BOUNDS[key][1], lo + max(0.2, 0.05 * lo))
     return (round(lo, 2), round(hi, 2))
@@ -95,9 +148,14 @@ def _window(d, key, default):
 
 def _scalar(d, key, default):
     v = d.get(key)
-    if v is None or isinstance(v, (list, tuple, dict, str)):
-        return default
-    return _clamp(v, key)
+    value = default if v is None or isinstance(v, (list, tuple, dict, str)) else _clamp(v, key)
+    if key in ('egoSpeedKph', 'challengerSpeedKph'):
+        if any(k in d for k in ('windDirectionDeg', 'windSpeedMps', 'windGustPeakMps')):
+            value = max(value, 65.0 if key == 'egoSpeedKph' else 60.0)
+        cap = LOW_GRIP_SPEED_CAP.get(d.get('surfaceKind'))
+        if cap is not None:
+            value = min(value, cap)
+    return value
 
 
 def _react_interactions(react_expr):
@@ -343,11 +401,57 @@ def c_junction_conflict(brief, d):
       features=[jx], max_sites=8)
 
 
+def _minimum_lane_change_speed_kph(actor_class, surface_kind):
+    """Speed floor that leaves six seconds for a conservative-width lane change."""
+    wheelbase, max_steer, tire_mu, max_lat = LATERAL_PHYSICS[actor_class]
+    grip = SURFACE_FRICTION.get(surface_kind, 1.0)
+    tyre_ceiling = min(max_lat, tire_mu * GRAVITY_MPS2 * grip)
+    available_s = CLIP - 12.0
+    minimum_rate = LANE_CHANGE_MAX_M * MIN_JERK_PEAK_RATE / available_s
+    required_ceiling = (
+      MIN_JERK_PEAK_ACCEL * minimum_rate ** 2
+      / (MIN_JERK_PEAK_RATE ** 2 * LANE_CHANGE_MIN_M))
+    if tyre_ceiling < required_ceiling:
+        raise ValueError(
+          'surface grip cannot support a full lane change before the clip ends')
+    # Two percent absorbs the later three-decimal downward rounding of the rate.
+    return (math.sqrt(required_ceiling * wheelbase / math.tan(max_steer))
+            * 3.6 * 1.02)
+
+
+def _feasible_lateral_rate(actor_class, speed_kph, surface_kind, preferred_rate=1.6):
+    """Fastest preferred lane-change rate that fits tyre and steering limits."""
+    wheelbase, max_steer, tire_mu, max_lat = LATERAL_PHYSICS[actor_class]
+    speed = speed_kph / 3.6
+    grip = SURFACE_FRICTION.get(surface_kind, 1.0)
+    tyre_ceiling = min(max_lat, tire_mu * GRAVITY_MPS2 * grip)
+    steering_ceiling = speed * speed * math.tan(max_steer) / wheelbase
+    ceiling = min(tyre_ceiling, steering_ceiling)
+    if ceiling <= 0:
+        raise ValueError('lateral_incursion challenger must be moving; steering authority is zero')
+    # T = 1.875 D / rate and peak ay = 5.7735 D / T^2. The narrowest
+    # conservative lane is the worst case for acceleration at a fixed peak rate.
+    max_rate = math.sqrt(
+      ceiling * LANE_CHANGE_MIN_M * MIN_JERK_PEAK_RATE ** 2
+      / MIN_JERK_PEAK_ACCEL)
+    rate = min(preferred_rate, math.floor(max_rate * 0.995 * 1000.0) / 1000.0)
+    max_duration = LANE_CHANGE_MAX_M * MIN_JERK_PEAK_RATE / max(rate, 1e-9)
+    if max_duration > CLIP - 12.0:
+        raise ValueError(
+          'lateral_incursion challenger is too slow to finish a physical lane change '
+          'before the clip: %.2f kph gives %.3f m/s2 lateral ceiling and needs %.2f s'
+          % (speed_kph, ceiling, max_duration))
+    return rate
+
+
 def c_lateral_incursion(brief, d):
     v_ego_kph = _scalar(d, 'egoSpeedKph', 40.0)
     v_ego = v_ego_kph / 3.6
-    chal_kph = _scalar(d, 'challengerSpeedKph', 34.0)
     cat = d.get('challengerCatalog') if d.get('challengerCatalog') in VEHICLES else 'vehicle.sedan'
+    actor_class = VEHICLES[cat]
+    chal_kph = max(_minimum_lane_change_speed_kph(actor_class, d.get('surfaceKind')),
+                   _scalar(d, 'challengerSpeedKph', 34.0))
+    lateral_rate = _feasible_lateral_rate(actor_class, chal_kph, d.get('surfaceKind'))
     closing = max(v_ego - chal_kph / 3.6, 1.0)
     gap = _window(d, 'gapM', (14, 34))
     cut_w = _window(d, 'eventLeadS', (0.8, 2.4))
@@ -371,7 +475,8 @@ def c_lateral_incursion(brief, d):
        {'id': 'chal-cuts-in', 'actor': 'chal', 'verb': 'changeLane',
         'trigger': {'kind': 'at', 't': cut},
         'target': {'mode': 'toRole', 'role': 'ego'},
-        'dynamics': {'shape': 'sinusoidal', 'constraint': 'rate', 'value': 1.6}}])
+        'dynamics': {'shape': 'sinusoidal', 'constraint': 'rate',
+                     'value': lateral_rate}}])
 
 
 def c_oncoming(brief, d):
@@ -489,6 +594,253 @@ def c_workzone(brief, d):
                  'assumedSpeedKph': 40, 'shiftTraffic': True, 'essentiality': 'required'}])
 
 
+def _param_range(template, pid):
+    for p in template['params']['declarations']:
+        if p['id'] == pid:
+            return tuple(p['range'])
+    raise ValueError('compiler did not declare %s' % pid)
+
+
+def _conflict_window(template, family):
+    ego = next(r for r in template['roles'] if r['id'] == 'ego')
+    ego_start = float(ego['pose']['s'])
+    ego_kph = float(ego['initialSpeedKph'])
+    if family in ('longitudinal_lead', 'lateral_incursion', 'parking_pullout'):
+        lo, hi = _param_range(template, 'initialGapM')
+        chal = next(r for r in template['roles'] if r['id'] == 'chal')
+        expr = str(chal.get('dsM', ''))
+        match = re.search(r'\+\s*(-?\d+(?:\.\d+)?)\s*$', expr)
+        warmup_offset = float(match.group(1)) if match else 0.0
+        return (ego_start + lo + warmup_offset, ego_start + hi + warmup_offset,
+                ego_start, ego_kph)
+    if family in ('crossing_vru', 'occluded_vru'):
+        lo, hi = _param_range(template, 'conflictS')
+        return lo, hi, ego_start, ego_kph
+    if family == 'hesitating_vru':
+        h = _param_range(template, 'hesitateAtM')
+        w = _param_range(template, 'walkOutM')
+        a = _param_range(template, 'approachM')
+        warmup_offset = WARMUP * ego_kph / 3.6
+        return (h[0] + w[0] + a[0] + warmup_offset,
+                h[1] + w[1] + a[1] + warmup_offset, ego_start, ego_kph)
+    if family == 'junction_conflict':
+        return 0.0, 0.0, ego_start, ego_kph
+    if family == 'oncoming':
+        lo, hi = _param_range(template, 'oncomingStartM')
+        chal = next(r for r in template['roles'] if r['id'] == 'chal')
+        fraction = ego_kph / max(ego_kph + float(chal['initialSpeedKph']), 0.1)
+        return ego_start + lo * fraction, ego_start + hi * fraction, ego_start, ego_kph
+    if family == 'workzone':
+        ws = _param_range(template, 'worksStartM')
+        wl = _param_range(template, 'worksLengthM')
+        return ws[0] + 0.5 * wl[0], ws[1] + 0.5 * wl[1], ego_start, ego_kph
+    raise ValueError('no conflict geometry for family %s' % family)
+
+
+def _number_hint(d, key, default):
+    value = d.get(key)
+    if isinstance(value, (list, tuple)) and len(value) == 2:
+        lo, hi = _clamp(value[0], key), _clamp(value[1], key)
+        return 0.5 * (min(lo, hi) + max(lo, hi))
+    if value is None or isinstance(value, (dict, str, list, tuple)):
+        return default
+    return _clamp(value, key)
+
+
+def _approach_window(d, prefix, conflict):
+    """Cover the whole conservative braking zone; reject authored decoration behind it."""
+    conflict_lo, conflict_hi, ego_start, ego_kph = conflict
+    scale = SURFACE_FRICTION.get(d.get('surfaceKind'), 1.0)
+    braking_m = max(12.0, (ego_kph / 3.6) ** 2 / (2.0 * 9.81 * scale))
+    zone_start = max(ego_start, conflict_lo - braking_m)
+    zone_end = conflict_hi
+    at_key, length_key = prefix + 'AtM', prefix + 'LengthM'
+    requested_at = _number_hint(d, at_key, zone_start)
+    requested_length = _number_hint(d, length_key, max(5.0, zone_end - zone_start))
+    if requested_at >= zone_end or requested_at + requested_length <= zone_start:
+        return None
+    at = min(requested_at, zone_start)
+    end = max(requested_at + requested_length, zone_end)
+    length = end - at
+    if at < BOUNDS[at_key][0] or at > BOUNDS[at_key][1] or length > BOUNDS[length_key][1]:
+        return None
+    return round(at, 2), round(max(BOUNDS[length_key][0], length), 2)
+
+
+def _ensure_director(template, conflict):
+    for role in template['roles']:
+        if role['id'] == 'director':
+            return 'director'
+    at = round(0.5 * (conflict[0] + conflict[1]), 2)
+    template['roles'].append(
+      {'id': 'director', 'kind': 'on_reference', 'label': 'traffic marshal',
+       'actor': {'class': 'pedestrian', 'catalogId': 'pedestrian.traffic_marshal',
+                 'static': True},
+       'pose': {'laneOffset': 0, 's': at, 'lateralM': -0.8,
+                'lateralRef': 'lane_edge', 'headingOffsetRad': 0},
+       'initialSpeedKph': 0})
+    return 'director'
+
+
+def _vehicle_challenger(template, field):
+    for role in template['roles']:
+        if role['id'] == 'chal' and role['actor']['class'] in VEHICLES.values():
+            return 'chal'
+    raise ValueError('%s requires a vehicle challenger role' % field)
+
+
+def _apply_environment(template, d, conflict):
+    weather = d.get('weather') if d.get('weather') in WEATHER else 'clear'
+    time_of_day = d.get('timeOfDay') if d.get('timeOfDay') in TIMES_OF_DAY else 'noon'
+    surface = d.get('surfaceKind') if d.get('surfaceKind') in SURFACES else None
+    marking = d.get('markingQuality') if d.get('markingQuality') in MARKING_QUALITIES else 'crisp'
+    wind_requested = any(k in d for k in ('windDirectionDeg', 'windSpeedMps',
+                                           'windGustPeakMps'))
+    if (weather == 'clear' and time_of_day == 'noon' and surface is None
+            and marking == 'crisp' and not wind_requested):
+        return
+    env = dict(template.get('environment') or {})
+    env['weather'], env['timeOfDay'] = weather, time_of_day
+    if wind_requested:
+        direction = _scalar(d, 'windDirectionDeg', 90.0)
+        steady = _window(d, 'windSpeedMps', (0.0, 4.0))
+        template['params']['declarations'].append(
+          A._p('windSpeedMps', steady[0], steady[1], 'mps'))
+        wind = {'directionDeg': direction, 'speedMps': 'param.windSpeedMps'}
+        peak = _window(d, 'windGustPeakMps', (32.0, 35.0))
+        peak_lo = max(32.0, peak[0], steady[1])
+        peak_hi = BOUNDS['windGustPeakMps'][1]
+        template['params']['declarations'].append(
+          A._p('windGustPeakMps', peak_lo, peak_hi, 'mps'))
+        conflict_t = ((0.5 * (conflict[0] + conflict[1]) - conflict[2])
+                      / max(conflict[3] / 3.6, 0.1))
+        duration = 4.0
+        clip = template['choreography']['clipSeconds']
+        start = max(0.0, min(clip - duration, conflict_t - 0.5 * duration))
+        wind['gust'] = {'startS': round(start, 2), 'durationS': duration,
+                        'peakSpeedMps': 'param.windGustPeakMps'}
+        high_sided = {'vehicle.box_truck', 'vehicle.bus', 'vehicle.van'}
+        affected = next((r for r in template['roles']
+                         if r['id'] == 'chal' and r['actor']['class'] in VEHICLES.values()), None)
+        if affected is None:
+            affected = next(r for r in template['roles'] if r['id'] == 'ego')
+        if affected['actor']['catalogId'] not in high_sided:
+            affected['actor'].update({'class': 'truck', 'catalogId': 'vehicle.box_truck'})
+        env['wind'] = wind
+    if surface is not None:
+        window = _approach_window(d, 'surface', conflict)
+        if window is None:
+            raise ValueError('surface patch does not overlap the pre-conflict braking zone')
+        env['surfacePatches'] = [
+          {'id': 'approach-surface', 'kind': surface, 'label': surface.replace('_', ' '),
+           'atM': window[0], 'lengthM': window[1], 'laneOffsets': [0],
+           'essentiality': 'required'}]
+    if marking != 'crisp':
+        window = _approach_window(d, 'marking', conflict)
+        if window is None:
+            raise ValueError('marking treatment does not overlap the pre-conflict braking zone')
+        env['markingTreatments'] = [
+          {'id': 'marking-quality', 'quality': marking, 'atM': window[0],
+           'lengthM': window[1], 'laneOffsets': []}]
+    template['environment'] = env
+
+
+def _apply_states(template, d, conflict):
+    interactions = template['choreography']['interactions']
+    gesture = d.get('directorGesture')
+    if gesture in ('halt', 'wave_through', 'point'):
+        director = _ensure_director(template, conflict)
+        interactions.append(
+          {'id': 'director-gesture', 'actor': director, 'verb': 'set',
+           'trigger': {'kind': 'at', 't': 2.6},
+           'target': {'key': 'pose.gesture', 'value': gesture}})
+        if gesture == 'halt':
+            interactions.append(
+              {'id': 'gesture-halts-ego', 'actor': 'ego', 'verb': 'speed',
+               'trigger': {'kind': 'at', 't': 2.6}, 'target': {'mode': 'stop'},
+               'dynamics': {'shape': 'linear', 'constraint': 'rate', 'value': 4.0}})
+        elif gesture == 'wave_through':
+            chal = _vehicle_challenger(template, 'directorGesture=wave_through')
+            interactions.extend([
+              {'id': 'gesture-yielding-vehicle', 'actor': chal, 'verb': 'speed',
+               'trigger': {'kind': 'at', 't': 2.6}, 'target': {'mode': 'stop'},
+               'dynamics': {'shape': 'linear', 'constraint': 'rate', 'value': 4.0}},
+              {'id': 'gesture-ego-proceeds', 'actor': 'ego', 'verb': 'set',
+               'trigger': {'kind': 'at', 't': 2.6},
+               'target': {'key': 'rules.collisionAvoidance', 'value': True}},
+            ])
+    challenger_gesture = d.get('challengerGesture')
+    if challenger_gesture in ('halt', 'wave_through', 'point'):
+        chal = _vehicle_challenger(template, 'challengerGesture')
+        interactions.extend([
+          {'id': 'challenger-gesture', 'actor': chal, 'verb': 'set',
+           'trigger': {'kind': 'at', 't': 2.6},
+           'target': {'key': 'pose.gesture', 'value': challenger_gesture}},
+          {'id': 'gesturing-challenger-yields', 'actor': chal, 'verb': 'speed',
+           'trigger': {'kind': 'at', 't': 2.6}, 'target': {'mode': 'stop'},
+           'dynamics': {'shape': 'linear', 'constraint': 'rate', 'value': 4.0}},
+          {'id': 'challenger-gesture-ego-proceeds', 'actor': 'ego', 'verb': 'set',
+           'trigger': {'kind': 'at', 't': 2.6},
+           'target': {'key': 'rules.collisionAvoidance', 'value': True}},
+        ])
+    paddle = d.get('paddle')
+    if paddle in ('stop', 'slow'):
+        if not any(r['id'] == 'worker' for r in template['roles']):
+            raise ValueError('paddle requires the workzone flagger')
+        interactions.append(
+          {'id': 'flagger-paddle', 'actor': 'worker', 'verb': 'set',
+           'trigger': {'kind': 'at', 't': 2.6},
+           'target': {'key': 'pose.paddle', 'value': paddle}})
+    state_fields = (
+      ('stopArm', 'pose.stopArm', 'extended', 'school-bus-stop-arm'),
+      ('emergencyLights', 'lights.emergency', 'flashing', 'challenger-emergency-lights'),
+    )
+    for field, key, value, iid in state_fields:
+        if d.get(field) is True:
+            chal = _vehicle_challenger(template, field)
+            interactions.append(
+              {'id': iid, 'actor': chal, 'verb': 'set',
+               'trigger': {'kind': 'at', 't': 2.6}, 'target': {'key': key, 'value': value}})
+    indicator = d.get('challengerIndicator')
+    if indicator in ('left', 'right', 'hazard'):
+        chal = _vehicle_challenger(template, 'challengerIndicator')
+        interactions.append(
+          {'id': 'challenger-indicator', 'actor': chal, 'verb': 'set',
+           'trigger': {'kind': 'at', 't': 2.6},
+           'target': {'key': 'lights.indicator', 'value': indicator}})
+
+
+def _apply_signal_phase(template, d, family):
+    phase = d.get('signalPhase')
+    if phase not in ('normal', 'flashing_yellow', 'flashing_red', 'blackout'):
+        return
+    if family != 'junction_conflict':
+        raise ValueError('signalPhase requires junction_conflict')
+    jx = next(f for f in template['anchor']['features'] if f['id'] == 'jx')
+    jx['control'] = {'value': ['signalized'], 'essentiality': 'required'}
+    if phase == 'normal':
+        return
+    indication = 'off' if phase == 'blackout' else phase
+    pose = {'laneOffset': 0, 's': -3, 'tFrac': 0, 'headingOffsetRad': 0}
+    template['trafficControls'] = [
+      {'id': 'incident-signal', 'kind': 'normal_signal', 'label': phase.replace('_', ' '),
+       'pose': pose, 'feature': 'jx',
+       'stopLines': [{'pose': pose, 'feature': 'jx'}],
+       'phases': [{'indication': indication,
+                   'durationS': template['choreography']['clipSeconds']}],
+       'loop': False, 'darkFallback': 'all_way_stop', 'darkDwellS': 1}]
+
+
+def compile_decision(brief, decision):
+    family = decision['family']
+    template = COMPILERS[family](brief, decision)
+    conflict = _conflict_window(template, family)
+    _apply_environment(template, decision, conflict)
+    _apply_states(template, decision, conflict)
+    _apply_signal_phase(template, decision, family)
+    return template
+
+
 COMPILERS = {
   'longitudinal_lead': c_longitudinal_lead,
   'crossing_vru':      c_crossing_vru,
@@ -531,7 +883,10 @@ uniformly; every number is clamped into the physical bounds shown):
   challengerCatalog   vehicles: vehicle.sedan | vehicle.suv | vehicle.box_truck | vehicle.van |
                       vehicle.bus | vehicle.motorcycle | vehicle.bicycle
                       VRUs: pedestrian.adult_walking | pedestrian.child_walking | vehicle.bicycle
-  challengerSpeedKph  0..60 (scalar; lead/cut-in/oncoming/junction challenger speed)
+  challengerSpeedKph  0..60 (scalar; lead/cut-in/oncoming/junction challenger speed).
+                      A lateral_incursion is raised to its class-specific physical floor (about
+                      4-13 kph) if lower, so its full-lane change can finish after the latest
+                      trigger and before the clip ends.
   challengerStatic    true for a genuinely stopped lead (longitudinal only)
   leadBrakes          true = moving lead brakes hard, Euro NCAP CCRb (longitudinal only)
   gapM                [8..130] initial ego->challenger gap window (longitudinal/lateral/parking)
@@ -553,6 +908,41 @@ uniformly; every number is clamped into the physical bounds shown):
   oncomingStartM      [40..160] oncoming start distance window
   worksStartM/worksLengthM/closedWidthM/workerSpeedKph   workzone geometry windows
   corridorSpeedKph    [25..90] required posted-speed window for the corridor
+  weather             clear | cloudy | overcast | light_rain | heavy_rain | wet_road |
+                      fog_light | fog_dense | snow | sleet (default clear)
+  timeOfDay           dawn | morning | noon | afternoon | dusk | night | night_lit
+                      (default noon)
+  surfaceKind         ice | packed_snow | standing_water | wet_leaves | loose_gravel | sand |
+                      spilled_oil | polished_asphalt | grit_treated
+  surfaceAtM          -160..160 (scalar or [lo,hi] hint for patch start)
+  surfaceLengthM      5..180 (scalar or [lo,hi] hint for patch length)
+                      The compiler derives the final window from the family's conflict point
+                      and emits it only when it covers the ego braking zone BEFORE the conflict.
+  markingQuality      crisp | faded | absent | misaligned (default crisp). Marking degradation
+                      is visual evidence only and does not change lane geometry or dynamics.
+  markingAtM          -160..160 (scalar or [lo,hi] approach-window start hint)
+  markingLengthM      5..180 (scalar or [lo,hi] approach-window length hint). Like a surface,
+                      degraded markings are emitted only across the pre-conflict braking zone.
+  directorGesture     halt | wave_through | point. Adds a traffic marshal and state_set event;
+                      halt also stops ego, while wave_through stops the challenger and lets ego
+                      proceed, so the visible gesture is coupled to the traffic motion it directs.
+  challengerGesture   wave_through | halt | point. Sets pose.gesture on the vehicle challenger,
+                      which stops and holds while ego proceeds; unlike directorGesture this does
+                      not add a marshal.
+  windDirectionDeg    0..359 scalar: direction the air travels TOWARD, counter-clockwise from
+                      corridor-forward; +90 pushes a forward-travelling actor to the left.
+  windSpeedMps        [0..20] steady wind-speed window.
+  windGustPeakMps     [5..35] gust-peak window, clamped never below steady wind. The compiler
+                      derives gust timing so its midpoint coincides with the approach/conflict;
+                      gust timing is deliberately not an author field.
+  paddle              stop | slow (workzone only; set on the construction flagger)
+  stopArm             true (vehicle challenger only; extends pose.stopArm)
+  emergencyLights     true (vehicle challenger only; lights.emergency flashes)
+  challengerIndicator left | right | hazard (vehicle challenger only)
+  signalPhase         normal | flashing_yellow | flashing_red | blackout
+                      (junction_conflict only). This requires junction.control=signalized, so
+                      hosting is limited to signalized Yale, El Camino, and Richmond junctions;
+                      Belmont and Easterbrook have none. A non-junction request is refused.
   rationale           one sentence, for the record
 
 PHYSICS FACTS you must design around (all measured on this engine):
@@ -566,12 +956,29 @@ PHYSICS FACTS you must design around (all measured on this engine):
   that; a hazard in plain view that the ego's safety governor sees early never gets there. The
   compiler therefore releases the ego's avoidance late (reactAtTtcS) -- your reactAtTtcS window
   decides how late. Lower = more critical but risks collision (C5 rejects any contact).
-- C2 and C4 nearly exclude each other at low ego speed: at 35 kph the admissible gap window for a
-  stopped lead is EMPTY, at 40 kph it is ~1 m wide, at 55 kph ~19 m. Longitudinal briefs with a
-  stopped lead need egoSpeedKph >= 50.
+- LOW GRIP CHANGES THE PHYSICS, not just the picture. Ice has frictionScale 0.15 and caps
+  achievable deceleration near 1.5 m/s^2. The frozen gate rejects every collision (C5), and the
+  evaluator rejects braking demand above the grip-scaled ceiling as physically_unavoidable.
+  Therefore low-grip briefs MUST use lower speeds, longer gaps, and/or earlier events. The
+  compiler also caps approach speed and raises the reaction-TTC floor for low-grip surfaces;
+  do not try to defeat those rails with a normal-speed, late-reaction decision.
+- C2 and C4 nearly exclude each other at low ego speed on dry asphalt: at 35 kph the admissible
+  gap window for a stopped lead is EMPTY, at 40 kph it is ~1 m wide, at 55 kph ~19 m.
+  Longitudinal stopped-lead briefs therefore need dry grip; do not combine them with ice.
 - The five maps publish NO corridor posted below ~60 kph; a corridorSpeedKph upper bound <= 60
-  matches ZERO sites. There are no roundabouts, school zones, parking aisles, or rail crossings;
-  those briefs must be authored as the nearest hostable mechanism on an ordinary corridor.
+  matches ZERO sites. There are no roundabouts, school zones, parking aisles, or rail crossings,
+  so only those unavailable road-layout details must be reduced to the nearest hostable family.
+  Weather, time of day, local surface grip, marking quality, actor states, and signal faults are
+  directly expressible and MUST NOT be reduced to an ordinary clear, dry corridor.
+- A crosswind gust consumes lateral friction-circle budget. Combining a strong gust with low grip
+  can make the demand physically_unavoidable and fail evaluation, so wind briefs should use dry
+  grip. With the active lateral controller, a truck at 12 m/s under a 25 m/s gust deviates only
+  0.19 m (about 1.5 evidence pixels), and a sedan or short weak gust is similarly unprovable.
+  At about 18 m/s road speed, a high-sided truck under a 35 m/s gust deviates 0.79 m over 3 s
+  and 0.87 m over 4 s (about 7 pixels); a bus reaches 0.92 m over 4 s. The compiler therefore
+  uses a box truck, bus, or van, an approximately 18 m/s approach, and a strong 4 s conflict-
+  centred gust. Do not author a sedan or low peak for a wind brief: physically real but invisible
+  motion will not certify.
 - Collisions REJECT (C5): windows that force contact (huge vruSpeed + tiny eventLead, or
   reactAtTtcS all the way down) lose cells to collisions.
 
@@ -601,6 +1008,42 @@ Feasible cells: %d across %d maps / %d sites; passing cells: %d.
 Revise your decision to fix the dominant failure. Return one JSON decision object."""
 
 
+def first_authored_collision(trace):
+    """First collision with at least one non-ambient side, matching product validity."""
+    ambient = set((trace.get('header') or {}).get('ambientActorIds') or [])
+    collisions = ((trace.get('metrics') or {}).get('collisions') or [])
+    for collision in collisions:
+        a, b = collision.get('a'), collision.get('b')
+        if a in ambient and b in ambient:
+            continue
+        detail = {'a': a, 'b': b, 't': collision.get('t')}
+        times = (trace.get('ticks') or {}).get('t') or []
+        tracks = (trace.get('ticks') or {}).get('actors') or {}
+        if times and isinstance(collision.get('t'), (int, float)):
+            index = min(range(len(times)), key=lambda i: abs(times[i] - collision['t']))
+            points = []
+            for actor_id in (a, b):
+                track = tracks.get(actor_id) or {}
+                xs, ys = track.get('x') or [], track.get('y') or []
+                if index < len(xs) and index < len(ys):
+                    points.append((xs[index], ys[index]))
+            if points:
+                detail['x'] = round(sum(point[0] for point in points) / len(points), 3)
+                detail['y'] = round(sum(point[1] for point in points) / len(points), 3)
+        return detail
+    return None
+
+
+def collision_feedback(detail):
+    if not detail:
+        return None
+    where = (' near map position (x=%.3f, y=%.3f)' % (detail['x'], detail['y'])
+             if 'x' in detail and 'y' in detail else '')
+    return ('Authored collision: "%s" with "%s" at t=%.6fs%s. Revise actor spacing, '
+            'speed, event timing, or reaction timing so their bodies do not overlap.'
+            % (detail.get('a'), detail.get('b'), detail.get('t'), where))
+
+
 def feedback_lines(row):
     notes = []
     ff = row.get('firstFailure') or {}
@@ -619,6 +1062,9 @@ def feedback_lines(row):
     if ff.get('C5'):
         notes.append('C5 failures: rejected by the evaluator (collision, trivially-safe band, '
                      'or never-fired trigger).')
+    collision = collision_feedback(row.get('firstAuthoredCollision'))
+    if collision:
+        notes.append(collision)
     if ff.get('C6'):
         notes.append('C6 failures: occlusion not proven (hide-then-reveal missing).')
     rc = row.get('refusalCodes') or {}
@@ -646,7 +1092,7 @@ def decide(prompt):
 
 
 def compile_and_validate(brief, decision, tag):
-    template = COMPILERS[decision['family']](brief, decision)
+    template = compile_decision(brief, decision)
     path = '/tmp/tg-%s-%s-%s.template.json' % (RUN_TAG, tag,
                                                re.sub(r'[^A-Za-z0-9_-]', '-', brief['id']))
     json.dump(template, open(path, 'w'), indent=1)
@@ -666,11 +1112,14 @@ def run_and_gate(brief, path, decision, draws, max_sites, concurrency):
                 'outdir': outdir}
     recs = P.gate_summary(summary, brief=brief['brief'], version=2)
     refusals = {}
+    first_collision = None
     for r in summary.get('results', []):
         tf = r.get('traceFile')
         if not tf or not os.path.exists(tf):
             code = (r.get('error') or {}).get('code') or r.get('status') or 'unknown'
             refusals[code] = refusals.get(code, 0) + 1
+        elif first_collision is None:
+            first_collision = first_authored_collision(G.load_trace(tf))
     feasible = [r for r in recs if r.get('firstFailure') != 'NOTRACE']
     port = G.portability(feasible)
     census = P.loss_census(feasible) if feasible else {'counts': {}, 'passed': 0}
@@ -680,6 +1129,7 @@ def run_and_gate(brief, path, decision, draws, max_sites, concurrency):
             'passingCells': census['passed'], 'maps': port['nMaps'], 'sites': port['nSites'],
             'admitted': admitted, 'firstFailure': census['counts'],
             'refusalCodes': refusals, 'outdir': outdir,
+            'firstAuthoredCollision': first_collision,
             'template': path}
 
 
@@ -717,7 +1167,8 @@ def author_brief(brief, probe_draws, final_draws, max_sites, concurrency, log_di
     trail['rounds'].append({'kind': 'probe', 'result':
                             {k: probe.get(k) for k in ('admitted', 'cells', 'feasibleCells',
                                                        'passingCells', 'maps', 'sites',
-                                                       'firstFailure', 'refusalCodes', 'error')}})
+                                                       'firstFailure', 'firstAuthoredCollision',
+                                                       'refusalCodes', 'error')}})
     d_final = d1
     if not probe['admitted']:
         # Round 2: revise against the measured census.
