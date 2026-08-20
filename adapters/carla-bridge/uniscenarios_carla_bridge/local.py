@@ -729,10 +729,16 @@ def _run_intent(args: argparse.Namespace) -> dict[str, object]:
         lease, asset_paths, output_dir, DEFAULT_XSD, args.host, args.port, progress=emit,
     )
     manifest_entries = _artifact_manifest_entries(result["artifacts"])
+    runtime_evidence = result["attestation"]["runtimeEvidence"]
     artifact_manifest = {
         "schema": "uniscenario.render-artifact-manifest/v1",
         "intentId": intent["intentId"], "intentSha256": intent_sha, "engine": "carla",
         "artifacts": manifest_entries, "attestation": result["attestation"],
+        "carlaEvidence": {
+            "sensorHost": dict(intent["sensorHost"]),
+            "sensorHostReadback": runtime_evidence["prontoSensorHost"],
+            "runtimeImage": runtime_evidence["runtimeImage"],
+        },
         "parityEvidence": result["parityEvidence"], "planSha256": result["planSha256"],
     }
     manifest_path = Path(args.manifest)
