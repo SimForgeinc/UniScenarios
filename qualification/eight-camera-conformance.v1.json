@@ -4,6 +4,7 @@
   "pairCount": 5,
   "pixelEqualityRequired": false,
   "columns": [
+    "kiaCarnivalHostIdentity",
     "captureScheduleParity",
     "calibrationParity",
     "browserFrameAndChecksumClosure",

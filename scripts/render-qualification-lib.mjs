@@ -50,6 +50,19 @@ export function program() {
   const value = readJson(PROGRAM_PATH);
   if (value.schema !== 'uniscenario.render-qualification-program/v1') throw new Error('qualification program schema mismatch');
   if (value.prontoRig?.sensors?.length !== 18) throw new Error('Pronto port-E rig must contain exactly 18 sensors');
+  if (value.prontoRig.sensors.filter((sensor) => sensor.type === 'dash_camera').length !== 8
+    || value.prontoRig.sensors.filter((sensor) => sensor.type === 'lidar').length !== 6
+    || value.prontoRig.sensors.filter((sensor) => sensor.type === 'radar').length !== 4) {
+    throw new Error('Pronto port-E rig must contain exactly 8 cameras, 6 lidar, and 4 radar');
+  }
+  const host = value.qualificationHost;
+  if (host?.assetId !== 'vehicle.kia.carnival' || host?.carlaBlueprintId !== 'vehicle.kia.carnival'
+    || host?.carlaClassPath !== '/Game/Carla/Blueprints/Vehicles/KiaCarnival2025/BP_KiaCarnival2025.BP_KiaCarnival2025_C'
+    || host?.make !== 'Kia' || host?.model !== 'Carnival' || host?.baseType !== 'van'
+    || host?.image?.ociIndexDigest !== 'sha256:f17c639e5f86fd7458fe1d02d3be1d481deeaa714f3cac30e465187d04ec90e5'
+    || host?.image?.linuxAmd64ManifestDigest !== 'sha256:baed0d038437c55efe0abe52a762d352aeb21acdeeff5b11a15f6bd8a648de64') {
+    throw new Error('qualification host must be the exact evidence-backed Kia Carnival identity');
+  }
   return value;
 }
 
@@ -348,6 +361,7 @@ export function selectQualification(inventory, { output, count = program().selec
   if (candidates.length < count) throw new Error(`only ${candidates.length} real eligible dev scenarios are available; ${count} required`);
   const selected = [];
   const covered = new Set();
+  const p = program();
   const remaining = new Map(candidates.map((candidate) => [candidate.documentId, candidate]));
   while (selected.length < count) {
     const ranked = [...remaining.values()].map((candidate) => {
@@ -361,6 +375,11 @@ export function selectQualification(inventory, { output, count = program().selec
     selected.push({
       rank: selected.length + 1,
       ...winner.candidate,
+      qualificationHost: {
+        actorId: winner.candidate.prontoCapableCars[0],
+        asset: p.qualificationHost,
+        replacementPolicy: 'replace-selected-host-only; preserve-all-other-authored-actors',
+      },
       selectionEvidence: {
         marginalCoverageCount: winner.newlyCovered.length,
         marginalCoverage: winner.newlyCovered,
@@ -375,6 +394,7 @@ export function selectQualification(inventory, { output, count = program().selec
     selectionAlgorithm: 'deterministic-greedy-max-new-coverage/v1; tie=total-coverage-then-document-id',
     selectionCount: count,
     coverage: [...covered].sort(),
+    qualificationHost: p.qualificationHost,
     scenarios: selected,
   };
   const manifest = { ...manifestBase, manifestSha256: sha256(manifestBase) };
@@ -463,14 +483,45 @@ function renderSources(actorId, sensors, video) {
   });
 }
 
+function makeIntentSensorHost(actorId, host) {
+  return {
+    actorId,
+    vehicleAsset: {
+      catalogAssetId: host.assetId,
+      carlaBlueprintId: host.carlaBlueprintId,
+      carlaClassPath: host.carlaClassPath,
+      make: host.make,
+      model: host.model,
+      baseType: host.baseType,
+      sourceImage: {
+        repository: host.image.reference,
+        indexSha256: host.image.ociIndexDigest.replace(/^sha256:/, ''),
+        linuxAmd64ManifestSha256: host.image.linuxAmd64ManifestDigest.replace(/^sha256:/, ''),
+      },
+    },
+    sensorRig: {
+      rigId: 'pronto.8-camera-6-lidar-4-radar',
+      cameras: 8,
+      lidars: 6,
+      radars: 4,
+    },
+  };
+}
+
 export function prepareQualificationRequests(manifest, { output } = {}) {
   if (manifest.schema !== MANIFEST_SCHEMA || !DIGEST.test(manifest.manifestSha256 ?? '')) throw new Error(`expected hashed ${MANIFEST_SCHEMA}`);
   if (manifest.scenarios.length !== 5) throw new Error('Pronto qualification requires exactly five selected scenarios');
   const p = program();
+  if (JSON.stringify(canonicalize(manifest.qualificationHost)) !== JSON.stringify(canonicalize(p.qualificationHost))) {
+    throw new Error('qualification manifest does not carry the exact Kia Carnival identity');
+  }
   const rig = canonicalRig(p);
   const pairs = manifest.scenarios.map((scenario) => {
-    const actorId = scenario.prontoCapableCars[0];
-    if (!actorId) throw new Error(`scenario ${scenario.documentId} has no deterministic Pronto car`);
+    const actorId = scenario.qualificationHost?.actorId;
+    if (!actorId || actorId !== scenario.prontoCapableCars[0]) throw new Error(`scenario ${scenario.documentId} has no deterministic selected Pronto host`);
+    if (JSON.stringify(canonicalize(scenario.qualificationHost.asset)) !== JSON.stringify(canonicalize(p.qualificationHost))) {
+      throw new Error(`scenario ${scenario.documentId} does not assert the exact Kia Carnival qualification host`);
+    }
     const pairId = `qualification-${String(scenario.rank).padStart(2, '0')}-${scenario.documentId}`;
     const lineage = {
       sourceDocumentId: scenario.documentId,
@@ -497,6 +548,7 @@ export function prepareQualificationRequests(manifest, { output } = {}) {
           sha256: scenario.map.xodrSha256,
         },
       },
+      sensorHost: makeIntentSensorHost(actorId, p.qualificationHost),
       renderSpec: {
         schema: 'uniscenario.render-spec/v3',
         sources: renderSources(actorId, rig.sensors, video),
@@ -519,7 +571,19 @@ export function prepareQualificationRequests(manifest, { output } = {}) {
       lineage,
       titleSuffix: ' — render qualification',
       expectedSourceContentSha256: scenario.revision.contentSha256,
-      patch: { operation: 'replace-actor-sensors', actorId, sensors: rig.sensors },
+      patch: {
+        operation: 'replace-selected-host-asset-and-sensors',
+        actorId,
+        expectedSourceActorClass: 'car',
+        vehicleAsset: {
+          catalogAssetId: p.qualificationHost.assetId,
+          carlaBlueprintId: p.qualificationHost.carlaBlueprintId,
+          carlaClassPath: p.qualificationHost.carlaClassPath,
+          sourceImage: p.qualificationHost.image,
+        },
+        sensors: rig.sensors,
+        preserveEveryOtherActor: true,
+      },
       sourceMutationAllowed: false,
     };
     const job = (backend) => ({
@@ -861,6 +925,36 @@ function mediaCheck(result, expected) {
   return { passed: errors.length === 0, errors, metadata: media };
 }
 
+function projectSensorHostEvidence(value) {
+  if (!value || typeof value !== 'object') return undefined;
+  const vehicle = value.vehicleAsset ?? value;
+  const sourceImage = vehicle.sourceImage ?? value.sourceImage;
+  const rig = value.sensorRig ?? value.rig;
+  return {
+    actorId: value.actorId,
+    vehicleAsset: {
+      catalogAssetId: vehicle.catalogAssetId,
+      carlaBlueprintId: vehicle.carlaBlueprintId,
+      carlaClassPath: vehicle.carlaClassPath,
+      make: vehicle.make,
+      model: vehicle.model,
+      baseType: vehicle.baseType,
+      sourceImage: {
+        repository: sourceImage?.repository,
+        indexSha256: sourceImage?.indexSha256,
+        linuxAmd64ManifestSha256: sourceImage?.linuxAmd64ManifestSha256,
+      },
+    },
+    sensorRig: {
+      rigId: rig?.rigId,
+      cameras: rig?.cameras,
+      lidars: rig?.lidars,
+      radars: rig?.radars,
+    },
+  };
+}
+
+
 export function comparePair(requestPair, browser, carla, { output } = {}) {
   if (requestPair.browser?.intentSha256 !== requestPair.carla?.intentSha256 || !DIGEST.test(requestPair.browser?.intentSha256 ?? '')) throw new Error('paired request does not carry one valid shared intentSha256');
   const intent = requestPair.browser.intent;
@@ -870,10 +964,13 @@ export function comparePair(requestPair, browser, carla, { output } = {}) {
   const carlaPackage = getPath(carla, ['lineage.sourceExecutionPackageId', 'executionPackageId']);
   const browserIntent = getPath(browser, ['intentSha256']);
   const carlaIntent = getPath(carla, ['intentSha256']);
+  const browserHostEvidence = projectSensorHostEvidence(getPath(browser, ['browserEvidence.sensorHost']));
+  const carlaHostEvidence = projectSensorHostEvidence(getPath(carla, ['carlaEvidence.sensorHost']));
   const identities = [
     expectationCheck('revision-identity', intent.scenarioRevision.revisionId, browserRevision, carlaRevision),
     expectationCheck('package-identity', requestPair.lineage.sourceExecutionPackageId, browserPackage, carlaPackage),
     expectationCheck('intent-identity', requestPair.browser.intentSha256, browserIntent, carlaIntent),
+    expectationCheck('kia-carnival-sensor-host-evidence', intent.sensorHost, browserHostEvidence, carlaHostEvidence),
     equalityCheck('actors', getPath(browser, ['actors', 'semantic.actors']), getPath(carla, ['actors', 'semantic.actors'])),
     equalityCheck('lifecycle', getPath(browser, ['lifecycle', 'semantic.lifecycle']), getPath(carla, ['lifecycle', 'semantic.lifecycle'])),
     equalityCheck('signals', getPath(browser, ['signals', 'semantic.signals']), getPath(carla, ['signals', 'semantic.signals'])),
@@ -909,6 +1006,7 @@ export function comparePair(requestPair, browser, carla, { output } = {}) {
     schema: COMPARISON_SCHEMA,
     pairId: requestPair.pairId,
     intentSha256: requestPair.browser.intentSha256,
+    sensorHost: intent.sensorHost,
     expectedSensorCount: 18,
     expectedFramesPerSensor: expectedFrames,
     checks,
@@ -927,7 +1025,9 @@ export function eightCameraMatrix(reports, { output } = {}) {
     const pairResults = reports.map((report) => {
       const browserErrors = report.checks.browserFrameAndChecksumClosure.errors.filter((error) => error.includes(`\0${sensorId}\0`));
       const carlaErrors = report.checks.carlaFrameAndChecksumClosure.errors.filter((error) => error.includes(`\0${sensorId}\0`));
-      return { pairId: report.pairId, schedule: report.checks.intentionIdentity.find((item) => item.name === 'capture-schedule')?.passed === true,
+      return { pairId: report.pairId,
+        kiaCarnivalHost: report.checks.intentionIdentity.find((item) => item.name === 'kia-carnival-sensor-host-evidence')?.passed === true,
+        schedule: report.checks.intentionIdentity.find((item) => item.name === 'capture-schedule')?.passed === true,
         calibration: report.checks.intentionIdentity.find((item) => item.name === 'sensor-calibration')?.passed === true,
         browserClosure: browserErrors.length === 0, carlaClosure: carlaErrors.length === 0,
         playableMedia: report.checks.browserPlayableMedia.passed && report.checks.carlaPlayableMedia.passed };
