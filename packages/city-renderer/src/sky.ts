@@ -94,7 +94,10 @@ export function skyAppearanceForWeather(input: {
     // developing a false directional hotspot where the sun sits.
     mieDirectionalG: CLEAR_SKY.mieDirectionalG - 0.3 * haze,
     tint: input.backgroundColor,
-    tintAmount: input.backgroundColor === null ? 0 : 0.35 + 0.5 * haze,
+    // Only overcast pulls the sky toward the authored flat colour. On a clear
+    // day the scattering model is the more accurate description of the sky, and
+    // tinting it merely desaturates a blue sky to haze.
+    tintAmount: input.backgroundColor === null ? 0 : 0.72 * haze,
   };
 }
 

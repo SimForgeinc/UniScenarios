@@ -116,6 +116,16 @@ describe('sky dome', () => {
     expect(appearance.tintAmount).toBe(0);
     expect(appearance.turbidity).toBeCloseTo(CLEAR_SKY.turbidity, 6);
   });
+
+  it('does not wash a clear sky toward the authored flat colour', () => {
+    // Clear weather still carries a background colour, and tinting toward it
+    // turns a blue midday sky into white haze.
+    const clear = skyAppearanceForWeather({ haze: 0, backgroundColor: 0x9fb8d4 });
+    expect(clear.tintAmount).toBe(0);
+
+    const overcast = skyAppearanceForWeather({ haze: 1, backgroundColor: 0x8a929c });
+    expect(overcast.tintAmount).toBeGreaterThan(0.5);
+  });
 });
 
 describe('sun elevation falloff', () => {
