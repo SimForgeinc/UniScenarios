@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/render-worker",
-  "version": "0.1.0-rc.43",
+  "version": "0.1.0-rc.44",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
@@ -23,7 +23,10 @@
       "default": "./dist/index.js"
     }
   },
-  "files": ["dist", "bin"],
+  "files": [
+    "dist",
+    "bin"
+  ],
   "dependencies": {
     "@uniscenarios/render-runtime": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",

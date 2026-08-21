@@ -4,13 +4,7 @@
 !pnpm-workspace.yaml
 !tsconfig.base.json
 !packages/
-packages/*
-!packages/scenario-model/
-!packages/scenario-model/**
-!packages/render-runtime/
-!packages/render-runtime/**
-!packages/browser-renderer/
-!packages/browser-renderer/**
+!packages/**
 !services/
 services/*
 !services/render-worker/

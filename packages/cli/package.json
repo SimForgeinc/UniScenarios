@@ -1,8 +1,15 @@
 {
   "name": "@uniscenarios/cli",
-  "version": "0.1.0-rc.43",
-  "repository": { "type": "git", "url": "git+https://github.com/SimForgeinc/UniScenarios.git", "directory": "packages/cli" },
-  "publishConfig": { "access": "public", "provenance": true },
+  "version": "0.1.0-rc.44",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "license": "Apache-2.0",
   "type": "module",
   "main": "./dist/index.js",
@@ -12,9 +19,15 @@
     "scen": "./bin/scen.js"
   },
   "exports": {
-    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
   },
-  "files": ["dist", "bin"],
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
     "build": "tsup src/index.ts src/main.ts --format esm --dts --sourcemap --clean --out-dir dist",
     "prepack": "pnpm run build",
@@ -26,12 +39,12 @@
     "uniscenarios": "tsx src/main.ts"
   },
   "dependencies": {
-    "@uniscenarios/openscenario": "workspace:*",
     "@uniscenarios/anchor-matcher": "workspace:*",
     "@uniscenarios/map-intel": "workspace:*",
-    "@uniscenarios/scenario-model": "workspace:*",
+    "@uniscenarios/openscenario": "workspace:*",
     "@uniscenarios/render-runtime": "workspace:*",
     "@uniscenarios/scenario-materializer": "workspace:*",
+    "@uniscenarios/scenario-model": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*",
     "tsx": "^4.20.0"
   },

@@ -2,7 +2,7 @@ import { createWriteStream, promises as fs, type WriteStream } from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { chromium } from 'playwright-core';
-import type { EngineCapabilityDeclaration, RenderArtifactManifest, RenderEngineAdapter, RenderExecutionContext } from '@uniscenarios/render-runtime';
+import { ENGINE_CAPABILITIES_V1_SCHEMA, type EngineCapabilityDeclaration, type RenderArtifactManifest, type RenderEngineAdapter, type RenderExecutionContext } from '@uniscenarios/render-runtime';
 import { BROWSER_RENDER_ENGINE_ID, type BrowserCaptureResult } from './capture.js';
 import type { ArtifactIdentity } from './artifacts.js';
 import { BROWSER_RENDER_REQUEST_V1_SCHEMA, parseBrowserRenderIntent, type ResolvedBrowserRenderRequest } from './intent.js';
@@ -14,22 +14,42 @@ export interface BrowserRenderEngineOptions {
   readonly engineVersion?: string;
 }
 
-const CAPABILITIES = Object.freeze({
+const CAPABILITIES: EngineCapabilityDeclaration = {
+  schema: ENGINE_CAPABILITIES_V1_SCHEMA,
   engineId: BROWSER_RENDER_ENGINE_ID,
-  engineVersion: '0.1.0-rc.43',
+  engineVersion: '0.1.0-rc.44',
   backend: 'browser',
-  modalities: Object.freeze(['rgb', 'depth', 'semantic', 'instance', 'lidar', 'radar']),
-  artifacts: Object.freeze(['sensor-archive', 'sensor-video', 'manifest', 'frames']),
-  deterministicFixedStep: true,
-  frameMajor: true,
-  streamingArtifacts: true,
-  cancellation: true,
-}) as unknown as EngineCapabilityDeclaration;
+  protocolVersion: 1,
+  capabilities: [
+    'openscenario.1_4',
+    'timing.fixed_step',
+    'environment.authored',
+    'sensor.rgb',
+    'sensor.depth',
+    'sensor.semantic',
+    'sensor.instance',
+    'sensor.lidar',
+    'sensor.radar',
+    'artifact.video',
+    'artifact.frames',
+    'artifact.sensor_archive',
+    'artifact.manifest',
+    'map.static_semantics',
+  ],
+  modalities: ['rgb', 'depth', 'semantic', 'instance', 'lidar', 'radar'],
+  limits: {
+    maxSimultaneousSensors: 64,
+    maxWidth: 8192,
+    maxHeight: 8192,
+    maxFramesPerSecond: 240,
+  },
+  requiresGpu: false,
+};
 
 /** Runtime package entrypoint discovered internally for public `--engine browser`. */
 export function createRenderEngine(options: BrowserRenderEngineOptions = {}): RenderEngineAdapter {
-  const capabilities = options.engineVersion
-    ? ({ ...CAPABILITIES, engineVersion: options.engineVersion } as unknown as EngineCapabilityDeclaration)
+  const capabilities: EngineCapabilityDeclaration = options.engineVersion
+    ? { ...CAPABILITIES, engineVersion: options.engineVersion }
     : CAPABILITIES;
   return {
     capabilities,
@@ -149,7 +169,7 @@ export function createRenderEngine(options: BrowserRenderEngineOptions = {}): Re
           return {
             schema: 'uniscenario.render-artifact-manifest/v1',
             intentSha256: context.intentSha256,
-            engine: { engineId: BROWSER_RENDER_ENGINE_ID, engineVersion: options.engineVersion ?? '0.1.0-rc.43', backend: 'browser' },
+            engine: { engineId: BROWSER_RENDER_ENGINE_ID, engineVersion: options.engineVersion ?? '0.1.0-rc.44', backend: 'browser' },
             startedAt,
             completedAt: new Date().toISOString(),
             artifacts,

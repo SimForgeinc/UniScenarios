@@ -3,14 +3,12 @@ FROM node:22.14.0-bookworm-slim AS build
 WORKDIR /src
 RUN corepack enable && corepack prepare pnpm@11.18.0 --activate
 COPY --from=source /package.json /pnpm-lock.yaml /pnpm-workspace.yaml /tsconfig.base.json ./
-COPY --from=source /packages/scenario-model ./packages/scenario-model
-COPY --from=source /packages/render-runtime ./packages/render-runtime
-COPY --from=source /packages/browser-renderer ./packages/browser-renderer
+COPY --from=source /packages ./packages
 COPY --from=source /services/render-worker ./services/render-worker
 RUN pnpm install --frozen-lockfile --ignore-scripts \
- && pnpm --filter @uniscenarios/scenario-model --filter @uniscenarios/render-runtime --filter @uniscenarios/browser-renderer --filter @uniscenarios/render-worker build \
- && pnpm deploy --filter @uniscenarios/render-worker --prod /out/worker \
- && pnpm deploy --filter @uniscenarios/browser-renderer --prod /out/browser-renderer
+ && pnpm --filter @uniscenarios/browser-renderer... --filter @uniscenarios/render-worker... build \
+ && pnpm deploy --legacy --filter @uniscenarios/render-worker --prod /out/worker \
+ && pnpm deploy --legacy --filter @uniscenarios/browser-renderer --prod /out/browser-renderer
 
 FROM node:22.14.0-bookworm-slim AS runtime
 ARG SOURCE_REVISION

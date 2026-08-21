@@ -8,7 +8,7 @@ COPY --from=source /packages/render-runtime ./packages/render-runtime
 COPY --from=source /services/render-worker ./services/render-worker
 RUN pnpm install --frozen-lockfile --ignore-scripts \
  && pnpm --filter @uniscenarios/scenario-model --filter @uniscenarios/render-runtime --filter @uniscenarios/render-worker build \
- && pnpm deploy --filter @uniscenarios/render-worker --prod /out/worker
+ && pnpm deploy --legacy --filter @uniscenarios/render-worker --prod /out/worker
 
 FROM python:3.12.10-slim-bookworm AS python-build
 WORKDIR /src

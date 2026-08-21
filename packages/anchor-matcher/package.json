@@ -1,6 +1,6 @@
 {
   "name": "@uniscenarios/anchor-matcher",
-  "version": "0.1.0-rc.43",
+  "version": "0.1.0-rc.44",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/SimForgeinc/UniScenarios.git",
@@ -24,8 +24,8 @@
     "dist"
   ],
   "dependencies": {
-    "zod": "^4.4.3",
-    "@uniscenarios/xodr-tools": "workspace:*"
+    "@uniscenarios/xodr-tools": "workspace:*",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^22.10.0",
