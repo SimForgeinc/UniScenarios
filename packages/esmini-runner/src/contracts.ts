@@ -1,10 +1,10 @@
 /** Browser-safe external execution contracts. No Node.js types belong here. */
-import type { EsminiBundleManifest } from '@uniscenarios/cli';
+import type { EsminiBundleManifest } from '@uniscenarios/openscenario/node';
 
 export type Sha256Digest = `sha256:${string}`;
 
 export interface EsminiRunnerBundle {
-  /** Exact manifest emitted by @uniscenarios/cli; the runner never rewrites it. */
+  /** Exact manifest emitted by @uniscenarios/openscenario; the runner never rewrites it. */
   readonly manifest: EsminiBundleManifest;
   /** Path-to-opaque-content-handle mapping. Handles are never URLs or paths. */
   readonly contentIds: Readonly<Record<string, string>>;

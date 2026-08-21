@@ -7,7 +7,7 @@ import {
   buildEsminiRunnableBundle,
   createServerMapDependencyResolver,
   type EsminiRunnableBundle,
-} from '../../../packages/cli/src/asam/esmini-bundle.ts';
+} from '../../../packages/openscenario/src/node/esmini-bundle.ts';
 import { loadMap } from '../../../packages/cli/src/maps.ts';
 import {
   EsminiRunner,
@@ -130,7 +130,7 @@ async function route(
       graph: map.graph,
       canonicalTrace,
       expectedXodrSha256: snapshot.map.xodrDigest,
-      mapResolver: createServerMapDependencyResolver(),
+      mapResolver: createServerMapDependencyResolver(path.join(REPO, 'dev-assets')),
       xsdPath: XSD,
       mode: body.mode,
       author: 'UniScenarios Studio',

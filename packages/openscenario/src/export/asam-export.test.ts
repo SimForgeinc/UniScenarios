@@ -10,13 +10,15 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import {
   AsamExportError,
-  OFFICIAL_OPENSCENARIO_140_XSD,
   assertOpenScenarioDsl22ProfileSyntax,
   exportOpenScenarioDsl22,
   exportOpenScenarioXml14,
-  validateOpenScenarioXml14,
   validateOpenScenarioDsl22ProfileSyntax,
-} from '../asam/index.js';
+} from './index.js';
+import {
+  OFFICIAL_OPENSCENARIO_140_XSD,
+  validateOpenScenarioXml14,
+} from '../node/xml-1.4-validation.js';
 
 const graph = buildLaneGraph({
   schemaVersion: 1,

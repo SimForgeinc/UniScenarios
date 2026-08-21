@@ -8,7 +8,7 @@ lines, archive paths, URLs, or environment variables.
 
 `POST /v1/external-runs` with an `EsminiExecutionJob`. Return `202` with the
 current `ExternalRunSnapshot`. The job contains the exact
-`EsminiBundleManifest` emitted by `@uniscenarios/cli` plus opaque server content
+`EsminiBundleManifest` emitted by `@uniscenarios/openscenario/node` plus opaque server content
 handles created by `ingestRunnableBundle`.
 
 ## Inspect

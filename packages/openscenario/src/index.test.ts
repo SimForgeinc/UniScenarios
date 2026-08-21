@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { describe, expect, it } from 'vitest';
 
-import { OFFICIAL_OPENSCENARIO_140_XSD, exportOpenScenarioXml14 } from './index.js';
+import { exportOpenScenarioXml14 } from './index.js';
+import { OFFICIAL_OPENSCENARIO_140_XSD } from './node/index.js';
 
 describe('@uniscenarios/openscenario public boundary', () => {
   it('exposes the canonical OpenSCENARIO XML exporter', () => {

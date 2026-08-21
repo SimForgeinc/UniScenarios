@@ -242,6 +242,9 @@ importers:
       '@uniscenarios/map-intel':
         specifier: workspace:*
         version: link:../map-intel
+      '@uniscenarios/openscenario':
+        specifier: workspace:*
+        version: link:../openscenario
       '@uniscenarios/render-runtime':
         specifier: workspace:*
         version: link:../render-runtime
@@ -298,9 +301,9 @@ importers:
 
   packages/esmini-runner:
     dependencies:
-      '@uniscenarios/cli':
+      '@uniscenarios/openscenario':
         specifier: workspace:*
-        version: link:../cli
+        version: link:../openscenario
       '@uniscenarios/trace-comparator':
         specifier: workspace:*
         version: link:../trace-comparator
@@ -336,9 +339,6 @@ importers:
 
   packages/openscenario:
     dependencies:
-      '@uniscenarios/cli':
-        specifier: workspace:*
-        version: link:../cli
       '@uniscenarios/scenario-model':
         specifier: workspace:*
         version: link:../scenario-model
@@ -352,6 +352,9 @@ importers:
       '@types/node':
         specifier: ^22.10.0
         version: 22.20.1
+      execa:
+        specifier: ^9.5.2
+        version: 9.6.1
       typescript:
         specifier: ^5.6.0
         version: 5.9.3

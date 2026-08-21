@@ -72,7 +72,9 @@ CLI stdout is JSON unless `--pretty` is supplied. Validation findings use exit
 code 2 so an agent can distinguish repairable scenario defects from command
 failures.
 
-See `docs/scenario-visual-qa.md` for the evidence acceptance contract and
+See `docs/openscenario-architecture.md` for the formal OpenSCENARIO ownership,
+artifact, validation, execution, and browser-delivery architecture. See
+`docs/scenario-visual-qa.md` for the evidence acceptance contract and
 `docs/repository-transition.md` for the standalone repository provenance and
 naming policy. See `docs/simcloud-convergence.md` for canonical ownership,
 the local-to-product development flow, publication, rollback, and acceptance

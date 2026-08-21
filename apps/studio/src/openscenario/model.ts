@@ -27,8 +27,8 @@ export interface OpenScenarioLocalBundle {
   readonly behaviorParityScope: 'semantic-actions' | 'motion-only';
   readonly filename: string;
   readonly xml: string;
-  readonly manifest: import('@uniscenarios/cli').EsminiBundleManifest;
-  readonly capability: import('@uniscenarios/cli').EsminiCompatibilityReport;
+  readonly manifest: import('@uniscenarios/openscenario/node').EsminiBundleManifest;
+  readonly capability: import('@uniscenarios/openscenario/export').EsminiCompatibilityReport;
   readonly xsd: { readonly valid: true; readonly digest: string };
   readonly downloadUrl: string;
 }

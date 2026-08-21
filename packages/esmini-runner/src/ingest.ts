@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import type { EsminiRunnableBundle } from '@uniscenarios/cli';
+import type { EsminiRunnableBundle } from '@uniscenarios/openscenario/node';
 import type { EsminiExecutionJob, EsminiExecutionOptions } from './contracts.js';
 import { assertSafeRelativePath, BundleSecurityError } from './security.js';
 

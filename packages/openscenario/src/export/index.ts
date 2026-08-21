@@ -13,11 +13,7 @@ export {
   type Dsl22SyntaxDiagnostic,
 } from './dsl-2.2-syntax.js';
 export { exportOpenScenarioXml14 } from './xml-1.4.js';
-export {
-  OFFICIAL_OPENSCENARIO_140_XSD,
-  validateOpenScenarioXml14,
-  type OpenScenarioXml14Validation,
-} from './xml-1.4-validation.js';
+export { analyzeAsamCapabilities } from './common.js';
 export {
   analyzeEsminiCompatibility,
   exportOpenScenarioXml13Esmini,

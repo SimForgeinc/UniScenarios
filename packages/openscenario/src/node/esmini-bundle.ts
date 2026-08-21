@@ -13,13 +13,12 @@ import {
   type SimTrace,
 } from '@uniscenarios/sim-engine';
 
-import { DEV_ASSETS } from '../maps.js';
 import {
   analyzeEsminiCompatibility,
   exportOpenScenarioXml13Esmini,
   type EsminiCompatibilityReport,
   type EsminiExportMode,
-} from './xml-1.3-esmini.js';
+} from '../export/xml-1.3-esmini.js';
 
 export const ESMINI_BUNDLE_VERSION = 1 as const;
 export const OFFICIAL_OPENSCENARIO_131_XSD = {
@@ -144,7 +143,7 @@ export async function validateOpenScenarioXml13(xml: string, xsdPath: string): P
  * Resolve the complete immutable OpenDRIVE file from server-owned assets.
  * The browser submits only mapId + digest; a 16KB preview can never satisfy it.
  */
-export function createServerMapDependencyResolver(assetRoot = DEV_ASSETS): MapDependencyResolver {
+export function createServerMapDependencyResolver(assetRoot: string): MapDependencyResolver {
   return {
     async resolveFullOpenDrive(mapId, expectedXodrSha256) {
       if (!/^[a-z0-9][a-z0-9-]*$/.test(mapId)) throw new Error(`unsafe mapId: ${mapId}`);

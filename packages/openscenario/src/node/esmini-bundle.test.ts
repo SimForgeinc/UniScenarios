@@ -15,13 +15,13 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   analyzeEsminiCompatibility,
   exportOpenScenarioXml13Esmini,
-} from '../asam/index.js';
+} from '../export/index.js';
 import {
   OFFICIAL_OPENSCENARIO_131_XSD,
   buildEsminiRunnableBundle,
   validateOpenScenarioXml13,
   type MapDependencyResolver,
-} from '../asam/esmini-bundle.js';
+} from './esmini-bundle.js';
 
 const sha256 = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 const roadBytes = new TextEncoder().encode('<?xml version="1.0"?><OpenDRIVE><header revMajor="1" revMinor="4" name="fixture" version="1" date="1970-01-01T00:00:00" north="1" south="0" east="1" west="0"/></OpenDRIVE>\n');
