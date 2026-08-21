@@ -10,7 +10,7 @@
     "maxActiveJobs": 32,
     "intervalMs": 10000,
     "submissionRecoveryMs": 300000,
-    "submissionRampPerHeartbeat": 8,
+    "submissionRampPerHeartbeat": 4,
     "loadPausePerCpu": 2.5,
     "maxGenerationAttempts": 2,
     "providerFailureThreshold": 3,
