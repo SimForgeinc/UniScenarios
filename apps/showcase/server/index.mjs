@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 
 import {
   atomicJson,
+  DEFAULT_AUTHOR_EFFORT,
+  DEFAULT_AUTHOR_MODEL,
   DEFAULT_REVIEW_EFFORT,
   DEFAULT_REVIEW_MODEL,
   exists,
@@ -158,9 +160,16 @@ function normalizeJob(input, jobId) {
   if (input.seed !== undefined && !['string', 'number'].includes(typeof input.seed)) {
     throw Object.assign(new Error('seed must be a string or number'), { status: 400 });
   }
+  // Author and review are symmetric: both default to production and both are
+  // validated up front. authorModel/authorEffort used to be hardcoded here, so a
+  // caller naming an author was silently ignored and an evaluation arm measured
+  // the production model instead of the one it asked for.
+  const authorModel = input.authorModel ?? DEFAULT_AUTHOR_MODEL;
+  const authorEffort = input.authorEffort ?? DEFAULT_AUTHOR_EFFORT;
   const reviewModel = input.reviewModel ?? DEFAULT_REVIEW_MODEL;
   const reviewEffort = input.reviewEffort ?? DEFAULT_REVIEW_EFFORT;
   try {
+    validateModelEffort(authorModel, authorEffort, 'author model');
     validateModelEffort(reviewModel, reviewEffort, 'review model');
   } catch (error) {
     throw Object.assign(error, { status: 400 });
@@ -180,8 +189,8 @@ function normalizeJob(input, jobId) {
     seed: input.seed ?? jobId,
     render3d: production ? true : (input.render3d ?? false),
     topK,
-    authorModel: 'gpt-5.6-luna',
-    authorEffort: 'medium',
+    authorModel,
+    authorEffort,
     reviewModel,
     reviewEffort,
     fallbackToVisual: production,
