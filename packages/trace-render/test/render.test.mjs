@@ -23,7 +23,7 @@ const LEGACY_HASHES = {
   'frames/frame-003.png': '7a2737c5d8310123245ed1e2dd4a71118a28ed2ebeda530ce323ef8e21095db4',
   'frames/frame-003.svg': '16a444f2d15d14690cfad71f6c93953819bfa94b3f9454a62a58e03ff2ba6d1e',
   'trace-render.mp4': '714c75e7f3602c38dbcf52ec48037f080bada214b709e16298bdcb958a40abc4',
-  'manifest.json': 'a8d77c36969cb5a87782dac8099a2f6e5e92617b207d870912c74239a60d2d03',
+  'manifest.json': '7a71c11181aacb58efc25c600032db60998b7c6986bff4e7230e34f80354e341',
 };
 
 let tempRoot;

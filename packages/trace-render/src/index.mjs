@@ -224,22 +224,45 @@ function actorFitsView(trace, actorId, index, camera, scale, width, height, dims
     ));
 }
 
+/**
+ * Frames that must actually contain the required actors. Composition only has to
+ * be informative where the mechanism is judged: over a full 20 s clip two actors
+ * routinely start hundreds of metres apart and converge, so demanding containment
+ * in every frame refused evidence whose incident framed perfectly. Outside the
+ * incident, losing the partner off-frame costs nothing.
+ */
+function compositionFrameIndices(trace, frameIndices) {
+  const window = incidentWindow(trace);
+  const onset = window?.losOpenT ?? window?.onsetT;
+  const conflict = window?.conflictT;
+  if (!Number.isFinite(onset) || !Number.isFinite(conflict)) return frameIndices;
+  const lo = Math.min(onset, conflict);
+  const hi = Math.max(onset, conflict);
+  const inWindow = frameIndices.filter((index) => {
+    const t = trace.ticks.t[index];
+    return Number.isFinite(t) && t >= lo && t <= hi;
+  });
+  return inWindow.length > 0 ? inWindow : frameIndices;
+}
+
 function chooseViewScale(trace, instanceDoc, frameIndices, cameraMode, requestedScale, width, height) {
   const requiredActorIds = requiredViewActorIds(trace);
   const ladder = viewScaleLadder(requestedScale);
   const dims = actorDims(instanceDoc);
+  const mustContain = compositionFrameIndices(trace, frameIndices);
   for (const scale of ladder) {
-    const containsRequiredActors = frameIndices.every((index) => {
+    const containsRequiredActors = mustContain.every((index) => {
       const camera = cameraFor(trace, index, cameraMode);
       return requiredActorIds.every(
         (actorId) => actorFitsView(trace, actorId, index, camera, scale, width, height, dims),
       );
     });
-    if (containsRequiredActors) return { scale, ladder, requiredActorIds };
+    if (containsRequiredActors) return { scale, ladder, requiredActorIds, compositionFrames: mustContain.length };
   }
   throw new Error(
     `2D composition cannot contain required actors ${requiredActorIds.join(', ')} `
-    + `within ${width}x${height} at minimum scale ${ladder[ladder.length - 1]} px/m`,
+    + `within ${width}x${height} at minimum scale ${ladder[ladder.length - 1]} px/m `
+    + `across ${mustContain.length} incident frame(s)`,
   );
 }
 
@@ -687,6 +710,9 @@ export async function renderTrace(options) {
       scaleLadder: view.ladder,
       requiredActorIds: view.requiredActorIds,
       edgeMarginPx: VIEW_EDGE_MARGIN_PX,
+      // How many frames the containment requirement was evaluated over: the
+      // incident window when one exists, else the whole clip.
+      compositionFrames: view.compositionFrames,
     },
     underlay: underlayAssets ? underlayAssets.provenance : null,
     scenarioId: instanceDoc.manifest?.replayKey?.templateId ?? null,
