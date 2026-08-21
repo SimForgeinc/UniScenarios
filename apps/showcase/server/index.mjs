@@ -5,7 +5,15 @@ import { mkdir, readFile, readdir, rm, stat } from 'node:fs/promises';
 import { extname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { atomicJson, exists, MAPS, ShowcasePipeline } from './pipeline.mjs';
+import {
+  atomicJson,
+  DEFAULT_REVIEW_EFFORT,
+  DEFAULT_REVIEW_MODEL,
+  exists,
+  MAPS,
+  ShowcasePipeline,
+  validateModelEffort,
+} from './pipeline.mjs';
 import { classifyFailure } from './failures.mjs';
 
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
@@ -150,6 +158,13 @@ function normalizeJob(input, jobId) {
   if (input.seed !== undefined && !['string', 'number'].includes(typeof input.seed)) {
     throw Object.assign(new Error('seed must be a string or number'), { status: 400 });
   }
+  const reviewModel = input.reviewModel ?? DEFAULT_REVIEW_MODEL;
+  const reviewEffort = input.reviewEffort ?? DEFAULT_REVIEW_EFFORT;
+  try {
+    validateModelEffort(reviewModel, reviewEffort, 'review model');
+  } catch (error) {
+    throw Object.assign(error, { status: 400 });
+  }
   return {
     jobId,
     id: `showcase-${jobId}`,
@@ -167,6 +182,8 @@ function normalizeJob(input, jobId) {
     topK,
     authorModel: 'gpt-5.6-luna',
     authorEffort: 'medium',
+    reviewModel,
+    reviewEffort,
     fallbackToVisual: production,
     campaignId: campaignValue(input.campaignId),
     campaignCaseId: campaignValue(input.campaignCaseId),

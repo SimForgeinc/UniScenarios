@@ -117,10 +117,14 @@ def author(args):
             provider = response.json().get('usage') or {}
         except Exception:  # noqa: BLE001
             provider = {}
-        usage['input_tokens'] += provider.get('input_tokens') or 0
-        usage['output_tokens'] += provider.get('output_tokens') or 0
-        usage['reasoning_tokens'] += (
-            (provider.get('output_tokens_details') or {}).get('reasoning_tokens') or 0)
+        usage['input_tokens'] += (
+            provider.get('input_tokens') or provider.get('prompt_tokens') or 0)
+        usage['output_tokens'] += (
+            provider.get('output_tokens') or provider.get('completion_tokens') or 0)
+        output_details = (
+            provider.get('output_tokens_details')
+            or provider.get('completion_tokens_details') or {})
+        usage['reasoning_tokens'] += output_details.get('reasoning_tokens') or 0
         return response
 
     started = time.monotonic()
@@ -464,6 +468,23 @@ def _authored_scene_evidence(instance_path, trace_path):
         }
     return evidence
 
+def _require_oracle_content(response, text, model):
+    """Reject exhausted reasoning responses before they can become verdicts."""
+    if text and text.strip():
+        return text
+    usage = response.get('usage') or {}
+    output = response.get('output') or []
+    output_types = [item.get('type') for item in output if isinstance(item, dict)]
+    reasoning_present = bool(response.get('reasoning_content')) or any(
+        item.get('type') == 'reasoning' or item.get('reasoning_content')
+        for item in output if isinstance(item, dict)
+    )
+    raise RuntimeError(
+        f'semantic2d oracle returned empty content for model {model}; '
+        f'usage={json.dumps(usage, separators=(",", ":"))}; '
+        f'outputTypes={output_types}; reasoningPresent={reasoning_present}'
+    )
+
 
 def semantic_2d(args):
     sys.path.insert(0, str(FOOTAGE))
@@ -487,11 +508,12 @@ def semantic_2d(args):
     body = {
         'model': args.model,
         'reasoning': {'effort': args.effort},
-        'max_output_tokens': 3000,
+        'max_output_tokens': 16000,
         'input': [{'role': 'user', 'content': content}],
     }
     response, raw, wall = futil.responses_call(body, timeout=420)
-    parsed = futil.parse_json_block(futil.output_text(response))
+    text = _require_oracle_content(response, futil.output_text(response), args.model)
+    parsed = futil.parse_json_block(text)
     emission = {'tier': '2d-semantic'}
     for axis in ('mechanismFidelity', 'actorFidelity', 'eventSequence'):
         if axis in parsed:
@@ -507,6 +529,7 @@ def semantic_2d(args):
         'cellId': args.cell_id,
         'model': args.model,
         'effort': args.effort,
+        'promptSha256': futil.sha256_text(prompt),
         'visionAsserted': True,
         **emission,
         **semantic2d_verdict(emission),
@@ -515,9 +538,11 @@ def semantic_2d(args):
         'incidentWindow': incident_window,
         'latencyS': round(wall, 2),
         'tokens': {
-            'in': usage.get('input_tokens'),
-            'out': usage.get('output_tokens'),
-            'reasoning': (usage.get('output_tokens_details') or {}).get('reasoning_tokens'),
+            'in': usage.get('input_tokens') or usage.get('prompt_tokens'),
+            'out': usage.get('output_tokens') or usage.get('completion_tokens'),
+            'reasoning': (
+                usage.get('output_tokens_details') or usage.get('completion_tokens_details') or {}
+            ).get('reasoning_tokens'),
         },
         'rawResponseSha256': futil.sha256_text(raw),
     })

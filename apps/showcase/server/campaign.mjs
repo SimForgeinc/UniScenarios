@@ -22,7 +22,13 @@ import {
 } from './product-contract.mjs';
 
 import { classifyFailure, normalizeUnsupportedReason, OPERATIONAL_FAILURE_KINDS, truncateDetail } from './failures.mjs';
-import { MAPS, collectJobUsage, emptyUsage } from './pipeline.mjs';
+import {
+  collectJobUsage,
+  DEFAULT_REVIEW_EFFORT,
+  DEFAULT_REVIEW_MODEL,
+  MAPS,
+  validateModelEffort,
+} from './pipeline.mjs';
 
 const ROOT = resolve(fileURLToPath(new URL('../../../', import.meta.url)));
 const execFileAsync = promisify(execFile);
@@ -103,6 +109,11 @@ export function validateCampaignConfig(config) {
   if (!Number.isInteger(config.targetValidVideos) || config.targetValidVideos < 1) {
     throw new Error('campaign targetValidVideos must be a positive integer');
   }
+  validateModelEffort(
+    config.reviewModel ?? DEFAULT_REVIEW_MODEL,
+    config.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
+    'campaign review model',
+  );
   const caseIds = config.cases.map((item) => item.id);
   if (caseIds.some((id) => typeof id !== 'string' || !/^[a-z0-9][a-z0-9-]*$/.test(id)) || new Set(caseIds).size !== caseIds.length) {
     throw new Error('campaign case ids must be unique lowercase slugs');
@@ -796,7 +807,10 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
           ...process.env,
           OPENAI_BASE_URL: 'http://127.0.0.1:4141/v1',
           OPENAI_API_KEY: 'x',
-          VISTA_MODEL: 'gpt-5.6-luna',
+          // Probe the instrument this campaign will actually rely on. Hardcoding a
+          // model here meant the gate could pass on one model while the campaign
+          // judged its evidence with another.
+          VISTA_MODEL: config.reviewModel ?? DEFAULT_REVIEW_MODEL,
           VISTA_EFFORT: 'low',
         },
       });
@@ -1295,6 +1309,13 @@ export async function runCampaign({ argv = [], env = {}, probe } = {}) {
           campaignId: config.id,
           campaignCaseId: item.id,
           campaignAttempt: number,
+          reviewModel: config.reviewModel ?? DEFAULT_REVIEW_MODEL,
+          reviewEffort: config.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
+          // A campaign that names an author must actually get it. Omitting these
+          // silently authored every case with the server default, which would
+          // make an evaluation arm measure the wrong model.
+          ...(config.authorModel ? { authorModel: config.authorModel } : {}),
+          ...(config.authorEffort ? { authorEffort: config.authorEffort } : {}),
         }),
       });
       if (!response.ok) {

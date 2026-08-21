@@ -123,14 +123,39 @@ export const MAPS = [
   'richmond-field-station',
 ];
 
+/** Production defaults. Per-job overrides are recorded in the attempt provenance. */
+export const DEFAULT_AUTHOR_MODEL = 'gpt-5.6-luna';
+export const DEFAULT_AUTHOR_EFFORT = 'medium';
+export const DEFAULT_REVIEW_MODEL = 'gpt-5.6-sol';
+export const DEFAULT_REVIEW_EFFORT = 'medium';
+
+const effortVocabulary = (model) => {
+  if (model === 'openrouter/stealth/ox-alpha') return ['low', 'high', 'max'];
+  if (/^gpt-5\.6-/.test(model)) return ['low', 'medium', 'high'];
+  return null;
+};
+
 /**
- * The vision model the two footage reviews run under. Both are observations, not
- * knobs: the 2D semantic oracle is the pipeline's single acceptance authority and
- * the blind 2D pass is the ranking signal for ungated 3D spend, so neither is a
- * per-job choice a caller may vary between attempts of the same campaign.
+ * Validate an explicitly selected model instrument without translating effort
+ * names. Silent translation would make benchmark arms look comparable when
+ * they are not.
  */
-const REVIEW_MODEL = 'gpt-5.6-sol';
-const REVIEW_EFFORT = 'medium';
+export function validateModelEffort(model, effort, label = 'model') {
+  if (typeof model !== 'string' || model.length === 0) {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+  if (typeof effort !== 'string' || effort.length === 0) {
+    throw new Error(`${label} effort must be a non-empty string`);
+  }
+  const supported = effortVocabulary(model);
+  if (!supported) {
+    throw new Error(`${label} ${model} has no registered effort vocabulary`);
+  }
+  if (!supported.includes(effort)) {
+    throw new Error(`${label} ${model} does not support effort ${effort}; supported efforts: ${supported.join(', ')}`);
+  }
+  return { model, effort };
+}
 
 const COMPILER_TERMS = /\b(brak|lead|vehicle|car|truck|bus|pedestrian|child|cycl|scooter|junction|intersection|cross|cut.?in|lane chang|swerve|oncoming|u.?turn|parking|pull.?out|work.?zone|road.?work|closure)/i;
 
@@ -1014,8 +1039,8 @@ export class ShowcasePipeline {
         drawSeeds: [],
       },
       models: {
-        author: { model: job.authorModel ?? null, effort: job.authorEffort ?? null },
-        review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT },
+        author: { model: job.authorModel ?? DEFAULT_AUTHOR_MODEL, effort: job.authorEffort ?? DEFAULT_AUTHOR_EFFORT },
+        review: { model: job.reviewModel ?? DEFAULT_REVIEW_MODEL, effort: job.reviewEffort ?? DEFAULT_REVIEW_EFFORT },
         engineRequested: job.engine ?? 'auto',
         engineResolved: null,
       },
@@ -1088,6 +1113,11 @@ export class ShowcasePipeline {
   }
 
   async run(job, externalContext) {
+    validateModelEffort(
+      job.reviewModel ?? DEFAULT_REVIEW_MODEL,
+      job.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
+      'review model',
+    );
     const context = this.#createContext(job, externalContext);
     context.baseline = await resourceSample();
     await persistBenchmark(context);
@@ -1163,8 +1193,14 @@ export class ShowcasePipeline {
         precheck: { feasible: precheckResult.feasible, requires: precheckResult.requires, missing: precheckResult.missing },
         methodology: {
           profile: job.methodology ?? 'custom',
-          author: { model: job.authorModel, effort: job.authorEffort },
-          review: { model: REVIEW_MODEL, effort: REVIEW_EFFORT },
+          author: {
+            model: job.authorModel ?? DEFAULT_AUTHOR_MODEL,
+            effort: job.authorEffort ?? DEFAULT_AUTHOR_EFFORT,
+          },
+          review: {
+            model: job.reviewModel ?? DEFAULT_REVIEW_MODEL,
+            effort: job.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
+          },
           fallbackToVisual: job.fallbackToVisual === true,
         },
         semanticContract,
@@ -1192,8 +1228,8 @@ export class ShowcasePipeline {
       const authorOnce = async (subcommand) => {
         const args = [
           this.bridge, subcommand, '--brief', briefPath, '--out', authorDir,
-          '--model', job.authorModel ?? 'gpt-5.6-luna',
-          '--effort', job.authorEffort ?? 'medium',
+          '--model', job.authorModel ?? DEFAULT_AUTHOR_MODEL,
+          '--effort', job.authorEffort ?? DEFAULT_AUTHOR_EFFORT,
         ];
         // Every pipeline attempt is a measured attempt. The bridge has no recipe-substitution
         // branch left to disable: `vista-author` always runs a real authoring episode.
@@ -1461,8 +1497,8 @@ export class ShowcasePipeline {
             const result = await command(this.python, [
               this.bridge, 'judge', '--cell', cell.cellDir,
               '--render', join(render2dDir, item.redacted),
-              '--model', REVIEW_MODEL,
-              '--effort', REVIEW_EFFORT,
+              '--model', job.reviewModel ?? DEFAULT_REVIEW_MODEL,
+              '--effort', job.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
             ], {
               cwd: this.root,
               timeout: 600_000,
@@ -1728,7 +1764,7 @@ export class ShowcasePipeline {
             this.bridge, 'mutate', '--brief', briefPath, '--contract', contractPath,
             '--template', currentTemplatePath, '--feedback', feedbackPath,
             '--out', roundTemplatePath,
-            '--model', job.authorModel ?? 'gpt-5.6-luna', '--effort', job.authorEffort ?? 'medium',
+            '--model', job.authorModel ?? DEFAULT_AUTHOR_MODEL, '--effort', job.authorEffort ?? DEFAULT_AUTHOR_EFFORT,
           ], {
             cwd: this.root,
             timeout: 600_000,
@@ -1757,7 +1793,7 @@ export class ShowcasePipeline {
           const authorDirRound = join(roundDir, 'author');
           const result = await command(this.python, [
             this.bridge, 'vista-author', '--brief', fallbackBriefPath, '--out', authorDirRound,
-            '--model', job.authorModel ?? 'gpt-5.6-luna', '--effort', job.authorEffort ?? 'medium',
+            '--model', job.authorModel ?? DEFAULT_AUTHOR_MODEL, '--effort', job.authorEffort ?? DEFAULT_AUTHOR_EFFORT,
             '--contract', contractPath, '--retries', '0', '--budget', '20',
           ], {
             cwd: this.root,
@@ -2076,8 +2112,8 @@ export class ShowcasePipeline {
         '--render', item.renderDir, '--cell', item.cell.cellDir,
         '--cell-id', item.cell.cellId,
         '--request-text', job.requestedBrief ?? job.brief,
-        '--model', REVIEW_MODEL,
-        '--effort', REVIEW_EFFORT,
+        '--model', job.reviewModel ?? DEFAULT_REVIEW_MODEL,
+        '--effort', job.reviewEffort ?? DEFAULT_REVIEW_EFFORT,
       ], {
         cwd: this.root,
         timeout: 600_000,
