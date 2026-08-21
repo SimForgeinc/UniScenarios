@@ -32,7 +32,9 @@ async function readJson(path: string): Promise<unknown> {
   try {
     return JSON.parse(await readFile(path, 'utf8')) as unknown;
   } catch (error) {
-    throw new CliError('read_failed', `could not read JSON ${path}`, { detail: error });
+    throw new CliError('read_failed', `could not read JSON ${path}`, {
+      detail: { cause: error instanceof Error ? error.message : String(error) },
+    });
   }
 }
 

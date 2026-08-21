@@ -42,7 +42,6 @@ import { sitesMatch } from './commands/sites.js';
 import { templateValidate } from './commands/template.js';
 import { validate } from './commands/validate.js';
 import { renderHash, renderRun } from './commands/render.js';
-import { workerStart } from './commands/worker.js';
 
 const COMMANDS = [
   { name: 'maps list', summary: 'the five dev maps, their artifacts and catalog revisions' },
@@ -64,7 +63,6 @@ const COMMANDS = [
   { name: 'batch', summary: 'sites × draws matrix: instantiate → simulate → evaluate' },
   { name: 'render run', summary: 'execute one immutable render intent with the browser or CARLA engine' },
   { name: 'render hash', summary: 'compute the canonical SHA-256 identity of a render intent' },
-  { name: 'worker start', summary: 'run the control-plane-neutral pull worker from a configuration file' },
   { name: 'schemas', summary: 'the published JSON Schemas — the LLM emission contract' },
 ] as const;
 
@@ -570,15 +568,6 @@ async function dispatch(argv: readonly string[]): Promise<number> {
       });
     }
 
-    case 'worker': {
-      if (sub !== 'start') {
-        throw new CliError('unknown_command', `uniscenarios worker ${sub ?? ''}`.trim(), {
-          detail: { known: ['start'] },
-        });
-      }
-      const args = parseArgs(argv.slice(2), { booleans: GLOBAL_BOOLEANS, values: ['config'] });
-      return workerStart(requireString(args, 'config'));
-    }
 
     case 'schemas': {
       const args = parseArgs(argv.slice(1), {

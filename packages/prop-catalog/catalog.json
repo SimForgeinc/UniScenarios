@@ -108,6 +108,30 @@
     }
   },
   {
+    "id": "vehicle.kia.carnival",
+    "label": "Kia Carnival 2025",
+    "class": "vehicle",
+    "actorClass": "van",
+    "compatibleActorClasses": [
+      "car"
+    ],
+    "description": "Pronto sensor-platform vehicle. Browser presentation matches the production Kia Carnival dimensions; CARLA binds this identity to the packaged KiaCarnival2025 blueprint.",
+    "dims": {
+      "l": 5.15,
+      "w": 2,
+      "h": 1.78
+    },
+    "tags": [
+      "occlusion:medium",
+      "mobile",
+      "parkable",
+      "roadway"
+    ],
+    "defaultParams": {
+      "color": "#f1f2f3"
+    }
+  },
+  {
     "id": "vehicle.box_truck",
     "label": "Box truck",
     "class": "vehicle",

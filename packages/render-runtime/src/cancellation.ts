@@ -19,7 +19,7 @@ export function throwIfCanceled(signal: AbortSignal): void {
 
 export function anySignal(signals: readonly AbortSignal[]): AbortSignal {
   if (signals.length === 0) return new AbortController().signal;
-  return AbortSignal.any(signals);
+  return AbortSignal.any([...signals]);
 }
 
 export async function abortableDelay(milliseconds: number, signal: AbortSignal): Promise<void> {

@@ -33,7 +33,7 @@ const animationProfileSchema = z.strictObject({
 const catalogEntrySchema = z.object({
   id: z
     .string()
-    .regex(/^[a-z_]+\.[a-z0-9_]+$/, 'id must be <class>.<snake_case_name>'),
+    .regex(/^[a-z_]+(?:\.[a-z0-9_]+)+$/, 'id must be a dot-delimited lowercase catalog path'),
   label: z.string().min(1),
   class: z.enum(PROP_CLASSES as unknown as [string, ...string[]]),
   actorClass: z.enum(CATALOG_ACTOR_CLASSES as unknown as [string, ...string[]]).optional(),
@@ -42,7 +42,7 @@ const catalogEntrySchema = z.object({
   dims: dimsSchema,
   tags: z.array(z.enum(PROP_TAGS as unknown as [string, ...string[]])).min(1),
   defaultParams: z.record(z.string(), paramValueSchema),
-  legacyAliasOf: z.string().regex(/^[a-z_]+\.[a-z0-9_]+$/).optional(),
+  legacyAliasOf: z.string().regex(/^[a-z_]+(?:\.[a-z0-9_]+)+$/).optional(),
   animation: animationProfileSchema.optional(),
 });
 

@@ -16,12 +16,16 @@
       "default": "./dist/headless.js"
     }
   },
-  "files": ["dist", "harness.html"],
+  "files": [
+    "dist",
+    "harness.html"
+  ],
   "dependencies": {
     "@uniscenarios/city-renderer": "workspace:*",
     "@uniscenarios/playback": "workspace:*",
     "@uniscenarios/render-runtime": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
+    "fflate": "^0.8.3",
     "playwright-core": "^1.62.1",
     "three": "^0.185.0"
   },
@@ -32,7 +36,7 @@
     "typescript": "^5.6.0"
   },
   "scripts": {
-    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist && tsup src/headless.ts --format esm --dts --sourcemap --out-dir dist --no-external @uniscenarios/city-renderer --no-external @uniscenarios/playback --no-external @uniscenarios/scenario-model --no-external three",
+    "build": "tsup src/index.ts --format esm --dts --sourcemap --clean --out-dir dist && tsup --config tsup.headless.config.ts",
     "typecheck": "tsc --noEmit"
   }
 }

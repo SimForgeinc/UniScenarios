@@ -133,6 +133,7 @@ export interface PropParamMap {
   'vehicle.suv': VehicleParams;
   'vehicle.pickup': VehicleParams;
   'vehicle.van': VehicleParams;
+  'vehicle.kia.carnival': VehicleParams;
   'vehicle.box_truck': VehicleParams;
   'vehicle.semi_truck': VehicleParams;
   'vehicle.bus': VehicleParams;
@@ -232,6 +233,7 @@ const BUILDERS: Builders = {
   'vehicle.suv': buildSuv,
   'vehicle.pickup': buildPickup,
   'vehicle.van': buildVan,
+  'vehicle.kia.carnival': buildMinivan,
   'vehicle.box_truck': buildBoxTruck,
   'vehicle.semi_truck': buildSemiTruck,
   'vehicle.bus': buildBus,

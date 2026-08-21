@@ -54,7 +54,6 @@
     "@uniscenarios/map-intel": "workspace:*",
     "@uniscenarios/scenario-model": "workspace:*",
     "@uniscenarios/render-runtime": "workspace:*",
-    "@uniscenarios/render-worker": "workspace:*",
     "@uniscenarios/scenario-materializer": "workspace:*",
     "@uniscenarios/sim-engine": "workspace:*"
   },

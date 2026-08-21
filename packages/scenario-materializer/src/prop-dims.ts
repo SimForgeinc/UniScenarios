@@ -30,6 +30,7 @@ export const PROP_DIMS: Readonly<Record<string, PropDims>> = {
   'vehicle.suv': { l: 4.85, w: 1.95, h: 1.78 },
   'vehicle.pickup': { l: 5.9, w: 2.03, h: 1.95 },
   'vehicle.van': { l: 5.3, w: 2.0, h: 2.4 },
+  'vehicle.kia.carnival': { l: 5.15, w: 2, h: 1.78 },
   'vehicle.box_truck': { l: 7.6, w: 2.44, h: 3.4 },
   'vehicle.semi_truck': { l: 20.1, w: 2.6, h: 4.1 },
   'vehicle.bus': { l: 12.2, w: 2.55, h: 3.2 },
