@@ -16,7 +16,7 @@ export interface BrowserRenderEngineOptions {
 
 const CAPABILITIES = Object.freeze({
   engineId: BROWSER_RENDER_ENGINE_ID,
-  engineVersion: '0.1.0-rc.42',
+  engineVersion: '0.1.0-rc.43',
   backend: 'browser',
   modalities: Object.freeze(['rgb', 'depth', 'semantic', 'instance', 'lidar', 'radar']),
   artifacts: Object.freeze(['sensor-archive', 'sensor-video', 'manifest', 'frames']),
@@ -149,7 +149,7 @@ export function createRenderEngine(options: BrowserRenderEngineOptions = {}): Re
           return {
             schema: 'uniscenario.render-artifact-manifest/v1',
             intentSha256: context.intentSha256,
-            engine: { engineId: BROWSER_RENDER_ENGINE_ID, engineVersion: options.engineVersion ?? '0.1.0-rc.42', backend: 'browser' },
+            engine: { engineId: BROWSER_RENDER_ENGINE_ID, engineVersion: options.engineVersion ?? '0.1.0-rc.43', backend: 'browser' },
             startedAt,
             completedAt: new Date().toISOString(),
             artifacts,

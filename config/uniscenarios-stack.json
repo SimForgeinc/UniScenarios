@@ -1,6 +1,6 @@
 {
   "schema": "uniscenarios.stack-config/v1",
-  "stackVersion": "0.1.0-rc.42",
+  "stackVersion": "0.1.0-rc.43",
   "repository": "https://github.com/SimForgeinc/UniScenarios",
   "contracts": {
     "scenarioTemplate": "2",
@@ -59,6 +59,18 @@
       "role": "actor-catalog"
     },
     {
+      "path": "packages/render-runtime",
+      "role": "render-contract-runtime"
+    },
+    {
+      "path": "packages/browser-renderer",
+      "role": "browser-renderer"
+    },
+    {
+      "path": "services/render-worker",
+      "role": "portable-render-worker"
+    },
+    {
       "path": "packages/trace-comparator",
       "role": "trace-conformance"
     },
@@ -79,7 +91,7 @@
     {
       "path": "adapters/carla-bridge",
       "name": "uniscenarios-carla-bridge",
-      "version": "0.1.0rc42",
+      "version": "0.1.0rc43",
       "role": "optional-carla-execution-adapter",
       "registry": "pypi"
     }
