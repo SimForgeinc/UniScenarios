@@ -956,7 +956,9 @@ def test_compiler_inner_vertex_sample_and_digest_loops_are_abortible():
         if digest_checks == 3:
             raise CancellationRequested("digest cancelled")
     with pytest.raises(CancellationRequested, match="digest"):
-        worker_compiler._canonical_plan_sha256(plan.actors, plan.frames, digest_abort)
+        worker_compiler._canonical_plan_sha256(
+            plan.actors, plan.frames, plan.semantic_metadata, digest_abort,
+        )
 
 
 def test_executes_hash_closed_lease_and_uploads_trace():
@@ -990,7 +992,7 @@ def test_executes_hash_closed_lease_and_uploads_trace():
     assert backend.calls[0] == ("mode", "native-physics")
     assert backend.calls.index(("signals", ())) < backend.calls.index(("environment", 0.0))
     assert backend.calls.index(("signals", ())) < backend.calls.index(("spawn", ["ego"]))
-    assert backend.calls.index(("prepare", 0)) < backend.calls.index(("sensors", 1))
+    assert backend.calls.index(("sensors", 1)) < backend.calls.index(("prepare", 0))
 
 
 def test_mode_is_explicit_and_parity_tolerance_gates_result():
@@ -1811,7 +1813,8 @@ def test_expiry_inside_native_stability_cleans_up_without_binding_or_upload(monk
             deadline_monotonic=lambda: 1.0,
         )
     assert backend.calls[-1] == ("cleanup",)
-    assert not any(call[0] == "sensors" for call in backend.calls)
+    assert any(call[0] == "sensors" for call in backend.calls)
+    assert not any(call[0] == "apply" for call in backend.calls)
 
 
 def test_cancellation_during_trace_serialization_never_binds_or_uploads():
@@ -2167,7 +2170,9 @@ def test_duration_and_output_budgets_fail_before_expensive_allocation(monkeypatc
     (camera_dir / "00000000.png").write_bytes(b"four")
     monkeypatch.setattr(worker_runner.zipfile, "ZipFile", lambda *_args, **_kwargs: pytest.fail("ZIP must not allocate"))
     with pytest.raises(ContractError, match="pre-allocation budget"):
-        worker_runner._archive_frames(camera_dir, tmp_path / "frames.zip", 1, 3, lambda *_args: None)
+        worker_runner._archive_frames(
+            camera_dir, tmp_path / "frames.zip", 1, "png", 3, lambda *_args: None,
+        )
     monkeypatch.setattr(worker_runner, "_run_process", lambda *_args, **_kwargs: pytest.fail("ffmpeg must not start"))
     with pytest.raises(ContractError, match="pre-allocation output budget"):
         worker_runner._encode_video(tmp_path, "hero", 30, tmp_path / "render.mp4", 1, 3, lambda *_args: None, lambda: float("inf"))
@@ -2388,6 +2393,7 @@ class _AppearanceVehicle:
         self.transform = None
         self.velocities = []
         self.controls = []
+        self.destroy_calls = 0
 
     def get_light_state(self): return self.light_state
     def set_light_state(self, value): self.light_state = int(value)
@@ -2400,6 +2406,9 @@ class _AppearanceVehicle:
     def get_velocity(self): return _AppearanceVector(0, 0, 0)
     def get_transform(self): return self.transform
     def apply_control(self, control): self.controls.append(control)
+    def destroy(self):
+        self.destroy_calls += 1
+        return True
 
 
 class _AppearanceVector:
@@ -2586,24 +2595,22 @@ def test_carla_door_writes_are_edge_triggered_and_fail_closed_without_the_api():
         dark._apply_appearance("ego", _AppearanceVehicle(), {"light.brakeLights": "on"}, 0.0)
 
 
-def test_carla_parks_absent_actors_once_and_never_drives_them_again():
+def test_carla_destroys_absent_actors_once_and_never_drives_them_again():
     backend = _appearance_backend()
     backend.signals = {}
     backend.execution_mode = "native-physics"
     backend.fixed_timestep_s = 0.02
     backend.speed_integrals = {}
+    backend.actor_lifecycle = {"leaver": "active"}
     vehicle = _AppearanceVehicle()
     backend.actors = {"leaver": vehicle}
     absent = ActorFrame("absent", 10.0, -4.0, 0.5, 90.0, 7.0)
     backend.apply(PlanFrame(0, 0.0, {"leaver": absent}, {}))
-    assert vehicle.physics is False
-    assert vehicle.transform.location.z == pytest.approx(0.5 - 1000.0)
-    assert vehicle.transform.location.y == pytest.approx(4.0)
+    assert vehicle.destroy_calls == 1
+    assert "leaver" not in backend.actors
     assert vehicle.controls == []
-    parked = vehicle.transform
     backend.apply(PlanFrame(1, 0.02, {"leaver": absent}, {}))
-    # Idempotent: no second teleport, no control, no physics churn.
-    assert vehicle.transform is parked
+    assert vehicle.destroy_calls == 1
     assert vehicle.controls == []
 
 

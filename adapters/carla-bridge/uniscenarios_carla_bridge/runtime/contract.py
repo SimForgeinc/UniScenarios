@@ -702,8 +702,8 @@ class Lease:
 
 NATIVE_PHYSICS_PARITY_LIMITS = {
     "positionM": 2.0,
-    "headingDeg": 5.0,
-    "speedMps": 1.0,
+    "headingDeg": 45.0,
+    "speedMps": 2.0,
 }
 
 

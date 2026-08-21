@@ -59,6 +59,9 @@ class ActorBinding:
     kind: str
     catalog_name: str
     materialized_traffic_eligible: bool = False
+    # Actors with an Init pose but no timed trajectory are authored stationary
+    # entities. Native CARLA settles them once, then holds them kinematically.
+    static: bool = False
 
 
 @dataclass(frozen=True)
@@ -638,6 +641,17 @@ def compile_xosc14(xml_bytes: bytes, abort: Callable[[], None] | None = None) ->
     initial = _initial_positions(root, actors, check)
     check()
     trajectories = _trajectories(root, actors, check)
+    actors = {
+        actor_id: ActorBinding(
+            binding.id,
+            binding.entity_ref,
+            binding.kind,
+            binding.catalog_name,
+            binding.materialized_traffic_eligible,
+            actor_id not in trajectories,
+        )
+        for actor_id, binding in actors.items()
+    }
     check()
     initial_signals, signal_events = _signal_timeline(root, check)
     check()

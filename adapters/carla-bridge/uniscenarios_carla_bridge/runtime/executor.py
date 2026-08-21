@@ -252,11 +252,18 @@ def _encode_video(
     if encoder not in {"software", "nvidia"}:
         raise RuntimeError("UNISCENARIO_PRESENTATION_VIDEO_ENCODER must be software or nvidia")
     codec = "h264_nvenc" if encoder == "nvidia" else "libx264"
+    quality_options = (
+        ["-preset", "p5", "-cq", "17", "-profile:v", "high"]
+        if encoder == "nvidia"
+        else ["-preset", "medium", "-crf", "17", "-profile:v", "high", "-level:v", "4.2"]
+    )
     result = _run_process([
         "ffmpeg", "-y", "-loglevel", "error", "-framerate", str(fps),
         "-start_number", "0", "-i", str(camera_dir / "%08d.png"),
         "-frames:v", str(expected_frame_count),
-        "-c:v", codec, "-pix_fmt", "yuv420p", "-fs", str(max_bytes), str(destination),
+        "-c:v", codec, *quality_options, "-pix_fmt", "yuv420p",
+        "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709",
+        "-movflags", "+faststart", "-fs", str(max_bytes), str(destination),
     ], "encode_video", check_abort, deadline_monotonic)
     if result.returncode:
         raise RuntimeError(f"ffmpeg failed: {result.stderr.decode(errors='replace')}")
@@ -610,6 +617,16 @@ def _environment_values_match(
     return True
 
 
+def _is_baked_default_daylight(requested: Mapping[str, float]) -> bool:
+    return (
+        all(float(requested[field]) == 0.0 for field in (
+            "cloudiness", "precipitation", "precipitation_deposits",
+            "wind_intensity", "fog_density", "fog_distance", "wetness",
+        ))
+        and float(requested["sun_altitude_angle"]) >= 0.0
+    )
+
+
 def _environment_evidence_is_accepted(environment: object, requested: object) -> bool:
     if not isinstance(environment, Mapping):
         return False
@@ -618,18 +635,21 @@ def _environment_evidence_is_accepted(environment: object, requested: object) ->
         return False
     if not _environment_values_match(environment.get("requested"), expected):
         return False
-    if environment.get("available") is True:
+    if environment.get("available") is True and environment.get("exact") is True:
         return (
             set(environment) == {"schema", "available", "exact", "requested", "observed"}
-            and environment.get("exact") is True
             and _environment_values_match(environment.get("observed"), expected)
         )
     return (
-        set(environment) == {"schema", "available", "exact", "requested", "observed", "reason"}
-        and environment.get("available") is False
+        set(environment) == {
+            "schema", "available", "exact", "requested", "observed", "mode", "reason",
+        }
+        and environment.get("available") is True
         and environment.get("exact") is False
         and environment.get("observed") is None
-        and environment.get("reason") == "carla-weather-disabled"
+        and environment.get("mode") == "cooked-baked-default"
+        and environment.get("reason") == "custom-map-baked-default-daylight"
+        and _is_baked_default_daylight(expected)
     )
 
 def _parity_evidence(
@@ -672,10 +692,48 @@ def _parity_evidence(
             ):
                 semantic_failures.append("pronto-kia-sensor-host-readback")
         map_evidence = runtime_evidence.get("map")
+        runtime_xodr_sha256 = (
+            map_evidence.get("runtimeXodrSha256")
+            if isinstance(map_evidence, Mapping) else None
+        )
+        signal_identity_mode = (
+            map_evidence.get("signalIdentityMode")
+            if isinstance(map_evidence, Mapping) else None
+        )
+        signal_id_map = (
+            map_evidence.get("signalIdMap")
+            if isinstance(map_evidence, Mapping) else None
+        )
         if (
             not isinstance(map_evidence, Mapping)
+            or map_evidence.get("schema") != "uniscenario.carla-map-evidence/v1"
+            or map_evidence.get("available") is not True
+            or map_evidence.get("source") != "cooked-custom-map"
+            or map_evidence.get("identityMode") != "cooked-map-name"
             or map_evidence.get("requestedMapName") != lease.execution_package.xodr.map_name
-            or map_evidence.get("xodrSha256") != lease.execution_package.xodr.sha256
+            or map_evidence.get("loadedMapName") != lease.execution_package.xodr.map_name
+            or map_evidence.get("packageXodrSha256") != lease.execution_package.xodr.sha256
+            or not isinstance(runtime_xodr_sha256, str)
+            or len(runtime_xodr_sha256) != 64
+            or any(character not in "0123456789abcdef" for character in runtime_xodr_sha256)
+            or map_evidence.get("xodrByteExact") is not (
+                runtime_xodr_sha256 == lease.execution_package.xodr.sha256
+            )
+            or signal_identity_mode not in {
+                "direct-opendrive-id", "approved-cooked-map-remap",
+            }
+            or not isinstance(signal_id_map, Mapping)
+            or any(
+                not isinstance(authored_id, str)
+                or not authored_id
+                or not isinstance(runtime_id, str)
+                or not runtime_id
+                for authored_id, runtime_id in signal_id_map.items()
+            )
+            or len(set(signal_id_map.values())) != len(signal_id_map)
+            or (signal_identity_mode == "direct-opendrive-id" and bool(signal_id_map))
+            or (signal_identity_mode == "approved-cooked-map-remap" and not signal_id_map)
+            or map_evidence.get("exact") is not True
         ):
             semantic_failures.append("cooked-map-identity")
         environment = runtime_evidence.get("environment")
@@ -690,6 +748,10 @@ def _parity_evidence(
                 value = sensor_evidence[sensor_id]
                 if not isinstance(value, Mapping) or value.get("capturedFrames") != expected_capture_count:
                     semantic_failures.append(f"sensor-frame-closure:{sensor_id}")
+        if any(sensor.modality == "rgb" for sensor in lease.render_spec.sensors):
+            visual = runtime_evidence.get("visualQuality")
+            if not isinstance(visual, Mapping) or visual.get("verdict") != "pass":
+                semantic_failures.append("visual-quality")
 
     global_failed_actor_ids = list(getattr(parity, "failed_actor_ids", ()))
     violation_counts = dict(getattr(parity, "violation_counts", {}))
@@ -1231,11 +1293,11 @@ def execute_lease(
             check_abort("configure_environment")
             backend.spawn(plan.actors, plan.frames[0], catalog, abort=lambda: backend_fence("spawn_actors"))
             check_abort("spawn_actors")
-            stability = backend.prepare_scenario(plan.frames[0], abort=lambda: backend_fence("prepare_scenario"))
-            check_abort("prepare_scenario")
             if lease.job_mode == "full_render":
                 backend.configure_sensors(lease.render_spec, output_dir, MAX_OUTPUT_BYTES, abort=lambda: backend_fence("configure_sensors"))
                 check_abort("configure_sensors")
+            stability = backend.prepare_scenario(plan.frames[0], abort=lambda: backend_fence("prepare_scenario"))
+            check_abort("prepare_scenario")
             emit("interaction_started" if lease.job_mode == "interaction_2d" else "render_started", {"frames": len(plan.frames), "executionMode": lease.render_spec.execution_mode})
             for frame in plan.frames:
                 check_abort("execute", frame.index, len(plan.frames))
@@ -1436,9 +1498,12 @@ def execute_lease(
             manifest_body = _manifest_to_path(lease, plan, sensor_records, validation, parity_value, parity_evidence, attestation, artifacts, Path(directory) / "manifest.json", min(artifact_temp_limit, MAX_ARTIFACT_BYTES, MAX_OUTPUT_BYTES - output_bytes), lambda: check_abort("serialize_manifest"))
             add_artifact(make_artifact("manifest", manifest_body, "application/json", lease.artifact_uploads.get("manifest")))
     return {
+        "status": "succeeded" if parity.accepted else "failed-parity",
         "planSha256": plan.sha256,
         "sourceInputDigest": package.source_input_digest,
+        "materializedTrafficDigest": package.materialized_traffic_digest,
         "attestation": attestation,
+        "parity": parity_value,
         "parityEvidence": parity_evidence,
         "artifacts": artifacts,
     }
