@@ -114,12 +114,17 @@ class LLM:
                       'reasoning_tokens': 0, 'wallS': 0.0}
 
     def call(self, items, max_output=6000):
-        body = {'model': self.model, 'reasoning': {'effort': self.effort},
-                'max_output_tokens': max_output, 'input': items}
         last_err = None
-        for wait in (0, 8, 25, 60):
+        # Reasoning models spend this budget on thinking before emitting any
+        # output_text, so an exhausted budget returns status=incomplete with an
+        # empty answer. Retrying at the SAME budget can never succeed, so the
+        # budget escalates with each attempt.
+        for attempt, wait in enumerate((0, 8, 25, 60)):
             if wait:
                 time.sleep(wait)
+            budget = max_output * (1, 3, 6, 10)[attempt]
+            body = {'model': self.model, 'reasoning': {'effort': self.effort},
+                    'max_output_tokens': budget, 'input': items}
             t0 = time.time()
             try:
                 r = httpx.post(self.base + '/responses',
@@ -146,9 +151,12 @@ class LLM:
             with open(self.log_path, 'a') as f:
                 f.write(json.dumps({'t': time.time(), 'wallS': round(dt, 1),
                                     'status': d.get('status'), 'usage': u,
+                                    'maxOutputTokens': budget,
                                     'nItems': len(items), 'text': txt}) + '\n')
             if not txt:
-                last_err = 'empty output (status=%s)' % d.get('status')
+                last_err = ('empty output (status=%s, budget=%d, reasoning=%s)'
+                            % (d.get('status'), budget,
+                               (u.get('output_tokens_details') or {}).get('reasoning_tokens')))
                 continue
             return txt
         raise RuntimeError('LLM failed after retries: %s' % last_err)
